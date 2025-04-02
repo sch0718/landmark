@@ -1,0 +1,764 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Spring Cloud 개발 가이드라인
+
+## AI 페르소나
+
+당신은 Spring Cloud 전문 개발자입니다. 분산 시스템, 마이크로서비스 아키텍처, 클라우드 네이티브 애플리케이션 구축에 대한 깊은 이해를 가지고 있습니다. 확장성, 회복성, 고가용성을 갖춘 시스템을 설계하고 구현하는 전문가로서 Spring Cloud 에코시스템의 다양한 컴포넌트를 효과적으로 활용할 수 있습니다.
+
+## 기술 스택
+
+- **Java**: Java 11+ (Spring Boot 2.7.x), Java 17+ (Spring Boot 3.2.x)
+- **Spring Boot**: 2.7.x 또는 3.2.x, Java 버전에 따라 최신 버전 선택
+- **Spring Cloud**: 2021.0.x (Spring Boot 2.7.x) 또는 2023.0.x (Spring Boot 3.2.x), Spring Boot 버전에 따라 최신 버전 선택
+- **핵심 컴포넌트**:
+  - Spring Cloud Config
+  - Spring Cloud Netflix (Eureka)
+  - Spring Cloud Gateway
+  - Spring Cloud OpenFeign
+  - Spring Cloud Circuit Breaker (Resilience4j)
+  - Spring Cloud Sleuth/Micrometer Tracing
+
+## 서비스 디스커버리 (Eureka)
+
+### 서버 설정
+
+```java
+@SpringBootApplication
+@EnableEurekaServer
+public class EurekaServerApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(EurekaServerApplication.class, args);
+    }
+}
+```
+
+```yaml
+# application.yml
+server:
+  port: 8761
+
+eureka:
+  client:
+    registerWithEureka: false
+    fetchRegistry: false
+  server:
+    enableSelfPreservation: false
+    waitTimeInMsWhenSyncEmpty: 0
+```
+
+### 클라이언트 설정
+
+```java
+@SpringBootApplication
+@EnableDiscoveryClient
+public class ServiceApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(ServiceApplication.class, args);
+    }
+}
+```
+
+```yaml
+# application.yml
+spring:
+  application:
+    name: service-name
+
+eureka:
+  client:
+    serviceUrl:
+      defaultZone: http://localhost:8761/eureka/
+  instance:
+    preferIpAddress: true
+    instanceId: ${spring.application.name}:${spring.cloud.client.hostname}:${server.port}
+```
+
+### 모범 사례
+
+1. **서비스 이름 규칙**: 일관된 명명 규칙 사용 (예: `user-service`, `order-service`)
+2. **헬스 체크**: 적절한 헬스 체크 경로 구성
+   ```yaml
+   eureka:
+     instance:
+       statusPageUrlPath: /actuator/info
+       healthCheckUrlPath: /actuator/health
+   ```
+3. **메타데이터 활용**: 서비스별 메타데이터 추가로 동적 구성 지원
+   ```yaml
+   eureka:
+     instance:
+       metadataMap:
+         zone: zone1
+         version: v1
+   ```
+
+## 중앙 집중식 구성 (Config Server)
+
+### 서버 설정
+
+```java
+@SpringBootApplication
+@EnableConfigServer
+public class ConfigServerApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(ConfigServerApplication.class, args);
+    }
+}
+```
+
+```yaml
+# application.yml
+server:
+  port: 8888
+
+spring:
+  cloud:
+    config:
+      server:
+        git:
+          uri: https://github.com/your-org/config-repo
+          searchPaths: '{application}'
+          cloneOnStart: true
+        encrypt:
+          enabled: true
+```
+
+### 클라이언트 설정
+
+```yaml
+# bootstrap.yml
+spring:
+  application:
+    name: service-name
+  cloud:
+    config:
+      uri: http://localhost:8888
+      fail-fast: true
+      retry:
+        initial-interval: 1000
+        max-interval: 2000
+        max-attempts: 6
+```
+
+### 구성 파일 구조
+
+```
+config-repo/
+├── application.yml              # 모든 서비스에 적용되는 공통 구성
+├── service-name.yml             # 특정 서비스의 기본 구성
+├── service-name-dev.yml         # 개발 환경 구성
+├── service-name-production.yml  # 프로덕션 환경 구성
+```
+
+### 모범 사례
+
+1. **암호화 사용**: 민감한 정보 암호화
+   ```yaml
+   # 암호화된 값 사용
+   spring:
+     datasource:
+       password: '{cipher}AQA...'
+   ```
+
+2. **구성 갱신**: 구성 변경 시 자동 갱신
+   ```java
+   @RestController
+   @RefreshScope
+   public class ConfigurableController {
+       @Value("${dynamic.property}")
+       private String dynamicProperty;
+       
+       @GetMapping("/property")
+       public String getProperty() {
+           return dynamicProperty;
+       }
+   }
+   ```
+
+3. **구성 계층화**: 환경별 구성 분리
+
+## API 게이트웨이 (Spring Cloud Gateway)
+
+### 게이트웨이 설정
+
+```java
+@SpringBootApplication
+@EnableDiscoveryClient
+public class GatewayApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(GatewayApplication.class, args);
+    }
+}
+```
+
+```yaml
+# application.yml
+spring:
+  cloud:
+    gateway:
+      discovery:
+        locator:
+          enabled: true
+          lowerCaseServiceId: true
+      routes:
+        - id: user-service
+          uri: lb://user-service
+          predicates:
+            - Path=/api/users/**
+          filters:
+            - StripPrefix=1
+            - name: CircuitBreaker
+              args:
+                name: userServiceCircuitBreaker
+                fallbackUri: forward:/fallback/user-service
+        
+        - id: order-service
+          uri: lb://order-service
+          predicates:
+            - Path=/api/orders/**
+          filters:
+            - StripPrefix=1
+```
+
+### 게이트웨이 필터 구현
+
+```java
+@Component
+public class AuthenticationFilter implements GatewayFilter, Ordered {
+    
+    @Override
+    public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
+        ServerHttpRequest request = exchange.getRequest();
+        
+        // 인증 로직...
+        if (!isAuthenticated(request)) {
+            ServerHttpResponse response = exchange.getResponse();
+            response.setStatusCode(HttpStatus.UNAUTHORIZED);
+            return response.setComplete();
+        }
+        
+        return chain.filter(exchange);
+    }
+    
+    @Override
+    public int getOrder() {
+        return -100; // 높은 우선순위
+    }
+    
+    private boolean isAuthenticated(ServerHttpRequest request) {
+        // 인증 검증 로직
+        return true; // 예시
+    }
+}
+```
+
+### 글로벌 필터 설정
+
+```java
+@Configuration
+public class GatewayConfig {
+    
+    @Bean
+    public GlobalFilter customGlobalFilter() {
+        return (exchange, chain) -> {
+            ServerHttpRequest request = exchange.getRequest();
+            log.info("Request: {} {}", request.getMethod(), request.getURI());
+            
+            return chain.filter(exchange)
+                .then(Mono.fromRunnable(() -> {
+                    ServerHttpResponse response = exchange.getResponse();
+                    log.info("Response status: {}", response.getStatusCode());
+                }));
+        };
+    }
+}
+```
+
+### 모범 사례
+
+1. **CORS 설정**: 적절한 CORS 구성
+   ```yaml
+   spring:
+     cloud:
+       gateway:
+         globalcors:
+           corsConfigurations:
+             '[/**]':
+               allowedOrigins: "*"
+               allowedMethods: "*"
+               allowedHeaders: "*"
+   ```
+
+2. **레이트 리미팅**: 과도한 요청 방지
+   ```yaml
+   spring:
+     cloud:
+       gateway:
+         routes:
+           - id: user-service
+             uri: lb://user-service
+             predicates:
+               - Path=/api/users/**
+             filters:
+               - name: RequestRateLimiter
+                 args:
+                   redis-rate-limiter.replenishRate: 10
+                   redis-rate-limiter.burstCapacity: 20
+   ```
+
+3. **요청/응답 변환**: 필요에 따라 요청/응답 데이터 변환
+   ```yaml
+   spring:
+     cloud:
+       gateway:
+         routes:
+           - id: user-service
+             uri: lb://user-service
+             predicates:
+               - Path=/api/users/**
+             filters:
+               - AddRequestHeader=X-Request-Source, api-gateway
+               - AddResponseHeader=X-Response-Time, ${dateTimeFormatter:now:yyyy-MM-dd HH:mm:ss}
+   ```
+
+## 서비스 간 통신 (Feign)
+
+### Feign 클라이언트 설정
+
+```java
+@SpringBootApplication
+@EnableDiscoveryClient
+@EnableFeignClients
+public class ServiceApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(ServiceApplication.class, args);
+    }
+}
+```
+
+### Feign 클라이언트 인터페이스
+
+```java
+@FeignClient(name = "user-service", fallback = UserServiceFallback.class)
+public interface UserServiceClient {
+    
+    @GetMapping("/users/{userId}")
+    ResponseEntity<UserDTO> getUserById(@PathVariable("userId") Long userId);
+    
+    @PostMapping("/users")
+    ResponseEntity<UserDTO> createUser(@RequestBody UserDTO userDTO);
+}
+```
+
+### Fallback 구현
+
+```java
+@Component
+public class UserServiceFallback implements UserServiceClient {
+    
+    @Override
+    public ResponseEntity<UserDTO> getUserById(Long userId) {
+        // 대체 구현 또는 기본값 반환
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+            .body(new UserDTO(userId, "Unavailable", "N/A"));
+    }
+    
+    @Override
+    public ResponseEntity<UserDTO> createUser(UserDTO userDTO) {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
+    }
+}
+```
+
+### Feign 설정
+
+```yaml
+# application.yml
+feign:
+  client:
+    config:
+      default:
+        connectTimeout: 5000
+        readTimeout: 5000
+        loggerLevel: full
+      user-service:  # 특정 서비스 맞춤 설정
+        connectTimeout: 2000
+        loggerLevel: basic
+  circuitbreaker:
+    enabled: true
+```
+
+### 모범 사례
+
+1. **타임아웃 설정**: 적절한 타임아웃 구성으로 장애 전파 방지
+2. **재시도 메커니즘**: 일시적 장애 극복을 위한 재시도 구성
+   ```yaml
+   spring:
+     cloud:
+       loadbalancer:
+         retry:
+           enabled: true
+   
+   feign:
+     client:
+       config:
+         user-service:
+           retryer: com.netflix.feign.Retryer.Default
+   ```
+3. **에러 디코더**: 커스텀 에러 디코더로 서비스별 오류 처리
+   ```java
+   @Configuration
+   public class FeignConfig {
+       @Bean
+       public ErrorDecoder errorDecoder() {
+           return new CustomErrorDecoder();
+       }
+   }
+   
+   public class CustomErrorDecoder implements ErrorDecoder {
+       @Override
+       public Exception decode(String methodKey, Response response) {
+           // 응답 코드별 적절한 예외 반환
+           if (response.status() == 404) {
+               return new ResourceNotFoundException("Resource not found");
+           }
+           return new Default().decode(methodKey, response);
+       }
+   }
+   ```
+
+## 회로 차단기 (Circuit Breaker)
+
+### Resilience4j 설정
+
+```yaml
+# application.yml
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        slidingWindowSize: 100
+        permittedNumberOfCallsInHalfOpenState: 10
+        waitDurationInOpenState: 10000
+        failureRateThreshold: 50
+    instances:
+      userService:
+        baseConfig: default
+  timelimiter:
+    configs:
+      default:
+        timeoutDuration: 3s
+    instances:
+      userService:
+        baseConfig: default
+```
+
+### 회로 차단기 사용
+
+```java
+@Service
+public class UserService {
+    
+    private final UserServiceClient userServiceClient;
+    
+    @Autowired
+    public UserService(UserServiceClient userServiceClient) {
+        this.userServiceClient = userServiceClient;
+    }
+    
+    @CircuitBreaker(name = "userService", fallbackMethod = "getUserByIdFallback")
+    @Bulkhead(name = "userService")
+    @Retry(name = "userService")
+    public UserDTO getUserById(Long userId) {
+        ResponseEntity<UserDTO> response = userServiceClient.getUserById(userId);
+        return response.getBody();
+    }
+    
+    public UserDTO getUserByIdFallback(Long userId, Exception ex) {
+        // 대체 구현
+        log.error("Fallback for getUserById. User ID: {}, Error: {}", userId, ex.getMessage());
+        return new UserDTO(userId, "Fallback User", "N/A");
+    }
+}
+```
+
+### 모범 사례
+
+1. **회로 차단기 설정 최적화**: 시스템 특성에 맞게 조정
+2. **다양한 회복성 패턴 결합**: 회로 차단기 + 재시도 + 타임아웃 + 벌크헤드
+3. **모니터링**: 회로 차단기 상태 추적
+   ```java
+   @Bean
+   public HealthIndicator circuitBreakerHealthIndicator(CircuitBreakerRegistry registry) {
+       return new CircuitBreakerHealthIndicator(registry);
+   }
+   ```
+
+## 분산 추적 (Distributed Tracing)
+
+### Spring Cloud Sleuth 설정 (Spring Boot 2.x)
+
+```yaml
+# application.yml
+spring:
+  sleuth:
+    sampler:
+      probability: 1.0  # 개발 환경에서는 100%, 프로덕션에서는 적절히 조정
+  zipkin:
+    base-url: http://localhost:9411
+```
+
+### Micrometer Tracing 설정 (Spring Boot 3.x)
+
+```yaml
+# application.yml
+management:
+  tracing:
+    sampling:
+      probability: 1.0
+    propagation:
+      type: b3
+  zipkin:
+    tracing:
+      endpoint: http://localhost:9411/api/v2/spans
+```
+
+### 트랜잭션 ID 로깅
+
+```java
+@RestController
+@RequestMapping("/api/users")
+public class UserController {
+    
+    private static final Logger log = LoggerFactory.getLogger(UserController.class);
+    
+    @GetMapping("/{userId}")
+    public ResponseEntity<UserDTO> getUserById(@PathVariable Long userId) {
+        log.info("Received request to get user with ID: {}", userId);
+        // ... 구현
+    }
+}
+```
+
+로그 출력 예시:
+```
+2023-07-15 10:15:30.123 INFO [user-service,5d0f5380b238f1b6,682dc5927415cb12] ... : Received request to get user with ID: 123
+```
+
+### 커스텀 스팬 추가
+
+```java
+@Service
+public class UserService {
+    
+    private final Tracer tracer;
+    
+    @Autowired
+    public UserService(Tracer tracer) {
+        this.tracer = tracer;
+    }
+    
+    public UserDTO processUserData(Long userId) {
+        Span span = tracer.currentSpan().name("processUserData");
+        try (Tracer.SpanInScope ws = tracer.withSpan(span.start())) {
+            span.tag("userId", userId.toString());
+            
+            // 비즈니스 로직...
+            
+            return result;
+        } finally {
+            span.finish();
+        }
+    }
+}
+```
+
+### 모범 사례
+
+1. **적절한 샘플링 비율**: 프로덕션 환경에서는 트래픽에 맞게 조정
+2. **중요 지점에 명시적 스팬 추가**: 복잡한 연산이나 외부 시스템 호출
+3. **의미 있는 태그 추가**: 디버깅에 유용한 정보 포함
+4. **배치 처리**: Zipkin으로 트레이스 전송 시 배치 처리 최적화
+
+## 구성 관리 및 환경 분리
+
+### 프로파일 기반 구성
+
+```yaml
+# application.yml
+spring:
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+
+---
+spring:
+  config:
+    activate:
+      on-profile: dev
+  cloud:
+    config:
+      uri: http://localhost:8888
+      fail-fast: false
+
+---
+spring:
+  config:
+    activate:
+      on-profile: production
+  cloud:
+    config:
+      uri: http://config-server:8888
+      fail-fast: true
+```
+
+### 서비스별 구성
+
+각 마이크로서비스는 다음과 같은 구성 파일을 가질 수 있습니다:
+
+```yaml
+# user-service.yml
+server:
+  port: 8081
+
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/user_db
+    username: user_service
+    password: ${USER_DB_PASSWORD}
+
+# user-service-dev.yml
+spring:
+  datasource:
+    url: jdbc:h2:mem:user_db
+    username: sa
+    password: 
+
+# user-service-production.yml
+server:
+  port: 0  # 랜덤 포트 (동적 확장)
+
+spring:
+  datasource:
+    url: jdbc:mysql://mysql-cluster:3306/user_db
+    username: user_service
+    password: ${USER_DB_PASSWORD}
+```
+
+### 모범 사례
+
+1. **환경 변수 사용**: 민감한 정보는 환경 변수로 주입
+2. **랜덤 포트**: 프로덕션 환경에서 동적 포트 할당
+3. **기본값 지정**: 모든 중요 속성에 기본값 제공
+4. **구성 검증**: 애플리케이션 시작 시 필수 구성 검증
+   ```java
+   @Configuration
+   public class ConfigValidation {
+       @Value("${critical.property:}")
+       private String criticalProperty;
+       
+       @PostConstruct
+       public void validateConfig() {
+           if (StringUtils.isEmpty(criticalProperty)) {
+               throw new IllegalStateException("Critical property is not configured!");
+           }
+       }
+   }
+   ```
+
+## 보안
+
+### OAuth2/JWT 보안 설정
+
+```yaml
+# application.yml
+spring:
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: https://auth-server/issuer
+```
+
+```java
+@Configuration
+@EnableWebSecurity
+public class SecurityConfig extends WebSecurityConfigurerAdapter {
+    
+    @Override
+    protected void configure(HttpSecurity http) throws Exception {
+        http
+            .csrf().disable()
+            .authorizeRequests()
+                .antMatchers("/api/public/**").permitAll()
+                .antMatchers("/api/**").authenticated()
+            .and()
+            .oauth2ResourceServer()
+                .jwt();
+    }
+}
+```
+
+### 서비스 간 보안 통신
+
+```java
+@Configuration
+public class FeignSecurityConfig {
+    
+    @Bean
+    public RequestInterceptor bearerTokenRequestInterceptor(OAuth2AuthorizedClientManager authorizedClientManager) {
+        return requestTemplate -> {
+            OAuth2AuthorizedClient client = authorizedClientManager.authorize(
+                OAuth2AuthorizeRequest.withClientRegistrationId("service-client")
+                    .principal("service")
+                    .build());
+            
+            if (client != null) {
+                requestTemplate.header("Authorization", "Bearer " + client.getAccessToken().getTokenValue());
+            }
+        };
+    }
+}
+```
+
+### 모범 사례
+
+1. **서비스 간 인증**: 클라이언트 자격 증명 흐름 사용
+2. **토큰 릴레이**: 서비스 간 호출 시 사용자 컨텍스트 유지
+3. **최소 권한 원칙**: 각 서비스에 필요한 최소 권한만 부여
+4. **API 게이트웨이에서 인증 중앙화**: 게이트웨이에서 모든 요청 인증
+
+## 모범 사례 요약
+
+1. **서비스 설계**:
+   - 각 서비스는 단일 책임 원칙을 따름
+   - 적절한 크기로 서비스 분할 (너무 크거나 작지 않게)
+   - 명확한 API 계약 정의 및 버전 관리
+
+2. **회복성**:
+   - 모든 서비스 간 통신에 회로 차단기 적용
+   - 적절한 타임아웃 및 재시도 정책 설정
+   - 폴백 메커니즘 구현
+
+3. **구성 관리**:
+   - 중앙 집중식 구성 사용
+   - 환경별 구성 분리
+   - 민감한 정보 암호화
+
+4. **모니터링 및 로깅**:
+   - 분산 추적으로 서비스 간 흐름 추적
+   - 일관된 로깅 전략 적용
+   - 중앙 집중식 로그 수집 설정
+
+5. **DevOps**:
+   - CI/CD 파이프라인 구축
+   - 인프라스트럭처 자동화 (IaC)
+   - 블루/그린 또는 카나리 배포 전략 사용
+
+6. **성능 최적화**:
+   - 동적 스케일링 구성
+   - 비동기 및 리액티브 패턴 활용
+   - 캐싱 전략 구현 

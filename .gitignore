@@ -1,0 +1,137 @@
+# Java와 Spring Boot
+*.class
+*.jar
+*.war
+*.ear
+*.zip
+*.tar.gz
+*.rar
+hs_err_pid*
+replay_pid*
+
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+# IntelliJ IDEA
+.idea/
+*.iws
+*.iml
+*.ipr
+out/
+!**/src/main/**/out/
+!**/src/test/**/out/
+
+# VS Code
+.vscode/
+.history/
+*.code-workspace
+
+# Eclipse
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+bin/
+!**/src/main/**/bin/
+!**/src/test/**/bin/
+
+# NetBeans
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+# OS 관련 파일
+.DS_Store
+Thumbs.db
+.directory
+*.swp
+*.swo
+
+# Spring Boot 설정
+application-*.yml
+application-*.properties
+!application.yml
+!application.properties
+!application-example.yml
+!application-example.properties
+
+# 로그 파일
+*.log
+logs/
+
+# 프론트엔드 (React, Flutter)
+# React
+/frontend/web-client/node_modules/
+/frontend/web-client/.pnp
+/frontend/web-client/.pnp.js
+/frontend/web-client/coverage
+/frontend/web-client/build
+/frontend/web-client/.env
+/frontend/web-client/.env.local
+/frontend/web-client/.env.development.local
+/frontend/web-client/.env.test.local
+/frontend/web-client/.env.production.local
+/frontend/web-client/npm-debug.log*
+/frontend/web-client/yarn-debug.log*
+/frontend/web-client/yarn-error.log*
+/frontend/web-client/.eslintcache
+
+# Flutter
+/frontend/app-client/.dart_tool/
+/frontend/app-client/.flutter-plugins
+/frontend/app-client/.flutter-plugins-dependencies
+/frontend/app-client/.packages
+/frontend/app-client/pubspec.lock
+/frontend/app-client/.pub/
+/frontend/app-client/build/
+/frontend/app-client/coverage/
+/frontend/app-client/.pub-cache/
+/frontend/app-client/.test_coverage.dart
+/frontend/app-client/.last_build_id
+/frontend/app-client/.symlinks/
+/frontend/app-client/android/app/debug
+/frontend/app-client/android/app/profile
+/frontend/app-client/android/app/release
+/frontend/app-client/ios/Flutter/.last_build_id
+
+# 데이터베이스
+*.sqlite
+*.db
+
+# Helm
+.helm/charts/**/charts/
+.helm/*/requirements.lock
+
+# Kubernetes
+kubeconfig
+*.kubeconfig
+
+# Docker
+docker-compose.override.yml
+.env
+
+# Maven (혹시 몰라서 추가)
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+!.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/ 
+
+# Cursor
+#.cursor/

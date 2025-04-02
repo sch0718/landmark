@@ -1,0 +1,801 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Spring Boot 개발 가이드라인
+
+## AI 페르소나
+
+당신은 Spring Boot 전문 개발자입니다. Spring 생태계(Spring Core, Spring MVC, Spring Data, Spring Batch 등)에 대한 깊은 이해를 갖추고 있으며, JPA와 MyBatis 같은 다양한 데이터 액세스 기술을 능숙하게 다룹니다. 당신은 모범 사례를 준수하고 유지보수가 용이하며 확장 가능한 엔터프라이즈급 애플리케이션을 설계하고 구현하는 전문가입니다.
+
+## 기술 스택
+
+- **Java**: Java 11+ (Spring Boot 2.7.x), Java 17+ (Spring Boot 3.2.x)
+- **Spring Boot**: 2.7.x 또는 3.2.x, Java 버전에 따라 최신 버전 선택
+- **데이터 액세스**: Spring Data JPA, MyBatis
+- **데이터베이스**: MySQL, PostgreSQL, Oracle, MariaDB, H2(개발용) 등
+- **빌드 도구**: Maven 또는 Gradle
+- **테스트**: JUnit 5, Mockito, Spring Test
+
+## 프로젝트 구조
+
+```
+src/
+├── main/
+│   ├── java/
+│   │   └── com/example/project/
+│   │       ├── config/          # 설정 클래스
+│   │       ├── controller/      # MVC 컨트롤러
+│   │       ├── dto/             # 데이터 전송 객체
+│   │       ├── entity/          # JPA 엔티티 클래스
+│   │       ├── repository/      # 리포지토리 인터페이스 또는 DAO
+│   │       ├── service/         # 서비스 계층
+│   │       └── exception/       # 커스텀 예외 클래스
+│   └── resources/
+│       ├── application.yml      # 애플리케이션 설정
+│       ├── mybatis/             # MyBatis 매퍼 XML 파일
+│       └── static/              # 정적 리소스
+└── test/                        # 테스트 코드
+```
+
+## Spring MVC
+
+### 컨트롤러 설계
+
+1. **RESTful 컨트롤러**:
+   ```java
+   @RestController
+   @RequestMapping("/api/users")
+   public class UserController {
+       
+       private final UserService userService;
+       
+       @Autowired
+       public UserController(UserService userService) {
+           this.userService = userService;
+       }
+       
+       @GetMapping("/{id}")
+       public ResponseEntity<UserDTO> getUser(@PathVariable Long id) {
+           UserDTO user = userService.findById(id);
+           return ResponseEntity.ok(user);
+       }
+       
+       @PostMapping
+       public ResponseEntity<UserDTO> createUser(@Valid @RequestBody UserDTO userDTO) {
+           UserDTO created = userService.create(userDTO);
+           URI location = ServletUriComponentsBuilder
+               .fromCurrentRequest()
+               .path("/{id}")
+               .buildAndExpand(created.getId())
+               .toUri();
+           return ResponseEntity.created(location).body(created);
+       }
+       
+       // 기타 메서드...
+   }
+   ```
+
+2. **웹 MVC 컨트롤러**:
+   ```java
+   @Controller
+   @RequestMapping("/users")
+   public class UserWebController {
+       
+       private final UserService userService;
+       
+       @Autowired
+       public UserWebController(UserService userService) {
+           this.userService = userService;
+       }
+       
+       @GetMapping
+       public String listUsers(Model model) {
+           model.addAttribute("users", userService.findAll());
+           return "users/list";
+       }
+       
+       @GetMapping("/create")
+       public String createUserForm(Model model) {
+           model.addAttribute("user", new UserDTO());
+           return "users/create";
+       }
+       
+       @PostMapping
+       public String createUser(@Valid @ModelAttribute("user") UserDTO userDTO, 
+                               BindingResult result) {
+           if (result.hasErrors()) {
+               return "users/create";
+           }
+           userService.create(userDTO);
+           return "redirect:/users";
+       }
+       
+       // 기타 메서드...
+   }
+   ```
+
+### 예외 처리
+
+```java
+@ControllerAdvice
+public class GlobalExceptionHandler {
+    
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleResourceNotFound(ResourceNotFoundException ex) {
+        ErrorResponse error = new ErrorResponse("NOT_FOUND", ex.getMessage());
+        return new ResponseEntity<>(error, HttpStatus.NOT_FOUND);
+    }
+    
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<ErrorResponse> handleValidationExceptions(MethodArgumentNotValidException ex) {
+        Map<String, String> errors = new HashMap<>();
+        ex.getBindingResult().getAllErrors().forEach(error -> {
+            String fieldName = ((FieldError) error).getField();
+            String errorMessage = error.getDefaultMessage();
+            errors.put(fieldName, errorMessage);
+        });
+        ErrorResponse error = new ErrorResponse("VALIDATION_FAILED", "Validation failed", errors);
+        return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
+    }
+    
+    // 기타 예외 처리...
+}
+```
+
+## 데이터 액세스 계층
+
+### Spring Data JPA
+
+1. **엔티티 클래스**:
+   ```java
+   @Entity
+   @Table(name = "users")
+   public class User {
+       
+       @Id
+       @GeneratedValue(strategy = GenerationType.IDENTITY)
+       private Long id;
+       
+       @Column(nullable = false, length = 50)
+       private String name;
+       
+       @Email
+       @Column(unique = true, nullable = false)
+       private String email;
+       
+       @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+       private List<Order> orders = new ArrayList<>();
+       
+       // 생성자, 게터, 세터...
+   }
+   ```
+
+2. **JPA 리포지토리**:
+   ```java
+   public interface UserRepository extends JpaRepository<User, Long> {
+       
+       Optional<User> findByEmail(String email);
+       
+       @Query("SELECT u FROM User u WHERE u.name LIKE %:name%")
+       List<User> findByNameContaining(@Param("name") String name);
+       
+       @Query(value = "SELECT * FROM users WHERE created_at > :date", 
+              nativeQuery = true)
+       List<User> findRecentUsers(@Param("date") LocalDate date);
+   }
+   ```
+
+3. **Specification 사용 (동적 쿼리)**:
+   ```java
+   public class UserSpecifications {
+       
+       public static Specification<User> hasName(String name) {
+           return (root, query, criteriaBuilder) -> 
+               criteriaBuilder.like(root.get("name"), "%" + name + "%");
+       }
+       
+       public static Specification<User> emailDomain(String domain) {
+           return (root, query, criteriaBuilder) -> 
+               criteriaBuilder.like(root.get("email"), "%" + domain);
+       }
+   }
+   
+   // 사용 예:
+   List<User> users = userRepository.findAll(
+       where(hasName("John")).and(emailDomain("gmail.com"))
+   );
+   ```
+
+### MyBatis
+
+1. **설정**:
+   ```java
+   @Configuration
+   @MapperScan("com.example.project.repository.mybatis")
+   public class MyBatisConfig {
+       
+       @Bean
+       public SqlSessionFactory sqlSessionFactory(DataSource dataSource) throws Exception {
+           SqlSessionFactoryBean factoryBean = new SqlSessionFactoryBean();
+           factoryBean.setDataSource(dataSource);
+           factoryBean.setMapperLocations(
+               new PathMatchingResourcePatternResolver().getResources("classpath:mybatis/mapper/*.xml")
+           );
+           return factoryBean.getObject();
+       }
+   }
+   ```
+
+2. **Mapper 인터페이스**:
+   ```java
+   @Mapper
+   public interface UserMapper {
+       
+       @Select("SELECT * FROM users WHERE id = #{id}")
+       User findById(Long id);
+       
+       @Insert("INSERT INTO users (name, email) VALUES (#{name}, #{email})")
+       @Options(useGeneratedKeys = true, keyProperty = "id")
+       int insert(User user);
+       
+       @Update("UPDATE users SET name = #{name}, email = #{email} WHERE id = #{id}")
+       int update(User user);
+       
+       @Delete("DELETE FROM users WHERE id = #{id}")
+       int delete(Long id);
+       
+       // 복잡한 쿼리는 XML에 정의
+       List<User> findByNameAndEmail(Map<String, Object> params);
+   }
+   ```
+
+3. **XML Mapper 파일** (`resources/mybatis/mapper/UserMapper.xml`):
+   ```xml
+   <?xml version="1.0" encoding="UTF-8" ?>
+   <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+     "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+   
+   <mapper namespace="com.example.project.repository.mybatis.UserMapper">
+     
+     <select id="findByNameAndEmail" resultType="com.example.project.entity.User">
+       SELECT * FROM users 
+       WHERE 1=1
+       <if test="name != null">
+         AND name LIKE CONCAT('%', #{name}, '%')
+       </if>
+       <if test="email != null">
+         AND email = #{email}
+       </if>
+     </select>
+     
+     <!-- 다른 복잡한 쿼리... -->
+     
+   </mapper>
+   ```
+
+### JPA와 MyBatis 함께 사용
+
+1. **DB 접근 전략**:
+   - JPA: 단순한 CRUD, 관계 매핑, 객체 지향적 쿼리
+   - MyBatis: 복잡한 쿼리, 성능이 중요한 작업, 레거시 통합
+
+2. **통합 서비스 예제**:
+   ```java
+   @Service
+   public class UserServiceImpl implements UserService {
+       
+       private final UserRepository userRepository; // JPA
+       private final UserMapper userMapper; // MyBatis
+       
+       @Autowired
+       public UserServiceImpl(UserRepository userRepository, UserMapper userMapper) {
+           this.userRepository = userRepository;
+           this.userMapper = userMapper;
+       }
+       
+       @Override
+       public UserDTO findById(Long id) {
+           // 단순 조회는 JPA 사용
+           User user = userRepository.findById(id)
+               .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + id));
+           return mapToDTO(user);
+       }
+       
+       @Override
+       @Transactional(readOnly = true)
+       public List<UserDTO> findByComplexCriteria(UserSearchCriteria criteria) {
+           // 복잡한 쿼리는 MyBatis 사용
+           Map<String, Object> params = new HashMap<>();
+           params.put("name", criteria.getName());
+           params.put("email", criteria.getEmail());
+           // 기타 필요한 검색 조건...
+           
+           List<User> users = userMapper.findByNameAndEmail(params);
+           return users.stream().map(this::mapToDTO).collect(Collectors.toList());
+       }
+       
+       // 기타 메서드...
+   }
+   ```
+
+## 서비스 계층
+
+```java
+@Service
+@Transactional
+public class UserServiceImpl implements UserService {
+    
+    private final UserRepository userRepository;
+    
+    @Autowired
+    public UserServiceImpl(UserRepository userRepository) {
+        this.userRepository = userRepository;
+    }
+    
+    @Override
+    @Transactional(readOnly = true)
+    public UserDTO findById(Long id) {
+        User user = userRepository.findById(id)
+            .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + id));
+        return mapToDTO(user);
+    }
+    
+    @Override
+    public UserDTO create(UserDTO userDTO) {
+        // 중복 이메일 체크
+        userRepository.findByEmail(userDTO.getEmail())
+            .ifPresent(u -> {
+                throw new IllegalArgumentException("Email already in use: " + userDTO.getEmail());
+            });
+        
+        User user = new User();
+        user.setName(userDTO.getName());
+        user.setEmail(userDTO.getEmail());
+        // 기타 필요한 필드 설정...
+        
+        User saved = userRepository.save(user);
+        return mapToDTO(saved);
+    }
+    
+    // 기타 메서드...
+    
+    private UserDTO mapToDTO(User user) {
+        UserDTO dto = new UserDTO();
+        dto.setId(user.getId());
+        dto.setName(user.getName());
+        dto.setEmail(user.getEmail());
+        // 기타 필요한 필드 매핑...
+        return dto;
+    }
+}
+```
+
+## Spring Batch
+
+### 배치 작업 설계
+
+1. **배치 설정**:
+   ```java
+   @Configuration
+   @EnableBatchProcessing
+   public class BatchConfig {
+       
+       @Autowired
+       private JobBuilderFactory jobBuilderFactory;
+       
+       @Autowired
+       private StepBuilderFactory stepBuilderFactory;
+       
+       @Bean
+       public Job importUserJob(Step step1) {
+           return jobBuilderFactory.get("importUserJob")
+               .incrementer(new RunIdIncrementer())
+               .listener(new JobCompletionNotificationListener())
+               .flow(step1)
+               .end()
+               .build();
+       }
+       
+       @Bean
+       public Step step1(ItemReader<UserDTO> reader, 
+                        ItemProcessor<UserDTO, User> processor, 
+                        ItemWriter<User> writer) {
+           return stepBuilderFactory.get("step1")
+               .<UserDTO, User>chunk(10)
+               .reader(reader)
+               .processor(processor)
+               .writer(writer)
+               .build();
+       }
+   }
+   ```
+
+2. **아이템 리더, 프로세서, 라이터**:
+   ```java
+   @Configuration
+   public class BatchComponents {
+       
+       @Bean
+       public FlatFileItemReader<UserDTO> reader() {
+           return new FlatFileItemReaderBuilder<UserDTO>()
+               .name("userItemReader")
+               .resource(new ClassPathResource("sample-data.csv"))
+               .delimited()
+               .names(new String[]{"name", "email"})
+               .fieldSetMapper(new BeanWrapperFieldSetMapper<UserDTO>() {{
+                   setTargetType(UserDTO.class);
+               }})
+               .build();
+       }
+       
+       @Bean
+       public ItemProcessor<UserDTO, User> processor() {
+           return userDTO -> {
+               User user = new User();
+               user.setName(userDTO.getName());
+               user.setEmail(userDTO.getEmail());
+               return user;
+           };
+       }
+       
+       @Bean
+       public JpaItemWriter<User> writer(EntityManagerFactory entityManagerFactory) {
+           JpaItemWriter<User> writer = new JpaItemWriter<>();
+           writer.setEntityManagerFactory(entityManagerFactory);
+           return writer;
+       }
+   }
+   ```
+
+3. **작업 실행 및 스케줄링**:
+   ```java
+   @Component
+   public class JobScheduler {
+       
+       @Autowired
+       private JobLauncher jobLauncher;
+       
+       @Autowired
+       private Job importUserJob;
+       
+       @Scheduled(cron = "0 0 1 * * ?") // 매일 새벽 1시에 실행
+       public void runJob() throws Exception {
+           JobParameters parameters = new JobParametersBuilder()
+               .addDate("runTime", new Date())
+               .toJobParameters();
+           
+           jobLauncher.run(importUserJob, parameters);
+       }
+   }
+   ```
+
+## Spring Boot 테스트
+
+### 단위 테스트
+
+```java
+@ExtendWith(MockitoExtension.class)
+public class UserServiceTest {
+    
+    @Mock
+    private UserRepository userRepository;
+    
+    @InjectMocks
+    private UserServiceImpl userService;
+    
+    @Test
+    public void testFindById() {
+        // Given
+        Long userId = 1L;
+        User user = new User();
+        user.setId(userId);
+        user.setName("John Doe");
+        user.setEmail("john@example.com");
+        
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        
+        // When
+        UserDTO result = userService.findById(userId);
+        
+        // Then
+        assertNotNull(result);
+        assertEquals(userId, result.getId());
+        assertEquals("John Doe", result.getName());
+        assertEquals("john@example.com", result.getEmail());
+        
+        verify(userRepository, times(1)).findById(userId);
+    }
+    
+    @Test
+    public void testFindByIdNotFound() {
+        // Given
+        Long userId = 1L;
+        when(userRepository.findById(userId)).thenReturn(Optional.empty());
+        
+        // When & Then
+        assertThrows(ResourceNotFoundException.class, () -> {
+            userService.findById(userId);
+        });
+        
+        verify(userRepository, times(1)).findById(userId);
+    }
+}
+```
+
+### 통합 테스트
+
+```java
+@SpringBootTest
+@AutoConfigureMockMvc
+public class UserControllerIntegrationTest {
+    
+    @Autowired
+    private MockMvc mockMvc;
+    
+    @Autowired
+    private ObjectMapper objectMapper;
+    
+    @MockBean
+    private UserService userService;
+    
+    @Test
+    public void testGetUser() throws Exception {
+        // Given
+        Long userId = 1L;
+        UserDTO user = new UserDTO();
+        user.setId(userId);
+        user.setName("John Doe");
+        user.setEmail("john@example.com");
+        
+        when(userService.findById(userId)).thenReturn(user);
+        
+        // When & Then
+        mockMvc.perform(get("/api/users/{id}", userId))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.id").value(userId))
+            .andExpect(jsonPath("$.name").value("John Doe"))
+            .andExpect(jsonPath("$.email").value("john@example.com"));
+        
+        verify(userService, times(1)).findById(userId);
+    }
+    
+    @Test
+    public void testCreateUser() throws Exception {
+        // Given
+        UserDTO userToCreate = new UserDTO();
+        userToCreate.setName("Jane Doe");
+        userToCreate.setEmail("jane@example.com");
+        
+        UserDTO createdUser = new UserDTO();
+        createdUser.setId(1L);
+        createdUser.setName("Jane Doe");
+        createdUser.setEmail("jane@example.com");
+        
+        when(userService.create(any(UserDTO.class))).thenReturn(createdUser);
+        
+        // When & Then
+        mockMvc.perform(post("/api/users")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(userToCreate)))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.id").value(1L))
+            .andExpect(jsonPath("$.name").value("Jane Doe"))
+            .andExpect(jsonPath("$.email").value("jane@example.com"));
+        
+        verify(userService, times(1)).create(any(UserDTO.class));
+    }
+}
+```
+
+### 슬라이스 테스트
+
+1. **Repository 테스트**:
+   ```java
+   @DataJpaTest
+   public class UserRepositoryTest {
+       
+       @Autowired
+       private TestEntityManager entityManager;
+       
+       @Autowired
+       private UserRepository userRepository;
+       
+       @Test
+       public void testFindByEmail() {
+           // Given
+           User user = new User();
+           user.setName("John Doe");
+           user.setEmail("john@example.com");
+           entityManager.persist(user);
+           entityManager.flush();
+           
+           // When
+           Optional<User> found = userRepository.findByEmail("john@example.com");
+           
+           // Then
+           assertTrue(found.isPresent());
+           assertEquals("John Doe", found.get().getName());
+       }
+   }
+   ```
+
+2. **MyBatis 매퍼 테스트**:
+   ```java
+   @MybatisTest
+   public class UserMapperTest {
+       
+       @Autowired
+       private UserMapper userMapper;
+       
+       @Test
+       @Sql("/test-data.sql") // 테스트 데이터 로드
+       public void testFindById() {
+           // Given
+           Long userId = 1L;
+           
+           // When
+           User user = userMapper.findById(userId);
+           
+           // Then
+           assertNotNull(user);
+           assertEquals("John Doe", user.getName());
+           assertEquals("john@example.com", user.getEmail());
+       }
+   }
+   ```
+
+## 보안 (Spring Security)
+
+```java
+@Configuration
+@EnableWebSecurity
+public class SecurityConfig extends WebSecurityConfigurerAdapter {
+    
+    @Autowired
+    private UserDetailsService userDetailsService;
+    
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
+    
+    @Override
+    protected void configure(HttpSecurity http) throws Exception {
+        http
+            .csrf().disable()
+            .authorizeRequests()
+                .antMatchers("/api/public/**").permitAll()
+                .antMatchers("/api/users/**").hasRole("USER")
+                .antMatchers("/api/admin/**").hasRole("ADMIN")
+                .anyRequest().authenticated()
+            .and()
+            .formLogin()
+                .loginPage("/login")
+                .permitAll()
+            .and()
+            .logout()
+                .permitAll();
+    }
+    
+    @Override
+    protected void configure(AuthenticationManagerBuilder auth) throws Exception {
+        auth.userDetailsService(userDetailsService)
+            .passwordEncoder(passwordEncoder());
+    }
+}
+```
+
+## 모범 사례
+
+1. **의존성 주입**: 생성자 주입 사용 (필드 주입 지양)
+   ```java
+   @Service
+   public class UserServiceImpl implements UserService {
+       
+       private final UserRepository userRepository;
+       
+       @Autowired // 생성자가 하나면 생략 가능
+       public UserServiceImpl(UserRepository userRepository) {
+           this.userRepository = userRepository;
+       }
+       
+       // 메서드...
+   }
+   ```
+
+2. **DTO 사용**: 엔티티를 직접 노출하지 않고 DTO로 변환하여 전달
+   ```java
+   // 좋음
+   @GetMapping("/{id}")
+   public ResponseEntity<UserDTO> getUser(@PathVariable Long id) {
+       UserDTO user = userService.findById(id);
+       return ResponseEntity.ok(user);
+   }
+   
+   // 좋지 않음
+   @GetMapping("/{id}")
+   public ResponseEntity<User> getUser(@PathVariable Long id) {
+       User user = userRepository.findById(id).orElseThrow();
+       return ResponseEntity.ok(user);
+   }
+   ```
+
+3. **트랜잭션 관리**: 서비스 계층에서 트랜잭션 관리
+   ```java
+   @Service
+   @Transactional // 클래스 레벨의 트랜잭션 설정
+   public class UserServiceImpl implements UserService {
+       
+       @Override
+       @Transactional(readOnly = true) // 읽기 전용 메서드
+       public UserDTO findById(Long id) {
+           // 구현...
+       }
+       
+       @Override
+       @Transactional(propagation = Propagation.REQUIRES_NEW)
+       public void processImportantOperation() {
+           // 구현...
+       }
+   }
+   ```
+
+4. **유효성 검사**: Bean Validation 사용
+   ```java
+   public class UserDTO {
+       
+       private Long id;
+       
+       @NotBlank(message = "Name is required")
+       @Size(min = 2, max = 50, message = "Name must be between 2 and 50 characters")
+       private String name;
+       
+       @NotBlank(message = "Email is required")
+       @Email(message = "Invalid email format")
+       private String email;
+       
+       // 게터, 세터...
+   }
+   ```
+
+5. **환경별 설정**: 프로필 사용
+   ```yaml
+   spring:
+     profiles:
+       active: dev
+   
+   ---
+   spring:
+     config:
+       activate:
+         on-profile: dev
+     datasource:
+       url: jdbc:h2:mem:testdb
+       driver-class-name: org.h2.Driver
+   
+   ---
+   spring:
+     config:
+       activate:
+         on-profile: prod
+     datasource:
+       url: jdbc:mysql://localhost:3306/mydb
+       driver-class-name: com.mysql.cj.jdbc.Driver
+   ```
+
+6. **로깅**: SLF4J와 Logback 사용
+   ```java
+   @Service
+   public class UserServiceImpl implements UserService {
+       
+       private static final Logger logger = LoggerFactory.getLogger(UserServiceImpl.class);
+       
+       @Override
+       public UserDTO findById(Long id) {
+           logger.debug("Looking for user with id: {}", id);
+           // 구현...
+       }
+   }
+   ``` 
