@@ -95,28 +95,45 @@ graph TB
         end
         
         subgraph Data["데이터 네임스페이스"]
-            PostgreSQL["PostgreSQL\n(StatefulSet)"]
-            MongoDB["MongoDB\n(StatefulSet)"]
-            Elasticsearch["Elasticsearch\n(StatefulSet)"]
-            Redis["Redis\n(StatefulSet)"]
-            RabbitMQ["RabbitMQ\n(StatefulSet)"]
+            PostgreSQL["`PostgreSQL
+            (StatefulSet)`"]
+            MongoDB["`MongoDB
+            (StatefulSet)`"]
+            Elasticsearch["`Elasticsearch
+            (StatefulSet)`"]
+            Redis["`Redis
+            (StatefulSet)`"]
+            RabbitMQ["`RabbitMQ
+            (StatefulSet)`"]
         end
         
         subgraph Services["서비스 네임스페이스"]
             ConfigMap[ConfigMaps]
             Secret[Secrets]
-            ConfigServer["Config Server\n(Deployment)"]
-            EurekaServer["Service Discovery\n(StatefulSet)"]
-            APIGateway["API Gateway\n(Deployment)"]
-            Auth["Auth Service\n(Deployment)"]
-            User["User Service\n(Deployment)"]
-            Place["Place Service\n(Deployment)"]
-            Search["Search Service\n(Deployment)"]
-            Sharing["Sharing Service\n(Deployment)"]
-            History["History Service\n(Deployment)"]
-            Notification["Notification Service\n(Deployment)"]
-            Analytics["Analytics Service\n(Deployment)"]
-            Feed["Feed Service\n(Deployment)"]
+            ConfigServer["`Config Server
+            (Deployment)`"]
+            EurekaServer["`Service Discovery
+            (StatefulSet)`"]
+            APIGateway["`API Gateway
+            (Deployment)`"]
+            Auth["`Auth Service
+            (Deployment)`"]
+            User["`User Service
+            (Deployment)`"]
+            Place["`Place Service
+            (Deployment)`"]
+            Search["`Search Service
+            (Deployment)`"]
+            Sharing["`Sharing Service
+            (Deployment)`"]
+            History["`History Service
+            (Deployment)`"]
+            Notification["`Notification Service
+            (Deployment)`"]
+            Analytics["`Analytics Service
+            (Deployment)`"]
+            Feed["`Feed Service
+            (Deployment)`"]
         end
         
         %% 서비스 연결
@@ -178,9 +195,10 @@ graph TB
     
     %% 클러스터 외부 서비스
     subgraph External["외부 서비스"]
-        GithubActions["GitHub Actions\n(CI/CD)"]
-        GCP["Google Cloud\nStorage"]
-        SNS["Firebase Cloud\nMessaging"]
+        GithubActions["`GitHub Actions
+        (CI/CD)`"]
+        GCP["Google Cloud Storage"]
+        SNS["Firebase Cloud Messaging"]
     end
     
     GithubActions -- 배포 --> GitOps
@@ -428,12 +446,18 @@ flowchart TB
 ```mermaid
 flowchart TD
     %% 주요 레이어
-    client["클라이언트 레이어\n(React, Flutter, 외부 시스템)"]
-    api["API 레이어\n(컨트롤러, 입력 검증, API 문서화)"]
-    service["서비스 레이어\n(비즈니스 로직, 트랜잭션 관리)"]
-    repo["리포지토리 레이어\n(데이터 액세스, 쿼리 최적화)"]
-    domain["도메인 모델\n(엔티티, 값 객체, 집계)"]
-    db["데이터베이스\n(PostgreSQL, MongoDB, Redis, Elasticsearch)"]
+    client["`클라이언트 레이어
+    (React, Flutter, 외부 시스템)`"]
+    api["`API 레이어
+    (컨트롤러, 입력 검증, API 문서화)`"]
+    service["`서비스 레이어
+    (비즈니스 로직, 트랜잭션 관리)`"]
+    repo["`리포지토리 레이어
+    (데이터 액세스, 쿼리 최적화)`"]
+    domain["`도메인 모델
+    (엔티티, 값 객체, 집계)`"]
+    db["`데이터베이스
+    (PostgreSQL, MongoDB, Redis, Elasticsearch)`"]
     
     %% 연결
     client <--> api
@@ -443,10 +467,12 @@ flowchart TD
     domain --> db
     
     %% 레이어 내 주요 컴포넌트
-    api --- controller["@RestController\n@RequestMapping\n@Valid"]
-    service --- serviceImpl["@Service\n@Transactional"]
-    repo --- repository["JpaRepository\nMongoRepository"]
-    domain --- entity["@Entity\n@Document"]
+    api --- controller["`@RestController @RequestMapping
+    @Valid`"]
+    service --- serviceImpl["`@Service @Transactional`"]
+    repo --- repository["`JpaRepository MongoRepository`"]
+    domain --- entity["`@Entity
+    @Document`"]
     
     %% 스타일 정의
     classDef client fill:#ffdfdf,stroke:#333,stroke-width:2px,color:#000;
@@ -474,10 +500,10 @@ flowchart TB
     user["사용자"]
     
     %% 인프라 컴포넌트
-    github["GitHub\n(소스 코드)"]
-    actions["GitHub Actions\n(CI/CD)"]
+    github["GitHub (소스 코드)"]
+    actions["GitHub Actions (CI/CD)"]
     registry["Container Registry"]
-    argocd["ArgoCD\n(GitOps)"]
+    argocd["ArgoCD (GitOps)"]
     k8s["Kubernetes 클러스터"]
     
     %% 클러스터 내부
@@ -486,7 +512,7 @@ flowchart TB
         
         subgraph ns_services["Services 네임스페이스"]
             api_gateway["API Gateway"]
-            microservices["마이크로서비스\n(Auth, User, Place, etc.)"]
+            microservices["마이크로서비스 (Auth, User, Place, etc.)"]
         end
         
         subgraph ns_data["Data 네임스페이스"]
@@ -584,10 +610,10 @@ flowchart TB
     
     %% 데이터베이스 내부 구조
     subgraph postgres_schema["PostgreSQL 스키마"]
-        auth_schema["Auth Schema\n- users\n- roles\n- permissions"]
-        user_schema["User Schema\n- profiles\n- friends\n- preferences"]
-        place_schema["Place Schema\n- places\n- tags\n- categories"]
-        sharing_schema["Sharing Schema\n- shared_lists\n- permissions"]
+        auth_schema["Auth Schema - users - roles - permissions"]
+        user_schema["User Schema - profiles - friends - preferences"]
+        place_schema["Place Schema - places - tags - categories"]
+        sharing_schema["Sharing Schema - shared_lists - permissions"]
     end
     
     postgres --- postgres_schema
@@ -644,7 +670,8 @@ flowchart TB
     gateway["API Gateway"]
     
     services["마이크로서비스"]
-    cache["캐시 계층\n(Redis)"]
+    cache["`캐시 계층
+    (Redis)`"]
     db["데이터 계층"]
     
     %% 스케일링 및 모니터링
@@ -653,7 +680,8 @@ flowchart TB
     prom["Prometheus"]
     
     %% 회복성 컴포넌트
-    breaker["Circuit Breaker\n(Resilience4j)"]
+    breaker["`Circuit Breaker
+    (Resilience4j)`"]
     retry["재시도 메커니즘"]
     fallback["폴백 서비스"]
     
@@ -737,24 +765,31 @@ flowchart TB
 ```mermaid
 flowchart LR
     %% 클라이언트 노드
-    webClient["웹 클라이언트\n(React.js)"]
-    mobileClient["모바일 클라이언트\n(Flutter)"]
-    thirdParty["서드파티\n애플리케이션"]
+    webClient["`웹 클라이언트
+    (React.js)`"]
+    mobileClient["`모바일 클라이언트
+    (Flutter)`"]
+    thirdParty["`서드파티
+    애플리케이션`"]
     
     %% BFF 노드
     webBFF["웹 BFF"]
     mobileBFF["모바일 BFF"]
-    openAPI["OpenAPI 게이트웨이"]
+    openAPI["`OpenAPI
+    게이트웨이`"]
     
     %% 통신 채널
-    rest["REST API\n(HTTP/JSON)"]
+    rest["`REST API
+    (HTTP/JSON)`"]
     graphql["GraphQL API"]
-    ws["WebSocket\n(실시간 통신)"]
-    sse["Server-Sent Events\n(단방향 실시간)"]
+    ws["`WebSocket
+    (실시간 통신)`"]
+    sse["`Server-Sent Events
+    (단방향 실시간)`"]
     
     %% 서비스 계층
     apiGateway["API 게이트웨이"]
-    services["마이크로서비스\n계층"]
+    services["마이크로서비스 계층"]
     
     %% 클라이언트 연결
     webClient --> webBFF
@@ -776,7 +811,7 @@ flowchart LR
     apiGateway -- ws --> services
     
     %% API 문서화 관련
-    swagger["Swagger/OpenAPI\n문서"]
+    swagger["Swagger/OpenAPI 문서"]
     apiRegistry["API 레지스트리"]
     apiMonitor["API 모니터링"]
     
