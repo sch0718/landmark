@@ -2,22 +2,14 @@ package com.landmark.commons.model;
 
 import java.io.Serializable;
 
-import org.springframework.data.annotation.CreatedBy;
-import org.springframework.data.annotation.CreatedDate;
-import org.springframework.data.annotation.LastModifiedBy;
-import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.domain.Persistable;
-import org.springframework.format.annotation.DateTimeFormat;
-
-import com.fasterxml.jackson.annotation.JsonFormat;
 
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
 
-import javax.persistence.Column;
-import javax.persistence.MappedSuperclass;
-import java.time.LocalDateTime;
+import jakarta.persistence.MappedSuperclass;
+
 
 /**
  * 모든 Entity가 상속받을 기본 엔티티의 추상 클래스입니다.
@@ -29,9 +21,9 @@ import java.time.LocalDateTime;
  */
 @Getter
 @Setter
-@ToString(exclude = {"createdBy", "lastModifiedBy"})
+@ToString
 @MappedSuperclass
-public abstract class AbstractBaseModel<ID extends Serializable> extends AuditEntity implements Serializable, Persistable<ID> {
+public abstract class AbstractBaseEntity<ID extends Serializable> extends AuditEntity implements Persistable<ID> {
     
     private static final long serialVersionUID = 1L;
 

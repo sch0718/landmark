@@ -1,49 +1,116 @@
-plugins {
-    id 'java'
-    id 'org.springframework.boot' version '3.2.3'
-    id 'io.spring.dependency-management' version '1.1.4'
-}
-
-group = 'com.kakaopay'
-version = '0.0.1-SNAPSHOT'
-
-java {
-    sourceCompatibility = '17'
-}
-
-configurations {
-    compileOnly {
-        extendsFrom annotationProcessor
+buildscript {
+    repositories {
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'org.springframework.boot:spring-boot-gradle-plugin:3.2.3'
+        classpath 'io.spring.gradle:dependency-management-plugin:1.1.4'
     }
 }
 
-repositories {
-    mavenCentral()
+plugins {
+    id 'org.springframework.boot' version '3.2.3' apply false
+    id 'io.spring.dependency-management' version '1.1.4' apply false
 }
 
-dependencies {
-    // Spring Boot
-    implementation 'org.springframework.boot:spring-boot-starter-web'
-    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
-    implementation 'org.springframework.boot:spring-boot-starter-validation'
-    implementation 'org.springframework.boot:spring-boot-starter-actuator'
-    
-    // Database
-    implementation 'org.postgresql:postgresql'
-    runtimeOnly 'com.h2database:h2'
-    
-    // Documentation
-    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.3.0'
-    
-    // Lombok
-    compileOnly 'org.projectlombok:lombok'
-    annotationProcessor 'org.projectlombok:lombok'
-    
-    // Test
-    testImplementation 'org.springframework.boot:spring-boot-starter-test'
-    testImplementation 'org.mockito:mockito-core'
+ext {
+    springBootVersion = '3.2.3'
+    springCloudVersion = '2023.0.0'
+    springDependencyManagementVersion = '1.1.4'
+    javaVersion = 17
 }
 
-tasks.named('test') {
-    useJUnitPlatform()
+allprojects {
+    group = 'com.landmark'
+    version = '1.0.0-SNAPSHOT'
+    
+    repositories {
+        mavenCentral()
+        maven { url = 'https://repo.spring.io/milestone' }
+    }
+}
+
+subprojects {
+    apply plugin: 'java-library'
+    apply plugin: 'org.springframework.boot'
+    apply plugin: 'io.spring.dependency-management'
+    
+    java {
+        toolchain {
+            languageVersion = JavaLanguageVersion.of(rootProject.ext.javaVersion)
+        }
+    }
+    
+    tasks.withType(JavaCompile).configureEach {
+        options.encoding = 'UTF-8'
+        options.compilerArgs += ['-Xlint:deprecation']
+    }
+    
+    configurations {
+        all {
+            resolutionStrategy {
+                eachDependency { details ->
+                    if (details.requested.group == 'org.springframework.boot') {
+                        details.useVersion springBootVersion
+                    }
+                }
+            }
+        }
+    }
+    
+    // 실행 가능한 jar가 필요하지 않은 프로젝트는 bootJar 비활성화
+    if (!project.name.endsWith('service') && 
+        !project.name.equals('api-gateway') && 
+        !project.name.equals('config-server') && 
+        !project.name.equals('eureka-server')) {
+        bootJar.enabled = false
+        jar.enabled = true
+    }
+    
+    dependencyManagement {
+        imports {
+            mavenBom "org.springframework.cloud:spring-cloud-dependencies:${springCloudVersion}"
+        }
+    }
+    
+    dependencies {
+        // Spring Boot
+        implementation "org.springframework.boot:spring-boot-starter"
+        implementation "org.springframework.boot:spring-boot-starter-validation"
+        implementation "org.springframework.boot:spring-boot-starter-actuator"
+        
+        // Spring Cloud
+        implementation "org.springframework.cloud:spring-cloud-starter-netflix-eureka-client"
+        implementation "org.springframework.cloud:spring-cloud-starter-config"
+        implementation "org.springframework.cloud:spring-cloud-starter-openfeign"
+        implementation "org.springframework.cloud:spring-cloud-starter-circuitbreaker-resilience4j"
+        
+        // Micrometer Tracing
+        implementation 'io.micrometer:micrometer-tracing'
+        implementation 'io.micrometer:micrometer-observation'
+        implementation 'io.micrometer:micrometer-tracing-bridge-brave'
+        implementation 'io.zipkin.reporter2:zipkin-reporter-brave'
+        
+        // SpringDoc OpenAPI
+        implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.3.0'
+        
+        // Lombok
+        compileOnly 'org.projectlombok:lombok'
+        annotationProcessor 'org.projectlombok:lombok'
+        
+        // Test
+        testImplementation 'org.springframework.boot:spring-boot-starter-test'
+        testImplementation 'org.junit.jupiter:junit-jupiter-api'
+        testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine'
+    }
+    
+    tasks.named('test') {
+        useJUnitPlatform()
+    }
+}
+
+// commons 모듈은 Spring Boot 플러그인 제외
+configure(subprojects.findAll { it.path.equals(':commons') }) {
+    bootJar.enabled = false
+    jar.enabled = true
 } 

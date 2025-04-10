@@ -1,0 +1,78 @@
+plugins {
+    id 'java'
+    id 'java-library'
+}
+
+group = 'com.landmark'
+version = '1.0.0-SNAPSHOT'
+description = 'Commons for Landmark Application'
+
+sourceCompatibility = 17
+targetCompatibility = 17
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // Spring Boot 의존성 - api 스코프로 제공
+    api 'org.springframework.boot:spring-boot-starter-data-jpa'
+    api 'org.springframework.boot:spring-boot-starter-web'
+    api 'org.springframework.boot:spring-boot-starter-security'
+    api 'org.springframework.boot:spring-boot-starter-validation'
+    
+    // Spring Cloud 의존성
+    api 'org.springframework.cloud:spring-cloud-starter-openfeign'
+    api 'org.springframework.cloud:spring-cloud-starter-netflix-eureka-client'
+    api 'org.springframework.cloud:spring-cloud-starter-circuitbreaker-resilience4j'
+    
+    // 분산 추적
+    api 'io.micrometer:micrometer-tracing'
+    api 'io.micrometer:micrometer-observation'
+    api 'io.micrometer:micrometer-tracing-bridge-brave'
+    
+    // JWT
+    api 'io.jsonwebtoken:jjwt-api:0.11.5'
+    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.11.5'
+    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.11.5'
+    
+    // Lombok
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+    
+    // SpringDoc OpenAPI
+    api 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.3.0'
+    
+    // Jackson
+    api 'com.fasterxml.jackson.core:jackson-databind'
+    api 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310'
+    
+    // Validation
+    api 'jakarta.validation:jakarta.validation-api:3.0.2'
+    
+    // Commons 유틸리티
+    api 'org.apache.commons:commons-lang3'
+    api 'org.apache.commons:commons-collections4'
+    api 'commons-io:commons-io:2.15.1'
+    
+    // SLF4J
+    api 'org.slf4j:slf4j-api'
+    
+    // Test
+    testImplementation 'org.junit.jupiter:junit-jupiter-api'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine'
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.springframework.security:spring-security-test'
+}
+
+test {
+    useJUnitPlatform()
+}
+
+bootJar {
+    enabled = false
+}
+
+jar {
+    enabled = true
+} 

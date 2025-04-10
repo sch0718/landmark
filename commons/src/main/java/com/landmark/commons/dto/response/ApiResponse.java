@@ -1,13 +1,14 @@
 package com.landmark.commons.dto.response;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
-import lombok.Getter;
+import lombok.Data;
 import lombok.NoArgsConstructor;
-import lombok.Setter;
 import org.springframework.http.HttpStatus;
 
+import com.landmark.commons.exception.CommonErrorCode;
+
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 
 /**
  * API 응답을 위한 공통 응답 클래스입니다.
@@ -23,19 +24,29 @@ import java.time.format.DateTimeFormatter;
 @Builder
 public class ApiResponse<T> {
 
-    /** 응답 결과 성공 여부 */
+    /**
+     * 응답 결과 성공 여부
+     */
     private boolean success;
     
-    /** 응답 코드 */
+    /**
+     * 응답 코드
+     */
     private int code;
     
-    /** 응답 메시지 */
+    /**
+     * 응답 메시지
+     */
     private String message;
     
-    /** 응답 데이터 */
+    /**
+     * 응답 데이터
+     */
     private T data;
     
-    /** 응답 시간 */
+    /**
+     * 응답 시간
+     */
     private LocalDateTime timestamp;
 
     /**

@@ -1,19 +1,16 @@
 package com.landmark.commons.model;
 
-import javax.persistence.MappedSuperclass;
-import javax.persistence.PreUpdate;
+import jakarta.persistence.MappedSuperclass;
+import jakarta.persistence.PreUpdate;
 
+import java.io.Serializable;
 import java.time.LocalDateTime;
 
-import javax.persistence.Column;
-
-import org.springframework.format.annotation.DateTimeFormat;
-
-import com.fasterxml.jackson.annotation.JsonFormat;
+import jakarta.persistence.Column;
 
 import lombok.Getter;
 import lombok.Setter;
-
+import lombok.ToString;
 /**
  * 소프트 삭제 가능한 Entity의 추상 클래스입니다.
  * 삭제 여부와 삭제 시간 정보를 관리합니다.
@@ -24,9 +21,12 @@ import lombok.Setter;
  */
 @Getter
 @Setter
+@ToString
 @MappedSuperclass
-public class AbstractSoftDeletableBaseEntity extends AbstractBaseModel<String> implements SoftDeletable {
+public abstract class AbstractSoftDeletableBaseEntity<ID extends Serializable> extends AbstractBaseEntity<ID> implements SoftDeletable {
     
+    private static final long serialVersionUID = 1L;
+
     /**
      * 삭제 여부
      */
@@ -49,25 +49,5 @@ public class AbstractSoftDeletableBaseEntity extends AbstractBaseModel<String> i
         if (isDeleted && deletedAt == null) {
             deletedAt = LocalDateTime.now();
         }
-    }
-
-    @Override
-    public boolean isDeleted() {
-        return isDeleted;
-    }
-
-    @Override
-    public void setDeleted(boolean deleted) {
-        this.isDeleted = deleted;
-    }
-
-    @Override
-    public LocalDateTime getDeletedAt() {
-        return deletedAt;
-    }
-
-    @Override
-    public void setDeletedAt(LocalDateTime deletedAt) {
-        this.deletedAt = deletedAt;
     }
 }

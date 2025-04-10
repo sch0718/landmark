@@ -6,18 +6,12 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.ToString;
 import org.hibernate.annotations.GenericGenerator;
-import org.springframework.data.annotation.CreatedBy;
-import org.springframework.data.annotation.CreatedDate;
-import org.springframework.data.annotation.LastModifiedBy;
-import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
-import javax.persistence.Column;
-import javax.persistence.EntityListeners;
-import javax.persistence.GeneratedValue;
-import javax.persistence.Id;
-import javax.persistence.MappedSuperclass;
-import java.time.LocalDateTime;
+import jakarta.persistence.EntityListeners;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.Id;
+import jakarta.persistence.MappedSuperclass;
 
 /**
  * 모든 Entity가 상속받을 기본 엔티티 클래스입니다.
@@ -30,11 +24,13 @@ import java.time.LocalDateTime;
 @Getter
 @Setter
 @NoArgsConstructor
-@EqualsAndHashCode(of = "id")
-@ToString(exclude = {"createdBy", "lastModifiedBy"})
+@EqualsAndHashCode(of = "id", callSuper = true)
+@ToString
 @MappedSuperclass
 @EntityListeners(AuditingEntityListener.class)
-public class BaseEntity extends AbstractSoftDeletableBaseEntity {
+public class BaseEntity extends AbstractSoftDeletableBaseEntity<String> {
+
+    private static final long serialVersionUID = 1L;
     
     /**
      * ID - UUID로 자동 생성됩니다.

@@ -1,0 +1,18 @@
+rootProject.name = 'landmark'
+
+// 마이크로서비스
+include 'services:api-gateway'
+include 'services:auth-service'
+include 'services:user-service'
+include 'services:place-service'
+include 'services:search-service'
+include 'services:sharing-service'
+include 'services:history-service'
+include 'services:notification-service'
+include 'services:analytics-service'
+include 'services:feed-service'
+include 'services:config-server'
+include 'services:eureka-server'
+
+// 공통 모듈
+include 'commons' 

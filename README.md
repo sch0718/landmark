@@ -886,10 +886,12 @@ landmark/
 ├── frontend/                       # 프론트엔드 애플리케이션
 │   ├── app-client/                 # Flutter 앱 클라이언트
 │   └── web-client/                 # React 웹 클라이언트
-├── shared/                         # 공유 라이브러리 및 모듈
-│   ├── common-dto/                 # 공통 DTO 클래스
-│   ├── common-utils/               # 공통 유틸리티 함수
-│   └── common-security/            # 공통 보안 구성
+├── commons/                        # 공유 라이브러리 및 모듈
+│   ├── src/.../commons/config/     # 공통 설정 클래스
+│   ├── src/.../commons/dto/        # 공통 DTO 클래스
+│   ├── src/.../commons/entity/     # 공통 Entity 클래스
+│   ├── src/.../commons/utils/      # 공통 유틸리티 함수
+│   └── src/.../commons/security/   # 공통 보안 구성
 ├── docker/                         # Docker 관련 설정
 │   └── config/                     # 컨테이너 구성 파일
 ├── terraform/                      # 인프라 코드
