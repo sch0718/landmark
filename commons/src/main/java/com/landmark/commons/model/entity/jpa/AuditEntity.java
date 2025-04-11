@@ -1,4 +1,4 @@
-package com.landmark.commons.model;
+package com.landmark.commons.model.entity.jpa;
 
 import java.io.Serializable;
 import java.time.LocalDateTime;
@@ -12,6 +12,8 @@ import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedBy;
 import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
+
+import com.landmark.commons.model.entity.common.Auditable;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -28,7 +30,7 @@ import lombok.ToString;
 @ToString
 @MappedSuperclass
 @EntityListeners(AuditingEntityListener.class)
-public class AuditEntity implements Serializable {
+public class AuditEntity implements Auditable, Serializable {
 
     private static final long serialVersionUID = 1L;
 
@@ -50,8 +52,8 @@ public class AuditEntity implements Serializable {
 	 * 최종 수정 사용자 ID
 	 */
 	@LastModifiedBy
-	@Column(name = "last_modified_by")
-	private String lastModifiedBy;
+	@Column(name = "updated_by")
+	private String updatedBy;
 
     /**
 	 * 최종 수정 일시

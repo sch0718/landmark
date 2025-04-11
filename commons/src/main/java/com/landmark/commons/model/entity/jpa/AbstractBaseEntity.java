@@ -1,4 +1,4 @@
-package com.landmark.commons.model;
+package com.landmark.commons.model.entity.jpa;
 
 import java.io.Serializable;
 

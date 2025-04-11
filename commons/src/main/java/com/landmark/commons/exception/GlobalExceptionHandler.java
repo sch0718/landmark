@@ -1,12 +1,9 @@
-package com.landmark.commons.config;
+package com.landmark.commons.exception;
 
-import com.landmark.commons.dto.ResponseDTO;
-import com.landmark.commons.exception.BaseException;
-import com.landmark.commons.exception.ResourceNotFoundException;
+import com.landmark.commons.model.dto.response.ApiResponse;
 
 import lombok.extern.slf4j.Slf4j;
 
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.BindException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -33,21 +30,12 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(BaseException.class)
     public ResponseEntity<ApiResponse<Object>> handleBaseException(BaseException ex) {
-        log.error("BaseException: {}", ex.getMessage());
-        return new ResponseEntity<>(
-            ApiResponse.error(ex.getStatus(), ex.getMessage()), ex);
+        log.error("BaseException: {}, TraceId: {}", ex.getMessage(), ex.getTraceId());
+        return ResponseEntity
+            .status(ex.getStatus())
+            .body(ApiResponse.error(ex.getStatus(), ex.getMessage(), ex.getTraceId()));
     }
-    
-    /**
-     * 리소스를 찾을 수 없을 때 예외 처리
-     */
-    @ExceptionHandler(ResourceNotFoundException.class)
-    public ResponseEntity<ApiResponse<Object>> handleResourceNotFoundException(ServiceException ex) {
-        log.error("ServiceException: {}", ex.getMessage());
-        return new ResponseEntity<>(
-            ApiResponse.error(ex.getErrorCode(), ex.getMessage()), ex);
-    }
-    
+
     /**
      * 유효성 검사 예외 처리
      */
@@ -59,11 +47,13 @@ public class GlobalExceptionHandler {
         ex.getBindingResult().getFieldErrors().forEach(error -> 
             errors.put(error.getField(), error.getDefaultMessage())
         );
+
+        String traceId = TraceContext.getCurrentTraceId();
         
-        log.error("Validation error: {}", errors);
+        log.error("Validation error: {}, TraceId: {}", errors, traceId);
         
         return new ResponseEntity<>(
-            ApiResponse.error("유효성 검사에 실패했습니다.").data(errors), HttpStatus.BAD_REQUEST);
+            ApiResponse.error(CommonErrorCode.INVALID_REQUEST, errors, traceId), CommonErrorCode.INVALID_REQUEST.getStatus());
     }
     
     /**
@@ -77,11 +67,13 @@ public class GlobalExceptionHandler {
         ex.getBindingResult().getFieldErrors().forEach(error -> 
             errors.put(error.getField(), error.getDefaultMessage())
         );
+
+        String traceId = TraceContext.getCurrentTraceId();
         
-        log.error("Binding error: {}", errors);
+        log.error("Binding error: {}, TraceId: {}", errors, traceId);
         
         return new ResponseEntity<>(
-            ApiResponse.error("데이터 바인딩에 실패했습니다.").data(errors), HttpStatus.BAD_REQUEST);
+            ApiResponse.error(CommonErrorCode.INVALID_REQUEST, errors, traceId), CommonErrorCode.INVALID_REQUEST.getStatus());
     }
     
     /**
@@ -93,11 +85,13 @@ public class GlobalExceptionHandler {
         
         String error = String.format("%s 파라미터는 %s 타입이어야 합니다", 
                 ex.getName(), ex.getRequiredType().getSimpleName());
-        
-        log.error("Type mismatch: {}", error);
+
+        String traceId = TraceContext.getCurrentTraceId();
+                
+        log.error("Type mismatch: {}, TraceId: {}", error, traceId);
         
         return new ResponseEntity<>(
-                ApiResponse.error(error), HttpStatus.BAD_REQUEST);
+                ApiResponse.error(CommonErrorCode.INVALID_REQUEST, error, traceId), CommonErrorCode.INVALID_REQUEST.getStatus());
     }
     
     /**
@@ -105,9 +99,11 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Object>> handleAllExceptions(Exception ex) {
-        log.error("Unhandled exception", ex);
+        String traceId = TraceContext.getCurrentTraceId();
+        
+        log.error("Unhandled exception: {}, TraceId: {}", ex.getMessage(), traceId);
         
         return new ResponseEntity<>(
-                ApiResponse.error("서버 내부 오류가 발생했습니다."), HttpStatus.INTERNAL_SERVER_ERROR);
+                ApiResponse.error(CommonErrorCode.INTERNAL_SERVER_ERROR, traceId), CommonErrorCode.INTERNAL_SERVER_ERROR.getStatus());
     }
 } 

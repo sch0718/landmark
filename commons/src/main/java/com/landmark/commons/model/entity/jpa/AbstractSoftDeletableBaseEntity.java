@@ -1,10 +1,12 @@
-package com.landmark.commons.model;
+package com.landmark.commons.model.entity.jpa;
 
 import jakarta.persistence.MappedSuperclass;
 import jakarta.persistence.PreUpdate;
 
 import java.io.Serializable;
 import java.time.LocalDateTime;
+
+import com.landmark.commons.model.entity.common.SoftDeletable;
 
 import jakarta.persistence.Column;
 

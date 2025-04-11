@@ -1,7 +1,6 @@
 package com.landmark.commons.exception;
 
 import lombok.Getter;
-import lombok.RequiredArgsConstructor;
 import lombok.ToString;
 import org.springframework.http.HttpStatus;
 
@@ -19,6 +18,7 @@ public class BaseException extends RuntimeException {
     private static final long serialVersionUID = 1L;
     
     private final HttpStatus status;
+    private final String traceId;
 
     /**
      * 상태 코드와 메시지를 받아서 예외를 생성합니다.
@@ -29,6 +29,7 @@ public class BaseException extends RuntimeException {
     public BaseException(HttpStatus status, String message) {
         super(message);
         this.status = status;
+        this.traceId = TraceContext.getCurrentTraceId();
     }
 
     /**
@@ -48,5 +49,6 @@ public class BaseException extends RuntimeException {
     public BaseException(HttpStatus status, String message, Throwable cause) {
         super(message, cause);
         this.status = status;
+        this.traceId = TraceContext.getCurrentTraceId();
     }
 } 

@@ -2,7 +2,6 @@ package com.landmark.commons.exception;
 
 import lombok.Getter;
 import lombok.ToString;
-import org.springframework.http.HttpStatus;
 
 /**
  * 모든 서비스에서 사용할 수 있는 기본 예외 클래스

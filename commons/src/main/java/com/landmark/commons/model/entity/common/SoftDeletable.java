@@ -1,4 +1,4 @@
-package com.landmark.commons.model;
+package com.landmark.commons.model.entity.common;
 
 import java.time.LocalDateTime;
 
