@@ -1,6 +1,7 @@
 # trip-map 설계 (PoC)
 
 - 작성일: 2026-10-03
+- 개정: 2026-10-03 r4.1 — 네이버 저장 메모 기본 공개로 변경(사용자 결정)
 - 개정: 2026-10-03 r4 — 3차 리뷰 반영 (중복 방문 시 충돌 승격, 묶음 단위 되돌리기 §5.8, apply-edit 기준 버전 검사, 순서 무관성 범위 명시)
 - 개정: 2026-10-03 r3 — 2차 리뷰 반영 (날짜 묶음 병합, apply-edit 미수집 yaml 보호, 가져오기 원본 버전 맞추기, 빈 날 구간 수, 병합 결과 검증, 사용자 선택 시각, 좌표 범위 표기)
 - 개정: 2026-10-03 r2 — 설계 리뷰 반영 (되돌리기 병합, 가져오기 정리, 일정 재계산 절차, 작성자 ID, 경로 캐시 키, 미계산 합계, stopId, 필드별 병합, 공개 데이터 범위, 가져오기 제한, 관계 검증, 배포 게이트, 모바일 검증)
@@ -152,7 +153,7 @@ folders:                      # 네이버 공유 폴더 shareId (배포 JSON에�
   - 72815c89a7b241558581a0d907f133c1
   - 99f1043b371b42c893b32fd55de340e6
 publish:
-  naverMemo: false            # 네이버 저장 메모를 배포 JSON에 포함할지 (기본 false)
+  naverMemo: true             # 네이버 저장 메모를 배포 JSON에 포함할지 (생략 시 true)
 customPlaces:                 # 네이버 폴더에 없는 곳. 집 대신 인근 역 등 대표 지점 권장
   - { key: start, name: 출발(사당역), lng: 126.9816, lat: 37.4765 }
 days:
@@ -179,7 +180,7 @@ TripData {
 PlaceKey = "n:<sid>" | "c:<customKey>"
 Place { name, address, lng, lat, category (mcidName, custom은 null),
         folderIds: ("f1"…)[], savedAt (custom은 null), sid?,
-        naverMemos?: [{ folderId, memo }] }               # publish.naverMemo=true일 때만
+        naverMemos?: [{ folderId, memo }] }               # publish.naverMemo가 false면 생략
 Day   { date, stops: [Stop], legs: [Leg] }
 Stop  { id, placeKey, time?: "HH:mm", note? }
 Leg   { fromStopId, toStopId, fromPlaceKey, toPlaceKey,
@@ -279,7 +280,7 @@ EditLayer 추가:
 - 필터 칩: 폴더(복수), 카테고리(개수 표시), 내 태그, 상태(메모 있음 / 일정 포함·미포함 / 숨김 보기).
 - 지도: 필터 통과 장소를 카테고리 색 마커로. `supercluster`로 클러스터링.
 - 목록: "지도 영역 안만 보기" 토글. 목록과 지도 선택 상태 동기화.
-- 장소 카드: 이름, 카테고리, 주소, 소속 폴더, 네이버 메모(공개된 경우, 폴더별), 작성자별 메모(닉네임 표시, 내 것만 편집·삭제), 태그, 숨기기, `[일정에 추가 → Day 선택]`, `[네이버에서 열기]`(`https://m.place.naver.com/place/<sid>`; custom 장소는 숨김).
+- 장소 카드: 이름, 카테고리, 주소, 소속 폴더, 네이버 메모(폴더별, `publish.naverMemo: false`인 여행은 숨김), 작성자별 메모(닉네임 표시, 내 것만 편집·삭제), 태그, 숨기기, `[일정에 추가 → Day 선택]`, `[네이버에서 열기]`(`https://m.place.naver.com/place/<sid>`; custom 장소는 숨김).
 
 ### 4.4 일정 모드
 
@@ -485,7 +486,7 @@ EditLayer 추가:
 - `pipeline`
   - sid 병합 규칙(최신 이름, 최초 저장일, 폴더별 메모 보존), stop 연결 실패, 페이지네이션, 경로 단순화
   - **좌표가 바뀌면 경로 캐시 미스**, 실패 결과는 캐시되지 않음
-  - 공개 필드 필터(shareId 없음, naverMemo 옵션)
+  - 공개 필드 필터(shareId 없음, naverMemo 생략 시 포함·false면 제외)
   - **`apply-edit`**: override를 yaml에 반영(주석 보존), reset 날은 미변경, 미해결 원본 변경이 있으면 실패
   - **더 새 기준 편집 거부**: 편집의 `baseDataVersion`이 로컬 JSON보다 새로우면 reconcile 전에 실패, yaml 불변
   - **미수집 yaml 보호**: collect 이후 yaml을 직접 고친 날이 있으면 차이를 출력하고 실패, yaml 파일은 바이트 단위로 그대로
@@ -529,7 +530,7 @@ EditLayer 추가:
 | 데이터 | 처리 |
 |---|---|
 | 네이버 폴더 shareId | 배포하지 않음 (`f1` 등 내부 ID로 대체). shareId가 있으면 폴더 전체를 조회할 수 있기 때문 |
-| 네이버 저장 메모 | 기본 미배포. 여행별 `publish.naverMemo: true`일 때만 |
+| 네이버 저장 메모 | **기본 배포**(사용자 결정, 2026-10-03). 동행자가 메모를 보는 가치를 우선한다. 링크를 아는 누구나 읽을 수 있으므로 민감한 메모가 있는 여행은 `publish.naverMemo: false`로 끈다 |
 | 집 등 사적 좌표 | customPlaces에 정확한 위치 대신 인근 역 등 대표 지점을 쓰도록 문서·예시로 안내. 구간 경로가 그 지점에서 시작하므로 좌표만 숨기는 방식은 쓰지 않는다 |
 | 제목·일정·장소 | 공개를 전제로 한다. 더 강한 보호가 필요해지면 PoC 이후 접근 제어(로그인) 단계에서 다룬다 |
 
