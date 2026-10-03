@@ -32,7 +32,7 @@
 1. **네이버 장소명·메모에 HTML/스크립트 문자열** (`<img src=x onerror=alert(1)>`) — 문자 그대로 보이고 실행되지 않아야 한다. → Task 17 (`PlaceCard` 테스트), Task 16 (마커 라벨은 `textContent`로만 설정)
 2. **저장 폴더에 해외 장소(좌표 범위 밖)** — collect 전체가 실패하지 않고 그 장소만 제외·보고해야 한다. 단, 일정 stop이 그 장소를 가리키면 stop 연결 실패와 같이 종료 코드 1. → Task 10
 3. **방문이 없는 날·하루 한 곳뿐인 날** — 화면이 깨지지 않고 "방문 없음", 합계 없음으로 보여야 한다. → Task 4(`dayTotals([])`), Task 18(타임라인 빈 날)
-4. **같은 여행을 두 탭에서 동시에 편집** — 한 탭의 저장이 다른 탭에 `storage` 이벤트로 반영되어, 오래된 탭이 나중에 저장하며 상대 편집을 덮어쓰지 않아야 한다. → Task 15 (`editLayerAtom` storage 이벤트 테스트)
+4. **같은 여행을 두 탭에서 동시에 편집** — 두 탭이 서로 다른 장소에 메모를 저장해도 둘 다 남아야 한다(나중에 쓴 탭이 앞선 편집을 덮지 않음). → Task 15 (저장 직렬화 단위 테스트), Task 20 (두 페이지 경쟁 저장 E2E)
 5. **클립보드·공유 시트를 모두 쓸 수 없는 모바일 브라우저** — 링크를 선택 가능한 텍스트 필드로 보여 줘 직접 복사할 수 있어야 한다. → Task 19
 
 ---
@@ -130,11 +130,12 @@ trips/example.yaml
 - Produces (`trip-source.ts`): `TripSourceSchema`, `type TripSource` (§3.1 그대로; `publish.naverMemo` 기본 `true`; `stops[].id`, `publicId`는 optional — collect가 채운다).
 - Produces (`trip-data.ts`): `TripDataSchema`, `type TripData`, `type Place`, `type Day`, `type Stop = { id: string; placeKey: string; time?: string; note?: string }`, `type Leg` (§3.2 그대로).
 - Produces (`edit-layer.ts`): `EditLayerSchema`, `type EditLayer`, `type PlaceEdit`, `type DayEdit` (§3.3 그대로), `newEditLayer(args: { publicId: string; baseDataVersion: string; authorId: string; nickname: string; now: string }): EditLayer`.
-- Produces (`tests/fixtures/builders.ts`): `makeTrip(spec: { days: Record<string, string[]>; places?: string[] }): TripData` — `days`는 `{ '2026-11-14': ['X', 'Y'] }`처럼 날짜→stop id 목록이며, stop id `X`는 placeKey `n:<순번>`을 갖는 장소로 자동 생성, 모든 구간 `routed`. `makeEdit(overrides?: Partial<EditLayer>): EditLayer`. 이후 Task의 모든 도메인 테스트가 이 빌더를 쓴다.
+- Produces (`tests/fixtures/builders.ts`): `sid(symbol: string): string` — 테스트 표기용 기호를 유효한 StopId로 바꾼다(`'X'` → `'x000'`, `'H2'` → `'h200'`; 소문자화 후 `0`으로 4자까지 채움). `makeTrip(spec: { days: Record<string, string[]>; places?: string[] }): TripData` — `days`는 `{ '2026-11-14': ['X', 'Y'] }`처럼 날짜→기호 목록이며, 각 기호는 `sid(기호)`를 id로, placeKey `n:<순번>`을 갖는 장소로 자동 생성(기호 끝 숫자를 뗀 같은 문자는 같은 장소: `H`와 `H2`는 같은 placeKey), 모든 구간 `routed`, `dataVersion`·`queriedAt`은 고정 UTC ISO. `makeEdit(overrides?: Partial<EditLayer>): EditLayer` — 기본 authorId `'a-local'`, authors에 포함. 이후 Task의 모든 도메인 테스트가 이 빌더를 쓰며, 테스트 본문에서 stop id를 비교할 때는 `sid('X')`를 쓴다.
 
 - [ ] **Step 1: 실패 테스트 작성** — 표 기반(`it.each`)으로 §3.5의 규칙마다 통과 1건·거부 1건:
   - TripSource: `startDate > endDate` 거부, `2026-02-30` 거부, 기간 밖 날짜 거부, 날짜 중복 거부, customPlace key 중복 거부, 숫자만인 key(`"123"`) 거부, `lng: 123.99` 거부·`124.0` 통과·`132.0` 통과, `stops: []` 통과, `time: "25:00"` 거부, 전체 stop id 중복 거부, `publish` 생략 시 `naverMemo === true`.
   - TripData: 없는 placeKey 참조 거부, 없는 folderId 거부, `stops: []`이고 `legs: []` 통과, `stops` 1개·`legs: []` 통과, legs 수 불일치 거부, `legs[0].toStopId` 불일치 거부, `status: "failed"`인데 `durationMs: 0` 거부(null이어야 함), `dataVersion: "2026-10-03T10:00:00+09:00"` 거부(UTC `Z`만).
+  - 빌더: `makeTrip({ days: { '2026-11-14': ['X','Y'], '2026-11-15': [] } })`가 `TripDataSchema`를, `makeEdit()`이 `EditLayerSchema`를 통과.
   - EditLayer: memos 키가 authors에 없으면 거부, override 안 stop id 중복 거부, 메모 2,001자 거부, 태그 21개 거부, 31자 태그 거부, stop 51개 거부, authors 51명 거부, `mode: "reset"`에 `stops`가 있으면 거부.
 - [ ] **Step 2:** `yarn test tests/unit/schema` → FAIL(모듈 없음).
 - [ ] **Step 3:** 스키마 구현. 관계 검증은 각 최상위 스키마의 `superRefine`에서 `ctx.addIssue`로, 경로(`path`)를 정확히 지정한다(에러 화면이 첫 이슈를 보여 준다).
@@ -157,6 +158,7 @@ trips/example.yaml
   - `type EffectiveTrip = { days: EffectiveDay[]; hiddenEditDates: string[] }` (`hiddenEditDates`: 원본에 없는 날짜의 DayEdit).
   - `overlay(trip: TripData, edit: EditLayer | null): EffectiveTrip`
   - `findDuplicateStopIds(days: { stops: Stop[] }[]): string[]`
+  - `ensureOverride(trip: TripData, edit: EditLayer, date: string, now: string): EditLayer` — 그날이 이미 override면 그대로 반환. 아니면 **현재 실효 stops**(`overlay` 결과, 배치 규칙으로 빠진 방문 제외)를 복사해 `{ mode: 'override', stops, baseDayHash: hashDayStops(원본 그날 stops), updatedAt: now }`로 만든다. 앱의 모든 일정 편집(Task 17 일정에 추가, Task 18 전체)은 이 함수로 시작한다.
 
 - [ ] **Step 1: 실패 테스트 작성**
   - `edit = null` → 원본 그대로, 모든 `source: 'base'`, `unresolved: false`.
@@ -165,6 +167,7 @@ trips/example.yaml
   - **배치 규칙(§3.3)**: 원본 Day1=[], Day2=[X](v2), override Day1=[X'](X의 note만 다름) → Day1=[X'], Day2=[]이고 `days[1].removedByPlacement` = `['X']`, `findDuplicateStopIds` = `[]`.
   - 원본에 없는 날짜의 DayEdit → `hiddenEditDates`에 포함, `days`에는 없음.
   - **반복 방문**: Day1=[H, A, H2](H와 H2는 같은 placeKey, 다른 stop id) → stop 3개 유지.
+  - **줄어든 원본 날에서 편집 시작**: 원본 D2=[A, X, B], local override D1=[X] → `ensureOverride(trip, edit, D2, now)`의 D2 stops = `[A, B]`(X 없음), `baseDayHash` = 원본 D2 [A, X, B]의 해시. 이어서 장소 P를 추가해도 실효 일정에 X는 한 번(D1)뿐.
 - [ ] **Step 2:** `yarn test tests/unit/domain/overlay.test.ts` → FAIL.
 - [ ] **Step 3:** 구현. 배치 규칙: 먼저 override 날들의 stop id 집합을 만들고, 원본을 따르는 날에서 그 id를 뺀다.
 - [ ] **Step 4:** PASS 확인.
@@ -183,13 +186,14 @@ trips/example.yaml
 - Produces:
   - `type DisplayLeg = Omit<Leg, 'status'> & { status: 'routed' | 'failed' | 'unrouted' }`
   - `buildLegIndex(trip: TripData): Map<string, Leg>` — 키 `${fromPlaceKey}→${toPlaceKey}`, `routed`만.
-  - `effectiveLegs(day: EffectiveDay, trip: TripData, index: Map<string, Leg>): DisplayLeg[]` — 원본 그대로인 날은 원본 legs(실패 포함), override 날은 색인 재사용 후 `fromStopId/toStopId`를 현재 stop으로 바꾸고, 없으면 `unrouted`(하버사인 직선거리, `distanceKind: 'straight'`, 시간·통행료·`queriedAt` null, path = 두 점).
+  - `effectiveLegs(day: EffectiveDay, trip: TripData, index: Map<string, Leg>): DisplayLeg[]` — 원본 legs를 그대로 쓰는 조건은 `source === 'base'`이고 `removedByPlacement`가 비어 있을 때뿐(실패 구간 포함). 그 밖의 날(override, 또는 배치 규칙으로 방문이 빠진 원본 날)은 **실효 stops의 연속 쌍**으로 다시 만들며, 각 쌍은 색인 재사용 후 `fromStopId/toStopId`를 현재 stop으로 바꾸고, 없으면 `unrouted`(하버사인 직선거리, `distanceKind: 'straight'`, 시간·통행료·`queriedAt` null, path = 두 점).
   - `type DayTotals = { durationMs: number; roadDistanceM: number; tollFare: number; uncomputedCount: number; straightDistanceM: number }`
   - `dayTotals(legs: DisplayLeg[]): DayTotals` — `routed`만 시간·도로거리·통행료에 더하고, `failed`/`unrouted`는 개수와 직선거리에만.
 
 - [ ] **Step 1: 실패 테스트 작성**
   - A→C→B로 바꾼 override: A→C, C→B가 원본 어디에도 없으면 둘 다 `unrouted`; B→A가 원본 다른 날에 있으면 재사용.
   - 반복 방문 H→A→H: 두 구간의 `fromStopId/toStopId`가 각 stop id와 일치.
+  - **배치 규칙으로 줄어든 원본 날**: 원본 D2=[A, X, B](legs A→X, X→B), X가 local override D1로 배치됨 → D2 legs는 1개(A→B), 원본 어디에도 A→B가 없으면 `unrouted`, `fromStopId/toStopId` = `sid('A')/sid('B')`.
   - `dayTotals`: routed(3,600,000ms, 10,000m, 1,000원) + unrouted(직선 3,200m) → `{ durationMs: 3600000, roadDistanceM: 10000, tollFare: 1000, uncomputedCount: 1, straightDistanceM: 3200 }`.
   - **Review Focus 3**: `dayTotals([])` → 모두 0, `effectiveLegs`에 stop 0개·1개인 날 → `[]`.
 - [ ] **Step 2:** FAIL 확인. **Step 3:** 구현. **Step 4:** PASS 확인.
@@ -483,9 +487,18 @@ for g in groups:
 - Consumes: Task 14 저장소, `overlay`, `reconcile`, `keepMine`, `planRevert`, `applyRevert`.
 - Produces:
   - `paths = { home: '/', trip: (id: string) => `/t/${id}` }`
-  - `tripAtom: PrimitiveAtom<TripData | null>`; `editLayerAtom` — `atomWithStorage(storageKey(publicId), null, createJSONStorage(() => localStorage), { getOnInit: true })` 계열로 라우트 `Provider` 안에서 publicId별 생성(`createTripStore(publicId)`가 atom 묶음 반환). 다른 탭의 `storage` 이벤트 구독.
+  - `tripAtom: PrimitiveAtom<TripData | null>`.
+  - `createEditLayerStorage(storage: Storage, publicId: string, now: () => number): SyncStorage<EditLayer | null>` (Jotai `SyncStorage`) — `createJSONStorage`를 쓰지 않는다.
+    - `getItem`: Task 14 `readEditLayer` 경유(파싱·마이그레이션·`EditLayerSchema` 검증, 실패 시 백업 후 null).
+    - `setItem`/`removeItem`: `writeEditLayer` / 키 삭제.
+    - `subscribe(key, cb)`: `storage` 이벤트 중 같은 키만, `newValue`를 같은 검증 경로로 처리해 유효하면 `cb(값)`, 무효면 무시(현재 상태 유지, `console.warn`).
+  - `editLayerAtom = atomWithStorage(storageKey(publicId), null, createEditLayerStorage(...), { getOnInit: true })` — 라우트 `Provider` 안에서 publicId별 생성(`createTripStore(publicId)`가 atom 묶음 반환).
+  - **저장 직렬화** `updateEditLayer(publicId: string, fn: (e: EditLayer) => EditLayer, deps: { storage: Storage; locks?: LockManager; now: () => number }): Promise<EditLayer>` — `navigator.locks.request('tripmap:edit:<publicId>', …)` 안에서 **저장소의 최신 레이어를 다시 읽어** `fn`을 적용하고 쓴 뒤 그 값을 반환. `locks`가 없으면 같은 읽기-적용-쓰기를 잠금 없이 동기적으로 한 번에 수행(창이 매우 짧지만 보장 아님 — README에 한계 기록). 메모리 atom 값으로 저장소를 덮어쓰지 않는다.
   - `effectiveTripAtom` (읽기 전용 = `overlay(trip, edit)`), `reconcileReportAtom`.
-  - `useEditActions(): { ensureAuthor(): Promise<boolean>; update(fn: (e: EditLayer) => EditLayer): void }` — `ensureAuthor`는 local이 null이면 `NicknameDialog`를 열고 `newEditLayer`(authorId = `crypto.randomUUID()`) 생성. 스토리지 불가 시 토스트 "이 브라우저에서는 저장되지 않아요. 내보내기를 이용하세요"를 띄우고 메모리 상태로만 진행.
+  - `useEditActions(): { ensureAuthor(): Promise<boolean>; prepareDraftAuthor(): Promise<EditLayer | null>; update(fn: (e: EditLayer) => EditLayer): Promise<void> }`
+    - `ensureAuthor`: local이 null이면 `NicknameDialog`를 열고 `newEditLayer`(authorId = `crypto.randomUUID()`)를 만들어 `updateEditLayer`로 저장. 대화상자 취소 시 false, 저장소 불변.
+    - `prepareDraftAuthor`: local이 있으면 그것을, 없으면 닉네임을 받아 **저장하지 않은** 임시 레이어를 반환(취소 시 null). 가져오기 전용(Task 19).
+    - `update`: `updateEditLayer` 결과로 `editLayerAtom`을 갱신. 스토리지 불가 시 토스트 "이 브라우저에서는 저장되지 않아요. 내보내기를 이용하세요"를 띄우고 메모리 상태로만 진행.
   - 상단 바 메뉴 `닉네임 변경` → `authors[authorId] = { nickname, updatedAt: now }`. 검색 입력은 상단 바에 두고 값은 Task 17의 `ExploreFilter.query`로 전달.
   - `ReconcileBanner`는 미해결 묶음 외에 `report.removedStops`("원본에서 사라진 장소 N곳을 일정에서 뺐어요"), `orphanPlaceKeys`("사라진 장소의 메모 N건을 보관 중이에요 — 내보내기에 포함돼요"), `hiddenEditDates`("여행 기간에서 빠진 날짜의 편집 N건이 있어요")를 각각 한 줄로 보여 준다(0건이면 생략).
   - `ui-store`: `modeAtom: 'explore' | 'itinerary'`, `selectedDayAtom: string | 'all'`, `selectedPlaceAtom: string | null` — URL 쿼리 `mode`, `day`(1부터 번호), `place`와 양방향 동기화.
@@ -495,7 +508,8 @@ for g in groups:
   - `/`에 "공유받은 링크로 접속하세요", 여행 목록·링크 없음.
   - 404 → "링크가 잘못되었거나 만료된 여행입니다". 검증 실패 → `schemaVersion`과 첫 오류 표시.
   - 로드 시 `reconcile` 실행: 미해결 묶음이 있으면 배너 "Day 1 원본이 바뀌었어요(관련: Day 2)"와 두 버튼; `[내 편집 유지]` → `keepMine` 결과 저장, 배너 사라짐; `keepMine`이 null이면 `[원본 보기]`만 남음.
-  - **Review Focus 4**: 같은 키로 `window.dispatchEvent(new StorageEvent('storage', { key, newValue }))` → `editLayerAtom` 값이 새 값으로 바뀜.
+  - **실제 store 경유 검증**(`createStore()` + `store.get/set`): 저장소에 `{"schemaVersion":1}`(JSON은 유효, 스키마 위반)을 넣고 atom 초기 읽기 → 값 null, 백업 키에 원문, 원래 키 삭제. 다른 탭 이벤트 `new StorageEvent('storage', { key, newValue: 유효 레이어 })` → atom이 새 값; `newValue: '{"schemaVersion":1}'` → atom 값 그대로.
+  - **Review Focus 4 (단위)**: 탭 A의 atom이 오래된 레이어 L0을 들고 있는 동안 저장소가 L1(장소 p1 메모 추가)로 바뀜 → 탭 A에서 `update`(p2 메모 추가) → 저장소 결과에 p1·p2 메모 모두 존재. `locks` 있는 경로와 없는 경로 각각.
   - 쿼리 `?mode=itinerary&day=2` → `modeAtom === 'itinerary'`, `selectedDayAtom`이 두 번째 날짜.
   - 고아 2건·제거 방문 1건인 report → 해당 두 줄만 표시.
   - 닉네임 변경 → `authors[authorId].nickname` 갱신, `updatedAt` 현재 시각.
@@ -540,7 +554,7 @@ for g in groups:
   - `type ExploreFilter = { folderIds: string[]; categories: string[]; tags: string[]; hasMemo: boolean; inItinerary: 'any' | 'in' | 'out'; showHidden: boolean; query: string; inViewOnly: boolean }`
   - `filterPlaces(trip: TripData, edit: EditLayer | null, eff: EffectiveTrip, f: ExploreFilter, bounds?: Bounds): string[]` (placeKey 목록) — 검색 대상: 이름·주소·네이버 메모·사용자 메모·태그, 대소문자·한글 자모 그대로 `includes`.
   - `categoryCounts(trip: TripData): { category: string; count: number }[]` (많은 순).
-  - `PlaceCard` props: `{ placeKey: string }` — 메모 저장 시 `memos[authorId] = { text, updatedAt: now }`, 삭제는 `text: null`; 태그·숨김은 필드별 `updatedAt`; `[일정에 추가]`는 Day 선택 후 그날 override에 새 stop(id = 4자 무작위, 여행 내 유일) 추가(override가 없으면 원본 stops와 `baseDayHash`로 만든 뒤 추가).
+  - `PlaceCard` props: `{ placeKey: string }` — 메모 저장 시 `memos[authorId] = { text, updatedAt: now }`, 삭제는 `text: null`; 태그·숨김은 필드별 `updatedAt`; `[일정에 추가]`는 Day 선택 후 `ensureOverride`(Task 3)로 시작해 새 stop(id = 4자 무작위, 여행 내 유일)을 끝에 추가.
   - `ExplorePanel`은 필터 결과를 `MapView` 마커(`categoryColor`, `clusterable: true`, 선택 시 `selected`)로 넘기고, 목록 클릭 → `selectedPlaceAtom` 설정 + 지도 이동, 마커 클릭 → 목록 해당 항목으로 스크롤. `inViewOnly`면 `onBoundsChange`의 Bounds로 거른다.
 - [ ] **Step 1: 실패 테스트**
   - 폴더·카테고리·태그·상태·검색 조합 표 기반.
@@ -550,6 +564,7 @@ for g in groups:
   - `publish.naverMemo: false`로 만든 trip(=`naverMemos` 없음)에서는 네이버 메모 영역이 없음.
   - **Review Focus 1**: 이름·네이버 메모에 `<img src=x onerror=alert(1)>` → 문자 그대로 보이고 `container.querySelector('img')`가 null.
   - custom 장소엔 `[네이버에서 열기]` 없음.
+  - **줄어든 원본 날에 추가**: 원본 D2=[A, X, B]에서 X가 D1 override로 배치된 상태로 D2에 P 추가 → 실효 D2 = [A, B, P], `findDuplicateStopIds` = `[]`.
 - [ ] **Step 2–4:** FAIL → 구현 → PASS.
 - [ ] **Step 5:** 커밋 `feat(explore): 필터·목록·장소 카드`.
 
@@ -564,11 +579,11 @@ for g in groups:
 **Interfaces:**
 - Consumes: `effectiveTripAtom`, `buildLegIndex`, `effectiveLegs`, `dayTotals`, `planRevert`, `applyRevert`, `hashDayStops`, `useEditActions`, `MapView`.
 - Produces (`itinerary-actions.ts`, 모두 순수 함수 `(trip, edit, …, now) => EditLayer`):
-  - `reorderStops(trip, edit, date, fromIndex, toIndex, now)`
   - `moveStop(trip, edit, stopId, fromDate, toDate, now)` — 같은 stop id 유지, 두 날 override를 같은 `now`로 기록.
   - `removeStop(trip, edit, date, stopId, now)`
   - `updateStop(trip, edit, date, stopId, patch: { time?: string | null; note?: string | null }, now)`
-  - 공통 규칙: 그날 DayEdit가 override가 아니면 현재 실효 stops와 원본 해시(`baseDayHash = hashDayStops(원본 그날)`)로 override를 만든 뒤 변경.
+  - 공통 규칙: 모든 액션은 `ensureOverride`(Task 3)로 시작한다. stop은 인덱스가 아니라 id로 가리킨다 — 다른 탭의 저장이 반영된 최신 레이어에 적용될 수 있기 때문(Task 15).
+  - `reorderStops`의 시그니처는 `(trip, edit, date, stopId, toIndex, now)`.
   - 표시 문구(§4.4 그대로): 계산 `🚗 {h}시간 {m}분 · 도로 {km}km · {원}원`, 미계산 `┄ 직선 {km}km · 시간 미상 · 재계산 필요`, 합계 `계산된 구간 … · 미계산 {n}구간(직선 {km}km)` (미계산 0이면 뒷부분 생략), 거리는 소수 1자리 km, 금액은 천 단위 쉼표.
 - [ ] **Step 1: 실패 테스트**
   - `moveStop` 후 `overlay` 결과 X는 도착일에 한 번, 두 DayEdit `updatedAt` 같음.
@@ -596,14 +611,15 @@ for g in groups:
 - Produces:
   - `ExportDialog`: 링크 = `${location.origin}/t/${publicId}#e=${encoded}`. 순서: `navigator.share`가 있으면 공유 시트 → 없거나 실패하면 `navigator.clipboard.writeText` → 그것도 실패하면 링크를 읽기 전용 `TextField`(전체 선택)로 표시. 링크가 8,000자 초과면 "링크가 길어요. 파일로 내보내 주세요" 안내와 파일 버튼 강조. 파일명 `<제목>-<닉네임>-<YYYYMMDD>.tripedit.json`(압축 안 한 JSON, `Blob` 다운로드).
   - `useHashImport()`: 진입 시 `location.hash`가 `#e=`로 시작하면 값을 꺼내 `ImportDialog`를 열고, 결과와 무관하게 `history.replaceState(null, '', location.pathname + location.search)`.
-  - `ImportDialog`: 가져오기 전 `ensureAuthor()`(가져오기도 첫 편집으로 취급). 미리보기에 §5.3-5 항목(메모 추가/변경/삭제 수, 덮어써지는 태그·숨김 `from → to`, 충돌 묶음별 "내 것/받은 것" 라디오(기본값 선택), 정리 내역: 제거될 방문·표시되지 않을 날짜·원본이 바뀐 날). 확인 → `commitImport(..., new Date().toISOString())`; `ok: false`면 사유를 보여 주고 상태 유지. 실패 사유 문구: `too-long`/`too-large` "가져오기 데이터가 너무 커요", `corrupt`/`invalid` "가져오기 데이터가 손상됐어요", `other-trip` "다른 여행의 편집이에요", `trip-stale` "최신 여행 데이터가 아직 반영되지 않았어요. 잠시 후 다시 시도하세요."
+  - `ImportDialog`: 가져오기 전 `prepareDraftAuthor()`로 local을 준비한다(처음 방문한 브라우저면 닉네임을 받아 **저장하지 않은** 임시 레이어). 이 임시 레이어를 `prepareImport`의 `ctx.local`로 쓰고, 저장은 확인 후 `commitImport`가 `ok: true`일 때 `updateEditLayer`로 한 번만 한다. 닉네임 취소·검증 실패·`ok: false`·대화상자 취소는 모두 저장소를 건드리지 않는다. 미리보기에 §5.3-5 항목(메모 추가/변경/삭제 수, 덮어써지는 태그·숨김 `from → to`, 충돌 묶음별 "내 것/받은 것" 라디오(기본값 선택), 정리 내역: 제거될 방문·표시되지 않을 날짜·원본이 바뀐 날). 확인 → `commitImport(..., new Date().toISOString())`; `ok: false`면 사유를 보여 주고 상태 유지. 실패 사유 문구: `too-long`/`too-large` "가져오기 데이터가 너무 커요", `corrupt`/`invalid` "가져오기 데이터가 손상됐어요", `other-trip` "다른 여행의 편집이에요", `trip-stale` "최신 여행 데이터가 아직 반영되지 않았어요. 잠시 후 다시 시도하세요."
 - [ ] **Step 1: 실패 테스트**
-  - 짧은 편집 → share 없음·clipboard 있음 → `writeText`가 `#e=`로 시작하는 링크로 호출.
+  - 짧은 편집 → share 없음·clipboard 있음 → `writeText` 인자가 정확히 `` `${location.origin}/t/${publicId}#e=${await encodeEditLayer(edit)}` ``와 같고, 그 `#e=` 뒤 값을 `decodeEditLayer`하면 원래 편집과 `toEqual`.
   - **Review Focus 5**: share·clipboard 모두 없음(또는 reject) → 링크 텍스트 필드가 보이고 값이 링크.
   - 8,001자 링크 → 파일 안내 문구.
   - `#e=` 진입 → 대화상자 열림, 취소해도 `location.hash === ''`.
   - 충돌 묶음 라디오 기본값이 `defaultSide`, 반대쪽 선택 후 확인 → 결과 DayEdit `updatedAt`이 현재 시각.
   - `trip-stale` → 문구 표시, 저장소 미변경.
+  - **첫 방문 브라우저(local = null)**: 손상 링크 가져오기 → 오류 문구, `localStorage.getItem(storageKey(id))`가 여전히 null. 정상 링크로 미리보기까지 간 뒤 취소 → 여전히 null. 확인 → 그때만 레이어 저장(닉네임·authorId 포함).
 - [ ] **Step 2–4:** FAIL → 구현 → PASS.
 - [ ] **Step 5:** 커밋 `feat(share): 링크·파일 내보내기와 가져오기 미리보기`.
 
@@ -612,7 +628,7 @@ for g in groups:
 ### Task 20: E2E, 배포 설정, 운영 문서
 
 **Files:**
-- Create: `playwright.config.ts`, `tests/e2e/share.spec.ts`, `tests/e2e/itinerary.spec.ts`, `tests/fixtures/trips/e2e.json`(→ 테스트 시 `public/data/e2etest000001.json`으로 복사하는 global setup), `.github/workflows/ci.yml`, `README.md`
+- Create: `playwright.config.ts`, `tests/e2e/share.spec.ts`, `tests/e2e/itinerary.spec.ts`, `tests/e2e/concurrent.spec.ts`, `tests/fixtures/trips/e2e.json`(→ 테스트 시 `public/data/e2etest000001.json`으로 복사하는 global setup), `.github/workflows/ci.yml`, `README.md`
 
 **Interfaces:**
 - Consumes: 완성된 앱, `VITE_MAP_ADAPTER=fake`.
@@ -621,9 +637,10 @@ for g in groups:
   - CI: push·PR에서 `yarn install --frozen-lockfile && yarn lint && yarn build:ci && npx playwright install --with-deps && yarn test:e2e`.
 - [ ] **Step 1: E2E 작성**
   - `share.spec.ts`(mobile): 링크 열기 → 장소 카드에서 메모 → 닉네임 "동행" 입력 → 내보내기(클립보드 권한 부여, 실패 시 텍스트 필드에서 값 읽기) → 새 `browser.newContext()`에서 그 링크 열기 → 가져오기 확인 → 메모가 "동행" 이름으로 보임.
+  - `concurrent.spec.ts`(desktop, **Review Focus 4**): 같은 context에서 페이지 A·B로 같은 여행을 연다(둘 다 빈 상태에서 시작, 닉네임 미리 설정). A가 장소 1에 메모 저장 → B는 새로고침 없이 장소 2에 메모 저장 → 두 페이지 새로고침 후 두 메모가 모두 보임.
   - `itinerary.spec.ts`(desktop): Day1 순서 변경 → 미계산 문구 → 파일 내보내기 A 저장 → 되돌리기 → A 다시 가져오기 → 충돌 기본값이 되돌린 상태(reset이 최신) → 일정이 원본과 같음.
 - [ ] **Step 2:** `yarn test:e2e` → 두 프로젝트 모두 PASS.
-- [ ] **Step 3: README** — 설치, 개발 서버, 환경변수 `VITE_NAVER_MAP_CLIENT_ID`, NCP 콘솔 도메인 등록(Pages 도메인, `http://localhost:5173`), 여행 추가 절차(yaml 작성 → `yarn collect` → 커밋·push), **재계산 절차(§5.7 1–5단계, "최신 기준은 `git pull`로만")**, Cloudflare Pages 설정(빌드 명령 `yarn build:ci`, 출력 `dist`, Node 22), 공개 범위 주의(§9.2 표 요약), 수동 확인 체크리스트(§8.4).
+- [ ] **Step 3: README** — 설치, 알려진 한계(Web Locks 미지원 브라우저의 동시 저장, 여러 파일 가져오기 순서 의존, LWW 시계 의존), 개발 서버, 환경변수 `VITE_NAVER_MAP_CLIENT_ID`, NCP 콘솔 도메인 등록(Pages 도메인, `http://localhost:5173`), 여행 추가 절차(yaml 작성 → `yarn collect` → 커밋·push), **재계산 절차(§5.7 1–5단계, "최신 기준은 `git pull`로만")**, Cloudflare Pages 설정(빌드 명령 `yarn build:ci`, 출력 `dist`, Node 22), 공개 범위 주의(§9.2 표 요약), 수동 확인 체크리스트(§8.4).
 - [ ] **Step 4:** `yarn build:ci` 전체 성공 확인.
 - [ ] **Step 5:** 커밋 `test(e2e): 공유·일정 시나리오와 배포 설정, 운영 문서`.
 
