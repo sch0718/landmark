@@ -1,6 +1,7 @@
 # trip-map 설계 (PoC)
 
 - 작성일: 2026-10-03
+- 개정: 2026-10-03 r5 — 4차 리뷰 반영 (CLI 방문 제거 금지·git pull 안내, overlay 방문 배치 규칙과 묶음 단위 [내 편집 유지], 교환법칙 범위)
 - 개정: 2026-10-03 r4.1 — 네이버 저장 메모 기본 공개로 변경(사용자 결정)
 - 개정: 2026-10-03 r4 — 3차 리뷰 반영 (중복 방문 시 충돌 승격, 묶음 단위 되돌리기 §5.8, apply-edit 기준 버전 검사, 순서 무관성 범위 명시)
 - 개정: 2026-10-03 r3 — 2차 리뷰 반영 (날짜 묶음 병합, apply-edit 미수집 yaml 보호, 가져오기 원본 버전 맞추기, 빈 날 구간 수, 병합 결과 검증, 사용자 선택 시각, 좌표 범위 표기)
@@ -232,6 +233,7 @@ DayEdit =
 - 다른 날로 옮긴 방문은 **같은 `stop.id`를 유지**한다. 출발일과 도착일 두 DayEdit가 함께 기록되며, 병합은 이 id로 두 날을 묶는다(§5.4).
 - `baseDayHash`: override를 만들 때 그날 원본 `stops`(id·placeKey·time·note)의 해시.
 - 원본(TripData)은 절대 수정하지 않는다. 화면은 항상 `overlay(TripData, EditLayer)`로 계산한다.
+- **overlay의 방문 배치 규칙**: 같은 `stop.id`가 override인 날과 원본을 따르는 날(DayEdit 없음 또는 reset)에 함께 나타나면 **override인 날의 배치를 택하고**, 원본을 따르는 날에서는 그 방문을 뺀다. 원본이 방문의 날짜를 바꿨는데 로컬 override가 옛 날짜에 그 방문을 갖고 있을 때 생기며, 이 상태는 항상 미해결 원본 변경(§5.5)으로 함께 표시된다. 이 규칙 덕분에 실효 일정은 원본 변경만으로는 중복이 생기지 않는다. override끼리의 중복은 병합 승격(§5.4)이 막는다.
 
 ### 3.4 travel_map 개념의 대응
 
@@ -371,7 +373,7 @@ EditLayer 추가:
 
 **성질과 한계**
 
-- 성질: 같은 입력을 두 번 병합해도 결과가 같다(멱등). 충돌 선택을 기본값으로 두면 `merge(a, b)`와 `merge(b, a)`의 결과가 같다.
+- 성질: 같은 입력을 두 번 병합해도 결과가 같다(멱등). 충돌 선택을 기본값으로 두면 `merge(a, b)`와 `merge(b, a)`의 **병합 콘텐츠(`authors`, `places`, `days`)**가 같다. `authorId`와 `baseDataVersion`은 local 값을 유지하므로 객체 전체는 같지 않다.
 - 보장 범위: 위 순서 무관성은 **두 입력 사이**에만 해당한다. 날짜 묶음은 병합할 때마다 그 시점의 세 일정으로 다시 계산하므로, 여러 파일을 차례로 가져오면 가져오는 순서에 따라 결과가 달라질 수 있다. PoC는 이를 받아들이고, 파일을 하나씩 가져오며 매번 미리보기를 확인하도록 안내한다.
 - 한계: LWW는 기기 시계에 의존한다. PoC는 이를 받아들이고, 미리보기에서 덮어써지는 로컬 값을 보여 주는 것으로 보완한다.
 
@@ -384,7 +386,13 @@ EditLayer 추가:
 - 원본에 없는 날짜의 DayEdit: 유지하되 화면에는 표시하지 않고 배너로 알림.
 - override의 `stops`가 현재 원본 `stops`와 같으면 DayEdit를 `reset`으로 바꾼다(재계산 반영 후 자동 정리). 이때 `updatedAt`은 새로 찍지 않고 override의 값을 그대로 쓴다 — 자동 정리가 동행자의 더 최근 편집을 LWW에서 이기지 않도록.
 - 원본 그날 `stops` 해시 ≠ `baseDayHash`: **미해결 원본 변경**. 이 판정은 저장된 플래그가 아니라 매 로드마다 해시를 비교해 계산하므로, 가져오기로 들어온 옛 override도 해결될 때까지 계속 배너에 남는다.
-  - 배너: "Day n 원본이 바뀌었어요 `[원본 보기]` `[내 편집 유지]`". `[원본 보기]`는 그날이 속한 묶음 전체를 되돌린다(§5.8), `[내 편집 유지]`는 `baseDayHash`를 현재 값으로 갱신. 둘 다 `updatedAt = 지금`(§5.4).
+  - 배너는 날짜가 아니라 **묶음 단위**로 띄운다. 묶음은 현재 원본과 local 실효 일정으로 §5.8과 같이 계산하며, 미해결인 날과 그 날의 방문이 원본에서 옮겨 간 날이 한 묶음이 된다. 예: "Day1 원본이 바뀌었어요(관련: Day2) `[원본 보기]` `[내 편집 유지]`".
+  - `[원본 보기]`: 묶음 전체를 되돌린다(§5.8).
+  - `[내 편집 유지]`: 묶음 안의 **방문 배치를 local 쪽으로 확정**한다.
+    1. 묶음 안 override인 날은 그대로 둔다.
+    2. 묶음 안 원본을 따르는 날 중 overlay 규칙으로 방문이 빠진 날은, 그 실효 `stops`(원본에서 해당 방문을 뺀 것)를 새 override로 기록한다.
+    3. 결과 실효 일정이 §3.5 검증(여행 전체 `stop.id` 유일)을 통과한 뒤에만, 묶음 안 모든 override의 `baseDayHash`를 현재 원본 해시로 갱신한다. 실패하면 아무것도 바꾸지 않고 `[원본 보기]`만 제시한다.
+  - 둘 다 `updatedAt = 지금`(§5.4).
 - 완료 후 `baseDataVersion = tripData.dataVersion`.
 
 ### 5.6 편집한 날의 구간 (`leg-index`)
@@ -400,8 +408,13 @@ EditLayer 추가:
 2. 앱에서 **파일로 내보내기**.
 3. `yarn apply-edit trips/<여행>.yaml <파일>.tripedit.json`
    - **모든 검사를 먼저 끝내고, 통과했을 때만 yaml을 기록한다**(임시 파일에 쓴 뒤 rename). 검사 중 하나라도 실패하면 yaml은 바뀌지 않는다.
-   - 검사 0 (**기준 버전**): 편집 파일의 `baseDataVersion`이 로컬 `public/data/<publicId>.json`의 `dataVersion`보다 새로우면 종료 코드 1. "편집이 더 새 원본 기준입니다. `git pull`로 최신 JSON을 받거나 `collect`를 다시 실행하세요." 오래된 원본으로 reconcile해 방문을 지우지 않기 위해서다. 더 오래된 기준은 허용한다(검사 1의 reconcile이 처리).
-   - 검사 1: EditLayer를 검증하고 현재 `public/data/<publicId>.json` 기준으로 `reconcile`한다. 미해결 원본 변경이 있으면 목록을 출력하고 종료 코드 1(앱에서 먼저 해결).
+   - 검사 0 (**최신 원본 동기화**):
+     - `git fetch` 후 현재 브랜치가 `origin`보다 뒤처져 있으면 종료 코드 1: "`git pull`로 최신 yaml과 JSON을 함께 받으세요." (fetch가 실패하면 경고만 출력하고 계속.)
+     - 편집 파일의 `baseDataVersion`이 로컬 JSON의 `dataVersion`보다 새로우면 종료 코드 1, 같은 안내.
+     - 최신 기준을 확보하는 방법은 **`git pull`뿐**이다. `collect` 재실행은 안내하지 않는다 — `dataVersion`은 실행 시각이라 오래된 yaml을 다시 수집해도 버전만 새로워지고 내용은 오래된 채로 남기 때문이다.
+   - 검사 1: EditLayer를 검증하고 현재 `public/data/<publicId>.json` 기준으로 `reconcile`한다.
+     - 미해결 원본 변경이 있으면 목록을 출력하고 종료 코드 1(앱에서 먼저 해결).
+     - **reconcile이 override에서 방문을 하나라도 제거하면 종료 코드 1**로 제거될 방문 목록(장소명·PlaceKey·날짜)을 출력한다. 앱은 정리 내역을 보여 주고 진행하지만, yaml에 기록하는 CLI는 방문을 조용히 버리지 않는다. 이 검사는 버전 시각과 무관하게 동작하므로, 검사 0을 우회한 경우(예: 오래된 yaml을 다시 collect)에도 방문 손실을 막는 최종 안전장치가 된다.
    - 검사 2 (**미수집 yaml 보호**): 반영 대상 날짜마다 현재 yaml의 `stops`(id·place·time·note)와 기준 JSON의 그날 `stops`를 비교한다. 다르면 yaml이 마지막 collect 이후 직접 수정된 것이므로, 날짜별 차이를 출력하고 종료 코드 1. (먼저 `collect`로 JSON을 맞추고 앱에서 편집을 다시 확인한다.) 날짜 목록 자체가 다를 때도 같다.
    - 검사 3: 반영 결과 yaml이 `TripSource` 검증(관계 포함, 빈 날 허용)을 통과해야 한다.
    - 기록: `override`인 날의 `stops`를 yaml `days`에 주석을 보존하며 반영한다. `reset`과 DayEdit가 없는 날은 건드리지 않는다.
@@ -472,6 +485,8 @@ EditLayer 추가:
 - `domain/reconcile`
   - **v2 원본에 v1 편집을 가져오면** 사라진 장소의 방문이 제거되고, 원본이 바뀐 날이 미해결로 남으며, 병합 후 재로드해도 미해결 판정이 유지됨
   - override가 원본과 같아지면 reset으로 정리
+  - **원본이 방문 날짜를 바꿈**: v1 Day1=[X]에서 로컬이 X의 note만 고친 뒤 v2가 X를 Day2로 옮기면, 로드 직후 실효 일정에 X가 Day1에만 한 번 있고 {Day1, Day2} 묶음이 미해결로 표시됨
+  - 위 상태에서 `[내 편집 유지]` → Day2에 X를 뺀 override가 생기고 두 날의 해시가 갱신되어 미해결이 사라지며 X는 한 번만 남음. `[원본 보기]` → 두 날 모두 reset, X는 Day2에만 남음
 - `domain/revert` (§5.8)
   - **이동 후 출발일 되돌리기**: X를 Day1→Day2로 옮긴 뒤 Day1을 되돌리면 묶음 {Day1, Day2}가 반환되고, 확인 후 둘 다 reset되어 X가 원본 Day1에만 남음
   - 이동이 없는 날은 그날만 reset
@@ -489,6 +504,8 @@ EditLayer 추가:
   - 공개 필드 필터(shareId 없음, naverMemo 생략 시 포함·false면 제외)
   - **`apply-edit`**: override를 yaml에 반영(주석 보존), reset 날은 미변경, 미해결 원본 변경이 있으면 실패
   - **더 새 기준 편집 거부**: 편집의 `baseDataVersion`이 로컬 JSON보다 새로우면 reconcile 전에 실패, yaml 불변
+  - **오래된 yaml 재수집 우회**: 최신 yaml에만 있는 customPlace Y를 쓰는 편집 파일을, Y가 없는 오래된 yaml을 다시 collect한 JSON(더 새 `dataVersion`)에 apply-edit하면 검사 0은 통과하지만 검사 1이 Y 방문 제거를 감지해 실패, yaml 불변
+  - origin보다 뒤처진 브랜치에서 실패(git은 임시 저장소로 구성)
   - **미수집 yaml 보호**: collect 이후 yaml을 직접 고친 날이 있으면 차이를 출력하고 실패, yaml 파일은 바이트 단위로 그대로
   - **빈 일정 재수집**: 마지막 방문을 뺀 override → apply-edit → collect 결과 `stops: []`, `legs: []`로 검증 통과
   - 통합: 편집 일정 → apply-edit → collect(녹화 fixture) → 새 구간만 조회됨
