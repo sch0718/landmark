@@ -100,7 +100,7 @@ rule_system_fe 기준에서 이 앱에 필요한 것만 가져온다.
 |---|---|
 | 기본 | React 19, Vite, TypeScript, React Compiler |
 | UI | MUI 7 + Emotion (테마는 최소한으로 새로 작성) |
-| 상태 | Jotai (`atomWithStorage`로 EditLayer 영속화), 라우트 단위 `Provider` |
+| 상태 | Jotai 메모리 atom + 잠금(Web Locks) 경로로만 localStorage에 저장(`atomWithStorage`는 setter가 저장을 일으켜 쓰지 않음, 2026-10-03 계획 리뷰), 라우트 단위 `Provider` |
 | 스키마 | Zod — 파이프라인·앱·가져오기가 공유하는 유일한 데이터 정의 |
 | 기타 | react-router 7, dnd-kit, dayjs, es-toolkit, unplugin-icons, sonner, supercluster |
 | 압축 | 브라우저 내장 `CompressionStream`/`DecompressionStream`(`deflate-raw`) + base64url — 해제를 스트리밍으로 하며 크기 상한에서 중단할 수 있다(§5.3) |

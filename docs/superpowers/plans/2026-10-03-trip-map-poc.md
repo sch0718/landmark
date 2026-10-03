@@ -457,12 +457,14 @@ for g in groups:
   - `type TripLoadResult = { ok: true; trip: TripData } | { ok: false; kind: 'not-found' | 'invalid'; message: string; schemaVersion?: unknown }`
   - `loadTrip(publicId: string, opts?: { noCache?: boolean; fetchFn?: typeof fetch }): Promise<TripLoadResult>` — `GET /data/<publicId>.json`, `noCache`면 `cache: 'no-cache'`.
   - `storageKey(publicId: string): string`; `isStorageAvailable(storage: Storage | undefined): boolean` (쓰기·삭제 시도);
-    `readEditLayer(storage: Storage, publicId: string, now: number): { edit: EditLayer | null; corruptBackedUp: boolean }` — 파싱 후 `migrateEditLayer(raw: unknown): unknown`(v1은 그대로 반환하는 체인의 자리, §5.1)을 거쳐 검증; 실패하거나 `schemaVersion`이 1보다 크면 `…:corrupt:<now>`로 백업 후 키 삭제; `writeEditLayer(storage: Storage, edit: EditLayer): void`.
+    `withEditLock<T>(publicId: string, deps: { locks?: LockManager }, fn: () => T | Promise<T>): Promise<T>` — `locks.request('tripmap:edit:<publicId>', fn)`, `locks`가 없으면 `fn()`을 그대로 실행(한계는 README).
+    `updateEditLayer(publicId: string, fn: (e: EditLayer) => EditLayer, deps: { storage: Storage; locks?: LockManager; now: () => number }): Promise<EditLayer>` — `withEditLock` 안에서 **저장소의 최신 레이어를 다시 읽어** `fn`을 적용하고 쓴다. **앱에서 EditLayer를 저장소에 쓰는 곳은 이 함수와 `commitImport` 둘뿐이다.**
+    `readEditLayer(storage: Storage, publicId: string, now: number): { edit: EditLayer | null; raw: string | null; corruptBackedUp: boolean }` — 파싱 후 `migrateEditLayer(raw: unknown): unknown`(v1은 그대로 반환하는 체인의 자리, §5.1)을 거쳐 검증; 실패하거나 `schemaVersion`이 1보다 크면 `…:corrupt:<now>`로 백업 후 키 삭제; `writeEditLayer(storage: Storage, edit: EditLayer): void`.
   - `type ImportInput = { kind: 'link'; value: string } | { kind: 'file'; file: Blob }`
-  - `type PreparedImport = { trip: TripData; tripRefreshed: boolean; local: EditLayer; incoming: EditLayer; incomingReport: ReconcileReport; plan: ReturnType<typeof planMerge> }`
+  - `type PreparedImport = { trip: TripData; tripRefreshed: boolean; local: EditLayer; localSnapshot: string | null; incoming: EditLayer; incomingReport: ReconcileReport; plan: ReturnType<typeof planMerge> }` — `localSnapshot`은 준비 시점 저장소의 원문(`readEditLayer().raw`, 처음 방문이면 null). `local`은 저장된 레이어 또는 임시 작성자 레이어.
   - `type ImportFailure = { ok: false; reason: 'too-long' | 'too-large' | 'corrupt' | 'invalid' | 'other-trip' | 'trip-stale'; message: string }`
-  - `prepareImport(input: ImportInput, ctx: { trip: TripData; local: EditLayer; refetchTrip: () => Promise<TripLoadResult> }): Promise<{ ok: true; prepared: PreparedImport } | ImportFailure>` — §5.3 1–5. 파일은 `file.size > LIMITS.fileBytes`면 `too-large`(읽기 전).
-  - `commitImport(prepared: PreparedImport, choices: Record<string, 'local' | 'incoming'>, now: string): ReturnType<typeof applyMerge>`
+  - `prepareImport(input: ImportInput, ctx: { trip: TripData; local: EditLayer; localSnapshot: string | null; refetchTrip: () => Promise<TripLoadResult> }): Promise<{ ok: true; prepared: PreparedImport } | ImportFailure>` — §5.3 1–5. 파일은 `file.size > LIMITS.fileBytes`면 `too-large`(읽기 전).
+  - `commitImport(prepared: PreparedImport, choices: Record<string, 'local' | 'incoming'>, now: string, deps: { storage: Storage; locks?: LockManager }): Promise<{ ok: true; edit: EditLayer } | { ok: false; reason: 'changed' | string }>` — `withEditLock` 안에서 저장소 원문을 다시 읽어 `prepared.localSnapshot`과 다르면 **쓰지 않고** `{ ok: false, reason: 'changed' }`. 같으면 `applyMerge` 후 성공 시에만 저장.
   - `naverPlaceUrl(place: Place): string | null` (`https://m.place.naver.com/place/<sid>`, custom은 null).
 
 - [ ] **Step 1: 실패 테스트**
@@ -471,6 +473,9 @@ for g in groups:
   - **새 기준 파일 가져오기**: `incoming.baseDataVersion`이 더 새로우면 `refetchTrip` 호출; 새 trip이면 `tripRefreshed: true`로 진행, 여전히 오래되면 `{ ok: false, reason: 'trip-stale' }`이고 local 객체 불변.
   - 다른 publicId → `other-trip`. 1MB 초과 Blob → `too-large`.
   - 고아 PlaceEdit은 `prepared.local`에 유지.
+  - **미리보기 후 다른 탭 편집**: `prepareImport` → 저장소를 장소 p1 메모가 추가된 레이어로 교체(다른 탭 흉내) → `commitImport` → `{ ok: false, reason: 'changed' }`, 저장소는 p1 메모 레이어 그대로. 최신 값으로 다시 `prepareImport` → `commitImport` → 결과에 p1 메모와 가져온 편집 모두 존재.
+  - 처음 방문(snapshot null)인데 준비 후 다른 탭이 레이어를 만들었으면 `changed`.
+  - `updateEditLayer`: 저장소가 L1(p1 메모)로 바뀐 뒤 오래된 화면에서 p2 메모 추가 → 저장 결과에 p1·p2 모두. `locks` 있음·없음 각각.
 - [ ] **Step 2–4:** FAIL → 구현 → PASS.
 - [ ] **Step 5:** 커밋 `feat(app): trip·edit 저장소와 가져오기 흐름`.
 
@@ -484,21 +489,19 @@ for g in groups:
 - Test: `tests/unit/components/trip-page.test.tsx`, `tests/unit/stores/trip-store.test.ts`
 
 **Interfaces:**
-- Consumes: Task 14 저장소, `overlay`, `reconcile`, `keepMine`, `planRevert`, `applyRevert`.
+- Consumes: Task 14 저장소(`readEditLayer`, `updateEditLayer`, `withEditLock`), `overlay`, `reconcile`, `keepMine`, `planRevert`, `applyRevert`.
 - Produces:
   - `paths = { home: '/', trip: (id: string) => `/t/${id}` }`
   - `tripAtom: PrimitiveAtom<TripData | null>`.
-  - `createEditLayerStorage(storage: Storage, publicId: string, now: () => number): SyncStorage<EditLayer | null>` (Jotai `SyncStorage`) — `createJSONStorage`를 쓰지 않는다.
-    - `getItem`: Task 14 `readEditLayer` 경유(파싱·마이그레이션·`EditLayerSchema` 검증, 실패 시 백업 후 null).
-    - `setItem`/`removeItem`: `writeEditLayer` / 키 삭제.
-    - `subscribe(key, cb)`: `storage` 이벤트 중 같은 키만, `newValue`를 같은 검증 경로로 처리해 유효하면 `cb(값)`, 무효면 무시(현재 상태 유지, `console.warn`).
-  - `editLayerAtom = atomWithStorage(storageKey(publicId), null, createEditLayerStorage(...), { getOnInit: true })` — 라우트 `Provider` 안에서 publicId별 생성(`createTripStore(publicId)`가 atom 묶음 반환).
-  - **저장 직렬화** `updateEditLayer(publicId: string, fn: (e: EditLayer) => EditLayer, deps: { storage: Storage; locks?: LockManager; now: () => number }): Promise<EditLayer>` — `navigator.locks.request('tripmap:edit:<publicId>', …)` 안에서 **저장소의 최신 레이어를 다시 읽어** `fn`을 적용하고 쓴 뒤 그 값을 반환. `locks`가 없으면 같은 읽기-적용-쓰기를 잠금 없이 동기적으로 한 번에 수행(창이 매우 짧지만 보장 아님 — README에 한계 기록). 메모리 atom 값으로 저장소를 덮어쓰지 않는다.
+  - `editLayerAtom` — **저장을 일으키지 않는 메모리 atom**(`atomWithStorage`를 쓰지 않는다; 그 setter는 `storage.setItem`을 호출하므로 잠금 밖 재저장이 생긴다). `createTripStore(publicId, deps)`가 라우트 `Provider`용 atom 묶음을 만든다.
+    - 초기값: `readEditLayer(storage, publicId, now())`(검증·백업 경유)의 `edit`.
+    - `onMount`: `storage` 이벤트 중 같은 키만 받아 `readEditLayer`로 다시 읽어 유효하면 atom에 반영, 무효면 무시(`console.warn`).
+    - `refreshEditLayer()`: 저장소에서 다시 읽어 atom에 반영. 저장 후 화면 갱신은 반환값이 아니라 **이 재읽기**로 한다 — 잠금 해제 직후 다른 탭이 쓴 값까지 보이게.
   - `effectiveTripAtom` (읽기 전용 = `overlay(trip, edit)`), `reconcileReportAtom`.
   - `useEditActions(): { ensureAuthor(): Promise<boolean>; prepareDraftAuthor(): Promise<EditLayer | null>; update(fn: (e: EditLayer) => EditLayer): Promise<void> }`
     - `ensureAuthor`: local이 null이면 `NicknameDialog`를 열고 `newEditLayer`(authorId = `crypto.randomUUID()`)를 만들어 `updateEditLayer`로 저장. 대화상자 취소 시 false, 저장소 불변.
     - `prepareDraftAuthor`: local이 있으면 그것을, 없으면 닉네임을 받아 **저장하지 않은** 임시 레이어를 반환(취소 시 null). 가져오기 전용(Task 19).
-    - `update`: `updateEditLayer` 결과로 `editLayerAtom`을 갱신. 스토리지 불가 시 토스트 "이 브라우저에서는 저장되지 않아요. 내보내기를 이용하세요"를 띄우고 메모리 상태로만 진행.
+    - `update`: Task 14 `updateEditLayer`(잠금 경로)로 저장한 뒤 `refreshEditLayer()`. atom setter는 메모리만 바꾼다. 스토리지 불가 시 토스트 "이 브라우저에서는 저장되지 않아요. 내보내기를 이용하세요"를 띄우고 메모리 상태로만 진행.
   - 상단 바 메뉴 `닉네임 변경` → `authors[authorId] = { nickname, updatedAt: now }`. 검색 입력은 상단 바에 두고 값은 Task 17의 `ExploreFilter.query`로 전달.
   - `ReconcileBanner`는 미해결 묶음 외에 `report.removedStops`("원본에서 사라진 장소 N곳을 일정에서 뺐어요"), `orphanPlaceKeys`("사라진 장소의 메모 N건을 보관 중이에요 — 내보내기에 포함돼요"), `hiddenEditDates`("여행 기간에서 빠진 날짜의 편집 N건이 있어요")를 각각 한 줄로 보여 준다(0건이면 생략).
   - `ui-store`: `modeAtom: 'explore' | 'itinerary'`, `selectedDayAtom: string | 'all'`, `selectedPlaceAtom: string | null` — URL 쿼리 `mode`, `day`(1부터 번호), `place`와 양방향 동기화.
@@ -508,8 +511,9 @@ for g in groups:
   - `/`에 "공유받은 링크로 접속하세요", 여행 목록·링크 없음.
   - 404 → "링크가 잘못되었거나 만료된 여행입니다". 검증 실패 → `schemaVersion`과 첫 오류 표시.
   - 로드 시 `reconcile` 실행: 미해결 묶음이 있으면 배너 "Day 1 원본이 바뀌었어요(관련: Day 2)"와 두 버튼; `[내 편집 유지]` → `keepMine` 결과 저장, 배너 사라짐; `keepMine`이 null이면 `[원본 보기]`만 남음.
-  - **실제 store 경유 검증**(`createStore()` + `store.get/set`): 저장소에 `{"schemaVersion":1}`(JSON은 유효, 스키마 위반)을 넣고 atom 초기 읽기 → 값 null, 백업 키에 원문, 원래 키 삭제. 다른 탭 이벤트 `new StorageEvent('storage', { key, newValue: 유효 레이어 })` → atom이 새 값; `newValue: '{"schemaVersion":1}'` → atom 값 그대로.
-  - **Review Focus 4 (단위)**: 탭 A의 atom이 오래된 레이어 L0을 들고 있는 동안 저장소가 L1(장소 p1 메모 추가)로 바뀜 → 탭 A에서 `update`(p2 메모 추가) → 저장소 결과에 p1·p2 메모 모두 존재. `locks` 있는 경로와 없는 경로 각각.
+  - **실제 store 경유 검증**(`createStore()` + `store.get/set`): 저장소에 `{"schemaVersion":1}`(JSON은 유효, 스키마 위반)을 넣고 store 생성 → atom 값 null, 백업 키에 원문, 원래 키 삭제. 다른 탭 이벤트(저장소를 유효 레이어로 바꾼 뒤 `StorageEvent` 발생) → atom이 새 값; 무효 값 이벤트 → atom 값 그대로.
+  - **잠금 밖 재저장 없음**: `storage.setItem`을 spy. `update` 1회 → `setItem` 정확히 1회. 메모리 atom을 직접 `store.set` → `setItem` 0회.
+  - **Review Focus 4 (끼어들기)**: 해제 시점을 제어하는 가짜 `LockManager`로 탭 A의 `update`가 잠금을 풀고 `refreshEditLayer` 전에 멈추게 한다 → 그 사이 탭 B 역할로 저장소에 p2 메모 레이어 기록 → A 재개 → 저장소는 B의 값(p1·p2 메모 모두)이고 A의 atom도 같은 값.
   - 쿼리 `?mode=itinerary&day=2` → `modeAtom === 'itinerary'`, `selectedDayAtom`이 두 번째 날짜.
   - 고아 2건·제거 방문 1건인 report → 해당 두 줄만 표시.
   - 닉네임 변경 → `authors[authorId].nickname` 갱신, `updatedAt` 현재 시각.
@@ -611,7 +615,7 @@ for g in groups:
 - Produces:
   - `ExportDialog`: 링크 = `${location.origin}/t/${publicId}#e=${encoded}`. 순서: `navigator.share`가 있으면 공유 시트 → 없거나 실패하면 `navigator.clipboard.writeText` → 그것도 실패하면 링크를 읽기 전용 `TextField`(전체 선택)로 표시. 링크가 8,000자 초과면 "링크가 길어요. 파일로 내보내 주세요" 안내와 파일 버튼 강조. 파일명 `<제목>-<닉네임>-<YYYYMMDD>.tripedit.json`(압축 안 한 JSON, `Blob` 다운로드).
   - `useHashImport()`: 진입 시 `location.hash`가 `#e=`로 시작하면 값을 꺼내 `ImportDialog`를 열고, 결과와 무관하게 `history.replaceState(null, '', location.pathname + location.search)`.
-  - `ImportDialog`: 가져오기 전 `prepareDraftAuthor()`로 local을 준비한다(처음 방문한 브라우저면 닉네임을 받아 **저장하지 않은** 임시 레이어). 이 임시 레이어를 `prepareImport`의 `ctx.local`로 쓰고, 저장은 확인 후 `commitImport`가 `ok: true`일 때 `updateEditLayer`로 한 번만 한다. 닉네임 취소·검증 실패·`ok: false`·대화상자 취소는 모두 저장소를 건드리지 않는다. 미리보기에 §5.3-5 항목(메모 추가/변경/삭제 수, 덮어써지는 태그·숨김 `from → to`, 충돌 묶음별 "내 것/받은 것" 라디오(기본값 선택), 정리 내역: 제거될 방문·표시되지 않을 날짜·원본이 바뀐 날). 확인 → `commitImport(..., new Date().toISOString())`; `ok: false`면 사유를 보여 주고 상태 유지. 실패 사유 문구: `too-long`/`too-large` "가져오기 데이터가 너무 커요", `corrupt`/`invalid` "가져오기 데이터가 손상됐어요", `other-trip` "다른 여행의 편집이에요", `trip-stale` "최신 여행 데이터가 아직 반영되지 않았어요. 잠시 후 다시 시도하세요."
+  - `ImportDialog`: 가져오기 전 `prepareDraftAuthor()`로 local을 준비한다(처음 방문한 브라우저면 닉네임을 받아 **저장하지 않은** 임시 레이어). 이 임시 레이어와 `readEditLayer().raw`를 `prepareImport`의 `ctx.local`·`ctx.localSnapshot`으로 쓰고, 저장은 확인 시 `commitImport`(잠금 안 스냅샷 비교 후 저장)가 한다. `reason: 'changed'`면 저장하지 않은 채 최신 저장값으로 `prepareImport`를 다시 실행해 미리보기를 새로 보여 주고 "다른 탭에서 편집이 바뀌어 미리보기를 새로 만들었어요"를 표시(충돌 선택은 기본값으로 초기화). 성공하면 `refreshEditLayer()`. 닉네임 취소·검증 실패·`ok: false`·대화상자 취소는 모두 저장소를 건드리지 않는다. 미리보기에 §5.3-5 항목(메모 추가/변경/삭제 수, 덮어써지는 태그·숨김 `from → to`, 충돌 묶음별 "내 것/받은 것" 라디오(기본값 선택), 정리 내역: 제거될 방문·표시되지 않을 날짜·원본이 바뀐 날). 확인 → `commitImport(..., new Date().toISOString())`; `ok: false`면 사유를 보여 주고 상태 유지. 실패 사유 문구: `too-long`/`too-large` "가져오기 데이터가 너무 커요", `corrupt`/`invalid` "가져오기 데이터가 손상됐어요", `other-trip` "다른 여행의 편집이에요", `trip-stale` "최신 여행 데이터가 아직 반영되지 않았어요. 잠시 후 다시 시도하세요."
 - [ ] **Step 1: 실패 테스트**
   - 짧은 편집 → share 없음·clipboard 있음 → `writeText` 인자가 정확히 `` `${location.origin}/t/${publicId}#e=${await encodeEditLayer(edit)}` ``와 같고, 그 `#e=` 뒤 값을 `decodeEditLayer`하면 원래 편집과 `toEqual`.
   - **Review Focus 5**: share·clipboard 모두 없음(또는 reject) → 링크 텍스트 필드가 보이고 값이 링크.
@@ -619,6 +623,7 @@ for g in groups:
   - `#e=` 진입 → 대화상자 열림, 취소해도 `location.hash === ''`.
   - 충돌 묶음 라디오 기본값이 `defaultSide`, 반대쪽 선택 후 확인 → 결과 DayEdit `updatedAt`이 현재 시각.
   - `trip-stale` → 문구 표시, 저장소 미변경.
+  - **미리보기 중 다른 탭 편집**: 미리보기 표시 → 저장소에 p1 메모 레이어 기록 + `StorageEvent` → 확인 → 안내 문구와 새 미리보기, 저장소는 p1 메모 그대로 → 다시 확인 → 저장 결과에 p1 메모와 가져온 편집 모두.
   - **첫 방문 브라우저(local = null)**: 손상 링크 가져오기 → 오류 문구, `localStorage.getItem(storageKey(id))`가 여전히 null. 정상 링크로 미리보기까지 간 뒤 취소 → 여전히 null. 확인 → 그때만 레이어 저장(닉네임·authorId 포함).
 - [ ] **Step 2–4:** FAIL → 구현 → PASS.
 - [ ] **Step 5:** 커밋 `feat(share): 링크·파일 내보내기와 가져오기 미리보기`.
@@ -637,7 +642,7 @@ for g in groups:
   - CI: push·PR에서 `yarn install --frozen-lockfile && yarn lint && yarn build:ci && npx playwright install --with-deps && yarn test:e2e`.
 - [ ] **Step 1: E2E 작성**
   - `share.spec.ts`(mobile): 링크 열기 → 장소 카드에서 메모 → 닉네임 "동행" 입력 → 내보내기(클립보드 권한 부여, 실패 시 텍스트 필드에서 값 읽기) → 새 `browser.newContext()`에서 그 링크 열기 → 가져오기 확인 → 메모가 "동행" 이름으로 보임.
-  - `concurrent.spec.ts`(desktop, **Review Focus 4**): 같은 context에서 페이지 A·B로 같은 여행을 연다(둘 다 빈 상태에서 시작, 닉네임 미리 설정). A가 장소 1에 메모 저장 → B는 새로고침 없이 장소 2에 메모 저장 → 두 페이지 새로고침 후 두 메모가 모두 보임.
+  - `concurrent.spec.ts`(desktop, **Review Focus 4**): 같은 context에서 페이지 A·B로 같은 여행을 연다(닉네임 미리 설정). (1) A가 장소 1 메모 저장 → B는 새로고침 없이 장소 2 메모 저장 → 두 페이지 새로고침 후 두 메모 모두 보임. (2) A·B에서 `Promise.all`로 거의 동시에 서로 다른 장소 메모 저장을 20회 반복 → 새로고침 후 40개 메모 모두 보임(실제 Web Locks 경로). 끼어들기 순서의 결정적 재현은 Task 15 단위 테스트가 담당.
   - `itinerary.spec.ts`(desktop): Day1 순서 변경 → 미계산 문구 → 파일 내보내기 A 저장 → 되돌리기 → A 다시 가져오기 → 충돌 기본값이 되돌린 상태(reset이 최신) → 일정이 원본과 같음.
 - [ ] **Step 2:** `yarn test:e2e` → 두 프로젝트 모두 PASS.
 - [ ] **Step 3: README** — 설치, 알려진 한계(Web Locks 미지원 브라우저의 동시 저장, 여러 파일 가져오기 순서 의존, LWW 시계 의존), 개발 서버, 환경변수 `VITE_NAVER_MAP_CLIENT_ID`, NCP 콘솔 도메인 등록(Pages 도메인, `http://localhost:5173`), 여행 추가 절차(yaml 작성 → `yarn collect` → 커밋·push), **재계산 절차(§5.7 1–5단계, "최신 기준은 `git pull`로만")**, Cloudflare Pages 설정(빌드 명령 `yarn build:ci`, 출력 `dist`, Node 22), 공개 범위 주의(§9.2 표 요약), 수동 확인 체크리스트(§8.4).
