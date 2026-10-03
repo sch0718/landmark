@@ -1,6 +1,7 @@
 # trip-map 설계 (PoC)
 
 - 작성일: 2026-10-03
+- 개정: 2026-10-03 r3 — 2차 리뷰 반영 (날짜 묶음 병합, apply-edit 미수집 yaml 보호, 가져오기 원본 버전 맞추기, 빈 날 구간 수, 병합 결과 검증, 사용자 선택 시각, 좌표 범위 표기)
 - 개정: 2026-10-03 r2 — 설계 리뷰 반영 (되돌리기 병합, 가져오기 정리, 일정 재계산 절차, 작성자 ID, 경로 캐시 키, 미계산 합계, stopId, 필드별 병합, 공개 데이터 범위, 가져오기 제한, 관계 검증, 배포 게이트, 모바일 검증)
 - 상태: 사용자 검토 대기
 - 전신: `jeju_travel_map`(2025-05), `travel_map`(2025-06 ~ 2026-03, v0.1.0)
@@ -226,6 +227,7 @@ DayEdit =
 
 - `days[date]`가 없거나 `mode: "reset"`이면 원본 일정을 따른다. `override`면 그날 일정 전체를 대체한다.
 - 앱에서 새로 일정에 넣은 방문은 새 `stop.id`를 받는다(로컬 생성, 여행 안에서 유일).
+- 다른 날로 옮긴 방문은 **같은 `stop.id`를 유지**한다. 출발일과 도착일 두 DayEdit가 함께 기록되며, 병합은 이 id로 두 날을 묶는다(§5.4).
 - `baseDayHash`: override를 만들 때 그날 원본 `stops`(id·placeKey·time·note)의 해시.
 - 원본(TripData)은 절대 수정하지 않는다. 화면은 항상 `overlay(TripData, EditLayer)`로 계산한다.
 
@@ -240,17 +242,21 @@ TripSource·TripData 공통:
 - `startDate ≤ endDate`, 모든 날짜는 실제 달력 날짜(`2026-02-30` 거부).
 - `days[].date`는 기간 안, 중복 없음.
 - `customPlaces[].key` 중복 없음, 숫자만으로 된 key 금지(sid와 구분).
-- 좌표 범위: `lng` 124~132, `lat` 33~39 (대한민국 영역).
+- 좌표 범위(경계 포함): `124.0 ≤ lng ≤ 132.0`, `33.0 ≤ lat ≤ 39.0` (대한민국 영역).
 - `stop.id` 여행 전체에서 유일. `time`은 `HH:mm`.
+- 방문이 하나도 없는 날(`stops: []`)을 허용한다.
 
 TripData 추가:
 - 모든 `stop.placeKey`가 `places`에 존재, 모든 `folderIds`가 `folders`에 존재.
-- `legs.length = stops.length - 1`이고 `legs[i]`의 `fromStopId/toStopId`가 `stops[i]/stops[i+1]`과 일치, `fromPlaceKey/toPlaceKey`도 일치.
+- `legs.length = max(0, stops.length - 1)`이고 `legs[i]`의 `fromStopId/toStopId`가 `stops[i]/stops[i+1]`과 일치, `fromPlaceKey/toPlaceKey`도 일치.
 - `status`와 nullable 필드 조합이 §3.2 규칙과 일치.
 
 EditLayer 추가:
 - override의 `stop.id`가 그날 안에서 유일. `memos`의 키가 `authors`에 존재.
 - 크기 제한은 §5.3.
+
+실효 일정(`overlay(TripData, EditLayer)` 결과) 추가:
+- `stop.id`가 여행 전체에서 유일. 병합(§5.4) 결과도 이 검사를 통과해야 한다.
 
 ## 4. 화면
 
@@ -324,10 +330,14 @@ EditLayer 추가:
 
 1. `#e=` 링크 진입 또는 파일 선택 → 크기 제한 → 해제 → Zod 검증. 실패하면 사유 토스트, 상태 변경 없음.
 2. `publicId` 불일치 시 거부.
-3. **incoming을 현재 TripData 기준으로 정리**: `reconcile(tripData, incoming)`(§5.5)을 먼저 적용한다. 사라진 장소·날짜, 원본이 바뀐 날의 override를 찾아낸다.
-4. 미리보기: 메모 추가/변경/삭제 수, 태그·숨김 변경(덮어써지는 로컬 값 표시), Day 변경과 충돌, 3단계에서 찾은 정리 내역(제거될 방문, 표시되지 않을 날짜, 원본이 바뀐 날).
-5. 확인 시 `merge(local, reconciledIncoming)`. 취소해도 상태 변경 없음. 어느 경우든 `history.replaceState`로 `#e` 제거.
-6. 원본이 바뀐 날의 override는 병합 후에도 `baseDayHash` 불일치로 남으므로, §5.5의 미해결 배너로 이어진다(별도 상태 저장 불필요).
+3. **원본 버전 맞추기**: `incoming.baseDataVersion > tripData.dataVersion`(ISO 문자열 비교)이면 받은 편집이 내가 보고 있는 원본보다 새 원본 기준이다.
+   - TripData를 캐시 무시(`cache: "no-cache"`)로 다시 받는다. 새 원본을 받았으면 로컬 EditLayer부터 `reconcile`한 뒤 다음 단계로 간다.
+   - 다시 받아도 여전히 더 오래됐으면(CDN 전파 지연 등) **가져오기를 중단**한다: "최신 여행 데이터가 아직 반영되지 않았어요. 잠시 후 다시 시도하세요." 오래된 원본을 기준으로 방문을 제거하지 않는다.
+4. **incoming을 현재 TripData 기준으로 정리**: `reconcile(tripData, incoming)`(§5.5). 사라진 장소·날짜, 원본이 바뀐 날의 override를 찾아낸다.
+5. 미리보기: 메모 추가/변경/삭제 수, 태그·숨김 변경(덮어써지는 로컬 값 표시), Day 변경과 충돌 묶음(§5.4), 4단계 정리 내역(제거될 방문, 표시되지 않을 날짜, 원본이 바뀐 날).
+6. 확인 시 `merge(local, reconciledIncoming)` → **결과를 EditLayer 스키마·크기 제한·실효 일정 검증(§3.5)으로 다시 검사**. 실패하면 사유를 보여 주고 기존 상태를 유지한다(예: authors 합집합이 50명 초과).
+7. 취소하거나 실패해도 상태 변경 없음. 어느 경우든 `history.replaceState`로 `#e` 제거.
+8. 원본이 바뀐 날의 override는 병합 후에도 `baseDayHash` 불일치로 남으므로, §5.5의 미해결 배너로 이어진다(별도 상태 저장 불필요).
 
 ### 5.4 병합 규칙 (`merge(local, incoming)`)
 
@@ -338,8 +348,26 @@ EditLayer 추가:
 | `authors` | authorId 단위 LWW (닉네임 변경 반영) |
 | `memos` | authorId 단위 LWW. `text: null` 툼스톤도 비교 대상 — 삭제가 옛 메모에 의해 되살아나지 않는다 |
 | `tags`, `hidden` | **필드별** LWW. 한 사람이 태그를, 다른 사람이 숨김을 바꾸면 둘 다 유지 |
-| `days[date]` | 한쪽에만 있으면 채택. 양쪽에 있고 내용(`mode`, `stops`)이 같으면 `updatedAt` 큰 쪽. 다르면 **충돌** — 미리보기에서 "내 것/받은 것" 선택, 기본값은 LWW 결과. `reset`도 같은 규칙으로 비교한다 |
+| `days` | 날짜 하나가 아니라 **연결된 날짜 묶음** 단위로 병합한다 (아래) |
 | `authorId`, `baseDataVersion` | local 값 유지 |
+
+**일정 병합 (`days`)**
+
+다른 날로 옮긴 방문은 출발일과 도착일 두 DayEdit에 걸쳐 있으므로, 날짜별로 따로 고르면 방문이 사라지거나 두 날에 중복될 수 있다. 예: 원본 Day1=[X], Day2=[Y]에서 A가 X를 Day2로 옮기고(Day1=[], Day2=[Y,X]), B가 나중에 Day2의 Y 메모를 고치면(Day2=[Y']) 날짜별 LWW는 Day1=[], Day2=[Y']를 골라 X가 사라진다.
+
+1. **날짜 묶기**: 원본, local 실효 일정, incoming 실효 일정 세 곳에서 각 `stop.id`가 놓인 날짜를 모은다. 같은 `stop.id`가 서로 다른 날짜에 나타나면 그 날짜들을 한 묶음으로 합친다(union-find). 다른 날과 연결되지 않은 날은 혼자 한 묶음이다.
+2. **묶음별 판정**: 묶음 안 각 날짜의 local·incoming 상태(DayEdit 또는 "없음 = 원본")를 비교한다.
+   - 모든 날짜에서 한쪽만 DayEdit를 가졌거나 양쪽 내용(`mode`, `stops`)이 같으면 날짜별로 채택한다(같으면 `updatedAt` 큰 쪽).
+   - 하나라도 양쪽이 다르면 **묶음 전체가 충돌**이다. 미리보기에서 묶음 단위로 "내 것/받은 것"을 고르고, 고른 쪽의 상태를 묶음의 **모든 날짜**에 그대로 적용한다("없음"도 포함). 기본값은 묶음 안 DayEdit 중 `updatedAt`이 가장 큰 쪽.
+   - 위 예에서 {Day1, Day2}가 한 묶음으로 충돌이 되고, A를 고르면 Day1=[], Day2=[Y,X], B를 고르면 Day1=원본 [X], Day2=[Y']가 된다. 어느 쪽이든 X는 정확히 한 번 남는다.
+3. **결과 검증**: 병합 결과의 실효 일정에서 `stop.id`가 여행 전체에서 유일해야 한다(§3.5). 위반하면 병합을 중단하고 기존 상태를 유지한다.
+
+**충돌 해결과 사용자 선택의 시각**
+
+- 사용자가 명시적으로 고른 결과는 **새 편집**으로 기록한다. 고른 값에 `updatedAt = 지금`을 찍는다. 대상: 가져오기 충돌에서 기본값이 아닌 쪽을 고름, `[원본 보기]`, `[내 편집 유지]`. 이렇게 하면 이 선택을 다시 내보냈을 때 옛 값에 뒤집히지 않는다.
+- 기본값을 그대로 받아들인 경우와 자동 정리(§5.5의 override→reset)는 원래 `updatedAt`을 유지한다.
+
+**성질과 한계**
 
 - 성질: 같은 입력을 두 번 병합해도 결과가 같다(멱등). 충돌 선택을 기본값으로 두면 결과는 병합 순서와 무관하다.
 - 한계: LWW는 기기 시계에 의존한다. PoC는 이를 받아들이고, 미리보기에서 덮어써지는 로컬 값을 보여 주는 것으로 보완한다.
@@ -353,7 +381,7 @@ EditLayer 추가:
 - 원본에 없는 날짜의 DayEdit: 유지하되 화면에는 표시하지 않고 배너로 알림.
 - override의 `stops`가 현재 원본 `stops`와 같으면 DayEdit를 `reset`으로 바꾼다(재계산 반영 후 자동 정리). 이때 `updatedAt`은 새로 찍지 않고 override의 값을 그대로 쓴다 — 자동 정리가 동행자의 더 최근 편집을 LWW에서 이기지 않도록.
 - 원본 그날 `stops` 해시 ≠ `baseDayHash`: **미해결 원본 변경**. 이 판정은 저장된 플래그가 아니라 매 로드마다 해시를 비교해 계산하므로, 가져오기로 들어온 옛 override도 해결될 때까지 계속 배너에 남는다.
-  - 배너: "Day n 원본이 바뀌었어요 `[원본 보기]` `[내 편집 유지]`". `[원본 보기]`는 `reset`으로 기록, `[내 편집 유지]`는 `baseDayHash`를 현재 값으로 갱신.
+  - 배너: "Day n 원본이 바뀌었어요 `[원본 보기]` `[내 편집 유지]`". `[원본 보기]`는 `reset`으로 기록, `[내 편집 유지]`는 `baseDayHash`를 현재 값으로 갱신. 둘 다 `updatedAt = 지금`(§5.4).
 - 완료 후 `baseDataVersion = tripData.dataVersion`.
 
 ### 5.6 편집한 날의 구간 (`leg-index`)
@@ -368,8 +396,11 @@ EditLayer 추가:
 1. 동행자 편집을 가져와 병합하고, 일정이 원하는 상태인지 앱에서 확인한다.
 2. 앱에서 **파일로 내보내기**.
 3. `yarn apply-edit trips/<여행>.yaml <파일>.tripedit.json`
-   - EditLayer를 검증하고 현재 `public/data/<publicId>.json` 기준으로 `reconcile`한다. 미해결 원본 변경이 있으면 목록을 출력하고 종료 코드 1(앱에서 먼저 해결).
-   - `override`인 날의 `stops`(id·place·time·note)를 yaml `days`에 주석을 보존하며 반영한다. `reset`과 DayEdit가 없는 날은 건드리지 않는다.
+   - **모든 검사를 먼저 끝내고, 통과했을 때만 yaml을 기록한다**(임시 파일에 쓴 뒤 rename). 검사 중 하나라도 실패하면 yaml은 바뀌지 않는다.
+   - 검사 1: EditLayer를 검증하고 현재 `public/data/<publicId>.json` 기준으로 `reconcile`한다. 미해결 원본 변경이 있으면 목록을 출력하고 종료 코드 1(앱에서 먼저 해결).
+   - 검사 2 (**미수집 yaml 보호**): 반영 대상 날짜마다 현재 yaml의 `stops`(id·place·time·note)와 기준 JSON의 그날 `stops`를 비교한다. 다르면 yaml이 마지막 collect 이후 직접 수정된 것이므로, 날짜별 차이를 출력하고 종료 코드 1. (먼저 `collect`로 JSON을 맞추고 앱에서 편집을 다시 확인한다.) 날짜 목록 자체가 다를 때도 같다.
+   - 검사 3: 반영 결과 yaml이 `TripSource` 검증(관계 포함, 빈 날 허용)을 통과해야 한다.
+   - 기록: `override`인 날의 `stops`를 yaml `days`에 주석을 보존하며 반영한다. `reset`과 DayEdit가 없는 날은 건드리지 않는다.
    - 메모·태그·숨김은 yaml로 옮기지 않는다(EditLayer에 남는다).
    - 반영한 날과 변경 요약을 출력한다.
 4. `yarn collect trips/<여행>.yaml` → 새 구간만 API 호출(캐시 미스), 기존 구간은 캐시 재사용.
@@ -420,9 +451,14 @@ EditLayer 추가:
   - 태그와 숨김을 서로 다른 사람이 바꾸면 둘 다 유지
   - **되돌리기(reset) 후 옛 override 파일을 다시 가져와도 reset이 유지됨** (reset이 더 최신일 때)
   - Day 충돌 감지
+  - **날짜 간 이동 병합**: A가 X를 Day1→Day2로 옮기고 B가 Day2(또는 Day1)를 나중에 고친 두 경우 모두, {Day1, Day2}가 한 충돌 묶음이 되고 어느 쪽을 골라도 X가 정확히 한 번 남음
+  - 병합 결과 검증 실패(authors 합집합 50명 초과, stop.id 중복) 시 local 상태 불변
+  - 기본값이 아닌 쪽을 고른 결과는 `updatedAt = 지금`으로 기록되어, 옛 파일을 다시 가져와도 뒤집히지 않음
 - `domain/reconcile`
   - **v2 원본에 v1 편집을 가져오면** 사라진 장소의 방문이 제거되고, 원본이 바뀐 날이 미해결로 남으며, 병합 후 재로드해도 미해결 판정이 유지됨
   - override가 원본과 같아지면 reset으로 정리
+- 가져오기 흐름(`repositories/edit-layer-repo`, fetch 모킹)
+  - **보고 있는 원본보다 새 기준의 파일 가져오기**: TripData를 다시 받아 진행하고, 다시 받아도 오래됐으면 중단하며 방문을 제거하지 않음
   - 고아 PlaceEdit 유지
 - `domain/overlay`, `domain/leg-index`
   - **같은 장소 반복 방문**(숙소→A→숙소) 시 stop별로 구분되고 구간이 올바르게 연결됨
@@ -434,6 +470,8 @@ EditLayer 추가:
   - **좌표가 바뀌면 경로 캐시 미스**, 실패 결과는 캐시되지 않음
   - 공개 필드 필터(shareId 없음, naverMemo 옵션)
   - **`apply-edit`**: override를 yaml에 반영(주석 보존), reset 날은 미변경, 미해결 원본 변경이 있으면 실패
+  - **미수집 yaml 보호**: collect 이후 yaml을 직접 고친 날이 있으면 차이를 출력하고 실패, yaml 파일은 바이트 단위로 그대로
+  - **빈 일정 재수집**: 마지막 방문을 뺀 override → apply-edit → collect 결과 `stops: []`, `legs: []`로 검증 통과
   - 통합: 편집 일정 → apply-edit → collect(녹화 fixture) → 새 구간만 조회됨
   - **녹화한 실제 API 응답 fixture**(`tests/fixtures/`)만 사용, 네트워크 호출 없음.
 
