@@ -458,7 +458,7 @@ for g in groups:
   - `loadTrip(publicId: string, opts?: { noCache?: boolean; fetchFn?: typeof fetch }): Promise<TripLoadResult>` — `GET /data/<publicId>.json`, `noCache`면 `cache: 'no-cache'`.
   - `storageKey(publicId: string): string`; `isStorageAvailable(storage: Storage | undefined): boolean` (쓰기·삭제 시도);
     `withEditLock<T>(publicId: string, deps: { locks?: LockManager }, fn: () => T | Promise<T>): Promise<T>` — `locks.request('tripmap:edit:<publicId>', fn)`, `locks`가 없으면 `fn()`을 그대로 실행(한계는 README).
-    `updateEditLayer(publicId: string, fn: (e: EditLayer) => EditLayer, deps: { storage: Storage; locks?: LockManager; now: () => number }): Promise<EditLayer>` — `withEditLock` 안에서 **저장소의 최신 레이어를 다시 읽어** `fn`을 적용하고 쓴다. **앱에서 EditLayer를 저장소에 쓰는 곳은 이 함수와 `commitImport` 둘뿐이다.**
+    `updateEditLayer(publicId: string, fn: (current: EditLayer | null) => EditLayer, deps: { storage: Storage; locks?: LockManager; now: () => number }): Promise<EditLayer>` — `withEditLock` 안에서 **저장소의 최신 레이어를 다시 읽어**(없으면 null) `fn`을 적용하고 쓴다. **앱에서 EditLayer를 저장소에 쓰는 곳은 이 함수와 `commitImport` 둘뿐이다.**
     `readEditLayer(storage: Storage, publicId: string, now: number): { edit: EditLayer | null; raw: string | null; corruptBackedUp: boolean }` — 파싱 후 `migrateEditLayer(raw: unknown): unknown`(v1은 그대로 반환하는 체인의 자리, §5.1)을 거쳐 검증; 실패하거나 `schemaVersion`이 1보다 크면 `…:corrupt:<now>`로 백업 후 키 삭제; `writeEditLayer(storage: Storage, edit: EditLayer): void`.
   - `type ImportInput = { kind: 'link'; value: string } | { kind: 'file'; file: Blob }`
   - `type PreparedImport = { trip: TripData; tripRefreshed: boolean; local: EditLayer; localSnapshot: string | null; incoming: EditLayer; incomingReport: ReconcileReport; plan: ReturnType<typeof planMerge> }` — `localSnapshot`은 준비 시점 저장소의 원문(`readEditLayer().raw`, 처음 방문이면 null). `local`은 저장된 레이어 또는 임시 작성자 레이어.
@@ -476,6 +476,7 @@ for g in groups:
   - **미리보기 후 다른 탭 편집**: `prepareImport` → 저장소를 장소 p1 메모가 추가된 레이어로 교체(다른 탭 흉내) → `commitImport` → `{ ok: false, reason: 'changed' }`, 저장소는 p1 메모 레이어 그대로. 최신 값으로 다시 `prepareImport` → `commitImport` → 결과에 p1 메모와 가져온 편집 모두 존재.
   - 처음 방문(snapshot null)인데 준비 후 다른 탭이 레이어를 만들었으면 `changed`.
   - `updateEditLayer`: 저장소가 L1(p1 메모)로 바뀐 뒤 오래된 화면에서 p2 메모 추가 → 저장 결과에 p1·p2 모두. `locks` 있음·없음 각각.
+  - 첫 레이어 생성: 저장소가 비어 있으면 `fn`이 null을 받음; `current => current ?? draft`로 호출했는데 그사이 다른 레이어가 저장돼 있으면 기존 레이어가 그대로 남음(draft로 덮지 않음).
 - [ ] **Step 2–4:** FAIL → 구현 → PASS.
 - [ ] **Step 5:** 커밋 `feat(app): trip·edit 저장소와 가져오기 흐름`.
 
@@ -498,10 +499,10 @@ for g in groups:
     - `onMount`: `storage` 이벤트 중 같은 키만 받아 `readEditLayer`로 다시 읽어 유효하면 atom에 반영, 무효면 무시(`console.warn`).
     - `refreshEditLayer()`: 저장소에서 다시 읽어 atom에 반영. 저장 후 화면 갱신은 반환값이 아니라 **이 재읽기**로 한다 — 잠금 해제 직후 다른 탭이 쓴 값까지 보이게.
   - `effectiveTripAtom` (읽기 전용 = `overlay(trip, edit)`), `reconcileReportAtom`.
-  - `useEditActions(): { ensureAuthor(): Promise<boolean>; prepareDraftAuthor(): Promise<EditLayer | null>; update(fn: (e: EditLayer) => EditLayer): Promise<void> }`
-    - `ensureAuthor`: local이 null이면 `NicknameDialog`를 열고 `newEditLayer`(authorId = `crypto.randomUUID()`)를 만들어 `updateEditLayer`로 저장. 대화상자 취소 시 false, 저장소 불변.
-    - `prepareDraftAuthor`: local이 있으면 그것을, 없으면 닉네임을 받아 **저장하지 않은** 임시 레이어를 반환(취소 시 null). 가져오기 전용(Task 19).
-    - `update`: Task 14 `updateEditLayer`(잠금 경로)로 저장한 뒤 `refreshEditLayer()`. atom setter는 메모리만 바꾼다. 스토리지 불가 시 토스트 "이 브라우저에서는 저장되지 않아요. 내보내기를 이용하세요"를 띄우고 메모리 상태로만 진행.
+  - `useEditActions(): { ensureAuthor(): Promise<boolean>; prepareImportContext(): Promise<{ local: EditLayer; localSnapshot: string | null } | null>; update(fn: (e: EditLayer) => EditLayer): Promise<void> }`
+    - `ensureAuthor`: 메모리 atom이 null이면 `NicknameDialog`로 닉네임을 받아 draft(`newEditLayer`, authorId = `crypto.randomUUID()`)를 만들고 `updateEditLayer(id, current => current ?? draft)`로 저장 — 닉네임 입력 중 다른 탭이 레이어를 만들었다면 그 레이어를 보존한다. 이어서 `refreshEditLayer()`. 대화상자 취소 시 false, 저장소 불변.
+    - `prepareImportContext`: 가져오기 전용(Task 19). **`readEditLayer()`를 한 번 호출한 `{ edit, raw }` 쌍**으로 컨텍스트를 만든다. `edit`이 있으면 `{ local: edit, localSnapshot: raw }`(메모리 atom 값을 쓰지 않는다). `edit`이 null일 때만 닉네임을 받아 **저장하지 않은** draft로 `{ local: draft, localSnapshot: null }`. 닉네임 취소 시 null.
+    - `update`: `ensureAuthor()` 후 `updateEditLayer(id, current => { if (!current) throw new Error('edit layer missing'); return fn(current) })`, 저장 뒤 `refreshEditLayer()`. atom setter는 메모리만 바꾼다. 스토리지 불가 시 토스트 "이 브라우저에서는 저장되지 않아요. 내보내기를 이용하세요"를 띄우고 메모리 상태로만 진행.
   - 상단 바 메뉴 `닉네임 변경` → `authors[authorId] = { nickname, updatedAt: now }`. 검색 입력은 상단 바에 두고 값은 Task 17의 `ExploreFilter.query`로 전달.
   - `ReconcileBanner`는 미해결 묶음 외에 `report.removedStops`("원본에서 사라진 장소 N곳을 일정에서 뺐어요"), `orphanPlaceKeys`("사라진 장소의 메모 N건을 보관 중이에요 — 내보내기에 포함돼요"), `hiddenEditDates`("여행 기간에서 빠진 날짜의 편집 N건이 있어요")를 각각 한 줄로 보여 준다(0건이면 생략).
   - `ui-store`: `modeAtom: 'explore' | 'itinerary'`, `selectedDayAtom: string | 'all'`, `selectedPlaceAtom: string | null` — URL 쿼리 `mode`, `day`(1부터 번호), `place`와 양방향 동기화.
@@ -615,7 +616,7 @@ for g in groups:
 - Produces:
   - `ExportDialog`: 링크 = `${location.origin}/t/${publicId}#e=${encoded}`. 순서: `navigator.share`가 있으면 공유 시트 → 없거나 실패하면 `navigator.clipboard.writeText` → 그것도 실패하면 링크를 읽기 전용 `TextField`(전체 선택)로 표시. 링크가 8,000자 초과면 "링크가 길어요. 파일로 내보내 주세요" 안내와 파일 버튼 강조. 파일명 `<제목>-<닉네임>-<YYYYMMDD>.tripedit.json`(압축 안 한 JSON, `Blob` 다운로드).
   - `useHashImport()`: 진입 시 `location.hash`가 `#e=`로 시작하면 값을 꺼내 `ImportDialog`를 열고, 결과와 무관하게 `history.replaceState(null, '', location.pathname + location.search)`.
-  - `ImportDialog`: 가져오기 전 `prepareDraftAuthor()`로 local을 준비한다(처음 방문한 브라우저면 닉네임을 받아 **저장하지 않은** 임시 레이어). 이 임시 레이어와 `readEditLayer().raw`를 `prepareImport`의 `ctx.local`·`ctx.localSnapshot`으로 쓰고, 저장은 확인 시 `commitImport`(잠금 안 스냅샷 비교 후 저장)가 한다. `reason: 'changed'`면 저장하지 않은 채 최신 저장값으로 `prepareImport`를 다시 실행해 미리보기를 새로 보여 주고 "다른 탭에서 편집이 바뀌어 미리보기를 새로 만들었어요"를 표시(충돌 선택은 기본값으로 초기화). 성공하면 `refreshEditLayer()`. 닉네임 취소·검증 실패·`ok: false`·대화상자 취소는 모두 저장소를 건드리지 않는다. 미리보기에 §5.3-5 항목(메모 추가/변경/삭제 수, 덮어써지는 태그·숨김 `from → to`, 충돌 묶음별 "내 것/받은 것" 라디오(기본값 선택), 정리 내역: 제거될 방문·표시되지 않을 날짜·원본이 바뀐 날). 확인 → `commitImport(..., new Date().toISOString())`; `ok: false`면 사유를 보여 주고 상태 유지. 실패 사유 문구: `too-long`/`too-large` "가져오기 데이터가 너무 커요", `corrupt`/`invalid` "가져오기 데이터가 손상됐어요", `other-trip` "다른 여행의 편집이에요", `trip-stale` "최신 여행 데이터가 아직 반영되지 않았어요. 잠시 후 다시 시도하세요."
+  - `ImportDialog`: 가져오기 전 `prepareImportContext()`로 `{ local, localSnapshot }`을 받는다(한 번의 저장소 읽기에서 나온 쌍; 처음 방문한 브라우저면 저장하지 않은 draft와 null). 이 쌍을 그대로 `prepareImport`의 `ctx.local`·`ctx.localSnapshot`으로 쓰고(미리보기 재생성 때도 매번 `prepareImportContext()`를 다시 호출), 저장은 확인 시 `commitImport`(잠금 안 스냅샷 비교 후 저장)가 한다. `reason: 'changed'`면 저장하지 않은 채 최신 저장값으로 `prepareImport`를 다시 실행해 미리보기를 새로 보여 주고 "다른 탭에서 편집이 바뀌어 미리보기를 새로 만들었어요"를 표시(충돌 선택은 기본값으로 초기화). 성공하면 `refreshEditLayer()`, 그리고 `prepared.tripRefreshed`이면 `tripAtom`에 `prepared.trip`을 반영(이후 overlay·reconcile 배너가 새 원본 기준이 되도록). 닉네임 취소·검증 실패·`ok: false`·대화상자 취소는 모두 저장소를 건드리지 않는다. 미리보기에 §5.3-5 항목(메모 추가/변경/삭제 수, 덮어써지는 태그·숨김 `from → to`, 충돌 묶음별 "내 것/받은 것" 라디오(기본값 선택), 정리 내역: 제거될 방문·표시되지 않을 날짜·원본이 바뀐 날). 확인 → `commitImport(..., new Date().toISOString())`; `ok: false`면 사유를 보여 주고 상태 유지. 실패 사유 문구: `too-long`/`too-large` "가져오기 데이터가 너무 커요", `corrupt`/`invalid` "가져오기 데이터가 손상됐어요", `other-trip` "다른 여행의 편집이에요", `trip-stale` "최신 여행 데이터가 아직 반영되지 않았어요. 잠시 후 다시 시도하세요."
 - [ ] **Step 1: 실패 테스트**
   - 짧은 편집 → share 없음·clipboard 있음 → `writeText` 인자가 정확히 `` `${location.origin}/t/${publicId}#e=${await encodeEditLayer(edit)}` ``와 같고, 그 `#e=` 뒤 값을 `decodeEditLayer`하면 원래 편집과 `toEqual`.
   - **Review Focus 5**: share·clipboard 모두 없음(또는 reject) → 링크 텍스트 필드가 보이고 값이 링크.
@@ -623,6 +624,8 @@ for g in groups:
   - `#e=` 진입 → 대화상자 열림, 취소해도 `location.hash === ''`.
   - 충돌 묶음 라디오 기본값이 `defaultSide`, 반대쪽 선택 후 확인 → 결과 DayEdit `updatedAt`이 현재 시각.
   - `trip-stale` → 문구 표시, 저장소 미변경.
+  - **atom은 오래되고 저장소는 최신**: 메모리 atom은 L0, 저장소는 L1(p1 메모)이고 `StorageEvent`는 아직 발생시키지 않은 상태에서 가져오기 → 미리보기의 local이 L1 → 확인 → 결과에 p1 메모와 가져온 편집 모두(스냅샷 검사 통과 후에도 B 편집 보존).
+  - 원본을 다시 받은 가져오기(`tripRefreshed: true`) 성공 → `tripAtom`의 `dataVersion`이 새 값.
   - **미리보기 중 다른 탭 편집**: 미리보기 표시 → 저장소에 p1 메모 레이어 기록 + `StorageEvent` → 확인 → 안내 문구와 새 미리보기, 저장소는 p1 메모 그대로 → 다시 확인 → 저장 결과에 p1 메모와 가져온 편집 모두.
   - **첫 방문 브라우저(local = null)**: 손상 링크 가져오기 → 오류 문구, `localStorage.getItem(storageKey(id))`가 여전히 null. 정상 링크로 미리보기까지 간 뒤 취소 → 여전히 null. 확인 → 그때만 레이어 저장(닉네임·authorId 포함).
 - [ ] **Step 2–4:** FAIL → 구현 → PASS.
