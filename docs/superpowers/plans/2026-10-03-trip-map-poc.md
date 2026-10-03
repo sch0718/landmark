@@ -61,7 +61,7 @@ src/
     place.ts             # naverPlaceUrl, placeLabel
   repositories/
     trip-repo.ts         # loadTrip
-    edit-layer-repo.ts   # storageKey, readEditLayer, writeEditLayer, isStorageAvailable
+    edit-layer-repo.ts   # storageKey, readEditLayer, writeEditLayer, isStorageAvailable, createMemoryStorage
     import-flow.ts       # prepareImport, commitImport
   stores/
     trip-store.ts        # tripAtom, editLayerAtom, effectiveTripAtom, reconcileReportAtom
@@ -456,7 +456,7 @@ for g in groups:
 - Produces:
   - `type TripLoadResult = { ok: true; trip: TripData } | { ok: false; kind: 'not-found' | 'invalid'; message: string; schemaVersion?: unknown }`
   - `loadTrip(publicId: string, opts?: { noCache?: boolean; fetchFn?: typeof fetch }): Promise<TripLoadResult>` — `GET /data/<publicId>.json`, `noCache`면 `cache: 'no-cache'`.
-  - `storageKey(publicId: string): string`; `isStorageAvailable(storage: Storage | undefined): boolean` (쓰기·삭제 시도);
+  - `storageKey(publicId: string): string`; `isStorageAvailable(storage: Storage | undefined): boolean` (쓰기·삭제 시도); `createMemoryStorage(): Storage` (Map 기반 `Storage` 구현 — `getItem`/`setItem`/`removeItem`/`key`/`length`/`clear`);
     `withEditLock<T>(publicId: string, deps: { locks?: LockManager }, fn: () => T | Promise<T>): Promise<T>` — `locks.request('tripmap:edit:<publicId>', fn)`, `locks`가 없으면 `fn()`을 그대로 실행(한계는 README).
     `updateEditLayer(publicId: string, fn: (current: EditLayer | null) => EditLayer, deps: { storage: Storage; locks?: LockManager; now: () => number }): Promise<EditLayer>` — `withEditLock` 안에서 **저장소의 최신 레이어를 다시 읽어**(없으면 null) `fn`을 적용하고 쓴다. **앱에서 EditLayer를 저장소에 쓰는 곳은 이 함수와 `commitImport` 둘뿐이다.**
     `readEditLayer(storage: Storage, publicId: string, now: number): { edit: EditLayer | null; raw: string | null; corruptBackedUp: boolean }` — 파싱 후 `migrateEditLayer(raw: unknown): unknown`(v1은 그대로 반환하는 체인의 자리, §5.1)을 거쳐 검증; 실패하거나 `schemaVersion`이 1보다 크면 `…:corrupt:<now>`로 백업 후 키 삭제; `writeEditLayer(storage: Storage, edit: EditLayer): void`.
@@ -502,7 +502,8 @@ for g in groups:
   - `useEditActions(): { ensureAuthor(): Promise<boolean>; prepareImportContext(): Promise<{ local: EditLayer; localSnapshot: string | null } | null>; update(fn: (e: EditLayer) => EditLayer): Promise<void> }`
     - `ensureAuthor`: 메모리 atom이 null이면 `NicknameDialog`로 닉네임을 받아 draft(`newEditLayer`, authorId = `crypto.randomUUID()`)를 만들고 `updateEditLayer(id, current => current ?? draft)`로 저장 — 닉네임 입력 중 다른 탭이 레이어를 만들었다면 그 레이어를 보존한다. 이어서 `refreshEditLayer()`. 대화상자 취소 시 false, 저장소 불변.
     - `prepareImportContext`: 가져오기 전용(Task 19). **`readEditLayer()`를 한 번 호출한 `{ edit, raw }` 쌍**으로 컨텍스트를 만든다. `edit`이 있으면 `{ local: edit, localSnapshot: raw }`(메모리 atom 값을 쓰지 않는다). `edit`이 null일 때만 닉네임을 받아 **저장하지 않은** draft로 `{ local: draft, localSnapshot: null }`. 닉네임 취소 시 null.
-    - `update`: `ensureAuthor()` 후 `updateEditLayer(id, current => { if (!current) throw new Error('edit layer missing'); return fn(current) })`, 저장 뒤 `refreshEditLayer()`. atom setter는 메모리만 바꾼다. 스토리지 불가 시 토스트 "이 브라우저에서는 저장되지 않아요. 내보내기를 이용하세요"를 띄우고 메모리 상태로만 진행.
+    - `update`: `ensureAuthor()` 후 `updateEditLayer(id, current => { if (!current) throw new Error('edit layer missing'); return fn(current) })`, 저장 뒤 `refreshEditLayer()`. atom setter는 메모리만 바꾼다.
+    - **저장소 불가 대체**: `createTripStore`는 `isStorageAvailable(window.localStorage)`가 false면 그 탭의 저장소로 `createMemoryStorage()`를 주입한다. 이후 `readEditLayer`·`updateEditLayer`·`commitImport`·`refreshEditLayer` 경로는 바뀌지 않고 메모리 저장소에서 동작한다(탭을 닫으면 사라짐, 다른 탭과 공유 안 됨). 첫 편집 시 토스트 "이 브라우저에서는 저장되지 않아요. 내보내기를 이용하세요"를 한 번 띄운다. `storageUnavailableAtom: Atom<boolean>`을 노출해 내보내기 메뉴를 강조한다.
   - 상단 바 메뉴 `닉네임 변경` → `authors[authorId] = { nickname, updatedAt: now }`. 검색 입력은 상단 바에 두고 값은 Task 17의 `ExploreFilter.query`로 전달.
   - `ReconcileBanner`는 미해결 묶음 외에 `report.removedStops`("원본에서 사라진 장소 N곳을 일정에서 뺐어요"), `orphanPlaceKeys`("사라진 장소의 메모 N건을 보관 중이에요 — 내보내기에 포함돼요"), `hiddenEditDates`("여행 기간에서 빠진 날짜의 편집 N건이 있어요")를 각각 한 줄로 보여 준다(0건이면 생략).
   - `ui-store`: `modeAtom: 'explore' | 'itinerary'`, `selectedDayAtom: string | 'all'`, `selectedPlaceAtom: string | null` — URL 쿼리 `mode`, `day`(1부터 번호), `place`와 양방향 동기화.
@@ -518,6 +519,7 @@ for g in groups:
   - 쿼리 `?mode=itinerary&day=2` → `modeAtom === 'itinerary'`, `selectedDayAtom`이 두 번째 날짜.
   - 고아 2건·제거 방문 1건인 report → 해당 두 줄만 표시.
   - 닉네임 변경 → `authors[authorId].nickname` 갱신, `updatedAt` 현재 시각.
+  - **저장소 불가**: `setItem`이 항상 throw하는 Storage를 주입 → 메모 저장(닉네임 포함) → 두 번째 장소에 메모 저장 → atom에 두 메모 모두, `storageUnavailableAtom === true`, 토스트 1회 → `encodeEditLayer(store.get(editLayerAtom))`를 디코딩하면 두 메모 모두(내보내기 유지). 실제 `localStorage`에는 아무것도 쓰이지 않음.
 - [ ] **Step 2–4:** FAIL → 구현 → PASS.
 - [ ] **Step 5:** 커밋 `feat(app): 라우트·상태·레이아웃과 정리 배너`.
 
