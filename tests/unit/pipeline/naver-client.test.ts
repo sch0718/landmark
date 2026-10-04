@@ -120,6 +120,16 @@ describe('fetchFolder', () => {
     }
   });
 
+  it('장소 이름을 한국어로 받도록 Accept-Language를 ko-KR로 보낸다', async () => {
+    // Node fetch는 기본으로 `Accept-Language: *`를 보내고, 그러면 네이버가 영어 이름을 준다.
+    const { deps, seen } = makeDeps({
+      [`${FOLDER_BASE}?start=0&limit=500`]: { body: fixture('bookmarks-sokcho.json') },
+    });
+    await fetchFolder(SHARE_ID, deps);
+    expect(seen.length).toBeGreaterThan(0);
+    for (const s of seen) expect(s.headers['accept-language']).toBe('ko-KR,ko;q=0.9');
+  });
+
   it('HTTP 오류면 상태 코드를 담아 throw', async () => {
     const { deps } = makeDeps({
       [`${FOLDER_BASE}?start=0&limit=500`]: { status: 403, body: 'forbidden' },
@@ -147,6 +157,7 @@ describe('fetchCarRoute', () => {
     expect(r.path[0]).toHaveLength(2);
     expect(seen[0]?.headers.referer).toBe('https://map.naver.com/');
     expect(seen[0]?.headers).not.toHaveProperty('origin');
+    expect(seen[0]?.headers['accept-language']).toBe('ko-KR,ko;q=0.9');
   });
 
   it('route가 없으면 throw (코드 포함)', async () => {

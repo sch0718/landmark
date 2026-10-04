@@ -25,13 +25,17 @@ export type RouteResult = {
 
 const USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36';
+// Node fetch 기본값(`*`)이면 네이버가 장소 이름을 영어로 준다. 한국어 이름을 받으려면 명시한다.
+const ACCEPT_LANGUAGE = 'ko-KR,ko;q=0.9';
 const REQUEST_GAP_MS = 300;
 
 type Raw = Record<string, unknown>;
 
 async function getJson(url: string, referer: string, deps: HttpDeps): Promise<unknown> {
   // Origin 헤더를 넣으면 폴더 API가 403을 준다. 절대 추가하지 않는다.
-  const res = await deps.fetch(url, { headers: { 'User-Agent': USER_AGENT, Referer: referer } });
+  const res = await deps.fetch(url, {
+    headers: { 'User-Agent': USER_AGENT, 'Accept-Language': ACCEPT_LANGUAGE, Referer: referer },
+  });
   if (!res.ok) throw new Error(`네이버 요청 실패: HTTP ${res.status} (${url})`);
   return res.json();
 }
