@@ -1,0 +1,8 @@
+node_modules
+dist
+docs
+public/data
+.claude
+.superpowers
+yarn.lock
+tests/fixtures/naver/

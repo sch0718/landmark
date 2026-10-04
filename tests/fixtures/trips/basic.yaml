@@ -1,0 +1,17 @@
+# 테스트용 여행 (id 없음)
+title: 속초 1박2일
+startDate: 2026-11-14
+endDate: 2026-11-15
+folders:
+  - fb65e7f93f8a4144a4ded594d604a7aa # 속초, 고성, 양양 맛집
+customPlaces:
+  - { key: start, name: 출발(강릉역), lng: 128.9007, lat: 37.7655 }
+days:
+  - date: 2026-11-14
+    stops:
+      - { place: start } # 출발
+      - { place: '12028621', time: '12:00', note: 점심 }
+      - { place: '1885598328' }
+  - date: 2026-11-15
+    stops:
+      - { place: '1732759357' }

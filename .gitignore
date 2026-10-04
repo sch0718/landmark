@@ -1,0 +1,12 @@
+node_modules
+dist
+.cache/
+playwright-report/
+test-results/
+.env*.local
+.claude/
+.superpowers/
+.DS_Store
+*.tsbuildinfo
+# E2E global setup이 복사하는 fixture(커밋 금지)
+public/data/e2etest*.json

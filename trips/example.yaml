@@ -1,0 +1,28 @@
+# 예시 여행 (스펙 §3.1). `yarn collect trips/example.yaml`로 public/data/<publicId>.json을 만든다.
+#
+# §9.2 공개 데이터 범위 안내:
+#  - 배포된 JSON은 링크를 아는 누구나 읽을 수 있다. 공개할 필드를 최소화한다.
+#  - 출발지에 집 주소·좌표를 쓰지 말고 인근 역·터미널 같은 대표 지점을 쓴다.
+#  - 네이버 저장 메모에 개인적인 내용이 있으면 publish.naverMemo를 false로 둔다.
+# publicId와 각 stop의 id는 비워 두면 collect가 생성해 이 파일에 기록한다.
+title: 속초 1박2일
+startDate: 2026-11-14
+endDate: 2026-11-15
+folders:
+  # 네이버 공유 폴더 shareId (배포 JSON에는 포함하지 않음)
+  - fb65e7f93f8a4144a4ded594d604a7aa # 속초, 고성, 양양 맛집
+publish:
+  naverMemo: true # 저장 메모를 배포 JSON에 포함할지 (생략 시 true)
+customPlaces:
+  # 네이버 폴더에 없는 곳. 집 대신 인근 역 등 대표 지점을 쓴다
+  - { key: start, name: 출발(강릉역), lng: 128.9007, lat: 37.7655 }
+days:
+  - date: 2026-11-14
+    stops:
+      - { place: start } # 출발지(역 좌표)
+      - { place: '12028621', time: '12:00', note: 점심 } # 네이버 sid
+      - { place: '1885598328', time: '14:00', note: 커피 }
+  - date: 2026-11-15
+    stops:
+      - { place: '1732759357', time: '10:00' }
+      - { place: '1095703468', time: '12:00', note: 점심 }

@@ -1,0 +1,413 @@
+{
+    "folder": {
+        "folderId": 92420465,
+        "name": "\uc18d\ucd08, \uace0\uc131, \uc591\uc591 \ub9db\uc9d1",
+        "memo": "",
+        "externalLink": "",
+        "colorCode": "1",
+        "iconId": "1",
+        "markerColor": "1",
+        "lastUseTime": 1789827749000,
+        "creationTime": 1696204158000,
+        "shouldOverlay": true,
+        "bookmarkCount": 31,
+        "folderType": "SHARED",
+        "shareId": "fb65e7f93f8a4144a4ded594d604a7aa",
+        "followCount": 0,
+        "viewCount": 5,
+        "publicationStatus": "R",
+        "isExposed": false,
+        "isDefaultFolder": false
+    },
+    "bookmarkList": [
+        {
+            "bookmarkId": 2821106907,
+            "name": "\uc7a5\ubbf8\uacbd\uc591\uc2dd \uace0\uc131\ubcf8\uc810",
+            "displayName": "",
+            "px": 128.4547489,
+            "py": 38.4473816,
+            "type": "place",
+            "useTime": 1738469150000,
+            "lastUpdateTime": 1738469150000,
+            "creationTime": 1738469149000,
+            "order": 65535,
+            "bookmarkMismatchInfo": {
+                "isMatched": true,
+                "details": [
+                    "AVAILABLE"
+                ]
+            },
+            "sid": "15063536",
+            "address": "\uac15\uc6d0 \uace0\uc131\uad70 \uac70\uc9c4\uc74d \uac70\uc9c4\uae38 37-1",
+            "memo": "",
+            "url": "",
+            "mcid": "DINING",
+            "mcidName": "\uc74c\uc2dd\uc810",
+            "rcode": "0182025321",
+            "cidPath": [
+                "220036",
+                "220044",
+                "220126"
+            ],
+            "available": true,
+            "folderMappings": null,
+            "placeInfo": null,
+            "isIndoor": false
+        },
+        {
+            "bookmarkId": 2669367008,
+            "name": "\uc6d0\uc0b0\uba74\uc625",
+            "displayName": "",
+            "px": 128.5867088,
+            "py": 38.2022147,
+            "type": "place",
+            "useTime": 1736145593000,
+            "lastUpdateTime": 1736145593000,
+            "creationTime": 1736145593000,
+            "order": 65535,
+            "bookmarkMismatchInfo": {
+                "isMatched": true,
+                "details": [
+                    "AVAILABLE"
+                ]
+            },
+            "sid": "15009187",
+            "address": "\uac15\uc6d0 \uc18d\ucd08\uc2dc \uc911\uc559\ub85c 91-6",
+            "memo": "",
+            "url": "",
+            "mcid": "DINING",
+            "mcidName": "\uc74c\uc2dd\uc810",
+            "rcode": "01210105",
+            "cidPath": [
+                "220036",
+                "220037",
+                "220063",
+                "220645"
+            ],
+            "available": true,
+            "folderMappings": null,
+            "placeInfo": null,
+            "isIndoor": false
+        },
+        {
+            "bookmarkId": 2669178134,
+            "name": "\ub2e8\ucc9c\uba74\uc625",
+            "displayName": "",
+            "px": 128.5822266,
+            "py": 38.1925332,
+            "type": "place",
+            "useTime": 1736144232000,
+            "lastUpdateTime": 1736144232000,
+            "creationTime": 1736144232000,
+            "order": 65535,
+            "bookmarkMismatchInfo": {
+                "isMatched": true,
+                "details": [
+                    "AVAILABLE"
+                ]
+            },
+            "sid": "11733192",
+            "address": "\uac15\uc6d0 \uc18d\ucd08\uc2dc \ucca0\uc0c8\uae38 33",
+            "memo": "",
+            "url": "",
+            "mcid": "DINING",
+            "mcidName": "\uc74c\uc2dd\uc810",
+            "rcode": "01210108",
+            "cidPath": [
+                "220036",
+                "220037",
+                "220063",
+                "220645"
+            ],
+            "available": true,
+            "folderMappings": null,
+            "placeInfo": null,
+            "isIndoor": false
+        },
+        {
+            "bookmarkId": 2603960941,
+            "name": "\ubc14\ub2e4\uc815\uc6d0",
+            "displayName": "",
+            "px": 128.5828545,
+            "py": 38.2312948,
+            "type": "place",
+            "useTime": 1735213544000,
+            "lastUpdateTime": 1735213544000,
+            "creationTime": 1735213543000,
+            "order": 65535,
+            "bookmarkMismatchInfo": {
+                "isMatched": true,
+                "details": [
+                    "AVAILABLE"
+                ]
+            },
+            "sid": "36952311",
+            "address": "\uac15\uc6d0 \uace0\uc131\uad70 \ud1a0\uc131\uba74 \ubc84\ub9ac\uae68\uae38 23",
+            "memo": "",
+            "url": "",
+            "mcid": "CAFE",
+            "mcidName": "\uce74\ud398",
+            "rcode": "0182033034",
+            "cidPath": [
+                "220036",
+                "220052",
+                "220563"
+            ],
+            "available": true,
+            "folderMappings": null,
+            "placeInfo": null,
+            "isIndoor": false
+        },
+        {
+            "bookmarkId": 1822083067,
+            "name": "\ud568\ud765\ub0c9\uba74\uc625 \uc18d\ucd08\ubcf8\uc810",
+            "displayName": "",
+            "px": 128.5898752,
+            "py": 38.2019835,
+            "type": "place",
+            "useTime": 1719805441000,
+            "lastUpdateTime": 1719805441000,
+            "creationTime": 1719805441000,
+            "order": 65535,
+            "bookmarkMismatchInfo": {
+                "isMatched": true,
+                "details": [
+                    "AVAILABLE"
+                ]
+            },
+            "sid": "11709011",
+            "address": "\uac15\uc6d0 \uc18d\ucd08\uc2dc \uccad\ucd08\ud638\ubc18\ub85c 299",
+            "memo": "",
+            "url": "",
+            "mcid": "DINING",
+            "mcidName": "\uc74c\uc2dd\uc810",
+            "rcode": "01210104",
+            "cidPath": [
+                "220036",
+                "220037",
+                "220063",
+                "220645"
+            ],
+            "available": true,
+            "folderMappings": null,
+            "placeInfo": null,
+            "isIndoor": false
+        },
+        {
+            "bookmarkId": 1822081999,
+            "name": "\ub2e8\uc591\uba74\uc625",
+            "displayName": "",
+            "px": 128.62195,
+            "py": 38.075508,
+            "type": "place",
+            "useTime": 1719805415000,
+            "lastUpdateTime": 1719805415000,
+            "creationTime": 1719805415000,
+            "order": 65535,
+            "bookmarkMismatchInfo": {
+                "isMatched": true,
+                "details": [
+                    "AVAILABLE"
+                ]
+            },
+            "sid": "15073161",
+            "address": "\uac15\uc6d0 \uc591\uc591\uad70 \ub0a8\ubb386\uae38 3",
+            "memo": "",
+            "url": "",
+            "mcid": "DINING",
+            "mcidName": "\uc74c\uc2dd\uc810",
+            "rcode": "0183025021",
+            "cidPath": [
+                "220036",
+                "220037",
+                "220062",
+                "220628"
+            ],
+            "available": true,
+            "folderMappings": null,
+            "placeInfo": null,
+            "isIndoor": false
+        },
+        {
+            "bookmarkId": 1301277404,
+            "name": "\ubaa8\ub140\uac00\ub9ac\ube44",
+            "displayName": "",
+            "px": 128.6058358,
+            "py": 38.1732642,
+            "type": "place",
+            "useTime": 1700228422000,
+            "lastUpdateTime": 1700228422000,
+            "creationTime": 1700228422000,
+            "order": 65535,
+            "bookmarkMismatchInfo": {
+                "isMatched": true,
+                "details": [
+                    "AVAILABLE"
+                ]
+            },
+            "sid": "1021223975",
+            "address": "\uac15\uc6d0 \uc18d\ucd08\uc2dc \ub300\ud3ec\ud56d\ud76c\ub9dd\uae38 53",
+            "memo": "",
+            "url": "",
+            "mcid": "DINING",
+            "mcidName": "\uc74c\uc2dd\uc810",
+            "rcode": "01210110",
+            "cidPath": [
+                "220036",
+                "220037",
+                "220076",
+                "220801",
+                "221674"
+            ],
+            "available": true,
+            "folderMappings": null,
+            "placeInfo": null,
+            "isIndoor": false
+        },
+        {
+            "bookmarkId": 1226996191,
+            "name": "\ubc31\ucd0c\ub9c9\uad6d\uc218",
+            "displayName": "",
+            "px": 128.5418364,
+            "py": 38.2929804,
+            "type": "place",
+            "useTime": 1696204227000,
+            "lastUpdateTime": 1696204227000,
+            "creationTime": 1696204226000,
+            "order": 65535,
+            "bookmarkMismatchInfo": {
+                "isMatched": true,
+                "details": [
+                    "AVAILABLE"
+                ]
+            },
+            "sid": "11860442",
+            "address": "\uac15\uc6d0 \uace0\uc131\uad70 \ud1a0\uc131\uba74 \ubc31\ucd0c1\uae38 10",
+            "memo": "",
+            "url": "",
+            "mcid": "DINING",
+            "mcidName": "\uc74c\uc2dd\uc810",
+            "rcode": "0182033025",
+            "cidPath": [
+                "220036",
+                "220037",
+                "220064",
+                "220656"
+            ],
+            "available": true,
+            "folderMappings": null,
+            "placeInfo": null,
+            "isIndoor": false
+        },
+        {
+            "bookmarkId": 1226995839,
+            "name": "88\uc0dd\uc120\uad6c\uc774",
+            "displayName": "",
+            "px": 128.591975,
+            "py": 38.203735,
+            "type": "place",
+            "useTime": 1696204201000,
+            "lastUpdateTime": 1696204201000,
+            "creationTime": 1696204200000,
+            "order": 65535,
+            "bookmarkMismatchInfo": {
+                "isMatched": true,
+                "details": [
+                    "AVAILABLE"
+                ]
+            },
+            "sid": "11815720",
+            "address": "\uac15\uc6d0 \uc18d\ucd08\uc2dc \uc911\uc559\ubd80\ub450\uae38 71",
+            "memo": "",
+            "url": "",
+            "mcid": "DINING",
+            "mcidName": "\uc74c\uc2dd\uc810",
+            "rcode": "01210103",
+            "cidPath": [
+                "220036",
+                "220037",
+                "220076",
+                "220791",
+                "221625"
+            ],
+            "available": true,
+            "folderMappings": null,
+            "placeInfo": null,
+            "isIndoor": false
+        },
+        {
+            "bookmarkId": 377014103,
+            "name": "\ub2e8\ucc9c\uc2dd\ub2f9",
+            "displayName": "",
+            "px": 128.5937724,
+            "py": 38.2025844,
+            "type": "place",
+            "useTime": 1696204186000,
+            "lastUpdateTime": 1696204186000,
+            "creationTime": 1622981188000,
+            "order": 65535,
+            "bookmarkMismatchInfo": {
+                "isMatched": true,
+                "details": [
+                    "AVAILABLE"
+                ]
+            },
+            "sid": "11711552",
+            "address": "\uac15\uc6d0\ub3c4 \uc18d\ucd08\uc2dc \uccad\ud638\ub3d9 842",
+            "memo": "",
+            "url": "",
+            "mcid": "DINING",
+            "mcidName": "\uc74c\uc2dd\uc810",
+            "rcode": "01210109",
+            "cidPath": [
+                "220036",
+                "220037",
+                "220075",
+                "220768",
+                "221546"
+            ],
+            "available": true,
+            "folderMappings": null,
+            "placeInfo": null,
+            "isIndoor": false
+        },
+        {
+            "bookmarkId": 1226995323,
+            "name": "\uc544\ubc14\uc774\ud68c\uad6d\uc218",
+            "displayName": "",
+            "px": 128.5943544,
+            "py": 38.1999116,
+            "type": "place",
+            "useTime": 1696204161000,
+            "lastUpdateTime": 1696204161000,
+            "creationTime": 1696204161000,
+            "order": 65535,
+            "bookmarkMismatchInfo": {
+                "isMatched": true,
+                "details": [
+                    "AVAILABLE"
+                ]
+            },
+            "sid": "35308401",
+            "address": "\uac15\uc6d0 \uc18d\ucd08\uc2dc \uccad\ud638\ub85c 115-12",
+            "memo": "",
+            "url": "",
+            "mcid": "DINING",
+            "mcidName": "\uc74c\uc2dd\uc810",
+            "rcode": "01210109",
+            "cidPath": [
+                "220036",
+                "220037",
+                "220062",
+                "220628"
+            ],
+            "available": true,
+            "folderMappings": null,
+            "placeInfo": null,
+            "isIndoor": false
+        }
+    ],
+    "unavailableCount": 0,
+    "mismatchedCount": 0,
+    "removed": false
+}

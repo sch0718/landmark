@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+# 같은 브랜치·PR에 새 커밋이 오면 진행 중인 이전 실행을 취소한다.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: yarn
+
+      # 개발 의존성 engines가 package.json engines보다 좁은 문제는 저장소의 .yarnrc(ignore-engines true)가
+      # 처리한다. Cloudflare Pages와 같은 명령으로 설치한다(README 참고).
+      - name: Install
+        run: yarn install --frozen-lockfile
+
+      - name: Lint
+        run: yarn lint
+
+      # Cloudflare Pages 빌드 명령과 같다: validate → typecheck → 단위 테스트 → 빌드.
+      - name: Build (build:ci)
+        run: yarn build:ci
+
+      - name: Install Playwright browsers
+        run: yarn playwright install --with-deps chromium webkit
+
+      - name: E2E
+        run: yarn test:e2e
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
