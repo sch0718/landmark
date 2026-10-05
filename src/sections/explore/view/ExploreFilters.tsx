@@ -4,10 +4,12 @@ import Chip from '@mui/material/Chip';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import MenuItem from '@mui/material/MenuItem';
 import Stack from '@mui/material/Stack';
+import Typography from '@mui/material/Typography';
 import TextField from '@mui/material/TextField';
 import { useAtom, useAtomValue } from 'jotai';
 import { allTags, categoryCounts, type ExploreFilter } from 'src/sections/explore/store/filters';
-import { exploreFilterAtom } from 'src/sections/explore/store/explore-state';
+import { exploreFilterAtom, mapViewportUsableAtom } from 'src/sections/explore/store/explore-state';
+import { viewModeAtom } from 'src/stores/ui-store';
 import { useTripStore } from 'src/stores/trip-store';
 
 const toggle = (list: string[], value: string): string[] =>
@@ -31,6 +33,9 @@ export function ExploreFilters() {
   const trip = useAtomValue(ts.tripAtom);
   const edit = useAtomValue(ts.editLayerAtom);
   const [filter, setFilter] = useAtom(exploreFilterAtom);
+  const view = useAtomValue(viewModeAtom);
+  const usable = useAtomValue(mapViewportUsableAtom);
+  const viewportDisabled = view !== 'map' || !usable;
   if (!trip) return null;
   const patch = (p: Partial<ExploreFilter>) => setFilter({ ...filter, ...p });
   // 선택된 태그의 마지막 사용이 지워져도 칩이 남아 있어야 해제할 수 있다.
@@ -110,12 +115,18 @@ export function ExploreFilters() {
             <Checkbox
               size="small"
               checked={filter.inViewOnly}
+              disabled={viewportDisabled}
               onChange={(e) => patch({ inViewOnly: e.target.checked })}
             />
           }
           label="지도 영역 안만 보기"
         />
       </Box>
+      {viewportDisabled && (
+        <Typography variant="caption" color="text.secondary">
+          지도 보기에서 적용돼요
+        </Typography>
+      )}
     </Stack>
   );
 }

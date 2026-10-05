@@ -23,17 +23,22 @@ export async function openTrip(page: Page, url: string = TRIP_PATH): Promise<voi
 /** 모바일 하단 시트를 full로 펼친다(peek → half → full). */
 export async function expandSheet(page: Page): Promise<void> {
   const handle = page.getByRole('button', { name: '시트 크기 조절' });
-  const sheet = page.locator('[data-snap]');
+  const sheet = page.getByTestId('view-panel');
+  const peek = (await sheet.boundingBox())!.height;
   await handle.click();
-  await expect(sheet).toHaveAttribute('data-snap', 'half');
+  await expect.poll(async () => (await sheet.boundingBox())!.height).toBeGreaterThan(peek);
+  const half = (await sheet.boundingBox())!.height;
   await handle.click();
-  await expect(sheet).toHaveAttribute('data-snap', 'full');
+  await expect.poll(async () => (await sheet.boundingBox())!.height).toBeGreaterThan(half);
 }
 
 /** 탐색 목록에서 장소를 선택하고 펼쳐진 카드를 돌려준다. */
 export async function openPlace(page: Page, n: number): Promise<Locator> {
-  const list = page.getByRole('list', { name: '장소 목록' });
-  await list.getByRole('button', { name: new RegExp(`^${placeName(n)}`) }).click();
+  const detail = page.getByRole('dialog', { name: '장소 상세', exact: true, includeHidden: true });
+  if (await detail.isVisible())
+    await detail.getByRole('button', { name: '닫기', exact: true }).click();
+  await page.getByRole('button', { name: '장소', exact: true }).click();
+  await page.getByRole('button', { name: `${placeName(n)} 상세`, exact: true }).click();
   const card = page.getByTestId(`place-card-${placeKey(n)}`);
   await expect(card).toBeVisible();
   return card;
@@ -57,6 +62,9 @@ export async function submitNickname(page: Page, nickname: string): Promise<void
 
 /** 상단 설정 메뉴의 항목을 누른다. */
 export async function openSettingsItem(page: Page, item: string): Promise<void> {
+  const detail = page.getByRole('dialog', { name: '장소 상세', exact: true, includeHidden: true });
+  if (await detail.isVisible())
+    await detail.getByRole('button', { name: '닫기', exact: true }).click();
   await page.getByRole('button', { name: '설정' }).click();
   await page.getByRole('menuitem', { name: item }).click();
 }

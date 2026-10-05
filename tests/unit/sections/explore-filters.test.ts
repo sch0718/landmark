@@ -116,3 +116,33 @@ describe('categoryCounts', () => {
     ]);
   });
 });
+
+it('검색·폴더·카테고리·태그·메모·숨김·실효 일정 조건을 함께 유지한다', () => {
+  const t = trip();
+  const e = edit({
+    'n:3': {
+      memos: { 'a-local': { text: '야경 웨이팅', updatedAt: NOW } },
+      tags: { value: ['야경'], updatedAt: NOW },
+      hidden: { value: true, updatedAt: NOW },
+    },
+  });
+  e.days[D1] = {
+    mode: 'override',
+    baseDayHash: 'x',
+    updatedAt: NOW,
+    stops: [{ id: 'new0', placeKey: 'n:3' }],
+  };
+  const filter: Partial<ExploreFilter> = {
+    query: '웨이팅',
+    folderIds: ['f2'],
+    categories: ['음식점'],
+    tags: ['야경'],
+    hasMemo: true,
+    inItinerary: 'in',
+    showHidden: true,
+  };
+  expect(run(t, e, filter)).toEqual(['n:3']);
+  expect(run(t, e, { ...filter, showHidden: false })).toEqual([]);
+  expect(run(t, e, { ...filter, inItinerary: 'out' })).toEqual([]);
+  expect(run(t, e, { ...filter, categories: ['카페'] })).toEqual([]);
+});

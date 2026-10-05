@@ -47,7 +47,22 @@ yarn dev                           # http://localhost:5173 (네이버 지도, .e
 VITE_MAP_ADAPTER=fake yarn dev     # 가짜 지도
 ```
 
-여행 화면은 `/t/<publicId>`입니다(`/`는 안내 문구만 보여 주며 여행 목록을 노출하지 않습니다). 쿼리 `mode=explore|itinerary`, `day=<n>`, `place=<PlaceKey>`로 화면 상태를 공유할 수 있습니다.
+여행 화면은 `/t/<publicId>`입니다(`/`는 안내 문구만 보여 주며 여행 목록을 노출하지 않습니다). **지도·일정·장소** 세 뷰를 아래 링크로 공유합니다.
+
+```text
+/t/<publicId>?view=map
+/t/<publicId>?view=day&day=2
+/t/<publicId>?view=day&day=all
+/t/<publicId>?view=places&place=n%3A12345
+```
+
+기존 `?mode=explore|itinerary&day=2&place=<PlaceKey>` 링크와 `#e=...` 가져오기도 사용할 수 있습니다. 날짜 번호는 1부터 시작하며 마지막으로 고른 뷰는 브라우저에 여행별로 저장됩니다.
+
+모바일에서는 하단에서 뷰를 바꾸고, 지도 목록 시트를 탭하거나 드래그해 peek/half/full로 펼칩니다. 일정은 날짜 탭과 편집 버튼, 장소는 검색·필터·카드/목록·빠른 추가를 제공합니다. 모바일 일정의 지도는 경로 지도 열기로 표시합니다. 데스크톱에서는 왼쪽 탐색과 목록을 쓰며, 넓은 화면(1440px 이상)은 상세를 320px dock으로 나란히 보여 줍니다. 메모 초안은 뷰 전환 후에도 이어서 작성할 수 있습니다.
+
+편집 공유는 기존처럼 **편집 링크/파일 → 가져오기 → 병합**으로 동작합니다. 편집 내보내기는 `schemaVersion: 1` 계약을 유지하며 뷰·카드/목록·스크롤 같은 UI 선호와 저장 전 초안을 포함하지 않습니다.
+
+[실측 성능과 예산 판정](docs/ui-performance.md), [실물 기기 확인 범위](docs/ui-device-checks.md)를 참고하세요. 실물 iPhone Safari/Android Chrome과 유효 키 Naver SDK는 미실행이며 자동화 결과와 구분합니다.
 
 | 명령             | 내용                                                   |
 | ---------------- | ------------------------------------------------------ |
@@ -64,13 +79,34 @@ VITE_MAP_ADAPTER=fake yarn dev     # 가짜 지도
 
 ```bash
 yarn playwright install chromium webkit   # 처음 한 번
-yarn test:e2e
+yarn test:e2e:ci                          # CI 핵심 사용자 흐름
+yarn test:e2e                             # 필요할 때 세부 회귀 전체
 ```
 
-- 프로젝트 `desktop`(Chromium 1280×800): 일정 편집·되돌리기·재가져오기, 두 탭 동시 저장(실제 Web Locks).
-- 프로젝트 `mobile`(`devices['iPhone 13']`, WebKit): 링크 내보내기 → 새 브라우저 컨텍스트에서 가져오기.
-- `VITE_MAP_ADAPTER=fake`로 dev 서버(포트 5173)를 띄웁니다. CI가 아니면 이미 떠 있는 서버를 재사용하므로, 직접 띄운 서버가 가짜 지도 모드가 아니면 먼저 끄세요.
+- 프로젝트 `desktop`(Chromium 1280×800): 일정 편집·되돌리기·가져오기, 두 탭 동시 저장(Web Locks), 세 뷰·검색·초안·시트·긴 텍스트 회귀. 390–1920px 경계 및 1440/1920px dock도 확인합니다.
+- 프로젝트 `mobile`(iPhone 13 설정, WebKit 390×844): 링크 내보내기·가져오기와 뷰 회귀. 검색 focus는 390×664도 따로 확인합니다.
+- 프로젝트 `narrow-mobile`(Chromium 320×568, touch): 뷰 회귀와 작은 화면 시트 첫 행·빠른 추가 표시. touch/desktop 전용 사례 3개는 OS 조건에 따라 skip합니다.
+- fake 지도 서버(5173)와 빈 Client ID의 Naver 서버(5174)를 실행합니다. CI가 아니면 기존 서버를 재사용하므로, 직접 실행한 서버의 어댑터 설정을 확인하세요. 유효 키의 실 SDK 및 실물 기기 테스트와 구분합니다.
 - global setup이 `tests/fixtures/trips/e2e.json`을 `public/data/e2etest000001.json`으로 복사하고 teardown이 지웁니다. 이 파일은 커밋하지 않습니다(`.gitignore`).
+
+### 측정과 구현 호환
+
+제품 `f9f8fc2`의 과거 검증은 CI678·native68 PASS/3 skip·production39 first PASS/FLAKY0입니다. 활성 geometry의 과거 cache 복귀를 막는 수정과 실제 입력 회귀를 포함합니다. 당시 CPU4x p95 60.4/56.0/122.0/49.5/135.5ms와 장소→일정 >100ms 작업3건은 이전 엄격한 예산에서 FAIL이었습니다. 2026-10-05 사용자 결정으로 PoC 목표를 p95≤300ms·30회 중 >100ms 작업 최대5회로 완화해 이 기록을 수용합니다. 최신 성능 재측정 결과는 아닙니다. [성능 기록](docs/ui-performance.md)에 과거 판정과 원자료를 보존합니다.
+
+CI는 PR과 main push에서 핵심 사용자 흐름만 실행합니다. 500곳 전수 순회·20회 왕복 검사를 축소/제거하고, 세부 E2E는 수동 실행으로 분리했습니다. [검증 범위](docs/ui-validation.md)에 유지·제거한 항목과 실행 방법을 정리했습니다.
+
+```bash
+VITE_MAP_ADAPTER=fake yarn build
+node scripts/measure-ui-assets.mjs dist/assets
+```
+
+측정 스크립트는 JS/CSS 파일별 원본·gzip 바이트와 전체 합을 JSON으로 출력하며 앱 코드·SDK 키를 읽지 않습니다. source map과 개발용 MDI 컬렉션의 패키지 크기는 다운로드 비용에서 제외합니다. 초기 진입 청크·아이콘만의 비용·외부 SDK 요청은 별도 브라우저 측정이 필요합니다.
+
+MDI 아이콘은 개별 정적 import와 로컬 `build/compile-react-svg-icon.ts` compiler로 빌드합니다. 상세 dock은 MUI FocusTrap의 안정된 `isEnabled=false`로 외부 Tab 이동을 허용합니다. 기존 설치 구성에 맞춘 구현이며 런타임 아이콘·새 UI 라이브러리를 추가하지 않습니다.
+
+단위 테스트는 `vitest.config.ts`에서 기본 worker를 2개로 제한합니다. 여러 jsdom/MUI 통합 테스트를 CPU 수만큼 병렬 실행할 때 생기는 과부하와 타임아웃 후 후속 테스트 간섭을 줄이기 위한 설정입니다. 일반 테스트의 기본 제한은 5초이며, 여러 뷰와 화면 폭을 연속 전환하는 지도 수명 통합 테스트 한 건만 15초입니다. 필요하면 `yarn test --maxWorkers=N`으로 병렬 수를 명시할 수 있습니다.
+
+최종 검증은 lint → typecheck → `yarn test` → validate → build → E2E 순서로 실행합니다. 기존 미추적 scratch 파일 `inspect-mobile.mjs`, `verify-concepts.mjs`가 있는 로컬 checkout에서는 `yarn lint --ignore-pattern inspect-mobile.mjs --ignore-pattern verify-concepts.mjs`로 검사하며 이 제외는 제품 코드 제외가 아닙니다. URL과 UI의 동기화 규칙은 [상태 전이 문서](docs/ui-url-sync.md)에 정리했습니다.
 
 ## 여행 추가
 

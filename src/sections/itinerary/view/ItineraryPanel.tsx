@@ -9,6 +9,7 @@ import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { useState } from 'react';
 import { dayTotals } from 'src/domain/day-totals';
 import { planRevert } from 'src/domain/revert';
+import { naverPlaceUrl } from 'src/models/place';
 import type { TripData } from 'src/schema/trip-data';
 import { dayLabel } from 'src/sections/itinerary/store/format';
 import {
@@ -18,6 +19,7 @@ import {
   type ItineraryDay,
 } from 'src/sections/itinerary/store/itinerary-state';
 import { revertMessage } from 'src/sections/itinerary/store/revert-message';
+import { itineraryEditingAtom, mobileRouteMapAtom } from 'src/sections/views/store/view-session';
 import { useTripStore } from 'src/stores/trip-store';
 import { selectedDayAtom } from 'src/stores/ui-store';
 import { DayTabs } from './DayTabs';
@@ -71,7 +73,13 @@ export function ItineraryPanel() {
       </Box>
       <Stack divider={<Divider flexItem />} spacing={2} sx={{ p: 2 }}>
         {visible.map((item) => (
-          <DaySection key={item.day.date} trip={trip} item={item} onRevert={startRevert} />
+          <DaySection
+            key={item.day.date}
+            trip={trip}
+            item={item}
+            onRevert={startRevert}
+            selected={selected === item.day.date}
+          />
         ))}
       </Stack>
       {needsRecalc && (
@@ -97,22 +105,58 @@ export function ItineraryPanel() {
   );
 }
 
-type SectionProps = { trip: TripData; item: ItineraryDay; onRevert(date: string): void };
+type SectionProps = {
+  trip: TripData;
+  item: ItineraryDay;
+  onRevert(date: string): void;
+  selected: boolean;
+};
 
-function DaySection({ trip, item, onRevert }: SectionProps) {
+function DaySection({ trip, item, onRevert, selected }: SectionProps) {
   const { day, legs } = item;
+  const [editing, setEditing] = useAtom(itineraryEditingAtom);
+  const [showMap, setShowMap] = useAtom(mobileRouteMapAtom);
+  const first = selected ? day.stops[0] : undefined;
+  const place = first ? trip.places[first.placeKey] : undefined;
+  const url = place ? naverPlaceUrl(place) : null;
   return (
     <Box component="section" aria-label={dayLabel(trip, day.date)}>
       <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
         <Typography variant="subtitle1" component="h2" sx={{ fontWeight: 700 }}>
           {dayLabel(trip, day.date)}
         </Typography>
+        <Button
+          size="small"
+          aria-label={editing ? '일정 편집 완료' : '일정 편집'}
+          onClick={() => setEditing(!editing)}
+        >
+          {editing ? '완료' : '편집'}
+        </Button>
         {day.source === 'override' && (
           <Button size="small" color="warning" onClick={() => onRevert(day.date)}>
             원본 일정으로 되돌리기
           </Button>
         )}
       </Stack>
+      <Button size="small" onClick={() => setShowMap(!showMap)}>
+        {showMap ? '동선 지도 접기' : '동선 지도 보기'}
+      </Button>
+      {first && place && (
+        <Box sx={{ py: 1 }}>
+          <Typography variant="caption" color="text.secondary">
+            첫 번째 방문
+          </Typography>
+          <Typography variant="body2">
+            {first.time ? `${first.time} · ` : ''}
+            {place.name}
+          </Typography>
+          {url && (
+            <Button size="small" href={url} target="_blank" rel="noopener noreferrer">
+              네이버에서 보기
+            </Button>
+          )}
+        </Box>
+      )}
       <Timeline trip={trip} item={item} />
       {legs.length > 0 && <DayTotals totals={dayTotals(legs)} />}
     </Box>

@@ -1,12 +1,5 @@
 import { devices, expect, test, type Page } from '@playwright/test';
-import {
-  expandSheet,
-  fillNewMemo,
-  openPlace,
-  openSettingsItem,
-  openTrip,
-  submitNickname,
-} from './trip';
+import { fillNewMemo, openPlace, openSettingsItem, openTrip, submitNickname } from './trip';
 
 const MEMO = '여기 꼭 가요';
 
@@ -43,7 +36,7 @@ async function readExportedLink(page: Page): Promise<string> {
   return link!;
 }
 
-test('링크로 받은 동행의 메모를 새 기기에서 가져오면 "동행" 이름으로 보인다', async ({
+test('링크로 받은 동행의 메모를 새 기기에서 가져오면 "동행" 이름으로 보인다 @smoke', async ({
   page,
   browser,
   browserName,
@@ -56,7 +49,6 @@ test('링크로 받은 동행의 메모를 새 기기에서 가져오면 "동행
 
   // 동행의 휴대폰: 링크 열기 → 장소 카드 메모 → 닉네임 "동행".
   await openTrip(page);
-  await expandSheet(page);
   const card = await openPlace(page, 1);
   await (await fillNewMemo(card, MEMO)).click();
   await submitNickname(page, '동행');
@@ -82,7 +74,6 @@ test('링크로 받은 동행의 메모를 새 기기에서 가져오면 "동행
     await expect(importDialog).toBeHidden();
     await expect(other).toHaveURL(/\/t\/e2etest000001$/);
 
-    await expandSheet(other);
     const received = await openPlace(other, 1);
     await expect(received.getByText('동행', { exact: true })).toBeVisible();
     await expect(received.getByText(MEMO)).toBeVisible();

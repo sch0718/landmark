@@ -1,9 +1,10 @@
-import { render, screen, within } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createStore } from 'jotai';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppProviders } from 'src/app';
+import { installMapResources } from './helpers/map-resources';
 import { decodeEditLayer, encodeEditLayer } from 'src/domain/codec';
 import { createMemoryStorage, storageKey } from 'src/repositories/edit-layer-repo';
 import { routes } from 'src/routes/router';
@@ -94,11 +95,16 @@ beforeAll(async () => {
   await import('src/pages/TripPage');
 }, 20_000);
 
+let mapResources: ReturnType<typeof installMapResources>;
+
 beforeEach(() => {
+  mapResources = installMapResources();
   window.localStorage.clear();
 });
 
 afterEach(() => {
+  cleanup();
+  mapResources.restore();
   setNavigator({ share: undefined, clipboard: undefined });
   vi.unstubAllEnvs();
   vi.restoreAllMocks();

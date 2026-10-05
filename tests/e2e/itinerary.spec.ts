@@ -5,15 +5,12 @@ const DAY1 = 'Day 1 (11/14)';
 const ORIGINAL = [placeName(1), placeName(2), placeName(3)];
 const REORDERED = [placeName(2), placeName(1), placeName(3)];
 
-/** Day 1 타임라인의 장소 순서(드래그 핸들의 접근성 이름에서 읽는다). */
+/** Day 1 타임라인의 읽기/편집 상태와 독립적인 장소 순서. */
 async function day1Order(page: Page): Promise<string[]> {
-  const handles = page
+  return page
     .getByRole('list', { name: `${DAY1} 타임라인` })
-    .getByRole('button', { name: /순서 바꾸기$/ });
-  const labels = await handles.evaluateAll((els) =>
-    els.map((el) => el.getAttribute('aria-label') ?? ''),
-  );
-  return labels.map((l) => l.replace(/ 순서 바꾸기$/, ''));
+    .locator('[data-stop-id]')
+    .evaluateAll((rows) => rows.map((row) => row.getAttribute('data-stop-name') ?? ''));
 }
 
 const expectDay1Order = (page: Page, order: string[]) =>
@@ -21,20 +18,23 @@ const expectDay1Order = (page: Page, order: string[]) =>
 
 /** 일정 모드의 Day 1 탭을 버튼으로 연다. 화면 상태가 URL 쿼리에 반영된다. */
 async function openDay1(page: Page): Promise<void> {
-  await page.getByRole('button', { name: '일정' }).click();
-  await expect(page).toHaveURL(/[?&]mode=itinerary/);
+  await page.getByRole('button', { name: '일정', exact: true }).click();
+  await expect(page).toHaveURL(/[?&]view=day/);
   await page.getByRole('tab', { name: 'Day 1' }).click();
   await expect(page).toHaveURL(/[?&]day=1/);
 }
 
 const expectDay1View = async (page: Page) => {
-  await expect(page.getByRole('button', { name: '일정' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: '일정', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
   await expect(page.getByRole('tab', { name: 'Day 1' })).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByRole('list', { name: `${DAY1} 타임라인` })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Day 2 (11/15)' })).toHaveCount(0);
 };
 
-test('?mode=itinerary&day=1 딥 링크로 Day 1 일정이 바로 열리고 새로고침해도 유지된다', async ({
+test('?mode=itinerary&day=1 딥 링크로 Day 1 일정이 바로 열리고 새로고침해도 유지된다 @smoke', async ({
   page,
 }) => {
   await openTrip(page, `${TRIP_PATH}?mode=itinerary&day=1`);
@@ -47,7 +47,7 @@ test('?mode=itinerary&day=1 딥 링크로 Day 1 일정이 바로 열리고 새�
   await expect(page).toHaveURL(/\?mode=itinerary&day=1$/);
 });
 
-test('일정 순서 변경 → 파일 내보내기 → 되돌리기 → 옛 파일 가져오기에서 되돌린 상태가 유지된다', async ({
+test('일정 순서 변경 → 파일 내보내기 → 되돌리기 → 옛 파일 가져오기에서 되돌린 상태가 유지된다 @smoke', async ({
   page,
 }, testInfo) => {
   await openTrip(page);
@@ -57,6 +57,7 @@ test('일정 순서 변경 → 파일 내보내기 → 되돌리기 → 옛 파�
   await expect(hint).toBeHidden();
 
   // 키보드 드래그: 장소 1을 한 칸 아래로. 첫 편집이라 닉네임을 묻는다.
+  await page.getByRole('button', { name: '일정 편집', exact: true }).click();
   const handle = page.getByRole('button', { name: `${placeName(1)} 순서 바꾸기` });
   await handle.focus();
   // dnd-kit 안내 문구(live region)로 각 단계가 반영됐는지 확인하며 진행한다.

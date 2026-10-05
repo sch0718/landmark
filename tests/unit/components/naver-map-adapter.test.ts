@@ -1,12 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { NaverMapAdapter } from 'src/components/map/NaverMapAdapter';
+import { installMapResources } from './helpers/map-resources';
 
 let release!: () => void;
+let resources: ReturnType<typeof installMapResources> | undefined;
 vi.mock('src/components/map/load-naver-sdk', () => ({
   loadNaverSdk: vi.fn(() => new Promise<void>((r) => (release = r))),
 }));
 
 afterEach(() => {
+  resources?.restore();
+  resources = undefined;
   delete (window as { naver?: unknown }).naver;
 });
 
@@ -20,5 +24,189 @@ describe('NaverMapAdapter', () => {
     release();
     await mounted;
     expect(MapCtor).not.toHaveBeenCalled();
+  });
+});
+
+function installSdk() {
+  const listeners = new Set<unknown>();
+  const overlays = new Set<Overlay>();
+  const labels: HTMLElement[] = [];
+  class LatLng {
+    x: number;
+    y: number;
+    constructor(lat: number, lng: number) {
+      this.x = lng;
+      this.y = lat;
+    }
+  }
+  class Size {
+    constructor(
+      public width: number,
+      public height: number,
+    ) {}
+  }
+  class LatLngBounds {
+    constructor(
+      private sw: LatLng,
+      private ne: LatLng,
+    ) {}
+    getMin() {
+      return this.sw;
+    }
+    getMax() {
+      return this.ne;
+    }
+  }
+  class Overlay {
+    constructor(opts: Record<string, unknown>) {
+      overlays.add(this);
+      const icon = opts.icon as { content: HTMLElement } | undefined;
+      if (icon) labels.push(icon.content);
+    }
+    setMap(map: unknown) {
+      if (map === null) overlays.delete(this);
+    }
+  }
+  const map = {
+    center: new LatLng(37.5, 128),
+    zoom: 12,
+    getBounds: () => new LatLngBounds(new LatLng(33, 124), new LatLng(39, 132)),
+    getCenter: vi.fn(() => map.center),
+    getZoom: vi.fn(() => map.zoom),
+    setCenter: vi.fn((center: LatLng) => {
+      map.center = center;
+    }),
+    setZoom: vi.fn((zoom: number) => {
+      map.zoom = zoom;
+    }),
+    setSize: vi.fn(() => {
+      map.center = new LatLng(0, 0);
+      map.zoom = 1;
+    }),
+    fitBounds: vi.fn(),
+    destroy: vi.fn(),
+  };
+  const MapCtor = vi.fn(function () {
+    return map;
+  });
+  const removeListener = vi.fn((listener: unknown) => {
+    listeners.delete(listener);
+  });
+  (window as unknown as { naver: unknown }).naver = {
+    maps: {
+      Map: MapCtor,
+      Size,
+      LatLng,
+      LatLngBounds,
+      Marker: Overlay,
+      Polyline: Overlay,
+      Event: {
+        addListener: (_: unknown, name: string, callback: () => void) => {
+          const listener = { name, callback };
+          listeners.add(listener);
+          return listener;
+        },
+        removeListener,
+      },
+    },
+  };
+  return { map, listeners, overlays, labels, removeListener };
+}
+
+describe('NaverMapAdapter SDK 계약', () => {
+  it('resize가 Size를 전달하고 SDK가 바꾼 center/zoom을 복원하며 bounds를 알린다', async () => {
+    const sdk = installSdk();
+    const adapter = new NaverMapAdapter('id');
+    const bounds = vi.fn();
+    adapter.onBoundsChange(bounds);
+    const pending = adapter.mount(document.createElement('div'));
+    release();
+    await pending;
+    expect(adapter.getCamera()).toEqual({ center: [128, 37.5], zoom: 12 });
+    adapter.resize(390, 500);
+    expect(sdk.map.setSize).toHaveBeenCalledWith(
+      expect.objectContaining({ width: 390, height: 500 }),
+    );
+    expect(adapter.getCamera()).toEqual({ center: [128, 37.5], zoom: 12 });
+    expect(bounds).toHaveBeenCalledWith({ west: 124, south: 33, east: 132, north: 39 });
+    adapter.resize(0, 500);
+    expect(sdk.map.setSize).toHaveBeenCalledTimes(1);
+    adapter.setCamera({ center: [127, 36], zoom: 14 });
+    expect(sdk.map.center).toMatchObject({ x: 127, y: 36 });
+    expect(sdk.map.zoom).toBe(14);
+    adapter.destroy();
+    expect(adapter.getCamera()).toBeNull();
+    adapter.resize(390, 500);
+    adapter.setCamera({ center: [128, 37], zoom: 8 });
+    expect(sdk.map.setSize).toHaveBeenCalledTimes(1);
+  });
+  it('fitBounds에 기본 여백과 가림 영역 여백을 전달한다', async () => {
+    const sdk = installSdk();
+    const adapter = new NaverMapAdapter('id');
+    const pending = adapter.mount(document.createElement('div'));
+    release();
+    await pending;
+    const points: [number, number][] = [
+      [127, 36],
+      [128, 37],
+    ];
+    adapter.fitBounds(points);
+    expect(sdk.map.fitBounds).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        sw: expect.objectContaining({ x: 127, y: 36 }),
+        ne: expect.objectContaining({ x: 128, y: 37 }),
+      }),
+      { top: 40, right: 40, bottom: 40, left: 40 },
+    );
+    const padding = { top: 24, right: 24, bottom: 360, left: 24 };
+    adapter.fitBounds(points, padding);
+    expect(sdk.map.fitBounds).toHaveBeenLastCalledWith(expect.anything(), padding);
+    adapter.destroy();
+  });
+  it('재그리기와 반복 destroy는 Event·overlay·DOM click·callback 슬롯을 정리한다', async () => {
+    resources = installMapResources();
+    const sdk = installSdk();
+    const adapter = new NaverMapAdapter('id');
+    resources.trackNaver(adapter);
+    resources.setSdkProbe(() => ({
+      sdkListeners: sdk.listeners.size,
+      overlays: sdk.overlays.size,
+    }));
+    const click = vi.fn();
+    const bounds = vi.fn();
+    adapter.onMarkerClick(click);
+    adapter.onBoundsChange(bounds);
+    const pending = adapter.mount(document.createElement('div'));
+    release();
+    await pending;
+    const marker = { id: 'a', lng: 128, lat: 37.5, label: 'a', color: '#000', clusterable: false };
+    adapter.setMarkers([marker]);
+    adapter.setPolylines([{ id: 'l', path: [[128, 37]], color: '#000', dashed: false }]);
+    const oldLabel = sdk.labels[0]!;
+    oldLabel.click();
+    expect(click).toHaveBeenCalledTimes(1);
+    adapter.resize(390, 500);
+    oldLabel.click();
+    expect(click).toHaveBeenCalledTimes(1);
+    expect(sdk.overlays.size).toBe(2);
+    expect(resources.snapshot()).toMatchObject({
+      activeAdapters: 1,
+      callbackSlots: 2,
+      sdkListeners: 1,
+      overlays: 2,
+    });
+    const idle = [...sdk.listeners][0] as { callback: () => void };
+    adapter.destroy();
+    adapter.destroy();
+    for (const label of sdk.labels) label.click();
+    idle.callback();
+    expect(click).toHaveBeenCalledTimes(1);
+    expect(bounds).toHaveBeenCalledTimes(1);
+    expect(sdk.listeners.size).toBe(0);
+    expect(sdk.overlays.size).toBe(0);
+    expect(sdk.removeListener).toHaveBeenCalledTimes(1);
+    expect(sdk.map.destroy).toHaveBeenCalledTimes(1);
+    expect(adapter).toMatchObject({ markerCb: null, boundsCb: null });
+    expect(Object.values(resources.snapshot()).every((count) => count === 0)).toBe(true);
   });
 });

@@ -2,7 +2,14 @@ name: CI
 
 on:
   push:
+    branches: [main]
   pull_request:
+  workflow_dispatch:
+    inputs:
+      full_e2e:
+        description: 'Run the extended E2E regression suite'
+        type: boolean
+        default: false
 
 # 같은 브랜치·PR에 새 커밋이 오면 진행 중인 이전 실행을 취소한다.
 concurrency:
@@ -36,11 +43,16 @@ jobs:
       - name: Install Playwright browsers
         run: yarn playwright install --with-deps chromium webkit
 
-      - name: E2E
+      - name: E2E (core flows)
+        if: ${{ github.event_name != 'workflow_dispatch' || !inputs.full_e2e }}
+        run: yarn test:e2e:ci
+
+      - name: E2E (extended regression)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_e2e }}
         run: yarn test:e2e
 
       - name: Upload Playwright report
-        if: failure()
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report

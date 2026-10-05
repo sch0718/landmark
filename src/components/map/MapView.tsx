@@ -1,15 +1,26 @@
 import Box from '@mui/material/Box';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { FakeMapAdapter } from './FakeMapAdapter';
-import type { Bounds, MapAdapter, MapMarker, MapPolyline } from './MapAdapter';
+import type {
+  Bounds,
+  MapAdapter,
+  MapCamera,
+  MapMarker,
+  MapPadding,
+  MapPolyline,
+} from './MapAdapter';
 import { onNaverAuthFailure } from './load-naver-sdk';
 import { NaverMapAdapter } from './NaverMapAdapter';
+import { useMapSize } from './use-map-size';
 
 export const MAP_UNAVAILABLE_MESSAGE = '지도를 불러오지 못했어요. 도메인 등록을 확인하세요';
 export const MAP_MISSING_CLIENT_ID_MESSAGE =
   '지도 키가 설정되지 않았어요. 환경변수 VITE_NAVER_MAP_CLIENT_ID를 확인하세요';
 
 type Props = {
+  visible?: boolean;
+  padding?: MapPadding;
+  onReadyChange?(ready: boolean): void;
   markers: MapMarker[];
   polylines: MapPolyline[];
   onMarkerClick(id: string): void;
@@ -42,91 +53,142 @@ export function fitPoints(markers: MapMarker[]): [number, number][] {
 export function MapView(props: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const adapterRef = useRef<MapAdapter | null>(null);
-  /** 마지막으로 fitBounds를 한 fitKey(아직 안 했으면 undefined). */
-  const fittedKey = useRef<string | undefined>(undefined);
+  const visible = props.visible ?? true;
+  const [activated, setActivated] = useState(visible);
+  const [mountedAdapter, setMountedAdapter] = useState<MapAdapter | null>(null);
+  const cameras = useRef(new Map<string, MapCamera>());
+  const fittedKeys = useRef(new Set<string>());
+  const displayedKey = useRef<string | null>(null);
+  const appliedFocus = useRef<number | null>(null);
   const latest = useRef(props);
   useEffect(() => {
     latest.current = props;
   });
 
   useEffect(() => {
+    if (!visible || activated) return;
+    const frame = requestAnimationFrame(() => setActivated(true));
+    return () => cancelAnimationFrame(frame);
+  }, [visible, activated]);
+
+  useEffect(() => {
     const host = hostRef.current;
-    if (!host) return;
+    if (!activated || !host) return;
+    const cameraCache = cameras.current;
+    const fittedCache = fittedKeys.current;
     let cancelled = false;
+    let disposed = false;
     let adapter: MapAdapter;
     let unsubscribeAuth = () => {};
+    const dispose = () => {
+      if (disposed) return;
+      disposed = true;
+      unsubscribeAuth();
+      adapter.destroy();
+    };
+    const unavailable = (reason: string) => {
+      latest.current.onReadyChange?.(false);
+      latest.current.onUnavailable(reason);
+    };
     if (import.meta.env.VITE_MAP_ADAPTER === 'fake') {
       adapter = new FakeMapAdapter();
     } else {
       const clientId = import.meta.env.VITE_NAVER_MAP_CLIENT_ID;
       if (!clientId) {
-        latest.current.onUnavailable(MAP_MISSING_CLIENT_ID_MESSAGE);
+        unavailable(MAP_MISSING_CLIENT_ID_MESSAGE);
         return;
       }
       adapter = new NaverMapAdapter(clientId);
-      // 미등록 도메인: SDK가 로드 뒤 navermap_authFailure를 부른다(로드 중이면 mount가 reject된다).
       unsubscribeAuth = onNaverAuthFailure(() => {
         if (cancelled) return;
         cancelled = true;
+        adapterRef.current = null;
+        setMountedAdapter(null);
+        dispose();
         console.warn('네이버 지도 인증에 실패했어요');
-        latest.current.onUnavailable(MAP_UNAVAILABLE_MESSAGE);
+        unavailable(MAP_UNAVAILABLE_MESSAGE);
       });
+      if (cancelled) {
+        unsubscribeAuth();
+        return;
+      }
     }
     adapter.onMarkerClick((id) => latest.current.onMarkerClick(id));
     adapter.onBoundsChange((b) => latest.current.onBoundsChange?.(b));
     adapter.mount(host).then(
       () => {
         if (cancelled) {
-          adapter.destroy();
+          dispose();
           return;
         }
         adapterRef.current = adapter;
-        adapter.setMarkers(latest.current.markers);
-        adapter.setPolylines(latest.current.polylines);
-        fittedKey.current = latest.current.fitKey;
-        const pts = fitPoints(latest.current.markers);
-        if (pts.length > 0) adapter.fitBounds(pts);
+        setMountedAdapter(adapter);
       },
       (e: unknown) => {
+        if (cancelled) return;
+        cancelled = true;
+        dispose();
         console.warn('지도를 불러오지 못했어요', e);
-        if (!cancelled) latest.current.onUnavailable(MAP_UNAVAILABLE_MESSAGE);
+        unavailable(MAP_UNAVAILABLE_MESSAGE);
       },
     );
     return () => {
       cancelled = true;
-      unsubscribeAuth();
       adapterRef.current = null;
-      adapter.destroy();
+      dispose();
+      cameraCache.clear();
+      fittedCache.clear();
+      displayedKey.current = null;
+      appliedFocus.current = null;
     };
-  }, []);
+  }, [activated]);
 
+  const ready = useMapSize(hostRef, mountedAdapter, visible);
   useEffect(() => {
-    adapterRef.current?.setMarkers(props.markers);
-  }, [props.markers]);
+    latest.current.onReadyChange?.(ready);
+  }, [ready]);
   useEffect(() => {
-    adapterRef.current?.setPolylines(props.polylines);
-  }, [props.polylines]);
+    if (ready) adapterRef.current?.setMarkers(props.markers);
+  }, [ready, props.markers]);
+  useEffect(() => {
+    if (ready) adapterRef.current?.setPolylines(props.polylines);
+  }, [ready, props.polylines]);
 
-  const { fitKey, markers } = props;
+  const key = props.fitKey ?? 'explore';
   useEffect(() => {
     const adapter = adapterRef.current;
-    if (!adapter || fittedKey.current === fitKey) return;
-    fittedKey.current = fitKey;
-    const pts = fitPoints(markers);
-    if (pts.length > 0) adapter.fitBounds(pts);
-    // markers는 fitKey가 바뀐 그 렌더의 값만 쓴다. 마커만 바뀌면(편집·선택) 다시 맞추지 않는다.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fitKey]);
-
-  const focus = props.focus;
-  useEffect(() => {
-    if (!focus) return;
-    const [lng, lat] = focus.point;
-    adapterRef.current?.fitBounds([
-      [lng - FOCUS_PAD, lat - FOCUS_PAD],
-      [lng + FOCUS_PAD, lat + FOCUS_PAD],
-    ]);
-  }, [focus]);
+    if (!ready || !adapter) return;
+    const fit = (points: [number, number][]) => {
+      const padding = latest.current.padding;
+      if (padding) adapter.fitBounds(points, padding);
+      else adapter.fitBounds(points);
+    };
+    if (displayedKey.current !== key) {
+      if (displayedKey.current !== null && fittedKeys.current.has(displayedKey.current)) {
+        const old = adapter.getCamera();
+        if (old) cameras.current.set(displayedKey.current, old);
+      }
+      const remembered = cameras.current.get(key);
+      if (remembered) adapter.setCamera(remembered);
+      displayedKey.current = key;
+    }
+    if (!fittedKeys.current.has(key)) {
+      const points = fitPoints(latest.current.markers);
+      if (points.length > 0) {
+        fit(points);
+        fittedKeys.current.add(key);
+      }
+    }
+    const focus = latest.current.focus;
+    if (focus && focus.seq !== appliedFocus.current) {
+      const [lng, lat] = focus.point;
+      fit([
+        [lng - FOCUS_PAD, lat - FOCUS_PAD],
+        [lng + FOCUS_PAD, lat + FOCUS_PAD],
+      ]);
+      appliedFocus.current = focus.seq;
+    }
+  }, [ready, key, props.focus, props.markers]);
 
   return <Box ref={hostRef} sx={{ width: '100%', height: '100%' }} data-testid="map-host" />;
 }

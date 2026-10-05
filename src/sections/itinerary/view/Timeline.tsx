@@ -15,26 +15,27 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import Stack from '@mui/material/Stack';
-import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import { Fragment, useState, type FormEvent } from 'react';
+import { useAtomValue, useSetAtom } from 'jotai';
+import { Fragment, useState } from 'react';
 import { toast } from 'sonner';
 import { overlay } from 'src/domain/overlay';
-import { HHmm, LIMITS } from 'src/schema/common';
+import { LIMITS } from 'src/schema/common';
 import type { Stop, TripData } from 'src/schema/trip-data';
 import { circled, dayLabel } from 'src/sections/itinerary/store/format';
-import {
-  moveStop,
-  removeStop,
-  reorderStops,
-  updateStop,
-} from 'src/sections/itinerary/store/itinerary-actions';
+import { moveStop, removeStop, reorderStops } from 'src/sections/itinerary/store/itinerary-actions';
 import { useItinerarySave, type ItineraryDay } from 'src/sections/itinerary/store/itinerary-state';
+import {
+  detailAtom,
+  itineraryEditingAtom,
+  stopDraftsAtom,
+} from 'src/sections/views/store/view-session';
+import DragIcon from '~icons/mdi/drag';
+import MoreIcon from '~icons/mdi/dots-horizontal';
 import { LegRow } from './LegRow';
 
 type Props = { trip: TripData; item: ItineraryDay };
@@ -76,7 +77,13 @@ export function Timeline({ trip, item }: Props) {
             const leg = next ? legBetween.get(`${stop.id}>${next.id}`) : undefined;
             return (
               <Fragment key={stop.id}>
-                <StopRow trip={trip} date={date} stop={stop} position={i} />
+                <StopRow
+                  trip={trip}
+                  date={date}
+                  stop={stop}
+                  position={i}
+                  dayStopCount={day.stops.length}
+                />
                 {leg && <LegRow leg={leg} />}
               </Fragment>
             );
@@ -87,14 +94,30 @@ export function Timeline({ trip, item }: Props) {
   );
 }
 
-type RowProps = { trip: TripData; date: string; stop: Stop; position: number };
+type RowProps = {
+  trip: TripData;
+  date: string;
+  stop: Stop;
+  position: number;
+  dayStopCount: number;
+};
 
-function StopRow({ trip, date, stop, position }: RowProps) {
+function StopRow({ trip, date, stop, position, dayStopCount }: RowProps) {
   const save = useItinerarySave();
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition } =
     useSortable({ id: stop.id });
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
-  const [editing, setEditing] = useState(false);
+  const editingMode = useAtomValue(itineraryEditingAtom);
+  const setDetail = useSetAtom(detailAtom);
+  const setDrafts = useSetAtom(stopDraftsAtom);
+  const openEditor = () => {
+    setDrafts((drafts) =>
+      drafts[stop.id]
+        ? drafts
+        : { ...drafts, [stop.id]: { date, time: stop.time ?? '', note: stop.note ?? '' } },
+    );
+    setDetail({ kind: 'stop', date, stopId: stop.id });
+  };
   const name = trip.places[stop.placeKey]?.name ?? stop.placeKey;
 
   const moveTo = (toDate: string) => {
@@ -121,48 +144,88 @@ function StopRow({ trip, date, stop, position }: RowProps) {
       style={{ transform: CSS.Transform.toString(transform), transition }}
       sx={{ listStyle: 'none', py: 0.5, bgcolor: 'background.paper' }}
     >
-      <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-        <IconButton
-          size="small"
-          ref={setActivatorNodeRef}
-          aria-label={`${name} 순서 바꾸기`}
-          sx={{ cursor: 'grab', touchAction: 'none' }}
-          {...attributes}
-          {...listeners}
-        >
-          ⠿
-        </IconButton>
+      <Stack
+        direction="row"
+        spacing={1}
+        sx={{ alignItems: 'center', py: 0.75 }}
+        data-stop-id={stop.id}
+        data-stop-name={name}
+      >
+        {editingMode && (
+          <IconButton
+            size="small"
+            ref={setActivatorNodeRef}
+            aria-label={`${name} 순서 바꾸기`}
+            sx={{ cursor: 'grab', touchAction: 'none' }}
+            {...attributes}
+            {...listeners}
+          >
+            <DragIcon width={20} height={20} />
+          </IconButton>
+        )}
         <Typography component="span" sx={{ fontWeight: 700 }} aria-hidden>
           {circled(position + 1)}
         </Typography>
         <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Stack direction="row" spacing={1} sx={{ alignItems: 'baseline' }}>
+          <Stack direction="column" spacing={0} sx={{ alignItems: 'baseline' }}>
             {stop.time && (
               <Typography component="span" variant="body2" color="primary">
                 {stop.time}
               </Typography>
             )}
-            <Typography component="span" variant="body1" noWrap>
+            <Typography
+              component="span"
+              variant="body1"
+              sx={{ fontWeight: 600, overflowWrap: 'anywhere' }}
+            >
               {name}
             </Typography>
           </Stack>
           {stop.note && (
-            <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'pre-wrap' }}>
+            <Typography variant="caption" color="text.secondary" noWrap>
               {stop.note}
             </Typography>
           )}
         </Box>
-        <Button size="small" aria-label={`${name} 편집`} onClick={() => setEditing(true)}>
-          편집
-        </Button>
         <IconButton
           size="small"
           aria-label={`${name} 메뉴`}
           onClick={(e) => setMenuAnchor(e.currentTarget)}
         >
-          ⋯
+          <MoreIcon width={22} height={22} />
         </IconButton>
         <Menu anchorEl={menuAnchor} open={menuAnchor !== null} onClose={() => setMenuAnchor(null)}>
+          {[
+            <MenuItem
+              key="edit"
+              onClick={() => {
+                setMenuAnchor(null);
+                openEditor();
+              }}
+            >
+              시간·메모 편집
+            </MenuItem>,
+            <MenuItem
+              key="up"
+              disabled={position === 0}
+              onClick={() => {
+                setMenuAnchor(null);
+                save((t, e, now) => reorderStops(t, e, date, stop.id, position - 1, now));
+              }}
+            >
+              한 칸 위로
+            </MenuItem>,
+            <MenuItem
+              key="down"
+              disabled={position === dayStopCount - 1}
+              onClick={() => {
+                setMenuAnchor(null);
+                save((t, e, now) => reorderStops(t, e, date, stop.id, position + 1, now));
+              }}
+            >
+              한 칸 아래로
+            </MenuItem>,
+          ]}
           {trip.days
             .filter((d) => d.date !== date)
             .map((d) => (
@@ -172,80 +235,6 @@ function StopRow({ trip, date, stop, position }: RowProps) {
             ))}
           <MenuItem onClick={remove}>빼기</MenuItem>
         </Menu>
-      </Stack>
-      {editing && (
-        <StopEditor
-          name={name}
-          stop={stop}
-          onCancel={() => setEditing(false)}
-          onSave={(patch) => {
-            setEditing(false);
-            save((t, e, now) => updateStop(t, e, date, stop.id, patch, now));
-          }}
-        />
-      )}
-    </Box>
-  );
-}
-
-type EditorProps = {
-  name: string;
-  stop: Stop;
-  onCancel(): void;
-  onSave(patch: { time: string | null; note: string | null }): void;
-};
-
-/** 시간·메모 인라인 편집. 빈 값이면 그 필드를 지운다. */
-function StopEditor({ name, stop, onCancel, onSave }: EditorProps) {
-  const [time, setTime] = useState(stop.time ?? '');
-  const [note, setNote] = useState(stop.note ?? '');
-  const [timeError, setTimeError] = useState(false);
-
-  const submit = (e: FormEvent) => {
-    e.preventDefault();
-    const t = time.trim();
-    if (t !== '' && !HHmm.safeParse(t).success) {
-      setTimeError(true);
-      return;
-    }
-    const n = note.trim();
-    onSave({ time: t === '' ? null : t, note: n === '' ? null : n });
-  };
-
-  return (
-    <Box component="form" onSubmit={submit} sx={{ pl: 5, pt: 1 }}>
-      <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
-        <TextField
-          size="small"
-          label="시간"
-          placeholder="HH:mm"
-          value={time}
-          onChange={(e) => {
-            setTime(e.target.value);
-            setTimeError(false);
-          }}
-          error={timeError}
-          helperText={timeError ? '시간은 HH:mm 형식으로 입력하세요' : undefined}
-          slotProps={{ htmlInput: { 'aria-label': `${name} 시간` } }}
-          sx={{ width: 110 }}
-        />
-        <TextField
-          size="small"
-          label="메모"
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          multiline
-          slotProps={{ htmlInput: { 'aria-label': `${name} 메모` } }}
-          sx={{ flex: 1 }}
-        />
-      </Stack>
-      <Stack direction="row" spacing={1} sx={{ justifyContent: 'flex-end', pt: 0.5 }}>
-        <Button size="small" onClick={onCancel}>
-          취소
-        </Button>
-        <Button size="small" type="submit" variant="contained">
-          저장
-        </Button>
       </Stack>
     </Box>
   );

@@ -1,12 +1,20 @@
 import { buildClusterIndex, clusterFeatures, type ClusterIndex } from './cluster';
 import { loadNaverSdk } from './load-naver-sdk';
-import type { Bounds, MapAdapter, MapMarker, MapPolyline } from './MapAdapter';
+import type {
+  Bounds,
+  MapAdapter,
+  MapCamera,
+  MapMarker,
+  MapPadding,
+  MapPolyline,
+} from './MapAdapter';
 import { createMarkerLabelElement } from './marker-label';
 
 /** 사용하는 Naver Maps v3 API만 좁게 선언한다(전용 타입 패키지는 추가하지 않는다). */
 type Overlay = { setMap(map: unknown): void };
 type NaverMaps = {
   Map: new (el: HTMLElement, opts: Record<string, unknown>) => NaverMap;
+  Size: new (width: number, height: number) => unknown;
   LatLng: new (lat: number, lng: number) => unknown;
   LatLngBounds: new (sw: unknown, ne: unknown) => unknown;
   Marker: new (opts: Record<string, unknown>) => Overlay;
@@ -18,6 +26,8 @@ type NaverMaps = {
 };
 type NaverMap = {
   getBounds(): { getMin(): { x: number; y: number }; getMax(): { x: number; y: number } };
+  getCenter(): { x: number; y: number };
+  setSize(size: unknown): void;
   getZoom(): number;
   setZoom(z: number): void;
   setCenter(c: unknown): void;
@@ -36,6 +46,7 @@ export class NaverMapAdapter implements MapAdapter {
   private lines: MapPolyline[] = [];
   private destroyed = false;
   private listeners: unknown[] = [];
+  private markerClickCleanups: (() => void)[] = [];
   private markerCb: ((id: string) => void) | null = null;
   private boundsCb: ((b: Bounds) => void) | null = null;
 
@@ -90,14 +101,39 @@ export class NaverMapAdapter implements MapAdapter {
     );
   }
 
-  fitBounds(points: [number, number][]): void {
+  resize(width: number, height: number): void {
+    if (!this.map || width <= 0 || height <= 0) return;
+    const camera = this.getCamera();
+    this.map.setSize(new (maps().Size)(width, height));
+    if (camera) this.setCamera(camera);
+    this.drawMarkers();
+    const bounds = this.currentBounds();
+    if (bounds) this.boundsCb?.(bounds);
+  }
+
+  getCamera(): MapCamera | null {
+    if (!this.map) return null;
+    const point = this.map.getCenter();
+    return { center: [point.x, point.y], zoom: this.map.getZoom() };
+  }
+
+  setCamera(camera: MapCamera): void {
+    if (!this.map) return;
+    this.map.setCenter(new (maps().LatLng)(camera.center[1], camera.center[0]));
+    this.map.setZoom(camera.zoom);
+  }
+
+  fitBounds(points: [number, number][], padding?: MapPadding): void {
     if (!this.map || points.length === 0) return;
     const m = maps();
     const lngs = points.map((p) => p[0]);
     const lats = points.map((p) => p[1]);
     const sw = new m.LatLng(Math.min(...lats), Math.min(...lngs));
     const ne = new m.LatLng(Math.max(...lats), Math.max(...lngs));
-    this.map.fitBounds(new m.LatLngBounds(sw, ne), { top: 40, right: 40, bottom: 40, left: 40 });
+    this.map.fitBounds(
+      new m.LatLngBounds(sw, ne),
+      padding ?? { top: 40, right: 40, bottom: 40, left: 40 },
+    );
   }
 
   onMarkerClick(cb: (id: string) => void): void {
@@ -110,6 +146,13 @@ export class NaverMapAdapter implements MapAdapter {
 
   destroy(): void {
     this.destroyed = true;
+    this.markerCb = null;
+    this.boundsCb = null;
+    this.markers = [];
+    this.lines = [];
+    this.cluster = buildClusterIndex([]);
+    for (const cleanup of this.markerClickCleanups) cleanup();
+    this.markerClickCleanups = [];
     const m = (window as unknown as { naver?: { maps?: NaverMaps } }).naver?.maps;
     for (const l of this.listeners) m?.Event.removeListener(l);
     this.listeners = [];
@@ -133,6 +176,8 @@ export class NaverMapAdapter implements MapAdapter {
     const bounds = this.currentBounds();
     if (!map || !bounds) return;
     const m = maps();
+    for (const cleanup of this.markerClickCleanups) cleanup();
+    this.markerClickCleanups = [];
     for (const o of this.markerOverlays) o.setMap(null);
     this.markerOverlays = [];
 
@@ -144,6 +189,7 @@ export class NaverMapAdapter implements MapAdapter {
         icon: { content: el, anchor: { x: 0, y: 0 } },
       });
       el.addEventListener('click', onClick);
+      this.markerClickCleanups.push(() => el.removeEventListener('click', onClick));
       el.style.cursor = 'pointer';
       this.markerOverlays.push(overlay);
     };

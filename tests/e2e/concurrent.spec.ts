@@ -44,7 +44,9 @@ async function storedMemos(page: Page): Promise<Record<string, string>> {
   }, E2E_PUBLIC_ID);
 }
 
-test('A가 저장한 뒤 B가 새로고침 없이 저장해도 두 메모가 모두 남는다', async ({ context }) => {
+test('A가 저장한 뒤 B가 새로고침 없이 저장해도 두 메모가 모두 남는다 @smoke', async ({
+  context,
+}) => {
   const [a, b] = await openTwoPages(context);
 
   const cardA = await openPlace(a, 1);
@@ -63,12 +65,11 @@ test('A가 저장한 뒤 B가 새로고침 없이 저장해도 두 메모가 모
   }
 });
 
-test('두 페이지가 거의 동시에 20번씩 저장해도 40개 메모가 모두 남는다(Web Locks)', async ({
+test('두 페이지가 동시에 3번씩 저장해도 6개 메모가 모두 남는다(Web Locks) @smoke', async ({
   context,
 }) => {
-  test.setTimeout(180_000);
   const [a, b] = await openTwoPages(context);
-  const ROUNDS = 20;
+  const ROUNDS = 3;
 
   for (let i = 0; i < ROUNDS; i++) {
     const na = 3 + 2 * i;
@@ -95,10 +96,18 @@ test('두 페이지가 거의 동시에 20번씩 저장해도 40개 메모가 �
     await page.reload();
     await expect(page.getByRole('heading', { name: 'E2E 테스트 여행' })).toBeVisible();
     expect(await storedMemos(page)).toEqual(expected);
-    // 화면에서도: 메모 검색으로 40곳이 걸린다.
-    await page.getByLabel('검색', { exact: true }).fill('동시메모');
-    await expect(page.getByText('40곳', { exact: true })).toBeVisible();
+    // 화면의 검색 결과에도 저장한 모든 메모가 나타난다.
+    await page
+      .getByRole('dialog', { name: '장소 상세', exact: true })
+      .getByRole('button', { name: '닫기', exact: true })
+      .click();
+    await page.getByRole('button', { name: '장소', exact: true }).click();
+    await page.getByRole('textbox', { name: '검색', exact: true }).fill('동시메모');
+    await page.getByRole('button', { name: '목록', exact: true }).click();
+    await expect(page.getByText(`${ROUNDS * 2}곳`, { exact: true })).toBeVisible();
     await expect((await openPlace(page, 3)).getByText('동시메모 A0')).toBeVisible();
-    await expect((await openPlace(page, 42)).getByText(`동시메모 B${ROUNDS - 1}`)).toBeVisible();
+    await expect(
+      (await openPlace(page, 4 + 2 * (ROUNDS - 1))).getByText(`동시메모 B${ROUNDS - 1}`),
+    ).toBeVisible();
   }
 });

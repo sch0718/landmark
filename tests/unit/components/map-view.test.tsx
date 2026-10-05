@@ -1,34 +1,47 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { createStore, Provider, useSetAtom } from 'jotai';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createStore, Provider, useAtomValue, useSetAtom } from 'jotai';
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { FakeMapAdapter, FAKE_BOUNDS } from 'src/components/map/FakeMapAdapter';
 import { buildClusterIndex, clusterFeatures } from 'src/components/map/cluster';
 import { categoryColor, dayColor } from 'src/components/map/map-colors';
 import { createMarkerLabelElement } from 'src/components/map/marker-label';
 import type { MapMarker } from 'src/components/map/MapAdapter';
 import { fitPoints, MapView } from 'src/components/map/MapView';
+import { StrictMode } from 'react';
+import { installMapResources } from './helpers/map-resources';
 import { TripLayout } from 'src/layouts/TripLayout';
 import { createTripStore, TripStoreContext } from 'src/stores/trip-store';
 
 const sdk = vi.hoisted(() => ({
   load: (): Promise<void> => Promise.reject(new Error('blocked')),
   authFailure: null as (() => void) | null,
+  authAlreadyFailed: false,
 }));
 vi.mock('src/components/map/load-naver-sdk', () => ({
   loadNaverSdk: vi.fn(() => sdk.load()),
   onNaverAuthFailure: vi.fn((cb: () => void) => {
     sdk.authFailure = cb;
+    if (sdk.authAlreadyFailed) cb();
     return () => {
       if (sdk.authFailure === cb) sdk.authFailure = null;
     };
   }),
 }));
 
+let resources: ReturnType<typeof installMapResources>;
+beforeEach(() => {
+  resources = installMapResources();
+});
+
 afterEach(() => {
+  cleanup();
+  resources.restore();
+  vi.restoreAllMocks();
   vi.unstubAllEnvs();
   sdk.load = () => Promise.reject(new Error('blocked'));
   sdk.authFailure = null;
+  sdk.authAlreadyFailed = false;
 });
 
 const mk = (id: string, over: Partial<MapMarker> = {}): MapMarker => ({
@@ -131,9 +144,16 @@ describe('지도 사용 불가', () => {
 
     function Connected() {
       const setUnavailable = useSetAtom(ts.mapUnavailableAtom);
+      const unavailable = useAtomValue(ts.mapUnavailableAtom);
       return (
         <TripLayout
           topBar={<div>top</div>}
+          view="map"
+          layout="compact"
+          detail={{ open: false, content: null, onClose: vi.fn() }}
+          unavailable={unavailable}
+          routeMapVisible={false}
+          onMapPaddingChange={vi.fn()}
           map={
             <MapView
               markers={[]}
@@ -162,7 +182,7 @@ describe('지도 사용 불가', () => {
     expect(warn).toHaveBeenCalled();
     warn.mockRestore();
     expect(screen.getByText('panel-content')).toBeInTheDocument();
-    expect(screen.queryByTestId('trip-map-area')).toBeNull();
+    expect(screen.getByTestId('trip-map-area')).toBeEmptyDOMElement();
   });
 
   it('스크립트는 로드됐지만 인증 실패(navermap_authFailure)면 같은 사유로 알린다', async () => {
@@ -183,6 +203,35 @@ describe('지도 사용 불가', () => {
     unmount();
     expect(sdk.authFailure).toBeNull();
     warn.mockRestore();
+  });
+
+  it('기존 인증 실패가 등록 즉시 통지되면 SDK 요청 없이 callback을 해제한다', () => {
+    vi.stubEnv('VITE_MAP_ADAPTER', '');
+    vi.stubEnv('VITE_NAVER_MAP_CLIENT_ID', 'cid');
+    sdk.authAlreadyFailed = true;
+    const load = vi.fn(() => new Promise<void>(() => {}));
+    sdk.load = load;
+    const unavailable = vi.fn();
+    const order: string[] = [];
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    render(
+      <MapView
+        markers={[]}
+        polylines={[]}
+        onMarkerClick={vi.fn()}
+        onReadyChange={(ready) => {
+          if (!ready) order.push('not-ready');
+        }}
+        onUnavailable={(reason) => {
+          order.push('unavailable');
+          unavailable(reason);
+        }}
+      />,
+    );
+    expect(unavailable).toHaveBeenCalledTimes(1);
+    expect(order.slice(0, 2)).toEqual(['not-ready', 'unavailable']);
+    expect(sdk.authFailure).toBeNull();
+    expect(load).not.toHaveBeenCalled();
   });
 
   it('클라이언트 ID가 없으면 환경변수 안내와 함께 알린다', async () => {
@@ -271,5 +320,200 @@ describe('클러스터 계산', () => {
     expect(clusterFeatures(ci, bounds, 18).every((x) => x.kind === 'point')).toBe(true);
     const only = clusterFeatures(ci, { west: 126, south: 34, east: 127, north: 36 }, 18);
     expect(only).toHaveLength(1);
+  });
+});
+
+describe('MapView 크기와 생명주기', () => {
+  const props = {
+    markers: [mk('a')],
+    polylines: [],
+    onMarkerClick: vi.fn(),
+    onUnavailable: vi.fn(),
+  };
+  beforeEach(() => {
+    vi.stubEnv('VITE_MAP_ADAPTER', 'fake');
+  });
+
+  it('숨김 최초 진입에는 mount하지 않고 첫 표시 후 같은 인스턴스를 유지한다', async () => {
+    const destroy = vi.spyOn(FakeMapAdapter.prototype, 'destroy');
+    const { rerender, unmount } = render(<MapView {...props} visible={false} />);
+    expect(resources.mount).not.toHaveBeenCalled();
+    rerender(<MapView {...props} visible />);
+    await screen.findByTestId('marker-a');
+    const id = screen.getByTestId('fake-map').dataset.instanceId;
+    expect(id).toBeTruthy();
+    rerender(<MapView {...props} visible={false} />);
+    rerender(<MapView {...props} visible />);
+    await waitFor(() => expect(resources.snapshot().observers).toBe(1));
+    expect(screen.getByTestId('fake-map').dataset.instanceId).toBe(id);
+    expect(resources.mount).toHaveBeenCalledTimes(1);
+    expect(destroy).not.toHaveBeenCalled();
+    unmount();
+    expect(destroy).toHaveBeenCalledTimes(1);
+    expect(resources.snapshot()).toEqual({
+      activeAdapters: 0,
+      callbackSlots: 0,
+      observers: 0,
+      observedHosts: 0,
+      bodyTargets: 0,
+      pendingFrames: 0,
+      sdkListeners: 0,
+      overlays: 0,
+    });
+  });
+
+  it('초기 숨김 상태는 Naver SDK를 요청하지 않는다', () => {
+    vi.stubEnv('VITE_MAP_ADAPTER', '');
+    vi.stubEnv('VITE_NAVER_MAP_CLIENT_ID', 'cid');
+    const load = vi.fn(() => new Promise<void>(() => {}));
+    sdk.load = load;
+    render(<MapView {...props} visible={false} />);
+    expect(load).not.toHaveBeenCalled();
+    expect(sdk.authFailure).toBeNull();
+  });
+
+  it('숨김 중 그리기와 focus를 연기하고 재표시 때 최신 데이터와 padding을 적용한다', async () => {
+    const markers = vi.spyOn(FakeMapAdapter.prototype, 'setMarkers');
+    const lines = vi.spyOn(FakeMapAdapter.prototype, 'setPolylines');
+    const fit = vi.spyOn(FakeMapAdapter.prototype, 'fitBounds');
+    const { rerender } = render(<MapView {...props} />);
+    await screen.findByTestId('marker-a');
+    markers.mockClear();
+    lines.mockClear();
+    fit.mockClear();
+    const changed = {
+      ...props,
+      markers: [mk('b')],
+      polylines: [
+        { id: 'l', path: [[128, 37]] as [number, number][], color: '#000', dashed: false },
+      ],
+      focus: { point: [129, 38] as [number, number], seq: 1 },
+    };
+    const padding = { top: 24, right: 24, bottom: 360, left: 24 };
+    rerender(<MapView {...changed} visible={false} padding={padding} />);
+    expect(markers).not.toHaveBeenCalled();
+    expect(lines).not.toHaveBeenCalled();
+    expect(fit).not.toHaveBeenCalled();
+    rerender(<MapView {...changed} visible padding={padding} />);
+    await screen.findByTestId('marker-b');
+    await waitFor(() => expect(fit).toHaveBeenCalledTimes(1));
+    expect(fit).toHaveBeenLastCalledWith(
+      [
+        [128.995, 37.995],
+        [129.005, 38.005],
+      ],
+      padding,
+    );
+  });
+
+  it('빈 key는 첫 데이터에 fit하고 key 재방문에는 사용자의 카메라를 복원한다', async () => {
+    const fit = vi.spyOn(FakeMapAdapter.prototype, 'fitBounds');
+    const { rerender } = render(<MapView {...props} markers={[]} fitKey="a" />);
+    await waitFor(() => expect(resources.snapshot().observers).toBe(1));
+    expect(fit).not.toHaveBeenCalled();
+    rerender(<MapView {...props} fitKey="a" />);
+    await screen.findByTestId('marker-a');
+    const adapter = [...resources.instances][0]!;
+    adapter.setCamera({ center: [127, 36], zoom: 13 });
+    rerender(<MapView {...props} fitKey="b" />);
+    expect(fit).toHaveBeenCalledTimes(2);
+    adapter.setCamera({ center: [130, 38], zoom: 10 });
+    rerender(<MapView {...props} fitKey="a" />);
+    expect(adapter.getCamera()).toEqual({ center: [127, 36], zoom: 13 });
+    expect(fit).toHaveBeenCalledTimes(2);
+  });
+
+  it('padding만 바뀌면 fit과 카메라 복원을 반복하지 않고 다음 새 focus에 최신 padding을 쓴다', async () => {
+    const fit = vi.spyOn(FakeMapAdapter.prototype, 'fitBounds');
+    const camera = vi.spyOn(FakeMapAdapter.prototype, 'setCamera');
+    const padding = { top: 24, right: 24, bottom: 164, left: 24 };
+    const { rerender } = render(
+      <MapView {...props} padding={padding} focus={{ point: [128, 37], seq: 1 }} />,
+    );
+    await waitFor(() => expect(fit).toHaveBeenCalledTimes(2));
+    const before = camera.mock.calls.length;
+    const next = { ...padding, bottom: 360 };
+    rerender(<MapView {...props} padding={next} focus={{ point: [128, 37], seq: 1 }} />);
+    expect(fit).toHaveBeenCalledTimes(2);
+    expect(camera).toHaveBeenCalledTimes(before);
+    rerender(<MapView {...props} padding={next} focus={{ point: [129, 38], seq: 2 }} />);
+    expect(fit).toHaveBeenCalledTimes(3);
+    expect(fit.mock.calls[2]![1]).toEqual(next);
+  });
+
+  it('크기 변경은 zoom을 보존하고 같은 key를 다시 fit하지 않는다', async () => {
+    const fit = vi.spyOn(FakeMapAdapter.prototype, 'fitBounds');
+    const { unmount } = render(<MapView {...props} />);
+    await screen.findByTestId('marker-a');
+    const adapter = [...resources.instances][0]!;
+    adapter.setCamera({ center: [127, 36], zoom: 14 });
+    act(() => resources.setSize(screen.getByTestId('map-host'), 600, 700));
+    await waitFor(() => expect(adapter.resizeCalls).toContainEqual([600, 700]));
+    expect(adapter.getCamera()).toEqual({ center: [127, 36], zoom: 14 });
+    expect(fit).toHaveBeenCalledTimes(1);
+    unmount();
+  });
+
+  it('StrictMode 정리 후 새 어댑터를 fit하며 자원을 남기지 않는다', async () => {
+    const fit = vi.spyOn(FakeMapAdapter.prototype, 'fitBounds');
+    const { unmount } = render(
+      <StrictMode>
+        <MapView {...props} />
+      </StrictMode>,
+    );
+    await screen.findByTestId('marker-a');
+    expect(resources.snapshot().activeAdapters).toBe(1);
+    expect(resources.snapshot().callbackSlots).toBe(2);
+    expect(fit).toHaveBeenCalledTimes(1);
+    unmount();
+    expect(Object.values(resources.snapshot()).every((count) => count === 0)).toBe(true);
+  });
+
+  it('SDK 로딩 중 unmount하면 늦은 완료와 실패 알림을 무시한다', async () => {
+    vi.stubEnv('VITE_MAP_ADAPTER', '');
+    vi.stubEnv('VITE_NAVER_MAP_CLIENT_ID', 'cid');
+    let reject!: (error: Error) => void;
+    sdk.load = () =>
+      new Promise<void>((_, r) => {
+        reject = r;
+      });
+    const unavailable = vi.fn();
+    const ready = vi.fn();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { unmount } = render(
+      <MapView {...props} onUnavailable={unavailable} onReadyChange={ready} />,
+    );
+    unmount();
+    await act(async () => {
+      reject(new Error('late'));
+    });
+    expect(unavailable).not.toHaveBeenCalled();
+    expect(sdk.authFailure).toBeNull();
+    expect(ready).not.toHaveBeenCalledWith(true);
+    expect(warn).not.toHaveBeenCalled();
+  });
+});
+
+describe('MapView 목록 전용 모드', () => {
+  it('목록 전용으로 종료하면 지도 mount와 observer를 생성하지 않는다', () => {
+    vi.stubEnv('VITE_MAP_ADAPTER', 'fake');
+    const { unmount } = render(
+      <MapView
+        visible={false}
+        markers={[]}
+        polylines={[]}
+        onMarkerClick={vi.fn()}
+        onUnavailable={vi.fn()}
+      />,
+    );
+    expect(resources.mount).not.toHaveBeenCalled();
+    expect(resources.activeTargets()).toBe(0);
+    unmount();
+    expect(resources.snapshot()).toMatchObject({
+      activeAdapters: 0,
+      callbackSlots: 0,
+      observedHosts: 0,
+      pendingFrames: 0,
+    });
   });
 });

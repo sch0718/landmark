@@ -1,19 +1,23 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { createStore, Provider } from 'jotai';
+import { createStore, Provider, useAtomValue, useSetAtom } from 'jotai';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppProviders } from 'src/app';
+import { installMapResources } from './helpers/map-resources';
 import { findDuplicateStopIds, overlay } from 'src/domain/overlay';
 import { createMemoryStorage, storageKey } from 'src/repositories/edit-layer-repo';
 import { routes } from 'src/routes/router';
 import type { EditLayer } from 'src/schema/edit-layer';
 import type { TripData } from 'src/schema/trip-data';
 import { DEFAULT_FILTER } from 'src/sections/explore/store/filters';
-import { exploreFilterAtom } from 'src/sections/explore/store/explore-state';
+import { exploreFilterAtom, mapViewportUsableAtom } from 'src/sections/explore/store/explore-state';
 import { ExploreFilters } from 'src/sections/explore/view/ExploreFilters';
 import { PlaceCard } from 'src/sections/explore/view/PlaceCard';
 import { createTripStore, TripDepsContext, TripStoreContext } from 'src/stores/trip-store';
+import { detailAtom, memoDraftsAtom, tagDraftsAtom } from 'src/sections/views/store/view-session';
+import { DetailSurface } from 'src/sections/views/view/DetailSurface';
+import { createHeldLocks } from '../../fixtures/fake-locks';
 import { makeEdit, makeTrip, sid } from '../../fixtures/builders';
 
 const PID = 'testtrip0001';
@@ -27,12 +31,22 @@ const XSS = '<img src=x onerror=alert(1)>';
 
 const saved = (storage: Storage): EditLayer => JSON.parse(storage.getItem(KEY)!) as EditLayer;
 
-function setupCard(trip: TripData, edit: EditLayer, placeKey = 'n:1') {
+function CardDetailsHarness({ placeKey }: { placeKey: string }) {
+  const detail = useAtomValue(detailAtom);
+  const setDetail = useSetAtom(detailAtom);
+  return detail ? (
+    <DetailSurface modal={false} onClose={() => setDetail(null)} />
+  ) : (
+    <PlaceCard placeKey={placeKey} />
+  );
+}
+
+function setupCard(trip: TripData, edit: EditLayer, placeKey = 'n:1', locks?: LockManager) {
   const storage = createMemoryStorage();
   storage.setItem(KEY, JSON.stringify(edit));
   const ts = createTripStore(PID, {
     storage,
-    locks: undefined,
+    locks,
     now: () => NOW_MS,
     nowIso: () => NOW,
   });
@@ -42,7 +56,7 @@ function setupCard(trip: TripData, edit: EditLayer, placeKey = 'n:1') {
   const view = render(
     <TripStoreContext value={ts}>
       <Provider store={store}>
-        <PlaceCard placeKey={placeKey} />
+        <CardDetailsHarness placeKey={placeKey} />
       </Provider>
     </TripStoreContext>,
   );
@@ -105,7 +119,7 @@ describe('PlaceCard 메모', () => {
   });
 
   it('메모 저장 → memos[authorId] = { text, updatedAt: now }', async () => {
-    const { storage } = setupCard(trip(), makeEdit());
+    const { storage, store } = setupCard(trip(), makeEdit());
     await userEvent.click(screen.getByRole('button', { name: '메모 추가' }));
     await userEvent.type(screen.getByLabelText('내 메모'), '웨이팅 필수');
     await userEvent.click(screen.getByRole('button', { name: '저장' }));
@@ -116,6 +130,7 @@ describe('PlaceCard 메모', () => {
       }),
     );
     expect(await screen.findByText('웨이팅 필수')).toBeInTheDocument();
+    expect(store.get(memoDraftsAtom)['n:1:new']).toBeUndefined();
   });
 
   it('메모 수정 → 새 text, 삭제 → text: null 묘비', async () => {
@@ -149,7 +164,7 @@ describe('PlaceCard 태그·숨김', () => {
     const edit = makeEdit({
       places: { 'n:1': { memos: {}, tags: { value: ['기존'], updatedAt: OLD } } },
     });
-    const { storage } = setupCard(trip, edit);
+    const { storage, store } = setupCard(trip, edit);
     await userEvent.type(screen.getByLabelText('태그 추가'), '야경{Enter}');
     await waitFor(() =>
       expect(saved(storage).places['n:1']!.tags).toEqual({
@@ -157,6 +172,8 @@ describe('PlaceCard 태그·숨김', () => {
         updatedAt: NOW,
       }),
     );
+    expect(store.get(tagDraftsAtom)['n:1']).toBeUndefined();
+    expect(screen.getByLabelText('태그 추가')).toHaveValue('');
     await userEvent.click(await screen.findByRole('button', { name: '태그 기존 삭제' }));
     await waitFor(() =>
       expect(saved(storage).places['n:1']!.tags).toEqual({ value: ['야경'], updatedAt: NOW }),
@@ -237,8 +254,8 @@ describe('PlaceCard 일정에 추가', () => {
     const trip = makeTrip({ days: { [D1]: ['A'], [D2]: ['B'] }, places: ['P'] });
     const { storage } = setupCard(trip, makeEdit(), 'n:3');
     await userEvent.click(screen.getByRole('button', { name: '일정에 추가' }));
-    expect(screen.getByRole('menuitem', { name: 'Day 1 (11/14)' })).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('menuitem', { name: 'Day 2 (11/15)' }));
+    expect(screen.getByRole('button', { name: 'Day 1 (11/14)' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Day 2 (11/15)' }));
     await waitFor(() => expect(saved(storage).days[D2]).toBeDefined());
     const day = saved(storage).days[D2]!;
     if (day.mode !== 'override') throw new Error('override 아님');
@@ -257,7 +274,7 @@ describe('PlaceCard 일정에 추가', () => {
     });
     const { storage } = setupCard(trip, edit, 'n:4');
     await userEvent.click(screen.getByRole('button', { name: '일정에 추가' }));
-    await userEvent.click(screen.getByRole('menuitem', { name: 'Day 2 (11/15)' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Day 2 (11/15)' }));
     await waitFor(() => expect(saved(storage).days[D2]).toBeDefined());
     const eff = overlay(trip, saved(storage));
     expect(eff.days[1]!.stops.map((s) => s.placeKey)).toEqual(['n:1', 'n:3', 'n:4']);
@@ -274,7 +291,7 @@ describe('PlaceCard 일정에 추가', () => {
     vi.spyOn(Math, 'random').mockImplementation(() => seq[i++ % seq.length]!);
     const { storage } = setupCard(trip, makeEdit(), 'n:2');
     await userEvent.click(screen.getByRole('button', { name: '일정에 추가' }));
-    await userEvent.click(screen.getByRole('menuitem', { name: 'Day 1 (11/14)' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Day 1 (11/14)' }));
     await waitFor(() => expect(saved(storage).days[D1]).toBeDefined());
     const day = saved(storage).days[D1]!;
     if (day.mode !== 'override') throw new Error('override 아님');
@@ -284,6 +301,8 @@ describe('PlaceCard 일정에 추가', () => {
 });
 
 afterEach(() => {
+  cleanup();
+  mapResources.restore();
   vi.restoreAllMocks();
   vi.unstubAllEnvs();
 });
@@ -319,7 +338,10 @@ beforeAll(async () => {
   await import('src/pages/TripPage');
 }, 20_000);
 
+let mapResources: ReturnType<typeof installMapResources>;
+
 beforeEach(() => {
+  mapResources = installMapResources();
   window.localStorage.clear();
 });
 
@@ -331,18 +353,23 @@ describe('ExplorePanel', () => {
   };
 
   it('마커 클릭 → 목록 항목이 선택 상태, 목록 클릭 → 해당 마커 selected', async () => {
-    renderPage(trip());
-    const list = await screen.findByRole('list', { name: '장소 목록' });
-    await userEvent.click(await screen.findByTestId('marker-n:1'));
+    const { store } = renderPage(trip());
+    await screen.findByRole('list', { name: '장소 목록' });
+    await waitFor(() => expect(store.get(mapViewportUsableAtom)).toBe(true));
+    fireEvent.click(screen.getByTestId('marker-n:1'));
+    await userEvent.click(await screen.findByRole('button', { name: '닫기' }));
+    const list = screen.getByRole('list', { name: '장소 목록' });
     await waitFor(() =>
-      expect(within(list).getByRole('button', { name: /^A/ })).toHaveAttribute(
+      expect(within(list).getByRole('button', { name: 'A 상세' })).toHaveAttribute(
         'aria-current',
         'true',
       ),
     );
-    expect(within(list).getByRole('button', { name: /^B/ })).not.toHaveAttribute('aria-current');
+    expect(within(list).getByRole('button', { name: 'B 상세' })).not.toHaveAttribute(
+      'aria-current',
+    );
 
-    await userEvent.click(within(list).getByRole('button', { name: /^C/ }));
+    await userEvent.click(within(list).getByRole('button', { name: 'C 상세' }));
     await waitFor(() =>
       expect(screen.getByTestId('marker-n:3')).toHaveAttribute('aria-pressed', 'true'),
     );
@@ -352,19 +379,19 @@ describe('ExplorePanel', () => {
   it('필터가 목록과 마커에 함께 반영된다', async () => {
     renderPage(trip());
     await screen.findByTestId('marker-n:2');
-    await userEvent.click(
-      within(screen.getByRole('group', { name: '필터' })).getByRole('button', { name: /^카페/ }),
-    );
+    await userEvent.click(screen.getByRole('button', { name: /^카페/ }));
     await waitFor(() => expect(screen.queryByTestId('marker-n:1')).toBeNull());
     expect(screen.getByTestId('marker-n:2')).toBeInTheDocument();
     const list = screen.getByRole('list', { name: '장소 목록' });
-    expect(within(list).getAllByRole('button', { name: /^[ABC]/ })).toHaveLength(1);
+    expect(within(list).getAllByRole('button', { name: /^[ABC] 상세$/ })).toHaveLength(1);
   });
 
   it('상단 검색어가 목록을 거른다', async () => {
     renderPage(trip());
     await screen.findByTestId('marker-n:1');
+    await userEvent.click(screen.getByRole('button', { name: '검색' }));
     await userEvent.type(screen.getByRole('textbox', { name: '검색' }), '주소 C');
+    await userEvent.click(screen.getByRole('button', { name: '지도' }));
     await waitFor(() => expect(screen.queryByTestId('marker-n:1')).toBeNull());
     expect(screen.getByTestId('marker-n:3')).toBeInTheDocument();
   });
@@ -376,12 +403,175 @@ describe('ExplorePanel', () => {
     renderPage(trip(), edit);
     await screen.findByTestId('marker-n:1');
     expect(screen.queryByTestId('marker-n:2')).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: /^필터/ }));
     await userEvent.click(screen.getByRole('checkbox', { name: '숨김 포함' }));
     expect(await screen.findByTestId('marker-n:2')).toBeInTheDocument();
   });
 
   it('선택한 장소는 카드(메모·일정에 추가)를 펼친다', async () => {
     renderPage(trip(), makeEdit(), '?place=n:2');
-    expect(await screen.findByRole('button', { name: '일정에 추가' })).toBeInTheDocument();
+    expect(await screen.findByTestId('place-card-n:2')).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId('place-card-n:2')).getByRole('button', { name: '일정에 추가' }),
+    ).toBeInTheDocument();
   });
+});
+
+describe('PlaceCard 저장 완료 처리', () => {
+  it('저장 실패 시 메모 입력을 유지하고 한 번만 실패를 보고한다', async () => {
+    const { storage } = setupCard(makeTrip({ days: { [D1]: ['A'] } }), makeEdit());
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const write = vi.spyOn(storage, 'setItem').mockImplementation(() => {
+      throw new Error('write failed');
+    });
+    await userEvent.click(screen.getByRole('button', { name: '메모 추가' }));
+    await userEvent.type(screen.getByLabelText('내 메모'), '보존할 메모');
+    await userEvent.click(screen.getByRole('button', { name: '저장' }));
+    await waitFor(() => expect(warn).toHaveBeenCalledTimes(1));
+    expect(screen.getByLabelText('내 메모')).toHaveValue('보존할 메모');
+    write.mockRestore();
+    warn.mockRestore();
+  });
+});
+
+describe('PlaceCard 상세 초안', () => {
+  it.each(['추가', '수정'])(
+    '닫고 다시 열면 메모 %s 초안을 복원하고 취소는 해당 키만 지운다',
+    async (kind) => {
+      const edit =
+        kind === '수정'
+          ? makeEdit({ places: { 'n:1': { memos: { 'a-local': mem('기존') } } } })
+          : makeEdit();
+      const h = setupCard(makeTrip({ days: { [D1]: ['A'] } }), edit);
+      await userEvent.click(screen.getByRole('button', { name: `메모 ${kind}` }));
+      fireEvent.change(screen.getByLabelText('내 메모'), { target: { value: '작성 중' } });
+      act(() =>
+        h.store.set(memoDraftsAtom, { ...h.store.get(memoDraftsAtom), 'n:2:new': '다른 초안' }),
+      );
+      const node = (open: boolean) => (
+        <TripStoreContext value={h.ts}>
+          <Provider store={h.store}>{open && <PlaceCard placeKey="n:1" />}</Provider>
+        </TripStoreContext>
+      );
+      h.rerender(node(false));
+      h.rerender(node(true));
+      expect(screen.getByLabelText('내 메모')).toHaveValue('작성 중');
+      await userEvent.click(screen.getByRole('button', { name: '취소' }));
+      expect(h.store.get(memoDraftsAtom)).toEqual({ 'n:2:new': '다른 초안' });
+      expect(screen.queryByLabelText('내 메모')).toBeNull();
+    },
+  );
+
+  it('태그 초안은 장소 전환 후 복원하고 중복 및 저장 실패에도 유지한다', async () => {
+    const h = setupCard(
+      makeTrip({ days: { [D1]: ['A', 'B'] } }),
+      makeEdit({ places: { 'n:1': { memos: {}, tags: { value: ['기존'], updatedAt: OLD } } } }),
+    );
+    await userEvent.type(screen.getByLabelText('태그 추가'), '기존{Enter}');
+    const node = (key: string) => (
+      <TripStoreContext value={h.ts}>
+        <Provider store={h.store}>
+          <PlaceCard placeKey={key} />
+        </Provider>
+      </TripStoreContext>
+    );
+    h.rerender(node('n:2'));
+    h.rerender(node('n:1'));
+    expect(screen.getByLabelText('태그 추가')).toHaveValue('기존');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(h.storage, 'setItem').mockImplementation(() => {
+      throw new Error('quota');
+    });
+    fireEvent.change(screen.getByLabelText('태그 추가'), { target: { value: '실패 초안' } });
+    await userEvent.type(screen.getByLabelText('태그 추가'), '{Enter}');
+    await waitFor(() => expect(warn).toHaveBeenCalledOnce());
+    expect(h.store.get(tagDraftsAtom)['n:1']).toBe('실패 초안');
+  });
+
+  it.each(['새 메모', '수정 메모', '태그'])(
+    '%s의 실제 저장 대기 중 바뀐 초안은 제출값 저장 후에도 유지한다',
+    async (kind) => {
+      const held = createHeldLocks();
+      held.hold();
+      const edit =
+        kind === '수정 메모'
+          ? makeEdit({ places: { 'n:1': { memos: { 'a-local': mem('기존') } } } })
+          : makeEdit();
+      const h = setupCard(makeTrip({ days: { [D1]: ['A'] } }), edit, 'n:1', held.locks);
+      if (kind !== '태그')
+        await userEvent.click(
+          screen.getByRole('button', { name: kind === '새 메모' ? '메모 추가' : '메모 수정' }),
+        );
+      const label = kind === '태그' ? '태그 추가' : '내 메모';
+      fireEvent.change(screen.getByLabelText(label), { target: { value: '제출 내용' } });
+      if (kind === '태그') await userEvent.type(screen.getByLabelText(label), '{Enter}');
+      else await userEvent.click(screen.getByRole('button', { name: '저장' }));
+      await waitFor(() => expect(held.requested).toHaveLength(1));
+      fireEvent.change(screen.getByLabelText(label), { target: { value: '새 초안' } });
+      await act(async () => held.release());
+      await waitFor(() => {
+        const place = saved(h.storage).places['n:1']!;
+        expect(kind === '태그' ? place.tags?.value : place.memos['a-local']?.text).toEqual(
+          kind === '태그' ? ['제출 내용'] : '제출 내용',
+        );
+      });
+      expect(screen.getByLabelText(label)).toHaveValue('새 초안');
+      expect(
+        kind === '태그'
+          ? h.store.get(tagDraftsAtom)['n:1']
+          : h.store.get(memoDraftsAtom)[`n:1:${kind === '새 메모' ? 'new' : 'mine'}`],
+      ).toBe('새 초안');
+    },
+  );
+
+  it('공통 상세의 일정 추가는 detailAtom으로 날짜 선택을 연다', async () => {
+    const h = setupCard(makeTrip({ days: { [D1]: ['A'] } }), makeEdit());
+    act(() => h.store.set(detailAtom, { kind: 'place', placeKey: 'n:1' }));
+    h.rerender(
+      <TripStoreContext value={h.ts}>
+        <Provider store={h.store}>
+          <DetailSurface onClose={() => {}} />
+        </Provider>
+      </TripStoreContext>,
+    );
+    await userEvent.click(screen.getByRole('button', { name: '일정에 추가' }));
+    expect(h.store.get(detailAtom)).toEqual({ kind: 'add', placeKey: 'n:1' });
+    expect(screen.queryByRole('menu')).toBeNull();
+  });
+});
+
+it.each(['메모', '태그'])('닉네임 취소는 %s 초안을 지우지 않는다', async (kind) => {
+  const h = setupCard(makeTrip({ days: { [D1]: ['A'] } }), makeEdit());
+  h.storage.removeItem(KEY);
+  act(() => h.store.set(h.ts.editLayerAtom, null));
+  if (kind === '메모') await userEvent.click(screen.getByRole('button', { name: '메모 추가' }));
+  const label = kind === '메모' ? '내 메모' : '태그 추가';
+  await userEvent.type(screen.getByLabelText(label), '취소해도 보존');
+  if (kind === '메모') await userEvent.click(screen.getByRole('button', { name: '저장' }));
+  else await userEvent.type(screen.getByLabelText(label), '{Enter}');
+  await waitFor(() => expect(h.store.get(h.ts.nicknameRequestAtom)).not.toBeNull());
+  await act(async () => h.store.get(h.ts.nicknameRequestAtom)!.resolve(null));
+  expect(screen.getByLabelText(label)).toHaveValue('취소해도 보존');
+  expect(h.storage.getItem(KEY)).toBeNull();
+});
+
+it('가져온 내 메모의 변경 및 삭제는 수정 초안을 유지하고 현재 내용과 구분한다', async () => {
+  const h = setupCard(
+    makeTrip({ days: { [D1]: ['A'] } }),
+    makeEdit({ places: { 'n:1': { memos: { 'a-local': mem('처음') } } } }),
+  );
+  await userEvent.click(screen.getByRole('button', { name: '메모 수정' }));
+  fireEvent.change(screen.getByLabelText('내 메모'), { target: { value: '작성 중' } });
+  act(() =>
+    h.store.set(
+      h.ts.editLayerAtom,
+      makeEdit({ places: { 'n:1': { memos: { 'a-local': mem('가져온 내용') } } } }),
+    ),
+  );
+  expect(screen.getByText('가져온 내용')).toBeInTheDocument();
+  expect(screen.getByText('작성 중인 내용')).toBeInTheDocument();
+  expect(screen.getByLabelText('내 메모')).toHaveValue('작성 중');
+  act(() => h.store.set(h.ts.editLayerAtom, makeEdit()));
+  expect(screen.getByLabelText('내 메모')).toHaveValue('작성 중');
+  expect(h.store.get(memoDraftsAtom)['n:1:mine']).toBe('작성 중');
 });
