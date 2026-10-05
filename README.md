@@ -52,6 +52,7 @@ VITE_MAP_ADAPTER=fake yarn dev     # 가짜 지도
 | 명령             | 내용                                                   |
 | ---------------- | ------------------------------------------------------ |
 | `yarn lint`      | ESLint                                                 |
+| `yarn fm:check`  | Prettier 포맷 검사                                     |
 | `yarn typecheck` | `tsc -b --noEmit`                                      |
 | `yarn test`      | Vitest 단위·컴포넌트 테스트                            |
 | `yarn test:e2e`  | Playwright E2E(아래)                                   |
