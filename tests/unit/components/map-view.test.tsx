@@ -87,6 +87,44 @@ describe('MapView (Fake 어댑터)', () => {
   });
 });
 
+describe('MapView 크기 추적', () => {
+  it('SDK가 마운트 요소에 고정 px 크기를 써도, 측정 요소는 별도라서 영역이 다시 넓어지면 따라간다', async () => {
+    // 네이버 SDK의 setSize는 마운트 요소에 width/height px를 인라인으로 쓴다.
+    // 측정(ResizeObserver) 대상이 그 요소면 부모가 넓어져도 크기가 안 바뀌어 하얀 영역이 남는다.
+    vi.stubEnv('VITE_MAP_ADAPTER', 'fake');
+    const resize = vi.spyOn(FakeMapAdapter.prototype, 'resize').mockImplementation(function (
+      this: FakeMapAdapter,
+      w: number,
+      h: number,
+    ) {
+      const target = resources.mount.mock.calls.at(-1)?.[0] as HTMLElement | undefined;
+      if (target) Object.assign(target.style, { width: `${w}px`, height: `${h}px` });
+      this.resizeCalls.push([w, h]);
+    });
+    render(
+      <MapView
+        markers={[mk('a')]}
+        polylines={[]}
+        onMarkerClick={vi.fn()}
+        onUnavailable={vi.fn()}
+      />,
+    );
+    await screen.findByTestId('marker-a');
+    const frame = screen.getByTestId('map-host');
+    const mounted = resources.mount.mock.calls.at(-1)?.[0] as HTMLElement;
+    expect(mounted).not.toBe(frame);
+    expect(frame.contains(mounted)).toBe(true);
+
+    act(() => resources.setSize(frame, 1068, 774));
+    await waitFor(() => expect(resize).toHaveBeenLastCalledWith(1068, 774));
+    act(() => resources.setSize(frame, 748, 774)); // 장소 상세 열림
+    await waitFor(() => expect(resize).toHaveBeenLastCalledWith(748, 774));
+    act(() => resources.setSize(frame, 1068, 774)); // 상세 닫힘
+    await waitFor(() => expect(resize).toHaveBeenLastCalledWith(1068, 774));
+    expect(frame.style.width).toBe('');
+  });
+});
+
 describe('MapView fitKey', () => {
   it('마운트 직후 한 번, fitKey가 바뀔 때만 그때의 마커로 fitBounds한다', async () => {
     vi.stubEnv('VITE_MAP_ADAPTER', 'fake');

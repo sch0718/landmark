@@ -51,7 +51,11 @@ export function fitPoints(markers: MapMarker[]): [number, number][] {
 }
 
 export function MapView(props: Props) {
-  const hostRef = useRef<HTMLDivElement>(null);
+  // frameRef: 컨테이너를 100%로 채우며 크기를 잰다. canvasRef: SDK가 마운트되는 요소.
+  // 네이버 SDK의 setSize가 마운트 요소에 px 크기를 인라인으로 쓰므로 둘을 분리해야
+  // 영역이 다시 넓어질 때도 측정이 따라간다.
+  const frameRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLDivElement>(null);
   const adapterRef = useRef<MapAdapter | null>(null);
   const visible = props.visible ?? true;
   const [activated, setActivated] = useState(visible);
@@ -72,7 +76,7 @@ export function MapView(props: Props) {
   }, [visible, activated]);
 
   useEffect(() => {
-    const host = hostRef.current;
+    const host = canvasRef.current;
     if (!activated || !host) return;
     const cameraCache = cameras.current;
     const fittedCache = fittedKeys.current;
@@ -143,7 +147,7 @@ export function MapView(props: Props) {
     };
   }, [activated]);
 
-  const ready = useMapSize(hostRef, mountedAdapter, visible);
+  const ready = useMapSize(frameRef, mountedAdapter, visible);
   useEffect(() => {
     latest.current.onReadyChange?.(ready);
   }, [ready]);
@@ -190,5 +194,13 @@ export function MapView(props: Props) {
     }
   }, [ready, key, props.focus, props.markers]);
 
-  return <Box ref={hostRef} sx={{ width: '100%', height: '100%' }} data-testid="map-host" />;
+  return (
+    <Box
+      ref={frameRef}
+      sx={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden' }}
+      data-testid="map-host"
+    >
+      <Box ref={canvasRef} sx={{ position: 'absolute', inset: 0 }} data-testid="map-canvas" />
+    </Box>
+  );
 }
