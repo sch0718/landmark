@@ -2,7 +2,7 @@
 
 네이버 지도에 저장해 둔 장소와 일정을 한 화면(지도 + 목록 + 일정)으로 보고, 동행자와 링크·파일로 메모·일정 편집을 주고받는 정적 웹앱(PoC)입니다.
 
-- 데이터는 **빌드 타임에 로컬 CLI로 수집**해 `public/data/<publicId>.json`으로 커밋하고, 앱은 완전한 정적 사이트로 배포합니다.
+- 데이터는 **빌드 타임에 로컬 CLI로 수집**해 `public/data/<publicId>.json`으로 만들고, 앱은 완전한 정적 사이트로 배포합니다. 개인 여행 데이터가 실수로 올라가지 않도록 `trips/*`(예시 `example.yaml` 제외)와 `public/data/*`는 `.gitignore`에 있습니다. 배포할 여행만 `git add -f`로 올립니다.
 - 로그인·서버 DB가 없습니다. 편집은 보는 사람 브라우저의 localStorage에 저장되고, **내보내기(링크/파일) → 상대가 가져오기 → 병합**으로 공유합니다.
 - 설계 문서: `docs/superpowers/specs/2026-10-03-trip-map-design.md`
 
