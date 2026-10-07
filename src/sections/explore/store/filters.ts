@@ -29,16 +29,21 @@ export const DEFAULT_FILTER: ExploreFilter = {
 /** category가 null인 장소를 가리키는 표시·필터 값. */
 export const UNCATEGORIZED = '미분류';
 
-/** 편집 레이어의 분류를 적용한 분류별 장소 수. */
+/**
+ * 편집 레이어의 분류를 적용한 분류별 장소 수.
+ * 선택된 분류는 장소가 없어져도 count 0으로 남겨 칩에서 해제할 수 있게 한다.
+ */
 export function categoryCounts(
   trip: TripData,
   edit: EditLayer | null,
+  selected: string[] = [],
 ): { category: string; count: number }[] {
   const counts = new Map<string, number>();
   for (const [key, place] of Object.entries(trip.places)) {
     const c = effectiveCategory(place, edit?.places[key]) ?? UNCATEGORIZED;
     counts.set(c, (counts.get(c) ?? 0) + 1);
   }
+  for (const c of selected) if (!counts.has(c)) counts.set(c, 0);
   return [...counts]
     .map(([category, count]) => ({ category, count }))
     .sort((a, b) => b.count - a.count || a.category.localeCompare(b.category, 'ko'));

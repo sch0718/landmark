@@ -280,6 +280,15 @@ describe('merge', () => {
     ]);
   });
 
+  it('분류 요약: local에 분류 편집이 없고 incoming이 원본 복귀(null)면 넣지 않는다', () => {
+    const trip = makeTrip({ days: { [D1]: ['X'] } });
+    const local = makeEdit();
+    const incoming = makeEdit({
+      places: { 'n:1': { memos: {}, category: { value: null, updatedAt: T1 } } },
+    });
+    expect(planMerge(local, incoming, trip).summary.categoryChanges).toEqual([]);
+  });
+
   it('reset(최신)이 옛 override 파일을 이긴다', () => {
     const trip = makeTrip({ days: { [D1]: ['X', 'Y'] } });
     const local = makeEdit({ days: { [D1]: { mode: 'reset', updatedAt: T2 } } });

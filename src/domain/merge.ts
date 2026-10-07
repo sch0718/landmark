@@ -26,7 +26,7 @@ export type MergeSummary = {
   memosDeleted: number;
   tagChanges: { placeKey: string; from: string[] | undefined; to: string[] }[];
   hiddenChanges: { placeKey: string; from: boolean | undefined; to: boolean }[];
-  /** null은 원본 분류로 되돌림, undefined는 local에 분류 편집이 없음. */
+  /** from: null은 원본 분류, undefined는 local에 분류 편집이 없음. */
   categoryChanges: { placeKey: string; from: string | null | undefined; to: string | null }[];
   /** 충돌 없이 incoming 상태를 채택했고 local과 다른 날짜. */
   daysAdopted: string[];
@@ -198,7 +198,7 @@ function summarize(local: EditLayer, incoming: EditLayer, plans: GroupPlan[]): M
     }
     if (inc.category && incomingWins(loc?.category, inc.category)) {
       const from = loc?.category?.value;
-      if (from !== inc.category.value)
+      if ((from ?? null) !== inc.category.value)
         summary.categoryChanges.push({ placeKey, from, to: inc.category.value });
     }
   }

@@ -93,7 +93,52 @@ describe('ExploreFilters 태그 칩', () => {
   });
 });
 
+describe('ExploreFilters 분류 칩', () => {
+  it('선택한 분류의 마지막 장소가 다른 분류로 바뀌어도 칩이 남아 해제할 수 있다', async () => {
+    const edit = makeEdit({
+      places: { 'n:1': { memos: {}, category: { value: '공항', updatedAt: OLD } } },
+    });
+    const storage = createMemoryStorage();
+    storage.setItem(KEY, JSON.stringify(edit));
+    const ts = createTripStore(PID, { storage, locks: undefined });
+    const store = createStore();
+    store.set(ts.tripAtom, makeTrip({ days: { [D1]: ['A'] } }));
+    store.set(ts.editLayerAtom, edit);
+    store.set(exploreFilterAtom, { ...DEFAULT_FILTER, categories: ['음식점'] });
+    render(
+      <TripStoreContext value={ts}>
+        <Provider store={store}>
+          <ExploreFilters />
+        </Provider>
+      </TripStoreContext>,
+    );
+    const gone = screen.getByRole('button', { name: '음식점 0' });
+    expect(gone).toHaveAttribute('aria-pressed', 'true');
+    await userEvent.click(gone);
+    expect(store.get(exploreFilterAtom).categories).toEqual([]);
+    expect(screen.queryByRole('button', { name: '음식점 0' })).toBeNull();
+  });
+});
+
 describe('PlaceCard 분류', () => {
+  it('다른 장소로 전환하면 이전 장소의 분류 입력이 따라가지 않는다', async () => {
+    const trip = makeTrip({ days: { [D1]: ['A'] }, places: ['B'] });
+    const { rerender, ts, store } = setupCard(trip, makeEdit(), 'n:1');
+    await userEvent.click(screen.getByRole('button', { name: '분류 변경' }));
+    await userEvent.clear(screen.getByRole('combobox', { name: '분류' }));
+    await userEvent.type(screen.getByRole('combobox', { name: '분류' }), '공항');
+    rerender(
+      <TripStoreContext value={ts}>
+        <Provider store={store}>
+          <CardDetailsHarness placeKey="n:2" />
+        </Provider>
+      </TripStoreContext>,
+    );
+    expect(screen.getByRole('combobox', { name: '분류' })).toHaveValue(
+      trip.places['n:2']!.category ?? '',
+    );
+  });
+
   it('분류를 바꾸면 편집 레이어에 category가 기록되고 카드에 바뀐 분류와 원본이 보인다', async () => {
     const trip = makeTrip({ days: { [D1]: ['A'] }, places: ['B'] });
     trip.places['n:2']!.category = null;

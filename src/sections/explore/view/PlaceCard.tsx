@@ -101,6 +101,7 @@ export function PlaceCard({ placeKey }: { placeKey: string }) {
         )}
         {editingCategory && (
           <CategoryForm
+            key={placeKey}
             initial={category ?? ''}
             options={categoryOptions}
             onSave={setCategory}
