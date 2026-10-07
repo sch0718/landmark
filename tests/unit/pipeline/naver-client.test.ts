@@ -1,7 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { fetchCarRoute, fetchFolder, type HttpDeps } from '../../../pipeline/naver-client';
+import {
+  fetchCarRoute,
+  fetchFolder,
+  fetchPlaceSummary,
+  type HttpDeps,
+} from '../../../pipeline/naver-client';
 
 const SHARE_ID = 'fb65e7f93f8a4144a4ded594d604a7aa';
 const FOLDER_BASE = `https://pages.map.naver.com/save-pages/api/maps-bookmark/v3/shares/${SHARE_ID}/bookmarks`;
@@ -172,5 +177,57 @@ describe('fetchCarRoute', () => {
     await expect(fetchCarRoute([128.8961, 37.7519], [128.9184, 37.7952], deps)).rejects.toThrow(
       /500/,
     );
+  });
+});
+
+describe('fetchPlaceSummary', () => {
+  const URL_20307427 = 'https://map.naver.com/p/api/place/summary/20307427';
+
+  it('장소 ID로 이름·도로명 주소·좌표·분류를 가져온다 (녹화값)', async () => {
+    const { deps, seen } = makeDeps({
+      [URL_20307427]: { body: fixture('place-summary-20307427.json') },
+    });
+    const p = await fetchPlaceSummary('20307427', deps);
+    expect(p).toEqual({
+      sid: '20307427',
+      name: '착한전복 제주중문점',
+      address: '제주 서귀포시 천제연로 119',
+      lng: 126.4181775,
+      lat: 33.2545773,
+      category: '전복요리',
+    });
+    expect(seen[0]?.headers.referer).toBe('https://map.naver.com/');
+    expect(seen[0]?.headers).not.toHaveProperty('origin');
+    expect(seen[0]?.headers['accept-language']).toBe('ko-KR,ko;q=0.9');
+  });
+
+  it('도로명 주소가 없으면 지번 주소를, 분류가 없으면 null을 쓴다', async () => {
+    const body = JSON.stringify({
+      data: {
+        placeDetail: {
+          id: '1',
+          name: '어딘가',
+          coordinate: { longitude: 126.5, latitude: 33.4 },
+          address: { address: '제주 제주시 어딘가 1', roadAddress: '' },
+        },
+      },
+    });
+    const { deps } = makeDeps({ ['https://map.naver.com/p/api/place/summary/1']: { body } });
+    const p = await fetchPlaceSummary('1', deps);
+    expect(p.address).toBe('제주 제주시 어딘가 1');
+    expect(p.category).toBeNull();
+  });
+
+  it('placeDetail이 없으면 장소 ID를 담아 throw', async () => {
+    const { deps } = makeDeps({ [URL_20307427]: { body: '{"data":{}}' } });
+    await expect(fetchPlaceSummary('20307427', deps)).rejects.toThrow(/20307427/);
+  });
+
+  it('좌표가 없거나 숫자가 아니면 장소 ID를 담아 throw', async () => {
+    for (const coordinate of [undefined, {}, { longitude: 'x', latitude: 'y' }]) {
+      const body = JSON.stringify({ data: { placeDetail: { id: '1', name: 'a', coordinate } } });
+      const { deps } = makeDeps({ ['https://map.naver.com/p/api/place/summary/1']: { body } });
+      await expect(fetchPlaceSummary('1', deps)).rejects.toThrow(/좌표.*sid=1/);
+    }
   });
 });

@@ -3,11 +3,18 @@ import { parseDocument, type Document } from 'yaml';
 import { TripDataSchema, type TripData } from 'src/schema/trip-data';
 import { TripSourceSchema, type TripSource } from 'src/schema/trip-source';
 import { dayTotals } from 'src/domain/day-totals';
-import { buildPlaces } from './build-places';
+import { buildPlaces, folderSids } from './build-places';
 import type { FsPort } from './fs-port';
 import { ensureIds } from './ids';
 import { buildLegs, type FailedLeg } from './legs';
-import { fetchCarRoute, fetchFolder, type FetchedFolder, type HttpDeps } from './naver-client';
+import {
+  fetchCarRoute,
+  fetchFolder,
+  fetchPlaceSummary,
+  type FetchedFolder,
+  type HttpDeps,
+  type NaverPlace,
+} from './naver-client';
 import { resolveStops } from './resolve-stops';
 import type { RouteCache } from './route-cache';
 
@@ -103,8 +110,23 @@ export async function collect(
     }
   }
 
+  // 폴더에 이미 있는 sid는 buildPlaces가 폴더 쪽을 쓰므로 조회하지 않는다.
+  const inFolders = folderSids(fetched);
+  const naverPlaces: NaverPlace[] = [];
+  for (const sid of source.naverPlaces.filter((id) => !inFolders.has(id))) {
+    if (naverPlaces.length > 0 || fetched.length > 0) await deps.http.sleep(300);
+    try {
+      naverPlaces.push(await fetchPlaceSummary(sid, deps.http));
+    } catch (e) {
+      throw new Error(
+        `네이버 장소를 가져오지 못했습니다 (장소 ID=${sid}): ${e instanceof Error ? e.message : String(e)}`,
+        { cause: e },
+      );
+    }
+  }
+
   const now = deps.now();
-  const built = buildPlaces(source, fetched);
+  const built = buildPlaces(source, fetched, naverPlaces);
   const resolved = resolveStops(source, built.places);
   const { days, failed } = await buildLegs(resolved, built.places, {
     cache: deps.cache,

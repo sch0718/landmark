@@ -1,7 +1,7 @@
 import { Lat, Lng } from 'src/schema/common';
 import type { Place, TripData } from 'src/schema/trip-data';
 import type { TripSource } from 'src/schema/trip-source';
-import type { Bookmark, FetchedFolder } from './naver-client';
+import type { Bookmark, FetchedFolder, NaverPlace } from './naver-client';
 
 export type BuildPlacesReport = {
   excludedUnavailable: number;
@@ -19,12 +19,23 @@ type Occurrence = { folderId: string; bookmark: Bookmark };
 const inRange = (b: Bookmark): boolean =>
   Lng.safeParse(b.px).success && Lat.safeParse(b.py).success;
 
+/** 폴더에 저장된 장소의 sid. 사용 불가·범위 밖으로 제외된 북마크도 포함한다. */
+export function folderSids(folders: FetchedFolder[]): Set<string> {
+  return new Set(folders.flatMap((f) => f.bookmarks.map((b) => b.sid)));
+}
+
 /**
  * 네이버 폴더와 customPlaces로 places를 만든다(§3.2 중복 병합 표).
  * 폴더 ID는 yaml `folders` 순서대로 f1, f2 …. 폴더는 shareId로 찾으며 shareId는 출력에 넣지 않는다.
  * `count`는 그 폴더가 기여한 사용 가능·범위 안 북마크 수다.
+ * `naverPlaces`(장소 ID로 지정한 곳)는 폴더에 같은 sid가 없을 때만 `n:<sid>`로 더한다.
+ * 폴더에서 제외된(사용 불가·범위 밖) 장소는 naverPlaces로 되살리지 않고 폴더 쪽 제외 보고만 남긴다.
  */
-export function buildPlaces(source: TripSource, folders: FetchedFolder[]): BuildPlacesResult {
+export function buildPlaces(
+  source: TripSource,
+  folders: FetchedFolder[],
+  naverPlaces: NaverPlace[] = [],
+): BuildPlacesResult {
   const report: BuildPlacesReport = { excludedUnavailable: 0, excludedOutOfRange: [] };
   const outFolders: TripData['folders'] = [];
   const occurrences = new Map<string, Occurrence[]>();
@@ -73,6 +84,26 @@ export function buildPlaces(source: TripSource, folders: FetchedFolder[]): Build
       if (naverMemos.length > 0) place.naverMemos = naverMemos;
     }
     places[`n:${sid}`] = place;
+  }
+
+  const inFolders = folderSids(folders);
+  for (const p of naverPlaces) {
+    const key = `n:${p.sid}`;
+    if (inFolders.has(p.sid) || places[key]) continue;
+    if (!Lng.safeParse(p.lng).success || !Lat.safeParse(p.lat).success) {
+      report.excludedOutOfRange.push({ sid: p.sid, name: p.name });
+      continue;
+    }
+    places[key] = {
+      name: p.name,
+      address: p.address,
+      lng: p.lng,
+      lat: p.lat,
+      category: p.category,
+      folderIds: [],
+      savedAt: null,
+      sid: p.sid,
+    };
   }
 
   for (const custom of source.customPlaces) {

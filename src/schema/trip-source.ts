@@ -37,6 +37,10 @@ export const TripSourceSchema = z
     startDate: CalendarDate,
     endDate: CalendarDate,
     folders: z.array(z.string().min(1)),
+    // 저장 폴더 없이 네이버 장소 ID(sid)로 장소를 지정한다. collect가 장소 API로 이름·좌표·분류를 가져온다.
+    naverPlaces: z
+      .array(z.string().regex(/^\d+$/, { message: '네이버 장소 ID는 숫자여야 합니다' }))
+      .default([]),
     publish: z.object({ naverMemo: z.boolean().default(true) }).default({ naverMemo: true }),
     customPlaces: z.array(CustomPlaceSchema).default([]),
     days: z.array(SourceDaySchema),
@@ -60,6 +64,17 @@ export const TripSourceSchema = z
         });
       }
       keys.add(p.key);
+    });
+    const sids = new Set<string>();
+    trip.naverPlaces.forEach((sid, i) => {
+      if (sids.has(sid)) {
+        ctx.addIssue({
+          code: 'custom',
+          message: `네이버 장소 ID가 중복됩니다: ${sid}`,
+          path: ['naverPlaces', i],
+        });
+      }
+      sids.add(sid);
     });
     checkUniqueStopIds(ctx, trip.days);
   });

@@ -45,13 +45,22 @@ export function setupCollect(
       store.set(k, v);
     },
   };
-  const calls = { folder: 0, route: 0, routeQueries: [] as string[] };
+  const calls = { folder: 0, route: 0, routeQueries: [] as string[], placeSids: [] as string[] };
   const fakeFetch = async (input: RequestInfo | URL): Promise<Response> => {
     const url = String(input);
     if (url.includes(`/shares/${SHARE_ID}/bookmarks`)) {
       calls.folder += 1;
       if (folderStatus !== 200) return new Response('x', { status: folderStatus });
       return new Response(fixture('naver/bookmarks-sokcho.json'));
+    }
+    const place = /\/p\/api\/place\/summary\/(\d+)$/.exec(url);
+    if (place) {
+      calls.placeSids.push(place[1]!);
+      try {
+        return new Response(fixture(`naver/place-summary-${place[1]}.json`));
+      } catch {
+        return new Response('nf', { status: 404 });
+      }
     }
     if (url.includes('/api/directions/car')) {
       calls.route += 1;

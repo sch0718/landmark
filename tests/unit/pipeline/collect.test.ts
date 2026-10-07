@@ -104,4 +104,40 @@ describe('collect', () => {
     await collect(YAML_PATH, { refreshRoutes: false }, deps);
     expect(await validateAll({ fs })).toEqual({ ok: true, errors: [] });
   });
+
+  describe('naverPlaces', () => {
+    const yaml = (ids: string) => `title: 제주
+startDate: 2026-09-20
+endDate: 2026-09-20
+folders: []
+naverPlaces: [${ids}]
+customPlaces:
+  - { key: airport, name: 제주국제공항, lng: 126.4916441, lat: 33.5070711 }
+days:
+  - date: 2026-09-20
+    stops:
+      - { place: airport }
+      - { place: '20307427', note: 저녁 }
+`;
+
+    it('저장 폴더 없이 장소 ID로 네이버 분류·링크가 있는 장소를 만든다', async () => {
+      const { fs, deps, calls } = setup(yaml("'20307427'"));
+      const r = await collect(YAML_PATH, { refreshRoutes: false }, deps);
+      const data = TripDataSchema.parse(JSON.parse(fs.files[r.outPath]!));
+      expect(calls.placeSids).toEqual(['20307427']);
+      expect(data.places['n:20307427']).toMatchObject({
+        name: '착한전복 제주중문점',
+        category: '전복요리',
+        sid: '20307427',
+        folderIds: [],
+      });
+      expect(data.days[0]?.stops.map((st) => st.placeKey)).toEqual(['c:airport', 'n:20307427']);
+    });
+
+    it('장소 ID를 가져오지 못하면 그 ID를 담아 실패하고 JSON을 만들지 않는다', async () => {
+      const { fs, deps } = setup(yaml("'20307427', '999'"));
+      await expect(collect(YAML_PATH, { refreshRoutes: false }, deps)).rejects.toThrow(/999/);
+      expect(Object.keys(fs.files).filter((f) => f.startsWith('public/'))).toEqual([]);
+    });
+  });
 });

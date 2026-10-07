@@ -149,3 +149,17 @@ describe('TripSourceSchema', () => {
     if (!r.success) expect(r.error.issues[0]?.path).toEqual(['days', 1, 'date']);
   });
 });
+
+describe('TripSource naverPlaces', () => {
+  it('생략하면 빈 목록이고, 숫자 문자열 장소 ID만 받는다', () => {
+    expect(TripSourceSchema.parse(base()).naverPlaces).toEqual([]);
+    expect(TripSourceSchema.safeParse({ ...base(), naverPlaces: ['20307427'] }).success).toBe(true);
+    expect(TripSourceSchema.safeParse({ ...base(), naverPlaces: ['c:home'] }).success).toBe(false);
+  });
+
+  it('같은 장소 ID가 두 번 나오면 거부한다', () => {
+    const r = TripSourceSchema.safeParse({ ...base(), naverPlaces: ['20307427', '20307427'] });
+    expect(r.success).toBe(false);
+    expect(r.error?.issues[0]?.path).toEqual(['naverPlaces', 1]);
+  });
+});

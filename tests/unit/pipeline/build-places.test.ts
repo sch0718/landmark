@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildPlaces } from '../../../pipeline/build-places';
-import type { Bookmark, FetchedFolder } from '../../../pipeline/naver-client';
+import type { Bookmark, FetchedFolder, NaverPlace } from '../../../pipeline/naver-client';
 import { TripSourceSchema } from 'src/schema/trip-source';
 
 const SHARE_A = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
@@ -145,5 +145,69 @@ describe('buildPlaces', () => {
     const json = JSON.stringify(result);
     expect(json).not.toContain(SHARE_A);
     expect(json).not.toContain(SHARE_B);
+  });
+});
+
+describe('buildPlaces — naverPlaces(장소 ID 직접 지정)', () => {
+  const jeju: NaverPlace = {
+    sid: '20307427',
+    name: '착한전복 제주중문점',
+    address: '제주 서귀포시 천제연로 119',
+    lng: 126.4181775,
+    lat: 33.2545773,
+    category: '전복요리',
+  };
+
+  it('폴더에 없는 장소 ID는 n:<sid> 장소가 되고 네이버 분류를 그대로 쓴다', () => {
+    const r = buildPlaces(source({ folders: [], naverPlaces: ['20307427'] }), [], [jeju]);
+    expect(r.places['n:20307427']).toEqual({
+      name: '착한전복 제주중문점',
+      address: '제주 서귀포시 천제연로 119',
+      lng: 126.4181775,
+      lat: 33.2545773,
+      category: '전복요리',
+      folderIds: [],
+      savedAt: null,
+      sid: '20307427',
+    });
+  });
+
+  it('같은 장소가 저장 폴더에도 있으면 폴더 쪽 데이터(메모·저장일)를 그대로 둔다', () => {
+    const inFolder = bm({ sid: '20307427', name: '폴더 이름', memo: '폴더 메모' });
+    const r = buildPlaces(
+      source({ folders: [SHARE_A], naverPlaces: ['20307427'] }),
+      [folderA([inFolder])],
+      [jeju],
+    );
+    expect(r.places['n:20307427']?.name).toBe('폴더 이름');
+    expect(r.places['n:20307427']?.folderIds).toEqual(['f1']);
+  });
+
+  it('좌표가 범위 밖이면 제외하고 보고한다', () => {
+    const far: NaverPlace = { ...jeju, sid: '9', name: '도쿄', lng: 139.7, lat: 35.6 };
+    const r = buildPlaces(source({ folders: [], naverPlaces: ['9'] }), [], [far]);
+    expect(r.places['n:9']).toBeUndefined();
+    expect(r.report.excludedOutOfRange).toEqual([{ sid: '9', name: '도쿄' }]);
+  });
+
+  it('폴더에서 사용 불가로 제외된 sid는 naverPlaces로 되살리지 않는다', () => {
+    const gone = bm({ sid: '20307427', available: false });
+    const r = buildPlaces(
+      source({ folders: [SHARE_A], naverPlaces: ['20307427'] }),
+      [folderA([gone])],
+      [jeju],
+    );
+    expect(r.places['n:20307427']).toBeUndefined();
+    expect(r.report.excludedUnavailable).toBe(1);
+  });
+
+  it('폴더에서 범위 밖으로 제외된 sid는 한 번만 보고한다', () => {
+    const far = bm({ sid: '20307427', name: '도쿄', px: 139.7, py: 35.6 });
+    const r = buildPlaces(
+      source({ folders: [SHARE_A], naverPlaces: ['20307427'] }),
+      [folderA([far])],
+      [{ ...jeju, lng: 139.7, lat: 35.6 }],
+    );
+    expect(r.report.excludedOutOfRange).toEqual([{ sid: '20307427', name: '도쿄' }]);
   });
 });

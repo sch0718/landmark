@@ -105,3 +105,43 @@ export async function fetchCarRoute(
     path: first.path as [number, number][],
   };
 }
+
+export type NaverPlace = {
+  sid: string;
+  name: string;
+  address: string;
+  lng: number;
+  lat: number;
+  category: string | null;
+};
+
+/** 네이버 장소 ID(sid) 하나의 이름·주소·좌표·분류. 저장 폴더 없이 장소를 지정할 때 쓴다. */
+export async function fetchPlaceSummary(sid: string, deps: HttpDeps): Promise<NaverPlace> {
+  const url = `https://map.naver.com/p/api/place/summary/${sid}`;
+  const body = (await getJson(url, 'https://map.naver.com/', deps)) as Raw;
+  const detail = (body.data as Raw | undefined)?.placeDetail as Raw | undefined;
+  if (!detail) throw new Error(`네이버 장소 응답에 placeDetail이 없음 (sid=${sid})`);
+  const coordinate = detail.coordinate as Raw | undefined;
+  const lng = Number(coordinate?.longitude);
+  const lat = Number(coordinate?.latitude);
+  if (
+    coordinate === undefined ||
+    coordinate.longitude == null ||
+    coordinate.latitude == null ||
+    !Number.isFinite(lng) ||
+    !Number.isFinite(lat)
+  ) {
+    throw new Error(`네이버 장소 응답에 좌표가 없음 (sid=${sid})`);
+  }
+  const address = (detail.address ?? {}) as Raw;
+  const category = (detail.category as Raw | undefined)?.category;
+  const road = typeof address.roadAddress === 'string' ? address.roadAddress : '';
+  return {
+    sid,
+    name: String(detail.name ?? ''),
+    address: road !== '' ? road : String(address.address ?? ''),
+    lng,
+    lat,
+    category: typeof category === 'string' && category !== '' ? category : null,
+  };
+}

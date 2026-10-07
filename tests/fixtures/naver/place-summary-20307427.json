@@ -1,0 +1,27 @@
+{
+  "data": {
+    "placeDetail": {
+      "id": "20307427",
+      "name": "착한전복 제주중문점",
+      "businessType": "restaurant",
+      "coordinate": {
+        "longitude": 126.4181775,
+        "latitude": 33.2545773
+      },
+      "category": {
+        "category": "전복요리",
+        "categoryCodeList": [
+          "220036",
+          "220037",
+          "220076",
+          "220800"
+        ]
+      },
+      "address": {
+        "address": "제주 서귀포시 색달동 2481-10",
+        "roadAddress": "제주 서귀포시 천제연로 119",
+        "formattedAddress": "제주 서귀포시 색달동"
+      }
+    }
+  }
+}
