@@ -10,6 +10,7 @@ import {
 import { createContext, useContext, useMemo } from 'react';
 import { toast } from 'sonner';
 import { overlay, type EffectiveTrip } from 'src/domain/overlay';
+import { applyCategoryEdits } from 'src/domain/place-category';
 import { keepMine, reconcile, type ReconcileReport } from 'src/domain/reconcile';
 import { applyRevert } from 'src/domain/revert';
 import {
@@ -60,6 +61,8 @@ export type TripStore = {
   /** 저장을 일으키지 않는 메모리 atom. 저장은 `updateAtom`(→ `updateEditLayer`)으로만 한다. */
   editLayerAtom: PrimitiveAtom<EditLayer | null>;
   effectiveTripAtom: Atom<EffectiveTrip | null>;
+  /** 편집 레이어의 분류를 적용한 장소들. 분류를 보여 주는 곳은 원본 `trip.places` 대신 이 값을 쓴다. */
+  effectivePlacesAtom: Atom<TripData['places'] | null>;
   reconcileReportAtom: Atom<ReconcileReport | null>;
   storageUnavailableAtom: Atom<boolean>;
   loadStateAtom: Atom<LoadState>;
@@ -165,6 +168,11 @@ export function createTripStore(publicId: string, deps: TripStoreDeps = {}): Tri
   const effectiveTripAtom = atom((get) => {
     const trip = get(tripAtom);
     return trip ? overlay(trip, get(editLayerAtom)) : null;
+  });
+
+  const effectivePlacesAtom = atom((get) => {
+    const trip = get(tripAtom);
+    return trip ? applyCategoryEdits(trip, get(editLayerAtom)) : null;
   });
 
   const reconcileReportAtom = atom((get): ReconcileReport | null => {
@@ -331,6 +339,7 @@ export function createTripStore(publicId: string, deps: TripStoreDeps = {}): Tri
     tripAtom,
     editLayerAtom,
     effectiveTripAtom,
+    effectivePlacesAtom,
     reconcileReportAtom,
     storageUnavailableAtom,
     loadStateAtom,

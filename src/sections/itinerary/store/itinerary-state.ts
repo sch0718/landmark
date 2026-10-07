@@ -5,6 +5,7 @@ import type { MapMarker, MapPolyline } from 'src/components/map/MapAdapter';
 import { categoryColor, dayColor } from 'src/components/map/map-colors';
 import { buildLegIndex, effectiveLegs, type DisplayLeg } from 'src/domain/leg-index';
 import { overlay, type EffectiveDay } from 'src/domain/overlay';
+import { effectiveCategory } from 'src/domain/place-category';
 import { LIMITS } from 'src/schema/common';
 import type { EditLayer } from 'src/schema/edit-layer';
 import type { TripData } from 'src/schema/trip-data';
@@ -126,7 +127,7 @@ export function useItineraryLayers(): ItineraryLayers {
           lng: p.lng,
           lat: p.lat,
           label: p.name,
-          color: categoryColor(p.category),
+          color: categoryColor(effectiveCategory(p, edit?.places[key])),
           dimmed: true,
           clusterable: true,
         });

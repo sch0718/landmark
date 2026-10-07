@@ -1,3 +1,4 @@
+import Autocomplete from '@mui/material/Autocomplete';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
@@ -6,8 +7,9 @@ import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useAtom, useAtomValue, useSetAtom, useStore } from 'jotai';
-import { useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { toast } from 'sonner';
+import { effectiveCategory } from 'src/domain/place-category';
 import { naverPlaceUrl } from 'src/models/place';
 import { LIMITS } from 'src/schema/common';
 import {
@@ -22,12 +24,14 @@ function reportSaveError(e: unknown) {
   toast.error('편집을 저장하지 못했어요');
 }
 
-/** 장소 한 곳의 상세: 네이버 메모, 작성자별 메모, 태그, 숨김, 일정 추가. 모든 텍스트는 React 텍스트로만 그린다. */
+/** 장소 한 곳의 상세: 분류, 네이버 메모, 작성자별 메모, 태그, 숨김, 일정 추가. 모든 텍스트는 React 텍스트로만 그린다. */
 export function PlaceCard({ placeKey }: { placeKey: string }) {
   const ts = useTripStore();
   const trip = useAtomValue(ts.tripAtom);
   const edit = useAtomValue(ts.editLayerAtom);
+  const effectivePlaces = useAtomValue(ts.effectivePlacesAtom);
   const actions = usePlaceActions(placeKey);
+  const [editingCategory, setEditingCategory] = useState(false);
   const drafts = useAtomValue(memoDraftsAtom);
   const setDetail = useSetAtom(detailAtom);
   const place = trip && Object.hasOwn(trip.places, placeKey) ? trip.places[placeKey] : null;
@@ -36,6 +40,15 @@ export function PlaceCard({ placeKey }: { placeKey: string }) {
   const pe = edit?.places[placeKey];
   const tags = pe?.tags?.value ?? [];
   const hidden = pe?.hidden?.value ?? false;
+  const category = effectiveCategory(place, pe);
+  const categoryOverridden = typeof pe?.category?.value === 'string';
+  const categoryOptions = [
+    ...new Set(
+      [...Object.values(trip.places), ...Object.values(effectivePlaces ?? {})].flatMap((p) =>
+        p.category === null ? [] : [p.category],
+      ),
+    ),
+  ].sort((a, b) => a.localeCompare(b, 'ko'));
   const naverUrl = naverPlaceUrl(place);
   const folderName = (id: string) => trip.folders.find((f) => f.id === id)?.name ?? id;
   const myId = edit?.authorId ?? null;
@@ -55,6 +68,7 @@ export function PlaceCard({ placeKey }: { placeKey: string }) {
   const setMemo = (text: string) => actions.setMemo(text);
   const setTags = (tags: string[]) => save(actions.setTags(tags));
   const setHidden = (hidden: boolean) => save(actions.setHidden(hidden));
+  const setCategory = (value: string | null) => save(actions.setCategory(value));
 
   return (
     <Stack spacing={1.5} sx={{ p: 1.5 }} data-testid={`place-card-${placeKey}`}>
@@ -65,9 +79,35 @@ export function PlaceCard({ placeKey }: { placeKey: string }) {
         <Typography variant="body2" color="text.secondary">
           {place.address}
         </Typography>
-        <Typography variant="caption" color="text.secondary">
-          {[place.category ?? '미분류', ...place.folderIds.map(folderName)].join(' · ')}
-        </Typography>
+        <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
+          <Typography variant="caption" color="text.secondary" data-testid="place-category">
+            {[category ?? '미분류', ...place.folderIds.map(folderName)].join(' · ')}
+          </Typography>
+          {!editingCategory && (
+            <Button size="small" onClick={() => setEditingCategory(true)}>
+              분류 변경
+            </Button>
+          )}
+        </Stack>
+        {categoryOverridden && (
+          <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
+            <Typography variant="caption" color="text.secondary">
+              {`원본: ${place.category ?? '미분류'}`}
+            </Typography>
+            <Button size="small" onClick={() => void setCategory(null)}>
+              원본으로
+            </Button>
+          </Stack>
+        )}
+        {editingCategory && (
+          <CategoryForm
+            key={placeKey}
+            initial={category ?? ''}
+            options={categoryOptions}
+            onSave={setCategory}
+            onClose={() => setEditingCategory(false)}
+          />
+        )}
       </Box>
 
       {place.naverMemos && place.naverMemos.length > 0 && (
@@ -163,6 +203,66 @@ export function PlaceCard({ placeKey }: { placeKey: string }) {
         )}
       </Stack>
     </Stack>
+  );
+}
+
+function CategoryForm(props: {
+  initial: string;
+  options: string[];
+  onSave(value: string): Promise<PlaceActionResult | undefined>;
+  onClose(): void;
+}) {
+  const [value, setValue] = useState(props.initial);
+  const [saving, setSaving] = useState(false);
+  // 장소가 바뀌어 이 폼이 사라진 뒤 끝난 저장이 현재 장소의 폼을 닫지 않게 한다.
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  const trimmed = value.trim();
+  const valid = trimmed.length > 0 && trimmed.length <= LIMITS.categoryChars;
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!valid || saving) return;
+    setSaving(true);
+    try {
+      if ((await props.onSave(trimmed)) === 'saved' && mounted.current) props.onClose();
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <Box component="form" onSubmit={submit} sx={{ py: 0.5 }}>
+      <Autocomplete
+        freeSolo
+        size="small"
+        options={props.options}
+        inputValue={value}
+        onInputChange={(_e, next) => setValue(next.slice(0, LIMITS.categoryChars))}
+        renderInput={({ InputProps, InputLabelProps, inputProps, ...params }) => (
+          <TextField
+            {...params}
+            label="분류"
+            slotProps={{
+              input: InputProps,
+              inputLabel: InputLabelProps,
+              htmlInput: { ...inputProps, maxLength: LIMITS.categoryChars },
+            }}
+          />
+        )}
+      />
+      <Stack direction="row" spacing={1} sx={{ mt: 0.5 }}>
+        <Button size="small" type="submit" disabled={!valid || saving}>
+          저장
+        </Button>
+        <Button size="small" onClick={props.onClose}>
+          취소
+        </Button>
+      </Stack>
+    </Box>
   );
 }
 

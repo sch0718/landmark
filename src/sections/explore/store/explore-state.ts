@@ -38,16 +38,16 @@ const NO_MARKERS: MapMarker[] = [];
 /** 탐색 모드의 지도 마커. 다른 모드에서는 빈 목록. */
 export function useExploreMarkers(): MapMarker[] {
   const ts = useTripStore();
-  const trip = useAtomValue(ts.tripAtom);
+  const places = useAtomValue(ts.effectivePlacesAtom);
   const mode = useAtomValue(modeAtom);
   const view = useAtomValue(viewModeAtom);
   const selected = useAtomValue(selectedPlaceAtom);
   const active = view === 'map' && mode === 'explore';
   const keys = useExploreKeys(active);
   return useMemo(() => {
-    if (!active || !trip) return NO_MARKERS;
+    if (!active || !places) return NO_MARKERS;
     return keys.flatMap((key): MapMarker[] => {
-      const p = trip.places[key];
+      const p = places[key];
       if (!p) return [];
       return [
         {
@@ -61,5 +61,5 @@ export function useExploreMarkers(): MapMarker[] {
         },
       ];
     });
-  }, [active, trip, keys, selected]);
+  }, [active, places, keys, selected]);
 }

@@ -299,3 +299,20 @@ it('숨김 포함 카드와 목록은 숨김 표기를 보존하고 목록 추�
   await userEvent.click(screen.getByRole('button', { name: 'B 일정에 추가' }));
   expect(store.get(detailAtom)).toEqual({ kind: 'add', placeKey: 'n:2' });
 });
+
+it('바꾼 분류가 목록 표시와 분류 칩·필터에 반영된다', async () => {
+  const trip = makeTrip({ days: { [D1]: ['A'] }, places: ['B'] });
+  trip.places['n:2']!.category = null;
+  const edit = makeEdit({
+    places: { 'n:2': { memos: {}, category: { value: '공항', updatedAt: NOW } } },
+  });
+  const { store, rerender } = setup(trip, edit, <ExplorePanel />);
+  const row = screen.getByRole('button', { name: 'B 상세' });
+  expect(within(row).getByText(/공항/)).toBeInTheDocument();
+  expect(within(row).queryByText(/미분류/)).toBeNull();
+  rerender(<ExploreFilters />);
+  const chip = screen.getByRole('button', { name: '공항 1' });
+  expect(screen.queryByRole('button', { name: /미분류/ })).toBeNull();
+  await userEvent.click(chip);
+  expect(store.get(exploreFilterAtom).categories).toEqual(['공항']);
+});

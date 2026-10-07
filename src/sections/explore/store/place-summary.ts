@@ -1,4 +1,5 @@
 import type { EffectiveTrip } from 'src/domain/overlay';
+import { effectiveCategory } from 'src/domain/place-category';
 import type { EditLayer } from 'src/schema/edit-layer';
 import type { TripData } from 'src/schema/trip-data';
 import { dayName } from 'src/sections/itinerary/store/format';
@@ -33,6 +34,7 @@ export function summarizePlace(
   if (!Object.hasOwn(trip.places, placeKey)) return null;
   const place = trip.places[placeKey]!;
   const pe = edit?.places[placeKey];
+  const category = effectiveCategory(place, pe);
   const mine = edit ? pe?.memos[edit.authorId]?.text : null;
   const user = Object.entries(pe?.memos ?? {})
     .sort(([a], [b]) => a.localeCompare(b))
@@ -42,8 +44,8 @@ export function summarizePlace(
   return {
     placeKey,
     name: place.name,
-    category: place.category ?? '미분류',
-    emoji: categoryEmoji(place.category),
+    category: category ?? '미분류',
+    emoji: categoryEmoji(category),
     memoCount: user.length + naver.length,
     memoPreview:
       candidates

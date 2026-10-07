@@ -56,7 +56,7 @@ export function ExploreFilters() {
         ))}
       </Box>
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-        {categoryCounts(trip).map((c) => (
+        {categoryCounts(trip, edit, filter.categories).map((c) => (
           <ToggleChip
             key={c.category}
             label={`${c.category} ${c.count}`}

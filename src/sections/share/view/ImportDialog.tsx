@@ -208,6 +208,7 @@ function PreviewBody({
   const tags = (v: string[] | undefined) =>
     v === undefined || v.length === 0 ? '없음' : v.join(', ');
   const hidden = (v: boolean | undefined) => (v === undefined ? '없음' : v ? '숨김' : '표시');
+  const category = (v: string | null | undefined) => v ?? '원본';
 
   const changes = [
     ...summary.tagChanges.map(
@@ -215,6 +216,9 @@ function PreviewBody({
     ),
     ...summary.hiddenChanges.map(
       (c) => `${placeName(c.placeKey)}: 숨김 ${hidden(c.from)} → ${hidden(c.to)}`,
+    ),
+    ...summary.categoryChanges.map(
+      (c) => `${placeName(c.placeKey)}: 분류: ${category(c.from)} → ${category(c.to)}`,
     ),
   ];
   const notes = [
@@ -235,7 +239,7 @@ function PreviewBody({
         </Typography>
       </Section>
       {changes.length > 0 && (
-        <Section title="덮어써지는 태그·숨김">
+        <Section title="덮어써지는 태그·숨김·분류">
           {changes.map((line) => (
             <Typography key={line} variant="body2">
               {line}

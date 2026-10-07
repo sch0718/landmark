@@ -23,6 +23,13 @@ const PlaceEditSchema = z.object({
     })
     .optional(),
   hidden: z.object({ value: z.boolean(), updatedAt: IsoDateTime }).optional(),
+  /** 원본 분류 덮어쓰기. `value: null`은 원본으로 되돌림(병합에서 옛 값이 되살아나지 않게 기록한다). */
+  category: z
+    .object({
+      value: z.string().trim().min(1).max(LIMITS.categoryChars).nullable(),
+      updatedAt: IsoDateTime,
+    })
+    .optional(),
 });
 
 const EditStopSchema = z.object({

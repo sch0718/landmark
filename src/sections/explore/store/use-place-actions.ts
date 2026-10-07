@@ -61,6 +61,13 @@ export function usePlaceActions(placeKey: string) {
         throw new RangeError('태그 길이 또는 개수 제한을 넘었어요');
       return patch((p, now) => ({ ...p, tags: { value: values, updatedAt: now } }));
     },
+    /** null이면 원본 분류로 되돌린다(필드를 지우지 않고 null로 기록해 병합에서 옛 값이 되살아나지 않게). */
+    async setCategory(category: string | null): Promise<PlaceActionResult> {
+      const value = category === null ? null : category.trim();
+      if (value !== null && (!value || value.length > LIMITS.categoryChars))
+        throw new RangeError('분류는 1~30자로 입력하세요');
+      return patch((p, now) => ({ ...p, category: { value, updatedAt: now } }));
+    },
     setHidden(value: boolean): Promise<PlaceActionResult> {
       return patch((p, now) => ({ ...p, hidden: { value, updatedAt: now } }));
     },

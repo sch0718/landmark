@@ -117,6 +117,7 @@ describe('merge', () => {
         'n:1': {
           memos: { 'a-b': { text: '동행 메모', updatedAt: T2 } },
           tags: { value: ['맛집'], updatedAt: T2 },
+          category: { value: '숙소', updatedAt: T2 },
         },
       },
     };
@@ -136,6 +137,7 @@ describe('merge', () => {
         'n:1': {
           memos: { 'a-a': { text: 'A', updatedAt: T1 } },
           hidden: { value: true, updatedAt: T3 },
+          category: { value: '숙소', updatedAt: T2 },
         },
       },
     };
@@ -146,6 +148,7 @@ describe('merge', () => {
           memos: { 'a-a': { text: 'A 수정', updatedAt: T2 }, 'a-b': { text: 'B', updatedAt: T1 } },
           tags: { value: ['t'], updatedAt: T1 },
           hidden: { value: false, updatedAt: T3 },
+          category: { value: '공항', updatedAt: T2 },
         },
       },
     };
@@ -221,6 +224,69 @@ describe('merge', () => {
     const { summary } = planMerge(a, b, trip);
     expect(summary.tagChanges).toEqual([]);
     expect(summary.hiddenChanges).toEqual([{ placeKey: 'n:1', from: false, to: true }]);
+  });
+
+  it('분류(A)와 태그(B)를 서로 다른 사람이 바꾸면 필드별로 둘 다 유지된다', () => {
+    const trip = makeTrip({ days: { [D1]: ['X'] } });
+    const a = makeEdit({
+      places: { 'n:1': { memos: {}, category: { value: '숙소', updatedAt: T2 } } },
+    });
+    const b = makeEdit({
+      places: { 'n:1': { memos: {}, tags: { value: ['맛집'], updatedAt: T1 } } },
+    });
+    const m = mustMerge(a, b, trip);
+    expect(m.places['n:1']!.category).toEqual({ value: '숙소', updatedAt: T2 });
+    expect(m.places['n:1']!.tags).toEqual({ value: ['맛집'], updatedAt: T1 });
+  });
+
+  it('더 최신의 원본으로 되돌림(value: null)이 옛 분류 덮어쓰기를 이긴다', () => {
+    const trip = makeTrip({ days: { [D1]: ['X'] } });
+    const local = makeEdit({
+      places: { 'n:1': { memos: {}, category: { value: '숙소', updatedAt: T1 } } },
+    });
+    const incoming = makeEdit({
+      places: { 'n:1': { memos: {}, category: { value: null, updatedAt: T2 } } },
+    });
+    expect(mustMerge(local, incoming, trip).places['n:1']!.category).toEqual({
+      value: null,
+      updatedAt: T2,
+    });
+    expect(mustMerge(incoming, local, trip).places['n:1']!.category).toEqual({
+      value: null,
+      updatedAt: T2,
+    });
+    expect(planMerge(local, incoming, trip).summary.categoryChanges).toEqual([
+      { placeKey: 'n:1', from: '숙소', to: null },
+    ]);
+  });
+
+  it('분류 요약: incoming이 이기고 값이 다를 때만 넣는다', () => {
+    const trip = makeTrip({ days: { [D1]: ['X'] }, places: ['Y', 'Z'] });
+    const local = makeEdit({
+      places: {
+        'n:2': { memos: {}, category: { value: '카페', updatedAt: T3 } },
+        'n:3': { memos: {}, category: { value: '공항', updatedAt: T1 } },
+      },
+    });
+    const incoming = makeEdit({
+      places: {
+        'n:1': { memos: {}, category: { value: '숙소', updatedAt: T1 } },
+        'n:2': { memos: {}, category: { value: '식당', updatedAt: T2 } },
+        'n:3': { memos: {}, category: { value: '공항', updatedAt: T2 } },
+      },
+    });
+    expect(planMerge(local, incoming, trip).summary.categoryChanges).toEqual([
+      { placeKey: 'n:1', from: undefined, to: '숙소' },
+    ]);
+  });
+
+  it('분류 요약: local에 분류 편집이 없고 incoming이 원본 복귀(null)면 넣지 않는다', () => {
+    const trip = makeTrip({ days: { [D1]: ['X'] } });
+    const local = makeEdit();
+    const incoming = makeEdit({
+      places: { 'n:1': { memos: {}, category: { value: null, updatedAt: T1 } } },
+    });
+    expect(planMerge(local, incoming, trip).summary.categoryChanges).toEqual([]);
   });
 
   it('reset(최신)이 옛 override 파일을 이긴다', () => {
@@ -388,6 +454,7 @@ describe('merge', () => {
       memosDeleted: 1,
       tagChanges: [{ placeKey: 'n:1', from: ['옛'], to: ['새'] }],
       hiddenChanges: [{ placeKey: 'n:2', from: undefined, to: true }],
+      categoryChanges: [],
       daysAdopted: [D2],
     });
   });

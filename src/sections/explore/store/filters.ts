@@ -1,5 +1,6 @@
 import type { Bounds } from 'src/components/map/MapAdapter';
 import type { EffectiveTrip } from 'src/domain/overlay';
+import { effectiveCategory } from 'src/domain/place-category';
 import type { EditLayer } from 'src/schema/edit-layer';
 import type { TripData } from 'src/schema/trip-data';
 
@@ -28,12 +29,21 @@ export const DEFAULT_FILTER: ExploreFilter = {
 /** category가 null인 장소를 가리키는 표시·필터 값. */
 export const UNCATEGORIZED = '미분류';
 
-export function categoryCounts(trip: TripData): { category: string; count: number }[] {
+/**
+ * 편집 레이어의 분류를 적용한 분류별 장소 수.
+ * 선택된 분류는 장소가 없어져도 count 0으로 남겨 칩에서 해제할 수 있게 한다.
+ */
+export function categoryCounts(
+  trip: TripData,
+  edit: EditLayer | null,
+  selected: string[] = [],
+): { category: string; count: number }[] {
   const counts = new Map<string, number>();
-  for (const place of Object.values(trip.places)) {
-    const c = place.category ?? UNCATEGORIZED;
+  for (const [key, place] of Object.entries(trip.places)) {
+    const c = effectiveCategory(place, edit?.places[key]) ?? UNCATEGORIZED;
     counts.set(c, (counts.get(c) ?? 0) + 1);
   }
+  for (const c of selected) if (!counts.has(c)) counts.set(c, 0);
   return [...counts]
     .map(([category, count]) => ({ category, count }))
     .sort((a, b) => b.count - a.count || a.category.localeCompare(b.category, 'ko'));
@@ -67,7 +77,10 @@ export function filterPlaces(
     const pe = edit?.places[key];
     if (!f.showHidden && pe?.hidden?.value) continue;
     if (f.folderIds.length > 0 && !place.folderIds.some((id) => f.folderIds.includes(id))) continue;
-    if (f.categories.length > 0 && !f.categories.includes(place.category ?? UNCATEGORIZED))
+    if (
+      f.categories.length > 0 &&
+      !f.categories.includes(effectiveCategory(place, pe) ?? UNCATEGORIZED)
+    )
       continue;
     const tags = pe?.tags?.value ?? [];
     if (f.tags.length > 0 && !tags.some((t) => f.tags.includes(t))) continue;

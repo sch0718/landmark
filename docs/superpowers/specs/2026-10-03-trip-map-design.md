@@ -222,6 +222,7 @@ PlaceEdit {
   memos:  Record<authorId, { text: string | null, updatedAt }>   # null = 삭제(툼스톤)
   tags:   { value: string[], updatedAt } | undefined
   hidden: { value: boolean,  updatedAt } | undefined
+  category: { value: string | null, updatedAt } | undefined   # 원본 분류 덮어쓰기(1~30자). null = 원본으로 되돌림
 }
 DayEdit =
   | { mode: "override", stops: [Stop], baseDayHash, updatedAt }
@@ -351,7 +352,7 @@ EditLayer 추가:
 |---|---|
 | `authors` | authorId 단위 LWW (닉네임 변경 반영) |
 | `memos` | authorId 단위 LWW. `text: null` 툼스톤도 비교 대상 — 삭제가 옛 메모에 의해 되살아나지 않는다 |
-| `tags`, `hidden` | **필드별** LWW. 한 사람이 태그를, 다른 사람이 숨김을 바꾸면 둘 다 유지 |
+| `tags`, `hidden`, `category` | **필드별** LWW. 한 사람이 태그를, 다른 사람이 숨김이나 분류를 바꾸면 모두 유지. 분류의 `value: null`(원본으로 되돌림)도 비교 대상 — 옛 덮어쓰기가 되살아나지 않는다 |
 | `days` | 날짜 하나가 아니라 **연결된 날짜 묶음** 단위로 병합한다 (아래) |
 | `authorId`, `baseDataVersion` | local 값 유지 |
 

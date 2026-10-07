@@ -93,6 +93,121 @@ describe('ExploreFilters 태그 칩', () => {
   });
 });
 
+describe('ExploreFilters 분류 칩', () => {
+  it('선택한 분류의 마지막 장소가 다른 분류로 바뀌어도 칩이 남아 해제할 수 있다', async () => {
+    const edit = makeEdit({
+      places: { 'n:1': { memos: {}, category: { value: '공항', updatedAt: OLD } } },
+    });
+    const storage = createMemoryStorage();
+    storage.setItem(KEY, JSON.stringify(edit));
+    const ts = createTripStore(PID, { storage, locks: undefined });
+    const store = createStore();
+    store.set(ts.tripAtom, makeTrip({ days: { [D1]: ['A'] } }));
+    store.set(ts.editLayerAtom, edit);
+    store.set(exploreFilterAtom, { ...DEFAULT_FILTER, categories: ['음식점'] });
+    render(
+      <TripStoreContext value={ts}>
+        <Provider store={store}>
+          <ExploreFilters />
+        </Provider>
+      </TripStoreContext>,
+    );
+    const gone = screen.getByRole('button', { name: '음식점 0' });
+    expect(gone).toHaveAttribute('aria-pressed', 'true');
+    await userEvent.click(gone);
+    expect(store.get(exploreFilterAtom).categories).toEqual([]);
+    expect(screen.queryByRole('button', { name: '음식점 0' })).toBeNull();
+  });
+});
+
+describe('PlaceCard 분류', () => {
+  it('다른 장소로 전환하면 이전 장소의 분류 입력이 따라가지 않는다', async () => {
+    const trip = makeTrip({ days: { [D1]: ['A'] }, places: ['B'] });
+    const { rerender, ts, store } = setupCard(trip, makeEdit(), 'n:1');
+    await userEvent.click(screen.getByRole('button', { name: '분류 변경' }));
+    await userEvent.clear(screen.getByRole('combobox', { name: '분류' }));
+    await userEvent.type(screen.getByRole('combobox', { name: '분류' }), '공항');
+    rerender(
+      <TripStoreContext value={ts}>
+        <Provider store={store}>
+          <CardDetailsHarness placeKey="n:2" />
+        </Provider>
+      </TripStoreContext>,
+    );
+    expect(screen.getByRole('combobox', { name: '분류' })).toHaveValue(
+      trip.places['n:2']!.category ?? '',
+    );
+  });
+
+  it('분류를 바꾸면 편집 레이어에 category가 기록되고 카드에 바뀐 분류와 원본이 보인다', async () => {
+    const trip = makeTrip({ days: { [D1]: ['A'] }, places: ['B'] });
+    trip.places['n:2']!.category = null;
+    const { storage, store, ts } = setupCard(trip, makeEdit(), 'n:2');
+    expect(screen.getByTestId('place-category')).toHaveTextContent('미분류');
+    await userEvent.click(screen.getByRole('button', { name: '분류 변경' }));
+    const input = screen.getByRole('combobox', { name: '분류' });
+    expect(input).toHaveAttribute('maxLength', '30');
+    await userEvent.type(input, '  공항 ');
+    await userEvent.click(screen.getByRole('button', { name: '저장' }));
+    await waitFor(() =>
+      expect(saved(storage).places['n:2']!.category).toEqual({ value: '공항', updatedAt: NOW }),
+    );
+    expect(store.get(ts.effectivePlacesAtom)!['n:2']!.category).toBe('공항');
+    expect(screen.getByTestId('place-category')).toHaveTextContent('공항');
+    expect(screen.getByText('원본: 미분류')).toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: '분류' })).toBeNull();
+  });
+
+  it('이전 장소의 저장이 늦게 끝나도 현재 장소의 분류 폼을 닫지 않는다', async () => {
+    const held = createHeldLocks();
+    held.hold();
+    const trip = makeTrip({ days: { [D1]: ['A'] }, places: ['B'] });
+    const { rerender, ts, store, storage } = setupCard(trip, makeEdit(), 'n:1', held.locks);
+    await userEvent.click(screen.getByRole('button', { name: '분류 변경' }));
+    await userEvent.clear(screen.getByRole('combobox', { name: '분류' }));
+    await userEvent.type(screen.getByRole('combobox', { name: '분류' }), '공항');
+    await userEvent.click(screen.getByRole('button', { name: '저장' }));
+    await waitFor(() => expect(held.requested).toHaveLength(1));
+    rerender(
+      <TripStoreContext value={ts}>
+        <Provider store={store}>
+          <CardDetailsHarness placeKey="n:2" />
+        </Provider>
+      </TripStoreContext>,
+    );
+    await userEvent.clear(screen.getByRole('combobox', { name: '분류' }));
+    await userEvent.type(screen.getByRole('combobox', { name: '분류' }), '카페');
+    await act(async () => held.release());
+    await waitFor(() => expect(saved(storage).places['n:1']!.category?.value).toBe('공항'));
+    expect(screen.getByRole('combobox', { name: '분류' })).toHaveValue('카페');
+  });
+
+  it('공백만 입력하면 저장할 수 없다', async () => {
+    setupCard(makeTrip({ days: { [D1]: ['A'] } }), makeEdit());
+    await userEvent.click(screen.getByRole('button', { name: '분류 변경' }));
+    const input = screen.getByRole('combobox', { name: '분류' });
+    await userEvent.clear(input);
+    await userEvent.type(input, '   ');
+    expect(screen.getByRole('button', { name: '저장' })).toBeDisabled();
+  });
+
+  it('[원본으로]를 누르면 value: null이 기록되고 원본 분류가 보인다', async () => {
+    const edit = makeEdit({
+      places: { 'n:1': { memos: {}, category: { value: '숙소', updatedAt: OLD } } },
+    });
+    const { storage } = setupCard(makeTrip({ days: { [D1]: ['A'] } }), edit);
+    expect(screen.getByTestId('place-category')).toHaveTextContent('숙소');
+    expect(screen.getByText('원본: 음식점')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: '원본으로' }));
+    await waitFor(() =>
+      expect(saved(storage).places['n:1']!.category).toEqual({ value: null, updatedAt: NOW }),
+    );
+    expect(screen.getByTestId('place-category')).toHaveTextContent('음식점');
+    expect(screen.queryByText(/원본:/)).toBeNull();
+    expect(screen.queryByRole('button', { name: '원본으로' })).toBeNull();
+  });
+});
+
 describe('PlaceCard 메모', () => {
   const trip = () => makeTrip({ days: { [D1]: ['A'] } });
 

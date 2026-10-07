@@ -12,6 +12,7 @@ import { categoryCounts, DEFAULT_FILTER } from '../store/filters';
 export function FilterBar() {
   const ts = useTripStore();
   const trip = useAtomValue(ts.tripAtom);
+  const edit = useAtomValue(ts.editLayerAtom);
   const [filter, setFilter] = useAtom(exploreFilterAtom);
   const [query, setQuery] = useAtom(searchQueryAtom);
   const setDetail = useSetAtom(detailAtom);
@@ -27,8 +28,8 @@ export function FilterBar() {
     Number(query.trim().length > 0);
   return (
     <Box sx={{ display: 'flex', gap: 0.75, p: 1, overflowX: 'auto', alignItems: 'center' }}>
-      {categoryCounts(trip)
-        .slice(0, 3)
+      {categoryCounts(trip, edit, filter.categories)
+        .filter(({ category }, i) => i < 3 || filter.categories.includes(category))
         .map(({ category }) => (
           <Chip
             key={category}

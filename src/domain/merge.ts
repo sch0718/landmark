@@ -26,6 +26,8 @@ export type MergeSummary = {
   memosDeleted: number;
   tagChanges: { placeKey: string; from: string[] | undefined; to: string[] }[];
   hiddenChanges: { placeKey: string; from: boolean | undefined; to: boolean }[];
+  /** from: null은 원본 분류, undefined는 local에 분류 편집이 없음. */
+  categoryChanges: { placeKey: string; from: string | null | undefined; to: string | null }[];
   /** 충돌 없이 incoming 상태를 채택했고 local과 다른 날짜. */
   daysAdopted: string[];
 };
@@ -79,6 +81,8 @@ function mergePlaceEdit(local: PlaceEdit | undefined, incoming: PlaceEdit | unde
   if (tags !== undefined) out.tags = tags;
   const hidden = pickLww(local?.hidden, incoming?.hidden);
   if (hidden !== undefined) out.hidden = hidden;
+  const category = pickLww(local?.category, incoming?.category);
+  if (category !== undefined) out.category = category;
   return out;
 }
 
@@ -163,6 +167,7 @@ function summarize(local: EditLayer, incoming: EditLayer, plans: GroupPlan[]): M
     memosDeleted: 0,
     tagChanges: [],
     hiddenChanges: [],
+    categoryChanges: [],
     daysAdopted: [],
   };
   for (const placeKey of Object.keys(incoming.places).sort()) {
@@ -190,6 +195,11 @@ function summarize(local: EditLayer, incoming: EditLayer, plans: GroupPlan[]): M
       const from = loc?.hidden?.value;
       if (from !== inc.hidden.value)
         summary.hiddenChanges.push({ placeKey, from, to: inc.hidden.value });
+    }
+    if (inc.category && incomingWins(loc?.category, inc.category)) {
+      const from = loc?.category?.value;
+      if ((from ?? null) !== inc.category.value)
+        summary.categoryChanges.push({ placeKey, from, to: inc.category.value });
     }
   }
   for (const plan of plans) {
