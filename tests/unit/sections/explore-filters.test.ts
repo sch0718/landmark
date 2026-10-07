@@ -109,11 +109,28 @@ describe('filterPlaces', () => {
 
 describe('categoryCounts', () => {
   it('많은 순, 동률은 이름순, null은 미분류', () => {
-    expect(categoryCounts(trip())).toEqual([
+    expect(categoryCounts(trip(), null)).toEqual([
       { category: '음식점', count: 2 },
       { category: '카페', count: 2 },
       { category: '미분류', count: 1 },
     ]);
+  });
+
+  it('바꾼 분류로 집계하고 분류 필터도 바꾼 값으로 거른다', () => {
+    const t = trip();
+    const e = edit({
+      'n:1': { memos: {}, category: { value: '숙소', updatedAt: NOW } },
+      'n:4': { memos: {}, category: { value: '숙소', updatedAt: NOW } },
+      'n:5': { memos: {}, category: { value: null, updatedAt: NOW } },
+    });
+    expect(categoryCounts(t, e)).toEqual([
+      { category: '숙소', count: 2 },
+      { category: '카페', count: 2 },
+      { category: '음식점', count: 1 },
+    ]);
+    expect(run(t, e, { categories: ['숙소'] })).toEqual(['n:1', 'n:4']);
+    expect(run(t, e, { categories: ['음식점'] })).toEqual(['n:3']);
+    expect(run(t, e, { categories: ['미분류'] })).toEqual([]);
   });
 });
 

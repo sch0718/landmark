@@ -93,6 +93,52 @@ describe('ExploreFilters 태그 칩', () => {
   });
 });
 
+describe('PlaceCard 분류', () => {
+  it('분류를 바꾸면 편집 레이어에 category가 기록되고 카드에 바뀐 분류와 원본이 보인다', async () => {
+    const trip = makeTrip({ days: { [D1]: ['A'] }, places: ['B'] });
+    trip.places['n:2']!.category = null;
+    const { storage, store, ts } = setupCard(trip, makeEdit(), 'n:2');
+    expect(screen.getByTestId('place-category')).toHaveTextContent('미분류');
+    await userEvent.click(screen.getByRole('button', { name: '분류 변경' }));
+    const input = screen.getByRole('combobox', { name: '분류' });
+    expect(input).toHaveAttribute('maxLength', '30');
+    await userEvent.type(input, '  공항 ');
+    await userEvent.click(screen.getByRole('button', { name: '저장' }));
+    await waitFor(() =>
+      expect(saved(storage).places['n:2']!.category).toEqual({ value: '공항', updatedAt: NOW }),
+    );
+    expect(store.get(ts.effectivePlacesAtom)!['n:2']!.category).toBe('공항');
+    expect(screen.getByTestId('place-category')).toHaveTextContent('공항');
+    expect(screen.getByText('원본: 미분류')).toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: '분류' })).toBeNull();
+  });
+
+  it('공백만 입력하면 저장할 수 없다', async () => {
+    setupCard(makeTrip({ days: { [D1]: ['A'] } }), makeEdit());
+    await userEvent.click(screen.getByRole('button', { name: '분류 변경' }));
+    const input = screen.getByRole('combobox', { name: '분류' });
+    await userEvent.clear(input);
+    await userEvent.type(input, '   ');
+    expect(screen.getByRole('button', { name: '저장' })).toBeDisabled();
+  });
+
+  it('[원본으로]를 누르면 value: null이 기록되고 원본 분류가 보인다', async () => {
+    const edit = makeEdit({
+      places: { 'n:1': { memos: {}, category: { value: '숙소', updatedAt: OLD } } },
+    });
+    const { storage } = setupCard(makeTrip({ days: { [D1]: ['A'] } }), edit);
+    expect(screen.getByTestId('place-category')).toHaveTextContent('숙소');
+    expect(screen.getByText('원본: 음식점')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: '원본으로' }));
+    await waitFor(() =>
+      expect(saved(storage).places['n:1']!.category).toEqual({ value: null, updatedAt: NOW }),
+    );
+    expect(screen.getByTestId('place-category')).toHaveTextContent('음식점');
+    expect(screen.queryByText(/원본:/)).toBeNull();
+    expect(screen.queryByRole('button', { name: '원본으로' })).toBeNull();
+  });
+});
+
 describe('PlaceCard 메모', () => {
   const trip = () => makeTrip({ days: { [D1]: ['A'] } });
 

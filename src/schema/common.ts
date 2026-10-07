@@ -11,6 +11,7 @@ export const LIMITS = {
   memoChars: 2000,
   tagsPerPlace: 20,
   tagChars: 30,
+  categoryChars: 30,
   stopsPerDay: 50,
   authors: 50,
   exportLinkWarnChars: 8000,

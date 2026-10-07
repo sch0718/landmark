@@ -23,6 +23,10 @@ const memoOf = (text: string | null, key = 'a-local') => ({
   memos: { [key]: { text, updatedAt: NOW } },
 });
 const tagsOf = (value: string[]) => ({ memos: {}, tags: { value, updatedAt: NOW } });
+const categoryOf = (value: string | null) => ({
+  memos: {},
+  category: { value, updatedAt: NOW },
+});
 const tagList = (n: number) => Array.from({ length: n }, (_, i) => `t${i}`);
 
 const cases: { name: string; mutate: (e: EditLayer) => void; ok: boolean }[] = [
@@ -143,6 +147,55 @@ const cases: { name: string; mutate: (e: EditLayer) => void; ok: boolean }[] = [
     name: '실제 날짜가 아닌 days 키 거부',
     mutate: (e) => {
       e.days['2026-02-30'] = { mode: 'reset', updatedAt: NOW };
+    },
+    ok: false,
+  },
+  {
+    name: '분류 생략 통과',
+    mutate: (e) => {
+      e.places['n:1'] = { memos: {} };
+    },
+    ok: true,
+  },
+  {
+    name: '분류 덮어쓰기 통과',
+    mutate: (e) => {
+      e.places['n:1'] = categoryOf('숙소');
+    },
+    ok: true,
+  },
+  {
+    name: '분류 원본으로 되돌림(value null) 통과',
+    mutate: (e) => {
+      e.places['n:1'] = categoryOf(null);
+    },
+    ok: true,
+  },
+  {
+    name: '분류 30자 통과',
+    mutate: (e) => {
+      e.places['n:1'] = categoryOf('a'.repeat(30));
+    },
+    ok: true,
+  },
+  {
+    name: '분류 빈 문자열 거부',
+    mutate: (e) => {
+      e.places['n:1'] = categoryOf('');
+    },
+    ok: false,
+  },
+  {
+    name: '분류 공백만 거부',
+    mutate: (e) => {
+      e.places['n:1'] = categoryOf('   ');
+    },
+    ok: false,
+  },
+  {
+    name: '분류 31자 거부',
+    mutate: (e) => {
+      e.places['n:1'] = categoryOf('a'.repeat(31));
     },
     ok: false,
   },

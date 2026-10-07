@@ -292,6 +292,22 @@ describe('미리보기 내용', () => {
     expect(within(dialog).getByText('표시되지 않을 날짜: 2026-12-25')).toBeInTheDocument();
   });
 
+  it('분류 변경을 from → to로 보여 주고, 되돌림·편집 없음은 원본으로 표시한다', async () => {
+    const local = makeEdit({
+      places: { 'n:1': { memos: {}, category: { value: '숙소', updatedAt: OLD } } },
+    });
+    const incoming = incomingEdit({
+      places: {
+        'n:1': { memos: {}, category: { value: null, updatedAt: LATER } },
+        'n:2': { memos: {}, category: { value: '공항', updatedAt: LATER } },
+      },
+    });
+    renderPage({ storage: storageWith(local), hash: await linkHash(incoming) });
+    const dialog = await importDialog();
+    expect(await within(dialog).findByText('A: 분류: 숙소 → 원본')).toBeInTheDocument();
+    expect(within(dialog).getByText('B: 분류: 원본 → 공항')).toBeInTheDocument();
+  });
+
   it('원본이 바뀐 날을 보여 준다', async () => {
     const incoming = incomingEdit({
       days: {

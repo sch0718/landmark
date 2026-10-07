@@ -4,6 +4,7 @@ import Chip from '@mui/material/Chip';
 import ListItemButton from '@mui/material/ListItemButton';
 import Typography from '@mui/material/Typography';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
+import { effectiveCategory } from 'src/domain/place-category';
 import { mapFocusAtom } from 'src/sections/explore/store/explore-state';
 import { useTripStore } from 'src/stores/trip-store';
 import { detailAtom, selectedPlaceScrollRequestAtom } from 'src/sections/views/store/view-session';
@@ -78,7 +79,7 @@ export function PlaceList({ keys }: { keys: string[] }) {
                   color="text.secondary"
                   sx={{ display: 'block' }}
                 >
-                  {place.category ?? '미분류'}
+                  {effectiveCategory(place, edit?.places[key]) ?? '미분류'}
                   {hidden ? ' · 숨김' : ''}
                   {summary ? ` · 💬 ${summary.memoCount}` : ''}
                 </Typography>

@@ -33,6 +33,16 @@ describe('place summary', () => {
       hidden: true,
     });
   });
+  it('편집 레이어의 분류로 분류와 이모지를 정한다', () => {
+    const trip = makeTrip({ days: {}, places: ['A'] });
+    const edit = makeEdit({
+      places: { 'n:1': { memos: {}, category: { value: '호텔', updatedAt: NOW } } },
+    });
+    expect(summarizePlace(trip, edit, overlay(trip, edit), 'n:1')).toMatchObject({
+      category: '호텔',
+      emoji: '🏨',
+    });
+  });
   it('실효 일정과 작성자 정렬을 사용하고 빈 메모는 미리보기에서 제외한다', () => {
     const trip = makeTrip({ days: { '2026-11-14': ['A'] } });
     const edit = makeEdit({
