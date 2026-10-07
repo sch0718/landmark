@@ -158,6 +158,30 @@ describe('PlaceCard 분류', () => {
     expect(screen.queryByRole('combobox', { name: '분류' })).toBeNull();
   });
 
+  it('이전 장소의 저장이 늦게 끝나도 현재 장소의 분류 폼을 닫지 않는다', async () => {
+    const held = createHeldLocks();
+    held.hold();
+    const trip = makeTrip({ days: { [D1]: ['A'] }, places: ['B'] });
+    const { rerender, ts, store, storage } = setupCard(trip, makeEdit(), 'n:1', held.locks);
+    await userEvent.click(screen.getByRole('button', { name: '분류 변경' }));
+    await userEvent.clear(screen.getByRole('combobox', { name: '분류' }));
+    await userEvent.type(screen.getByRole('combobox', { name: '분류' }), '공항');
+    await userEvent.click(screen.getByRole('button', { name: '저장' }));
+    await waitFor(() => expect(held.requested).toHaveLength(1));
+    rerender(
+      <TripStoreContext value={ts}>
+        <Provider store={store}>
+          <CardDetailsHarness placeKey="n:2" />
+        </Provider>
+      </TripStoreContext>,
+    );
+    await userEvent.clear(screen.getByRole('combobox', { name: '분류' }));
+    await userEvent.type(screen.getByRole('combobox', { name: '분류' }), '카페');
+    await act(async () => held.release());
+    await waitFor(() => expect(saved(storage).places['n:1']!.category?.value).toBe('공항'));
+    expect(screen.getByRole('combobox', { name: '분류' })).toHaveValue('카페');
+  });
+
   it('공백만 입력하면 저장할 수 없다', async () => {
     setupCard(makeTrip({ days: { [D1]: ['A'] } }), makeEdit());
     await userEvent.click(screen.getByRole('button', { name: '분류 변경' }));

@@ -7,7 +7,7 @@ import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useAtom, useAtomValue, useSetAtom, useStore } from 'jotai';
-import { useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { toast } from 'sonner';
 import { effectiveCategory } from 'src/domain/place-category';
 import { naverPlaceUrl } from 'src/models/place';
@@ -214,6 +214,14 @@ function CategoryForm(props: {
 }) {
   const [value, setValue] = useState(props.initial);
   const [saving, setSaving] = useState(false);
+  // 장소가 바뀌어 이 폼이 사라진 뒤 끝난 저장이 현재 장소의 폼을 닫지 않게 한다.
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const trimmed = value.trim();
   const valid = trimmed.length > 0 && trimmed.length <= LIMITS.categoryChars;
   const submit = async (e: FormEvent) => {
@@ -221,7 +229,7 @@ function CategoryForm(props: {
     if (!valid || saving) return;
     setSaving(true);
     try {
-      if ((await props.onSave(trimmed)) === 'saved') props.onClose();
+      if ((await props.onSave(trimmed)) === 'saved' && mounted.current) props.onClose();
     } finally {
       setSaving(false);
     }
