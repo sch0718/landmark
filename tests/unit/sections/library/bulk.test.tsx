@@ -175,4 +175,49 @@ describe('library bulk edit', () => {
     expect(toastMock.error.mock.calls[0]![0]).toContain('저장하지 못했어요');
     expect(store.get(libraryAtom).places.place00001!.deletedAt).not.toBeNull();
   });
+  it('selection is dropped when the overview collapses the list, so bulk delete cannot hit hidden places', async () => {
+    const user = userEvent.setup();
+    const { store } = await renderLibrary(sampleLibrary()); // 기본 보기는 벤토
+    const overviewBlock = () =>
+      within(screen.getByRole('group', { name: '라벨 개요' })).getByRole('button', {
+        name: /맛집/,
+      });
+
+    await user.click(overviewBlock());
+    await shiftClick(user, /중앙시장 닭강정/);
+    expect(within(toolbar()).getByText('1곳 선택')).toBeInTheDocument();
+
+    // 같은 블록을 다시 누르면 필터가 풀리고 벤토는 목록을 접는다. 보이지 않는 선택도 함께 사라져야 한다.
+    await user.click(overviewBlock());
+    expect(screen.queryByRole('list', { name: '장소 목록' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('toolbar', { name: '일괄 편집' })).not.toBeInTheDocument();
+    expect(Object.values(store.get(libraryAtom).places).every((p) => p.deletedAt === null)).toBe(
+      true,
+    );
+  });
+
+  it('undo restores only the places this delete removed, not ones another tab had deleted', async () => {
+    const user = userEvent.setup();
+    const { store, storage } = await renderLibrary(sampleLibrary(), { prefs: LIST });
+    await shiftClick(user, /창가 자리/, /강남 한 곳/);
+
+    // 화면은 모르는 사이 다른 탭이 '강남 한 곳'(place00004)을 먼저 지웠다.
+    const stored = JSON.parse(storage.getItem(LIBRARY_KEY)!) as Library;
+    stored.places.place00004!.deletedAt = '2026-10-08T02:00:00.000Z';
+    storage.setItem(LIBRARY_KEY, JSON.stringify(stored));
+
+    await user.click(within(toolbar()).getByRole('button', { name: '삭제' }));
+    await waitFor(() => expect(store.get(libraryAtom).places.place00005!.deletedAt).not.toBeNull());
+    const [message, options] = toastMock.mock.calls[0] as [
+      string,
+      { action: { onClick: () => void } },
+    ];
+    expect(message).toBe('1곳을 지웠어요');
+
+    await act(async () => {
+      options.action.onClick();
+    });
+    await waitFor(() => expect(store.get(libraryAtom).places.place00005!.deletedAt).toBeNull());
+    expect(store.get(libraryAtom).places.place00004!.deletedAt).toBe('2026-10-08T02:00:00.000Z');
+  });
 });

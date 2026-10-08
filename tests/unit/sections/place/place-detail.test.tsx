@@ -177,6 +177,20 @@ describe('PlaceDetail', () => {
     expect(toastMock.error).not.toHaveBeenCalled();
   });
 
+  it('undo after delete does not revive a place another tab had already deleted', async () => {
+    const user = userEvent.setup();
+    const { store, storage, router } = await open(P1);
+    const stored = JSON.parse(storage.getItem(LIBRARY_KEY)!) as Library;
+    stored.places[P1]!.deletedAt = '2026-10-08T02:00:00.000Z';
+    storage.setItem(LIBRARY_KEY, JSON.stringify(stored));
+
+    await user.click(within(detail()).getByRole('button', { name: '삭제' }));
+    await waitFor(() => expect(store.get(libraryAtom).places[P1]!.deletedAt).not.toBeNull());
+    await waitFor(() => expect(router.state.location.pathname).toBe('/'));
+    expect(store.get(libraryAtom).places[P1]!.deletedAt).toBe('2026-10-08T02:00:00.000Z');
+    expect(toastMock).not.toHaveBeenCalled();
+  });
+
   it('unknown or deleted id shows not-found', async () => {
     const user = userEvent.setup();
     const { router } = await open('zzz');

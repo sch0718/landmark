@@ -92,15 +92,21 @@ function PlaceBody({ place }: { place: Place }) {
   const saveMemo = (text: string) => run((lib, ctx) => setPlaceMemo(lib, id, text, ctx));
 
   const remove = async () => {
-    const result = await run((lib, ctx) => deletePlaces(lib, [id], ctx));
+    // 이미 다른 탭이 지운 장소라면 되돌리기를 내놓지 않는다(저장된 최신본으로 판단한다).
+    let deleted: string[] = [];
+    const result = await run((lib, ctx) => {
+      deleted = [id].filter((placeId) => lib.places[placeId]?.deletedAt === null);
+      return deletePlaces(lib, [id], ctx);
+    });
     if (!result.ok) return;
     // 기록을 교체해서 뒤로 가기가 지운 장소를 다시 열지 않게 한다.
     void navigate(paths.library, { replace: true });
+    if (deleted.length === 0) return;
     toast('장소를 지웠어요', {
       duration: UNDO_MS,
       action: {
         label: '되돌리기',
-        onClick: () => void run((lib, ctx) => restorePlaces(lib, [id], ctx)),
+        onClick: () => void run((lib, ctx) => restorePlaces(lib, deleted, ctx)),
       },
     });
   };

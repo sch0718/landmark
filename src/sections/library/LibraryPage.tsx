@@ -60,8 +60,11 @@ export function LibraryPage() {
   const counts = useMemo(() => labelCounts(library, query), [library, query]);
   const regions = useMemo(() => regionCounts(library, query), [library, query]);
 
-  // 화면에 보이는 장소만 선택으로 센다. 필터가 바뀌어 사라진 선택은 버린다(렌더 중 상태 갱신).
-  const visible = new Set(places.map((p) => p.id));
+  const overview = view === 'bento' || view === 'tiles';
+  const showList = places.length > 0 && (!overview || hasActiveFilter(query));
+
+  // 화면에 보이는 장소만 선택으로 센다. 필터가 바뀌거나 목록이 접혀 사라진 선택은 버린다(렌더 중 상태 갱신).
+  const visible = new Set(showList ? places.map((p) => p.id) : []);
   if ([...selected].some((id) => !visible.has(id))) {
     setSelected(new Set([...selected].filter((id) => visible.has(id))));
   }
@@ -82,22 +85,27 @@ export function LibraryPage() {
     void run((lib, ctx) => removeLabels(lib, selectedIds, [labelId], ctx));
   const remove = async () => {
     const ids = selectedIds;
-    const result = await run((lib, ctx) => deletePlaces(lib, ids, ctx));
+    // 화면에서 고른 id가 아니라, 저장된 최신본에서 이번에 실제로 지워지는 장소만 되돌린다
+    // (다른 탭이 먼저 지운 장소를 되돌리기가 살려 내지 않도록).
+    let deleted: string[] = [];
+    const result = await run((lib, ctx) => {
+      deleted = ids.filter((id) => lib.places[id]?.deletedAt === null);
+      return deletePlaces(lib, ids, ctx);
+    });
     if (!result.ok) return;
     setSelected(new Set());
-    toast(`${ids.length}곳을 지웠어요`, {
+    if (deleted.length === 0) return;
+    toast(`${deleted.length}곳을 지웠어요`, {
       duration: UNDO_MS,
       action: {
         label: '되돌리기',
         // 같은 장소가 그 사이 다시 저장됐다면 검증에 막혀 실패한다. 그때도 `run`이 토스트로 알린다.
-        onClick: () => void run((lib, ctx) => restorePlaces(lib, ids, ctx)),
+        onClick: () => void run((lib, ctx) => restorePlaces(lib, deleted, ctx)),
       },
     });
   };
   const clearFilters = () => patch({ ...DEFAULT_QUERY, sort: query.sort });
 
-  const overview = view === 'bento' || view === 'tiles';
-  const showList = places.length > 0 && (!overview || hasActiveFilter(query));
   const listProps = {
     places,
     labelsById,
