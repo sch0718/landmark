@@ -48,9 +48,9 @@ docs/convention.md                        Effect·보관함 쓰기 규칙 (Task 
 src/lib/effect/runtime.ts                 AppLayer, ManagedRuntime, startEffect, forkEffect (Task 8)
 src/lib/effect/error-reporter.ts          console + 토스트 보고기 (Task 8)
 src/lib/effect/atom.ts                    effectAtom (Task 8)
-src/schema/parse.ts                       safeParse / parseOrThrow / formatIssues (Task 2)
-src/schema/common.ts                      Effect Schema로 이전 (Task 2)
-src/schema/{trip-source,trip-data,edit-layer}.ts  Effect Schema로 이전 (Task 2–3), Task 17에서 src/schema/legacy/로 이동
+src/schema/parse.ts                       safeParse / parseOrThrow (Task 2)
+src/schema/common.ts                      Effect Schema로 이전 (Task 3)
+src/schema/{trip-source,trip-data,edit-layer}.ts  Effect Schema로 이전 (Task 3), Task 17에서 src/schema/legacy/로 이동
 src/schema/library.ts                     Library v2 (Task 4)
 src/schema/prefs.ts                       UI 선호 (Task 7)
 src/domain/library/lww.ts                 필드 비교·갱신 (Task 5)
@@ -150,13 +150,12 @@ git commit -m "chore: Effect 4.0.2 도입 — 참고 소스 스크립트와 작�
 
 ---
 
-### Task 2: 스키마 이전 1 — 공통 스키마·파싱 도우미·여행 원본
+### Task 2: 파싱 도우미 (Zod 호출 모양의 Effect Schema 래퍼)
 
-근거: §6.2. Zod의 `safeParse`/`parse`/`issues` 호출부가 약 20곳이라, 같은 모양의 도우미를 두고 기계적으로 바꾼다.
+근거: §6.2. Zod의 `safeParse`/`parse`/`issues` 호출부가 약 20곳이라, 같은 모양의 도우미를 먼저 만든다. **이 태스크는 기존 스키마를 건드리지 않는다**(기존 Zod 스키마와 공존해 중간 상태에서도 타입 검사·테스트가 그대로 통과한다).
 
 **Files:**
 - Create: `src/schema/parse.ts`, `tests/unit/schema/parse.test.ts`
-- Modify: `src/schema/common.ts`, `src/schema/trip-source.ts`, `pipeline/collect.ts:69-73`, `pipeline/apply-edit.ts:327-329`, `pipeline/build-places.ts:20,93`, `src/sections/itinerary/view/StopEditPanel.tsx:78`, `tests/unit/schema/trip-source.test.ts`, 이 스키마를 `.safeParse`로 직접 부르는 다른 테스트
 
 **Interfaces:**
 - Produces (`src/schema/parse.ts`):
@@ -166,12 +165,12 @@ git commit -m "chore: Effect 4.0.2 도입 — 참고 소스 스크립트와 작�
   - `safeParse<S extends Schema.Top>(schema: S, value: unknown, opts?: ParseOpts): ParseResult<S['Type']>`
   - `parseOrThrow<S extends Schema.Top>(schema: S, value: unknown, opts?: ParseOpts): S['Type']` — 실패 시 `Error(첫 issue의 "path: message")`
   - `is<S>(schema: S, value: unknown): boolean`
-- Produces (`src/schema/common.ts`): 같은 이름 유지 — `LIMITS`, `IsoDateTime`, `CalendarDate`, `HHmm`, `Lng`, `Lat`, `PlaceKey`, `StopId`, `PublicId`, `checkPeriodAndDays`, `checkUniqueStopIds`. 관계 검증 함수는 `Schema.makeFilter`에 넣을 수 있는 형태 `(trip) => Schema.FilterIssue[]`로 바꾼다.
 
 - [ ] **Step 1: 실패하는 테스트** — `tests/unit/schema/parse.test.ts`
 
 ```ts
 const S = Schema.Struct({ a: Schema.Struct({ b: Schema.Number }) });
+const Hhmm = Schema.String.check(Schema.isPattern(/^([01]\d|2[0-3]):[0-5]\d$/, { message: 'HH:mm 형식이어야 합니다' }));
 it('returns data on success', () => expect(safeParse(S, { a: { b: 1 } })).toEqual({ success: true, data: { a: { b: 1 } } }));
 it('flattens nested issue path', () => {
   const r = safeParse(S, { a: { b: 'x' } });
@@ -179,7 +178,11 @@ it('flattens nested issue path', () => {
   expect(!r.success && r.issues[0]!.path).toBe('a.b');
 });
 it('keeps custom filter message', () => {
-  expect(safeParse(HHmm, '24:00')).toEqual({ success: false, issues: [{ path: '', message: 'HH:mm 형식이어야 합니다' }] });
+  expect(safeParse(Hhmm, '24:00')).toEqual({ success: false, issues: [{ path: '', message: 'HH:mm 형식이어야 합니다' }] });
+});
+it('rejects excess keys only with onExcessProperty error', () => {
+  expect(safeParse(S, { a: { b: 1 }, x: 1 }).success).toBe(true);
+  expect(safeParse(S, { a: { b: 1 }, x: 1 }, { onExcessProperty: 'error' }).success).toBe(false);
 });
 it('parseOrThrow throws with path', () => expect(() => parseOrThrow(S, {})).toThrow(/^a:/));
 ```
@@ -192,49 +195,54 @@ Run: `yarn test tests/unit/schema/parse.test.ts` → FAIL (`src/schema/parse` �
 
 `Schema.decodeUnknownExit(schema)(value, { errors: 'all', ...opts })` + `SchemaIssue.makeFormatterStandardSchemaV1()`로 `{ path, message }[]`를 만든다. 경로 요소는 `String()`으로 이어 붙인다.
 
-- [ ] **Step 4: `common.ts`를 Effect Schema로 이전**
+- [ ] **Step 4: 실행 — 통과 확인, 전체 회귀 없음**
 
-각 스키마의 메시지를 `annotations: { message: '<기존 문구>' }`로 그대로 옮긴다(`Schema.String.check(Schema.isPattern(re, { message }))`, `Schema.Number.check(Schema.isBetween({ minimum: 124, maximum: 132 }))` 등). `IsoDateTime`·`CalendarDate`의 함수형 검사는 `Schema.makeFilter`로. `LIMITS`는 그대로(v2 한도는 Task 4에서 별도 상수).
+Run: `yarn typecheck && yarn test`
+Expected: PASS(기존 테스트 수 그대로 + 5).
 
-- [ ] **Step 5: `trip-source.ts` 이전과 호출부 교체**
-
-`TripSourceSchema`를 `Schema.Struct(...).check(Schema.makeFilter(...))`로. `z.infer` → `typeof X.Type`. 호출부의 `X.safeParse(v)` → `safeParse(X, v)`, `parsed.error.issues` → `parsed.issues`(이미 `{path: string, message}`이므로 `i.path.join('.')` → `i.path`).
-
-- [ ] **Step 6: 기존 테스트 실행**
-
-Run: `yarn typecheck && yarn test tests/unit/schema tests/unit/pipeline`
-Expected: PASS. 문구가 다르면 스키마 쪽 문구를 기존 값으로 고친다(테스트를 고치지 않는다).
-
-- [ ] **Step 7: 커밋** — `refactor(schema): 공통·여행 원본 스키마를 Effect Schema로 이전`
+- [ ] **Step 5: 커밋** — `feat(schema): Effect Schema 파싱 도우미`
 
 ---
 
-### Task 3: 스키마 이전 2 — 여행 데이터·편집 레이어, Zod 제거
+### Task 3: 스키마 이전 — 공통·여행 원본·여행 데이터·편집 레이어, Zod 제거 (한 검증 단위)
 
-근거: §6.2.
+근거: §6.2. `trip-data.ts`·`edit-layer.ts`가 Zod 객체 안에서 `common.ts`의 `Lng`·`Lat`·`PlaceKey`·`IsoDateTime`과 `checkPeriodAndDays(ctx, trip)`를 쓰므로, 공통 모듈만 먼저 바꾸면 중간 상태가 깨진다(리뷰 #15). 그래서 **4개 스키마와 모든 호출부를 이 태스크 하나에서 옮기고, 검증은 마지막에 한 번** 한다. 중간 단계에서 테스트를 지우거나 건너뛰지 않는다.
 
 **Files:**
-- Modify: `src/schema/trip-data.ts`, `src/schema/edit-layer.ts`, `src/repositories/{trip-repo,edit-layer-repo,import-flow}.ts`, `src/domain/{merge,reconcile}.ts`, `pipeline/{apply-edit,collect,validate}.ts`, `src/sections/views/store/ui-preferences.ts`, 관련 테스트, `package.json`(zod 제거)
+- Modify: `src/schema/{common,trip-source,trip-data,edit-layer}.ts`, `src/repositories/{trip-repo,edit-layer-repo,import-flow}.ts`, `src/domain/{merge,reconcile}.ts`, `pipeline/{apply-edit,collect,validate,build-places}.ts`, `src/sections/itinerary/view/StopEditPanel.tsx:78`, `src/sections/views/store/ui-preferences.ts`, 스키마를 `.safeParse`/`.parse`로 직접 부르는 테스트, `package.json`(zod 제거)
 
 **Interfaces:**
-- Consumes: Task 2의 `safeParse`, `parseOrThrow`, `Issue`.
-- Produces: `TripDataSchema`, `EditLayerSchema`, 타입 `TripData`, `Place`(옛), `EditLayer`, `PlaceEdit`, `DayEdit` — 이름 유지. `pipeline/validate.ts`의 `Schema` 구조 타입은 `(v: unknown) => ParseResult<unknown>`을 받는 함수로 바꾼다.
+- Consumes: Task 2의 `safeParse`, `parseOrThrow`, `Issue`, `ParseOpts`.
+- Produces: 이름 유지 — `LIMITS`, `IsoDateTime`, `CalendarDate`, `HHmm`, `Lng`, `Lat`, `PlaceKey`, `StopId`, `PublicId`, `TripSourceSchema`, `TripDataSchema`, `EditLayerSchema`, 타입 `TripSource`, `TripData`, `Place`(옛), `EditLayer`, `PlaceEdit`, `DayEdit`. 관계 검증 `checkPeriodAndDays`·`checkUniqueStopIds`는 `(trip) => Schema.FilterIssue[]`로 바꾸고 `Schema.makeFilter` 안에서 부른다. 새 상수 `TRIP_DATA_PARSE: ParseOpts = { onExcessProperty: 'error' }`(`trip-data.ts`), `EDIT_LAYER_PARSE`(같은 값, `edit-layer.ts`). `pipeline/validate.ts`의 `Schema` 구조 타입은 `(v: unknown) => ParseResult<unknown>`을 받는 함수로 바꾼다.
 
-- [ ] **Step 1: 두 스키마 이전**
+- [ ] **Step 1: 이전 전 기준 기록**
 
-`z.strictObject`(Folder·Place·ResetDay) → `Schema.Struct(...)`. Effect 4.0.2는 알 수 없는 키를 기본으로 버리고(`onExcessProperty: 'ignore'`), 거부는 디코드 옵션 `onExcessProperty: 'error'`로만 된다(2026-10-08 `SchemaAST.d.ts` 확인). 그래서 각 파일에 `export const TRIP_DATA_PARSE: ParseOpts = { onExcessProperty: 'error' }`, `EDIT_LAYER_PARSE`(같은 값)를 두고, 이 스키마를 디코드하는 모든 호출부가 이 옵션을 넘긴다. 최상위 객체도 엄격해지는 차이가 생기므로 기존 fixture·테스트가 이 때문에 깨지면 fixture가 아니라 원인(새는 필드)을 보고한다. 테스트 추가: `rejects unknown key in folder and place`(기존 테스트에 있으면 그대로 통과해야 함). `discriminatedUnion('mode')` → `Schema.Union([...])`(각 멤버에 `mode: Schema.Literal(...)`). `superRefine` → `.check(Schema.makeFilter(...))`, 문구 유지.
+Run: `yarn test 2>&1 | tail -5`
+Expected: 통과 테스트 수를 기록한다(Step 6에서 비교).
 
-- [ ] **Step 2: 호출부 교체(Task 2 Step 5와 같은 규칙)와 `zod` 제거**
+- [ ] **Step 2: `common.ts` 이전**
+
+각 스키마의 메시지를 `{ message: '<기존 문구>' }`로 그대로 옮긴다(`Schema.String.check(Schema.isPattern(re, { message }))`, `Schema.Number.check(Schema.isBetween({ minimum: 124, maximum: 132 }, { message }))` 등). `IsoDateTime`·`CalendarDate`의 함수형 검사는 `Schema.makeFilter`로. `LIMITS`는 그대로(v2 한도는 Task 4에서 별도 상수).
+
+- [ ] **Step 3: `trip-source.ts`·`trip-data.ts`·`edit-layer.ts` 이전**
+
+`z.object` → `Schema.Struct`, `.optional()` → `Schema.optionalKey`, `.nullable()` → `Schema.NullOr`, `z.record` → `Schema.Record`, `z.tuple` → `Schema.Tuple`, `z.enum`/`z.literal` → `Schema.Literals`/`Schema.Literal`, `discriminatedUnion('mode')` → `Schema.Union([...])`(멤버마다 `mode: Schema.Literal(...)`), `superRefine` → `.check(Schema.makeFilter(...))`(문구 유지), `z.infer` → `typeof X.Type`. `z.strictObject`(Folder·Place·ResetDay)는 `Schema.Struct`로 두고, Effect 4.0.2는 알 수 없는 키를 기본으로 버리며 거부는 디코드 옵션 `onExcessProperty: 'error'`로만 되므로(2026-10-08 `SchemaAST.d.ts` 확인) 이 스키마를 디코드하는 모든 호출부가 `TRIP_DATA_PARSE`·`EDIT_LAYER_PARSE`를 넘긴다. 최상위 객체도 엄격해지는 차이로 기존 fixture·테스트가 깨지면 fixture를 고치지 말고 원인(새는 필드)을 보고한다.
+
+- [ ] **Step 4: 호출부 교체**
+
+`X.safeParse(v)` → `safeParse(X, v[, OPTS])`, `X.parse(v)` → `parseOrThrow(X, v[, OPTS])`, `parsed.error.issues` → `parsed.issues`(`i.path.join('.')` → `i.path`). 테스트 추가(없으면): `tests/unit/schema/trip-data.test.ts`의 `rejects unknown key in folder and place`.
+
+- [ ] **Step 5: Zod 제거**
 
 Run: `yarn remove zod && git grep -n "zod" -- src pipeline tests`
 Expected: 출력 없음.
 
-- [ ] **Step 3: 전체 검증**
+- [ ] **Step 6: 전체 검증**
 
 Run: `yarn lint && yarn typecheck && yarn test && yarn validate`
-Expected: 모두 PASS. 기존 단위 테스트 수가 줄지 않았다(이 태스크 전후 `yarn test` 요약의 테스트 수 비교).
+Expected: 모두 PASS. 통과 테스트 수가 Step 1 기록 이상(새 테스트만큼 증가). 문구가 다르면 스키마 쪽 문구를 기존 값으로 고친다(테스트를 고치지 않는다).
 
-- [ ] **Step 4: 커밋** — `refactor(schema): 여행 데이터·편집 레이어를 Effect Schema로 이전하고 Zod 제거`
+- [ ] **Step 7: 커밋** — `refactor(schema): 옛 스키마 4종을 Effect Schema로 이전하고 Zod 제거`
 
 ---
 
@@ -466,7 +474,7 @@ Expected: 모두 PASS. 기존 단위 테스트 수가 줄지 않았다(이 태�
   - `applyImportPlan(lib: Library, plan: ImportPlan): Library` — `pending`이 남아 있으면 throw(호출 측 버그)
   - `combineMemos(src, placeKey): string`, `truncateMemo(text: string, limit = 10_000): string`
   - 상수 `TRUNCATION_MARK = '…(원문 일부 생략)'`
-- `legacy-trip-source.ts`: `LegacyTripSource` 서비스 `{ fromFile(file: File): Effect<LegacySource, LegacyImportInvalid>; fromPublicId(id: string): Effect<LegacySource, LegacyImportInvalid> }` — `fetch('/data/<id>.json')` + `safeParse(TripDataSchema)`, 같은 브라우저의 `tripmap:edit:<id>`를 `readEditLayer`로 읽음(없거나 무효면 `edit: null`).
+- `legacy-trip-source.ts`: `LegacyTripSource` 서비스 `{ fromFile(file: File): Effect<LegacySource, LegacyImportInvalid>; fromPublicId(id: string): Effect<LegacySource, LegacyImportInvalid> }` — `fetch('/data/<id>.json')` + `safeParse(TripDataSchema)`, 같은 브라우저의 `tripmap:edit:<id>`를 **부작용 없는 전용 경로**로 읽는다: `getItem` → `JSON.parse` → `migrateEditLayer`(`src/repositories/edit-layer-repo.ts`에서 export됨, 순수 함수) → `safeParse(EditLayerSchema, _, EDIT_LAYER_PARSE)`. 키가 없거나, 파싱·검증 실패이거나, `schemaVersion > 1`이면 `edit: null`이고 **원문은 그대로 둔다**. 기존 `readEditLayer`는 무효 원문을 백업하고 원래 키를 지우므로 쓰지 않는다(리뷰 #15, 스펙 §3 "옛 키는 읽기만").
 
 **적용 흐름(화면 Task 16이 사용):** 미리보기 = `planLegacyImport(현재 lib, src, choices, null)` → 사용자가 `pending`을 모두 정함 → 적용 = `update(latest => { const p = planLegacyImport(latest, src, choices, preview.ids); if (semanticKey(p) !== semanticKey(preview)) fail(LegacyImportStale); return applyImportPlan(latest, p) })`.
 
@@ -481,7 +489,7 @@ Expected: 모두 PASS. 기존 단위 테스트 수가 줄지 않았다(이 태�
 - `label name empty-after-trim or >30 creates pending decision and blocks apply` — `applyImportPlan` throw.
 - `label exclude keeps place without that label`
 - `memo over 10000 creates pending; truncate yields length <= 10000 ending with TRUNCATION_MARK` — 입력 `'가'.repeat(10_001)` → 길이 정확히 `10_000`.
-- `truncate does not split surrogate pair` — 자르는 위치(`10_000 - 11 - 1`, `- 0`)에 `'😀'`를 둔 입력 → 결과에 고립 서로게이트가 없다(`/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/` 불일치), 길이 `9_999`.
+- `truncate does not split surrogate pair` — 본문 절단점은 `10_000 - 11 = 9_989`. 두 입력(각 10,001자 이상): (a) `'😀'`가 인덱스 `9_988`에서 시작(쌍이 절단점에 걸침) → 한 단위 앞에서 잘라 최종 길이 **`9_999`**, (b) `'😀'`가 인덱스 `9_989`에서 시작(쌍 전체가 절단점 뒤) → 보정 없음, 최종 길이 **`10_000`**. 두 경우 모두 결과에 고립 서로게이트가 없다(`/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/` 불일치).
 - `memo exclude-place excludes the place`
 - `semanticKey equal for unchanged library with reused ids` — 같은 lib·src·choices·ids로 두 번 계획 → 같은 key, `applyImportPlan` 성공.
 - `semanticKey differs when another tab added a label with same name` — 미리보기 후 lib에 같은 이름 라벨 생성 → 재계획 key 다름.
@@ -490,7 +498,7 @@ Expected: 모두 PASS. 기존 단위 테스트 수가 줄지 않았다(이 태�
 
 - [ ] **Step 2–4: 실패 확인 → 구현 → 통과 확인**
 
-- [ ] **Step 5: `LegacyTripSource` 테스트·구현** — `rejects invalid json with LegacyImportInvalid`, `reads edit layer of same publicId when present`(jsdom localStorage), `fetch 404 → LegacyImportInvalid('여행 데이터를 찾지 못했어요')`.
+- [ ] **Step 5: `LegacyTripSource` 테스트·구현** — `rejects invalid json with LegacyImportInvalid`, `reads edit layer of same publicId when present`(jsdom localStorage), `corrupt or future-version edit layer yields edit null and leaves storage untouched` — 손상 JSON과 `schemaVersion: 2` 두 경우, `setItem`·`removeItem` spy 호출 0회, 원래 키 원문 그대로, `fetch 404 → LegacyImportInvalid('여행 데이터를 찾지 못했어요')`.
 
 - [ ] **Step 6: 커밋** — `feat(import): 옛 여행 가져오기 계획·적용(길이 초과 결정, 재계산 비교)`
 
@@ -700,24 +708,32 @@ Expected: 모두 PASS. 기존 단위 테스트 수가 줄지 않았다(이 태�
 근거: §9, §8(번들 전후 수치).
 
 **Files:**
-- Delete: `src/pages/TripPage.tsx`, `src/pages/HomePage.tsx`, `src/layouts/*`, `src/sections/explore/**`, `src/sections/views/**`, `src/stores/{trip-store,ui-store}.ts`, `src/components/{NicknameDialog,ReconcileBanner}.tsx`(사용처가 사라진 것만), `src/theme/{theme,view-tokens}.ts`, 해당 단위 테스트, `tests/e2e/{views,itinerary,concurrent,share}.spec.ts`
+- Delete: `src/pages/TripPage.tsx`, `src/pages/HomePage.tsx`, `src/layouts/*`, `src/sections/explore/**`(아래 유지 예외 제외), `src/sections/views/**`(아래 유지 예외 제외), `src/components/{NicknameDialog,ReconcileBanner}.tsx`, `src/theme/{theme,view-tokens}.ts`, 삭제한 모듈의 단위 테스트, `tests/e2e/{views,itinerary,concurrent,share}.spec.ts`
 - Keep(§9): `src/sections/itinerary/**`, `src/sections/share/**`, `src/domain/{leg-index,day-totals,day-hash,merge,reconcile,revert,overlay,codec,place-category}.ts`, `pipeline/**`, `src/components/map/**`
+- **Keep — 유지 코드의 의존 모듈(리뷰 #15)**: 위 유지 집합에서 import를 따라가면 삭제 후보 중 다음 4개에 닿는다(2026-10-08 `feat/place-library`에서 계산). 이 4개와 그 의존성은 지우지 않는다: `src/stores/trip-store.ts`, `src/stores/ui-store.ts`, `src/sections/views/store/view-session.ts`, `src/sections/explore/store/add-stop.ts`. (각각 `itinerary-state`·`DayTabs`·`ItineraryPanel`·`StopEditPanel`·`Timeline`·`ExportDialog`·`ImportDialog`가 참조.)
 - Move: `src/schema/{trip-source,trip-data,edit-layer}.ts` → `src/schema/legacy/`(import 경로 일괄 수정)
 - Modify: `package.json`(`@iconify-json/mdi` 제거 — 남은 `~icons/mdi` 사용처를 Lucide로 바꾼 뒤), `README.md`
 
-- [ ] **Step 1: 삭제·이동 후 미사용 확인**
+**계약:** 유지 코드는 라우트에 연결되지 않지만 `tsconfig.app.json`이 `src` 전체를 포함하므로 **컴파일·린트·단위 테스트를 계속 통과해야 한다.** 삭제 후보마다 실제 참조를 확인하고, 유지 집합에서 닿는 모듈은 남긴다. 테스트를 지워서 통과시키지 않는다(삭제한 모듈 자신의 테스트만 지운다).
+
+- [ ] **Step 1: 삭제 전 참조 재확인**
+
+Run: 삭제 후보 각각에 `git grep -l "<모듈 경로(확장자 없이)>" -- src tests pipeline`
+Expected: 결과가 삭제 후보 자신과 그 테스트뿐이면 삭제, 유지 코드에서 나오면 유지 목록에 추가하고 보고한다.
+
+- [ ] **Step 2: 삭제·이동 후 검증**
 
 Run: `yarn lint && yarn typecheck && yarn test && git grep -n "~icons/mdi\|from 'zod'" -- src tests pipeline`
-Expected: PASS, grep 출력 없음. 유지 대상(itinerary·share)이 라우트에 없어서 깨진 테스트는 고치지 말고 테스트 쪽 렌더 경로만 맞춘다(동작 변경 없음).
+Expected: PASS, grep 출력 없음. 유지 코드의 테스트가 실패하면 원인이 된 삭제를 되돌린다(테스트·유지 코드를 고치지 않는다).
 
-- [ ] **Step 2: 번들 비교**
+- [ ] **Step 3: 번들 비교**
 
 Run: `VITE_MAP_ADAPTER=fake yarn build && node scripts/measure-ui-assets.mjs dist/assets > .cache/bundle-after.json`
 `docs/ui-performance.md` 끝에 `## 2026-10-08 v2 하위 프로젝트 1` 절을 추가하고 before/after 합계 gzip 바이트와 차이, 측정 명령을 적는다(수치는 실제 출력 그대로).
 
-- [ ] **Step 3: README 갱신** — 첫 문단을 v2 컨셉(§1.2)으로, 개발 명령에 `yarn effect:source`, 화면 경로 표(`/`, `/map`, `/place/:id`, `/labels`, `/settings`, `/trips`, `/t/:publicId` = 옛 여행 가져오기), "여행 추가" 절은 "옛 파이프라인(하위 프로젝트 2·3에서 대체 예정)"으로 표시. E2E 프로젝트 목록은 Task 18 후 갱신.
+- [ ] **Step 4: README 갱신** — 첫 문단을 v2 컨셉(§1.2)으로, 개발 명령에 `yarn effect:source`, 화면 경로 표(`/`, `/map`, `/place/:id`, `/labels`, `/settings`, `/trips`, `/t/:publicId` = 옛 여행 가져오기), "여행 추가" 절은 "옛 파이프라인(하위 프로젝트 2·3에서 대체 예정)"으로 표시. E2E 프로젝트 목록은 Task 18 후 갱신.
 
-- [ ] **Step 4: 커밋** — `refactor: 옛 탐색·뷰 화면 정리, 옛 스키마를 legacy로 이동, MDI 제거`
+- [ ] **Step 5: 커밋** — `refactor: 옛 탐색·뷰 화면 정리, 옛 스키마를 legacy로 이동, MDI 제거`
 
 ---
 
