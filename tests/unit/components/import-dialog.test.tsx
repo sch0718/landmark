@@ -3,12 +3,12 @@ import userEvent from '@testing-library/user-event';
 import { createStore } from 'jotai';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { legacyTripRoutes } from '../../fixtures/legacy-trip-routes';
 import { AppProviders } from 'src/app';
 import { installMapResources } from './helpers/map-resources';
 import { hashDayStops } from 'src/domain/day-hash';
 import { encodeEditLayer } from 'src/domain/codec';
 import { createMemoryStorage, storageKey } from 'src/repositories/edit-layer-repo';
-import { routes } from 'src/routes/router';
 import type { EditLayer } from 'src/schema/edit-layer';
 import type { TripData } from 'src/schema/trip-data';
 import { TripDepsContext } from 'src/stores/trip-store';
@@ -75,7 +75,7 @@ function renderPage(
   // react-router(BrowserRouter)가 history.state에 두는 값을 흉내 낸다. 해시를 지워도 남아야 한다.
   if (opts.hash !== undefined)
     window.history.replaceState(ROUTER_STATE, '', `/t/${PID}${opts.hash}`);
-  const router = createMemoryRouter(routes, { initialEntries: [`/t/${PID}`] });
+  const router = createMemoryRouter(legacyTripRoutes, { initialEntries: [`/t/${PID}`] });
   render(
     <TripDepsContext
       value={{

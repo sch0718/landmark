@@ -2,6 +2,7 @@ import { cleanup, act, fireEvent, render, screen, waitFor, within } from '@testi
 import userEvent from '@testing-library/user-event';
 import { createStore, Provider, useSetAtom } from 'jotai';
 import type { ReactNode } from 'react';
+import { legacyTripRoutes } from '../../fixtures/legacy-trip-routes';
 import { useItineraryDays } from 'src/sections/itinerary/store/itinerary-state';
 import { DetailSurface } from 'src/sections/views/view/DetailSurface';
 import { Timeline } from 'src/sections/itinerary/view/Timeline';
@@ -22,7 +23,6 @@ import { dayColor } from 'src/components/map/map-colors';
 import { hashDayStops } from 'src/domain/day-hash';
 import { overlay } from 'src/domain/overlay';
 import { createMemoryStorage, storageKey } from 'src/repositories/edit-layer-repo';
-import { routes } from 'src/routes/router';
 import type { EditLayer } from 'src/schema/edit-layer';
 import type { TripData } from 'src/schema/trip-data';
 import { moveStop, reorderStops } from 'src/sections/itinerary/store/itinerary-actions';
@@ -53,7 +53,7 @@ function renderPage(trip: TripData, edit?: EditLayer, search = '?mode=itinerary&
         new Response(JSON.stringify(trip), { headers: { 'Content-Type': 'application/json' } }),
     );
   const store = createStore();
-  const router = createMemoryRouter(routes, { initialEntries: [`/t/${PID}${search}`] });
+  const router = createMemoryRouter(legacyTripRoutes, { initialEntries: [`/t/${PID}${search}`] });
   render(
     <TripDepsContext
       value={{ storage, fetchFn, now: () => NOW_MS, nowIso: () => NOW, jotaiStore: store }}

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   applyImportPlan,
   combineMemos,
+  legacyLabelSources,
   planLegacyImport,
   semanticKey,
   truncateMemo,
@@ -228,6 +229,19 @@ describe('planLegacyImport / applyImportPlan', () => {
     const byName = (n: string) => livePlaceList(result).find((x) => x.name.value === n)!;
     expect(byName('A').category.value).toBe('카페');
     expect(byName('B').category.value).toBe('음식점');
+  });
+
+  describe('legacyLabelSources', () => {
+    it('lists folder and tag sources once each, in first-seen order', () => {
+      const trip = makeTrip({ days: {}, places: ['A', 'B'] });
+      const edit = makeEdit({
+        places: { 'n:2': { memos: {}, tags: { value: [' 태그 '], updatedAt: T0 } } },
+      });
+      expect(legacyLabelSources(src(trip, edit))).toEqual([
+        { key: 'folder:f1', rawName: '테스트 폴더' },
+        { key: 'tag: 태그 ', rawName: ' 태그 ' },
+      ]);
+    });
   });
 
   describe('combineMemos', () => {

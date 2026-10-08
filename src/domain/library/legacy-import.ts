@@ -132,7 +132,7 @@ export function combineMemos(source: LegacySource, placeKey: string): string {
 
 // ---------- 계획 ----------
 
-type LabelSource = { key: string; rawName: string };
+export type LabelSource = { key: string; rawName: string };
 
 type ResolvedLabel =
   { kind: 'ok'; normalized: string; display: string } | { kind: 'excluded' } | { kind: 'pending' };
@@ -175,6 +175,17 @@ function labelSourcesOf(source: LegacySource, placeKey: string): LabelSource[] {
     out.push({ key: `tag:${tag}`, rawName: tag });
   }
   return out;
+}
+
+/** 옛 여행 전체가 쓰는 라벨 출처(폴더·태그), 처음 나온 순서·키 중복 없이. 화면이 이름 겹침을 검사하는 데 쓴다. */
+export function legacyLabelSources(source: LegacySource): LabelSource[] {
+  const byKey = new Map<string, LabelSource>();
+  for (const placeKey of Object.keys(source.trip.places)) {
+    for (const labelSource of labelSourcesOf(source, placeKey)) {
+      if (!byKey.has(labelSource.key)) byKey.set(labelSource.key, labelSource);
+    }
+  }
+  return [...byKey.values()];
 }
 
 export function planLegacyImport(

@@ -113,7 +113,7 @@ export function LibraryPage() {
       <EmptyState
         title="아직 저장한 장소가 없어요"
         actionLabel="옛 여행 가져오기"
-        onAction={() => void navigate(paths.settings)}
+        onAction={() => void navigate(paths.settingsImport)}
       />
     );
   }

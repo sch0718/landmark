@@ -120,6 +120,24 @@ const settle = (op: LibraryOp): Effect.Effect<Applied, never, LibraryStore | IdG
   );
 
 /**
+ * 저장소에서 읽은(또는 막 저장한) 문서 `saved`를 `libraryAtom`에 반영한다. `before`는 실행을 시작할 때의
+ * atom 값이다. 실행하는 사이 atom이 바뀌었다면(다른 탭 변경·다른 실행) 어느 쪽이 최신인지 `saved`만으로는
+ * 알 수 없다. 저장소가 기준이므로 다시 읽어 반영한다(읽지 못하면 `saved`를 쓴다).
+ */
+export async function reflectSaved(
+  jotaiStore: ReturnType<typeof useStore>,
+  before: Library,
+  saved: Library,
+): Promise<void> {
+  if (jotaiStore.get(libraryAtom) === before) {
+    jotaiStore.set(libraryAtom, saved);
+    return;
+  }
+  const latest = await startEffect(Effect.option(readLatest));
+  jotaiStore.set(libraryAtom, latest._tag === 'Some' ? latest.value : saved);
+}
+
+/**
  * 보관함 변경 함수를 실행한다. `LibraryStore.update` 안에서 최신본에 적용하므로 오래된 탭이
  * 다른 탭의 변경을 덮어쓰지 않는다. 성공한 뒤에만 `libraryAtom`을 바꾼다.
  */
@@ -132,14 +150,7 @@ export function useLibraryAction(): {
       const before = jotaiStore.get(libraryAtom);
       const applied = await startEffect(settle(op));
       if (!applied.ok) return applied;
-      // 실행하는 사이 atom이 바뀌었다면(다른 탭 변경·다른 실행) 어느 쪽이 최신인지 이 결과만으로는
-      // 알 수 없다. 저장소가 기준이므로 다시 읽어 반영한다(읽지 못하면 이 결과를 쓴다).
-      if (jotaiStore.get(libraryAtom) === before) {
-        jotaiStore.set(libraryAtom, applied.lib);
-      } else {
-        const latest = await startEffect(Effect.option(readLatest));
-        jotaiStore.set(libraryAtom, latest._tag === 'Some' ? latest.value : applied.lib);
-      }
+      await reflectSaved(jotaiStore, before, applied.lib);
       return applied.createdId === undefined
         ? { ok: true }
         : { ok: true, createdId: applied.createdId };

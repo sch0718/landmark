@@ -3,6 +3,7 @@ import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import { Effect } from 'effect';
 import { useState } from 'react';
+import { downloadText } from 'src/lib/download-text';
 import { startEffect } from 'src/lib/effect/runtime';
 import { LibraryCorrupt } from 'src/services/errors';
 import { browserStorage } from 'src/services/browser-storage';
@@ -20,21 +21,6 @@ function readBackupText(backupKey: string | null): string | null {
   } catch {
     return null;
   }
-}
-
-const REVOKE_DELAY_MS = 30_000;
-
-function downloadText(text: string, filename: string): void {
-  const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  // 문서에 붙여 누르고, 주소는 브라우저가 파일을 가져갈 시간을 준 뒤 해제한다(WebKit은 바로 해제하면
-  // 빈 파일이 되거나 실패한다).
-  document.body.append(link);
-  link.click();
-  link.remove();
-  setTimeout(() => URL.revokeObjectURL(url), REVOKE_DELAY_MS);
 }
 
 const reset = Effect.gen(function* () {
@@ -70,7 +56,7 @@ export function CorruptScreen({
       return;
     }
     setMessage(null);
-    downloadText(text, `tripmap-backup-${new Date().toISOString()}.json`);
+    downloadText(text, `tripmap-backup-${new Date().toISOString()}.json`, 'application/json');
   };
 
   const startOver = async () => {

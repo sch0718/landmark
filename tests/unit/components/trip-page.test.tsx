@@ -2,8 +2,10 @@ import { act, cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { StrictMode, useLayoutEffect, type ReactNode } from 'react';
 import { atom, createStore, Provider, useAtomValue } from 'jotai';
-import { createMemoryRouter, RouterProvider } from 'react-router';
+import { createMemoryRouter, RouterProvider, type RouteObject } from 'react-router';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { routes } from 'src/routes/router';
+import { legacyTripRoutes } from '../../fixtures/legacy-trip-routes';
 import { AppProviders } from 'src/app';
 import { FakeMapAdapter, FAKE_BOUNDS } from 'src/components/map/FakeMapAdapter';
 import { installMapResources } from './helpers/map-resources';
@@ -14,7 +16,6 @@ import { detailAtom, selectedPlaceScrollRequestAtom } from 'src/sections/views/s
 import { hashDayStops } from 'src/domain/day-hash';
 import type { ReconcileReport } from 'src/domain/reconcile';
 import { createMemoryStorage, storageKey } from 'src/repositories/edit-layer-repo';
-import { routes } from 'src/routes/router';
 import type { EditLayer } from 'src/schema/edit-layer';
 import type { TripData } from 'src/schema/trip-data';
 import {
@@ -55,6 +56,7 @@ function renderAt(
     storage?: Storage;
     strict?: boolean;
     load?: () => Promise<Response>;
+    routes?: RouteObject[];
   } = {},
 ) {
   const storage = opts.storage ?? createMemoryStorage();
@@ -64,7 +66,7 @@ function renderAt(
       opts.load ? await opts.load() : (opts.response ?? jsonResponse(opts.trip)),
     );
   const store = createStore();
-  const router = createMemoryRouter(routes, { initialEntries: [url] });
+  const router = createMemoryRouter(opts.routes ?? legacyTripRoutes, { initialEntries: [url] });
   const wrap = (node: ReactNode) => (opts.strict ? <StrictMode>{node}</StrictMode> : node);
   render(
     wrap(
@@ -108,16 +110,16 @@ describe('라우트 오류 화면', () => {
     throw new Error('boom');
   }
 
-  it('홈·여행 라우트에 errorElement가 있고, 렌더 오류면 한국어 안내와 새로고침 버튼을 보여 준다', async () => {
-    const withError = routes.filter((r) => r.path !== '*');
-    expect(withError.length).toBeGreaterThanOrEqual(2);
+  it('옛 여행 라우트에 errorElement가 있고, 렌더 오류면 한국어 안내와 새로고침 버튼을 보여 준다', async () => {
+    const withError = legacyTripRoutes.filter((r) => r.path !== '*');
+    expect(withError.length).toBeGreaterThanOrEqual(1);
     for (const r of withError) expect(r.errorElement).toBeTruthy();
 
     const error = vi.spyOn(console, 'error').mockImplementation(() => {});
     const reload = vi.fn();
     vi.stubGlobal('location', { ...window.location, reload });
     const router = createMemoryRouter(
-      [{ path: '/', element: <Boom />, errorElement: routes[1]!.errorElement }],
+      [{ path: '/', element: <Boom />, errorElement: legacyTripRoutes[0]!.errorElement }],
       { initialEntries: ['/'] },
     );
     render(<RouterProvider router={router} />);
@@ -134,7 +136,7 @@ describe('라우트', () => {
   it('/는 보관함 셸을 보여 주고 여행(/t/) 링크가 없다', async () => {
     // 보관함을 읽는 동안 Suspense가 멈추므로 act 안에서 그려야 다시 시도된다.
     await act(async () => {
-      renderAt('/');
+      renderAt('/', { routes });
     });
     expect(screen.getByRole('region', { name: '장소 목록' })).toBeInTheDocument();
     const hrefs = screen.getAllByRole('link').map((link) => link.getAttribute('href'));

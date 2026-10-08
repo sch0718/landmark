@@ -3,11 +3,11 @@ import userEvent from '@testing-library/user-event';
 import { createStore, Provider, useAtomValue, useSetAtom } from 'jotai';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { legacyTripRoutes } from '../../fixtures/legacy-trip-routes';
 import { AppProviders } from 'src/app';
 import { installMapResources } from './helpers/map-resources';
 import { findDuplicateStopIds, overlay } from 'src/domain/overlay';
 import { createMemoryStorage, storageKey } from 'src/repositories/edit-layer-repo';
-import { routes } from 'src/routes/router';
 import type { EditLayer } from 'src/schema/edit-layer';
 import type { TripData } from 'src/schema/trip-data';
 import { DEFAULT_FILTER } from 'src/sections/explore/store/filters';
@@ -435,7 +435,7 @@ function renderPage(trip: TripData, edit?: EditLayer, search = '') {
         new Response(JSON.stringify(trip), { headers: { 'Content-Type': 'application/json' } }),
     );
   const store = createStore();
-  const router = createMemoryRouter(routes, { initialEntries: [`/t/${PID}${search}`] });
+  const router = createMemoryRouter(legacyTripRoutes, { initialEntries: [`/t/${PID}${search}`] });
   render(
     <TripDepsContext
       value={{ storage, fetchFn, now: () => NOW_MS, nowIso: () => NOW, jotaiStore: store }}

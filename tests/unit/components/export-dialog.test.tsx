@@ -3,11 +3,11 @@ import userEvent from '@testing-library/user-event';
 import { createStore } from 'jotai';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { legacyTripRoutes } from '../../fixtures/legacy-trip-routes';
 import { AppProviders } from 'src/app';
 import { installMapResources } from './helpers/map-resources';
 import { decodeEditLayer, encodeEditLayer } from 'src/domain/codec';
 import { createMemoryStorage, storageKey } from 'src/repositories/edit-layer-repo';
-import { routes } from 'src/routes/router';
 import type { EditLayer } from 'src/schema/edit-layer';
 import type { TripData } from 'src/schema/trip-data';
 import {
@@ -43,7 +43,7 @@ function renderPage(opts: { trip?: TripData; edit?: EditLayer; storage?: Storage
         headers: { 'Content-Type': 'application/json' },
       }),
   );
-  const router = createMemoryRouter(routes, { initialEntries: [`/t/${PID}`] });
+  const router = createMemoryRouter(legacyTripRoutes, { initialEntries: [`/t/${PID}`] });
   render(
     <TripDepsContext
       value={{
