@@ -200,7 +200,7 @@ describe('queryPlaces sort', () => {
     );
   });
 
-  it('sort label: first label order, then name; unlabeled last', () => {
+  it('sort label: representative label (first in labelIds) order, then name; unlabeled last', () => {
     const lib = library(
       [
         place({ name: '무라벨' }),
@@ -211,14 +211,48 @@ describe('queryPlaces sort', () => {
       ],
       [FOOD, CAFE],
     );
-    // 맛집가는 라벨 중 order가 가장 작은 TV맛집이 첫 라벨이다.
+    // 맛집가는 labelIds의 첫 번째가 카페이므로 카페 그룹(order 2)에 속한다.
     expect(names(queryPlaces(lib, q({ sort: 'label' })))).toEqual([
-      '맛집가',
       '맛집나',
       '맛집다',
+      '맛집가',
       '카페가',
       '무라벨',
     ]);
+  });
+
+  it('sort label skips deleted labels in labelIds to find the representative', () => {
+    const gone = label('gone0001', '삭제', 0, { deletedAt: T });
+    const lib = library(
+      [
+        place({ name: '둘째가 대표', labels: ['gone0001', 'cafe0001'] }),
+        place({ name: '맛집', labels: ['food0001'] }),
+        place({ name: '삭제만', labels: ['gone0001'] }),
+      ],
+      [FOOD, CAFE, gone],
+    );
+    expect(names(queryPlaces(lib, q({ sort: 'label' })))).toEqual([
+      '맛집',
+      '둘째가 대표',
+      '삭제만',
+    ]);
+  });
+
+  it('sort label falls back to recent when label and name are equal', () => {
+    const older = place({
+      name: '같은이름',
+      labels: ['food0001'],
+      saved: f(true, '2026-10-01T00:00:00.000Z'),
+    });
+    const newer = place({
+      name: '같은이름',
+      labels: ['food0001'],
+      saved: f(true, '2026-10-05T00:00:00.000Z'),
+    });
+    const lib = library([older, newer], [FOOD]);
+    expect(queryPlaces(lib, q({ sort: 'label' })).map((p) => p.id)).toEqual([newer.id, older.id]);
+    const lib2 = library([newer, older], [FOOD]);
+    expect(queryPlaces(lib2, q({ sort: 'label' })).map((p) => p.id)).toEqual([newer.id, older.id]);
   });
 
   it('sort label breaks ties between equal order by label name', () => {

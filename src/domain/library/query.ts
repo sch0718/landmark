@@ -94,23 +94,31 @@ function compareRecent(a: Place, b: Place): number {
   return a.id.localeCompare(b.id);
 }
 
+/** 대표 라벨: `labelIds` 순서(첫 번째가 대표)에서 처음으로 지워지지 않은 라벨. */
+function representativeLabel(place: Place, byId: ReadonlyMap<string, Label>): Label | undefined {
+  for (const id of place.labelIds.value) {
+    const label = byId.get(id);
+    if (label !== undefined) return label;
+  }
+  return undefined;
+}
+
 function sortPlaces(places: Place[], q: LibraryQuery, byId: ReadonlyMap<string, Label>): Place[] {
   if (q.sort === 'name') {
     return places.sort((a, b) => compareKo(a.name.value, b.name.value) || compareRecent(a, b));
   }
   if (q.sort === 'label') {
-    const first = new Map(places.map((p) => [p.id, labelsOf(p, byId)[0]]));
+    const first = new Map(places.map((p) => [p.id, representativeLabel(p, byId)]));
     return places.sort((a, b) => {
       const la = first.get(a.id);
       const lb = first.get(b.id);
-      if (la === undefined && lb === undefined) return compareKo(a.name.value, b.name.value);
-      if (la === undefined) return 1;
-      if (lb === undefined) return -1;
-      return (
-        la.order.value - lb.order.value ||
-        compareKo(la.name.value, lb.name.value) ||
-        compareKo(a.name.value, b.name.value)
-      );
+      if (la === undefined && lb !== undefined) return 1;
+      if (la !== undefined && lb === undefined) return -1;
+      const byLabel =
+        la !== undefined && lb !== undefined
+          ? la.order.value - lb.order.value || compareKo(la.name.value, lb.name.value)
+          : 0;
+      return byLabel || compareKo(a.name.value, b.name.value) || compareRecent(a, b);
     });
   }
   return places.sort(compareRecent);
