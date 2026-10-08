@@ -131,11 +131,14 @@ describe('라우트 오류 화면', () => {
 });
 
 describe('라우트', () => {
-  it('/는 안내 문구만 보여 주고 여행 목록·링크가 없다', () => {
-    renderAt('/');
-    expect(screen.getByText('공유받은 링크로 접속하세요')).toBeInTheDocument();
-    expect(screen.queryAllByRole('link')).toHaveLength(0);
-    expect(screen.queryAllByRole('list')).toHaveLength(0);
+  it('/는 보관함 셸을 보여 주고 여행(/t/) 링크가 없다', async () => {
+    // 보관함을 읽는 동안 Suspense가 멈추므로 act 안에서 그려야 다시 시도된다.
+    await act(async () => {
+      renderAt('/');
+    });
+    expect(screen.getByRole('region', { name: '장소 목록' })).toBeInTheDocument();
+    const hrefs = screen.getAllByRole('link').map((link) => link.getAttribute('href'));
+    expect(hrefs.filter((href) => href?.startsWith('/t/'))).toEqual([]);
   });
 
   it('404면 만료 안내', async () => {

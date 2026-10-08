@@ -10,9 +10,13 @@ import { emptyLibrary, type Library } from 'src/schema/library';
 import { IdGen } from 'src/services/id-gen';
 import { LibraryStore, type LoadResult } from 'src/services/library-store';
 
+/** 올리면 `libraryLoadAtom`이 저장소를 다시 읽는다(복구 화면에서 "새로 시작"한 뒤). */
+export const libraryReloadAtom = atom(0);
+
 /** 보관함 로드 결과. 읽지 못하면(`LibraryCorrupt`) Promise가 그 오류로 거부된다. */
-export const libraryLoadAtom = effectAtom(() =>
+export const libraryLoadAtom = effectAtom((get) =>
   Effect.gen(function* () {
+    get(libraryReloadAtom);
     const store = yield* LibraryStore;
     return yield* store.load;
   }),
