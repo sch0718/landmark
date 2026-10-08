@@ -181,8 +181,11 @@ describe('PlaceDetail', () => {
     const user = userEvent.setup();
     const { store, storage, router } = await open(P1);
     const stored = JSON.parse(storage.getItem(LIBRARY_KEY)!) as Library;
-    stored.places[P1]!.deletedAt = '2026-10-08T02:00:00.000Z';
-    storage.setItem(LIBRARY_KEY, JSON.stringify(stored));
+    const gone = { ...stored.places[P1]!, deletedAt: '2026-10-08T02:00:00.000Z' };
+    storage.setItem(
+      LIBRARY_KEY,
+      JSON.stringify({ ...stored, places: { ...stored.places, [P1]: gone } }),
+    );
 
     await user.click(within(detail()).getByRole('button', { name: '삭제' }));
     await waitFor(() => expect(store.get(libraryAtom).places[P1]!.deletedAt).not.toBeNull());

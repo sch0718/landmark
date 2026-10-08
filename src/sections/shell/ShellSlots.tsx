@@ -35,8 +35,3 @@ export function DetailSlot({ placeId }: { placeId: string | null }) {
     <PlaceDetail placeId={placeId} />
   );
 }
-
-/** `/labels`·`/settings`처럼 아직 화면이 없는 경로 자리. */
-export function PagePlaceholder({ title }: { title: string }) {
-  return <SlotPlaceholder title={title}>곧 제공돼요</SlotPlaceholder>;
-}

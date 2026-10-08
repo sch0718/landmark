@@ -20,9 +20,6 @@ export type AppRuntime = ManagedRuntime.ManagedRuntime<AppServices, unknown>;
 const defaultRuntime = ManagedRuntime.make(AppLayer);
 let current: AppRuntime = defaultRuntime;
 
-/** 앱 런타임. 첫 실행 때 Layer를 만든다. */
-export const appRuntime = defaultRuntime;
-
 /** 테스트에서 런타임을 바꾼다. `null`이면 기본 런타임으로 되돌린다. */
 export function setAppRuntimeForTest(runtime: AppRuntime | null): void {
   current = runtime ?? defaultRuntime;

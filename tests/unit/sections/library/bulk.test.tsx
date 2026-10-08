@@ -203,8 +203,11 @@ describe('library bulk edit', () => {
 
     // 화면은 모르는 사이 다른 탭이 '강남 한 곳'(place00004)을 먼저 지웠다.
     const stored = JSON.parse(storage.getItem(LIBRARY_KEY)!) as Library;
-    stored.places.place00004!.deletedAt = '2026-10-08T02:00:00.000Z';
-    storage.setItem(LIBRARY_KEY, JSON.stringify(stored));
+    const other = { ...stored.places.place00004!, deletedAt: '2026-10-08T02:00:00.000Z' };
+    storage.setItem(
+      LIBRARY_KEY,
+      JSON.stringify({ ...stored, places: { ...stored.places, place00004: other } }),
+    );
 
     await user.click(within(toolbar()).getByRole('button', { name: '삭제' }));
     await waitFor(() => expect(store.get(libraryAtom).places.place00005!.deletedAt).not.toBeNull());
