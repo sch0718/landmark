@@ -442,6 +442,16 @@ describe('useDraft', () => {
     return { promise, resolve };
   };
 
+  it('a setValue captured for the old key does not write into the new key draft', () => {
+    const { result, rerender } = renderHook(({ k, saved }) => useDraft(k, saved), {
+      initialProps: { k: 'A', saved: 'a' },
+    });
+    const staleSetValue = result.current.setValue;
+    rerender({ k: 'B', saved: 'b' });
+    act(() => staleSetValue('A의 글'));
+    expect(result.current).toMatchObject({ value: 'b', dirty: false, remoteChanged: false });
+  });
+
   it('does not bring the old draft back when returning to a key (A -> B -> A)', () => {
     const { result, rerender } = renderHook(({ k, saved }) => useDraft(k, saved), {
       initialProps: { k: 'A', saved: 'a' },

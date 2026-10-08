@@ -2,7 +2,7 @@ import { Cause, Clock, Effect, ErrorReporter, Pull, Stream } from 'effect';
 import { isEqual } from 'es-toolkit';
 import { atom, useAtomValue, useSetAtom, useStore, type PrimitiveAtom } from 'jotai';
 import { useHydrateAtoms } from 'jotai/utils';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { OpCtx, OpError, OpResult } from 'src/domain/library/ops';
 import { effectAtom } from 'src/lib/effect/atom';
 import { forkEffect, startEffect } from 'src/lib/effect/runtime';
@@ -214,7 +214,8 @@ export function useDraft<T>(key: string, saved: T) {
 
   // 핸들러가 항상 가장 최근 상태를 보도록 ref에 둔다(같은 이벤트 안에서 setValue 직후 commit해도 된다).
   const latest = useRef(current);
-  useEffect(() => {
+  // 레이아웃 효과로 맞춘다. 커밋 직후(페인트 전)에 도는 늦은 `commit`이 이전 키의 상태를 읽지 않게 한다.
+  useLayoutEffect(() => {
     latest.current = current;
   });
   const commitSeq = useRef(0);
@@ -226,6 +227,7 @@ export function useDraft<T>(key: string, saved: T) {
   const setValue = useCallback(
     (value: T) => {
       const from = latest.current;
+      if (from.key !== key) return; // 이전 키에서 잡아 둔 핸들러가 새 키의 초안에 쓰지 않게 한다.
       write({
         ...from,
         edit: { value },
@@ -234,7 +236,7 @@ export function useDraft<T>(key: string, saved: T) {
         lastFail: 0,
       });
     },
-    [saved, write],
+    [key, saved, write],
   );
 
   const commit = useCallback(
