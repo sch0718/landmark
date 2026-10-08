@@ -2,6 +2,7 @@ import { createBrowserRouter, type RouteObject } from 'react-router';
 import { ErrorScreen } from 'src/components/ErrorScreen';
 import { RouteErrorScreen } from 'src/components/RouteErrorScreen';
 import { paths } from 'src/routes/paths';
+import { LabelsPage } from 'src/sections/labels/LabelsPage';
 import { ShellRoute } from 'src/sections/shell/ShellRoute';
 import { PagePlaceholder } from 'src/sections/shell/ShellSlots';
 import { TripsPlaceholder } from 'src/sections/shell/TripsPlaceholder';
@@ -15,7 +16,7 @@ export const routes: RouteObject[] = [
       { path: paths.library, element: null },
       { path: paths.map, element: null },
       { path: paths.place(':id'), element: null },
-      { path: paths.labels, element: <PagePlaceholder title="라벨" /> },
+      { path: paths.labels, element: <LabelsPage /> },
       { path: paths.settings, element: <PagePlaceholder title="설정" /> },
       { path: paths.trips, element: <TripsPlaceholder /> },
     ],

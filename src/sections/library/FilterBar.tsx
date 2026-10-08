@@ -1,8 +1,10 @@
 import Box from '@mui/material/Box';
 import InputBase from '@mui/material/InputBase';
-import { LabelGlyph, SearchIcon } from 'src/components/icons';
+import { Link } from 'react-router';
+import { LabelGlyph, SearchIcon, TagsIcon } from 'src/components/icons';
 import type { LibraryQuery } from 'src/domain/library/query';
 import type { Label } from 'src/schema/library';
+import { paths } from 'src/routes/paths';
 import { ChipButton } from 'src/sections/library/ChipButton';
 import { labelColors } from 'src/sections/library/label-style';
 import { RegionChips } from 'src/sections/library/RegionChips';
@@ -113,6 +115,27 @@ export function FilterBar({ query, onChange, labels, counts, regions, view, onVi
             </Box>
           </ChipButton>
         ))}
+        <Box
+          component={Link}
+          to={paths.labels}
+          sx={{
+            flex: 'none',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 0.5,
+            minHeight: 44,
+            px: 1.5,
+            color: 'var(--tm-text-secondary)',
+            fontSize: 14,
+            fontWeight: 700,
+            textDecoration: 'none',
+            whiteSpace: 'nowrap',
+            '&:focus-visible': { outline: '2px solid var(--tm-accent-main)', outlineOffset: -2 },
+          }}
+        >
+          <TagsIcon aria-hidden="true" width={14} height={14} />
+          라벨 관리
+        </Box>
       </Box>
 
       <RegionChips
