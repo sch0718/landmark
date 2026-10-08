@@ -1,10 +1,15 @@
 import { dirname, join } from 'node:path';
 import { isMap, isScalar, isSeq, parseDocument, Scalar, type Document, type YAMLMap } from 'yaml';
 import { reconcile } from 'src/domain/reconcile';
-import { EDIT_LAYER_PARSE, EditLayerSchema, type EditLayer } from 'src/schema/edit-layer';
+import { EDIT_LAYER_PARSE, EditLayerSchema, type EditLayer } from 'src/schema/legacy/edit-layer';
 import { safeParse } from 'src/schema/parse';
-import { TRIP_DATA_PARSE, TripDataSchema, type Stop, type TripData } from 'src/schema/trip-data';
-import { TripSourceSchema, type TripSource } from 'src/schema/trip-source';
+import {
+  TRIP_DATA_PARSE,
+  TripDataSchema,
+  type Stop,
+  type TripData,
+} from 'src/schema/legacy/trip-data';
+import { TripSourceSchema, type TripSource } from 'src/schema/legacy/trip-source';
 import { parseSource } from './collect';
 import type { FsPort } from './fs-port';
 import type { GitPort } from './git-port';

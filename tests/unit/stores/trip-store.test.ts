@@ -3,8 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { decodeEditLayer, encodeEditLayer } from 'src/domain/codec';
 import { hashDayStops } from 'src/domain/day-hash';
 import { createMemoryStorage, storageKey } from 'src/repositories/edit-layer-repo';
-import type { EditLayer } from 'src/schema/edit-layer';
-import type { TripData } from 'src/schema/trip-data';
+import type { EditLayer } from 'src/schema/legacy/edit-layer';
+import type { TripData } from 'src/schema/legacy/trip-data';
 import { createTripStore, type TripStore } from 'src/stores/trip-store';
 import { makeEdit, makeTrip } from '../../fixtures/builders';
 

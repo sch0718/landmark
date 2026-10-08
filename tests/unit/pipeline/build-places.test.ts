@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { buildPlaces } from '../../../pipeline/build-places';
 import type { Bookmark, FetchedFolder, NaverPlace } from '../../../pipeline/naver-client';
 import { parseOrThrow } from 'src/schema/parse';
-import { TripSourceSchema } from 'src/schema/trip-source';
+import { TripSourceSchema } from 'src/schema/legacy/trip-source';
 
 const SHARE_A = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 const SHARE_B = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';

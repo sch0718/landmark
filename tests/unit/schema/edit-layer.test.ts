@@ -7,7 +7,7 @@ import {
   newEditLayer,
   serializeEditLayerFile,
   type EditLayer,
-} from 'src/schema/edit-layer';
+} from 'src/schema/legacy/edit-layer';
 import { safeParse } from 'src/schema/parse';
 import { makeEdit, sid, withBulkyMemos } from '../../fixtures/builders';
 

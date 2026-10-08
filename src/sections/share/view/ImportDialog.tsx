@@ -23,7 +23,7 @@ import {
 } from 'src/repositories/import-flow';
 import { isAbortError } from 'src/repositories/edit-layer-repo';
 import { loadTrip } from 'src/repositories/trip-repo';
-import type { TripData } from 'src/schema/trip-data';
+import type { TripData } from 'src/schema/legacy/trip-data';
 import { useEditActions, useTripStore } from 'src/stores/trip-store';
 
 export const CHANGED_NOTICE = '다른 탭에서 편집이 바뀌어 미리보기를 새로 만들었어요';

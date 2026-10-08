@@ -1,4 +1,4 @@
-import type { Stop } from 'src/schema/trip-data';
+import type { Stop } from 'src/schema/legacy/trip-data';
 
 const FNV64_OFFSET = 0xcbf29ce484222325n;
 const FNV64_PRIME = 0x100000001b3n;

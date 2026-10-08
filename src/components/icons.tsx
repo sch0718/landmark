@@ -12,6 +12,7 @@ import TagsIcon from '~icons/lucide/tags';
 import TrashIcon from '~icons/lucide/trash-2';
 import UndoIcon from '~icons/lucide/undo-2';
 import GripIcon from '~icons/lucide/grip-vertical';
+import EllipsisIcon from '~icons/lucide/ellipsis';
 import ExternalLinkIcon from '~icons/lucide/external-link';
 import NavigationIcon from '~icons/lucide/navigation';
 import PencilIcon from '~icons/lucide/pencil';
@@ -75,6 +76,7 @@ export {
   TrashIcon,
   UndoIcon,
   GripIcon,
+  EllipsisIcon,
   ExternalLinkIcon,
   NavigationIcon,
   PencilIcon,

@@ -4,7 +4,12 @@ import { buildLegs } from '../../../pipeline/legs';
 import type { RouteResult } from '../../../pipeline/naver-client';
 import { routeCacheKey, type RouteCache } from '../../../pipeline/route-cache';
 import { parseOrThrow } from 'src/schema/parse';
-import { TRIP_DATA_PARSE, TripDataSchema, type Place, type Stop } from 'src/schema/trip-data';
+import {
+  TRIP_DATA_PARSE,
+  TripDataSchema,
+  type Place,
+  type Stop,
+} from 'src/schema/legacy/trip-data';
 
 type Entry = RouteResult & { queriedAt: string };
 const NOW = '2026-10-03T01:00:00.000Z';

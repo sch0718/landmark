@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { safeParse } from 'src/schema/parse';
-import { TRIP_DATA_PARSE, TripDataSchema } from 'src/schema/trip-data';
+import { TRIP_DATA_PARSE, TripDataSchema } from 'src/schema/legacy/trip-data';
 import { describe, expect, it } from 'vitest';
 
 describe('E2E fixture TripData', () => {

@@ -3,7 +3,7 @@ import { collect, SourceValidationError } from '../../../pipeline/collect';
 import { UnresolvedPlacesError } from '../../../pipeline/resolve-stops';
 import { validateAll } from '../../../pipeline/validate';
 import { parseOrThrow } from 'src/schema/parse';
-import { TRIP_DATA_PARSE, TripDataSchema } from 'src/schema/trip-data';
+import { TRIP_DATA_PARSE, TripDataSchema } from 'src/schema/legacy/trip-data';
 import { fixture, NOW, setupCollect as setup, SHARE_ID, YAML_PATH } from './pipeline-harness';
 
 describe('collect', () => {

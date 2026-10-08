@@ -5,7 +5,7 @@ import Tabs from '@mui/material/Tabs';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ko';
 import { useAtom, useSetAtom } from 'jotai';
-import type { TripData } from 'src/schema/trip-data';
+import type { TripData } from 'src/schema/legacy/trip-data';
 import { dayName } from 'src/sections/itinerary/store/format';
 import { itineraryEditingAtom } from 'src/sections/views/store/view-session';
 import { selectedDayAtom } from 'src/stores/ui-store';

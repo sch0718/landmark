@@ -15,7 +15,7 @@ import {
 import { liveLabels } from 'src/domain/library/query';
 import { emptyLibrary, LibrarySchema, type Library, type Place } from 'src/schema/library';
 import { safeParse } from 'src/schema/parse';
-import type { TripData } from 'src/schema/trip-data';
+import type { TripData } from 'src/schema/legacy/trip-data';
 import { makeEdit, makeTrip } from '../../../fixtures/builders';
 
 const T0 = '2026-10-01T00:00:00.000Z';

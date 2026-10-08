@@ -1,10 +1,17 @@
 import { cleanup, act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { createStore, Provider, useSetAtom } from 'jotai';
-import type { ReactNode } from 'react';
-import { legacyTripRoutes } from '../../fixtures/legacy-trip-routes';
-import { useItineraryDays } from 'src/sections/itinerary/store/itinerary-state';
-import { DetailSurface } from 'src/sections/views/view/DetailSurface';
+import Box from '@mui/material/Box';
+import IconButton from '@mui/material/IconButton';
+import { createStore, Provider, useAtom, useAtomValue, useStore } from 'jotai';
+import { useState, type ReactNode } from 'react';
+import { LegacyTripScope } from '../../fixtures/legacy-trip-scope';
+import {
+  useItineraryDays,
+  useItineraryLayers,
+  useItineraryMarkerClick,
+} from 'src/sections/itinerary/store/itinerary-state';
+import { MapView } from 'src/components/map/MapView';
+import { StopEditPanel } from 'src/sections/itinerary/view/StopEditPanel';
 import { Timeline } from 'src/sections/itinerary/view/Timeline';
 import { ItineraryPanel } from 'src/sections/itinerary/view/ItineraryPanel';
 import {
@@ -13,9 +20,8 @@ import {
   mobileRouteMapAtom,
   stopDraftsAtom,
 } from 'src/sections/views/store/view-session';
-import { selectedDayAtom } from 'src/stores/ui-store';
-import { createMemoryRouter, RouterProvider } from 'react-router';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { modeAtom, selectedDayAtom } from 'src/stores/ui-store';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppProviders } from 'src/app';
 import { installMapResources } from './helpers/map-resources';
 import { FakeMapAdapter } from 'src/components/map/FakeMapAdapter';
@@ -23,12 +29,12 @@ import { dayColor } from 'src/components/map/map-colors';
 import { hashDayStops } from 'src/domain/day-hash';
 import { overlay } from 'src/domain/overlay';
 import { createMemoryStorage, storageKey } from 'src/repositories/edit-layer-repo';
-import type { EditLayer } from 'src/schema/edit-layer';
-import type { TripData } from 'src/schema/trip-data';
+import type { EditLayer } from 'src/schema/legacy/edit-layer';
+import type { TripData } from 'src/schema/legacy/trip-data';
 import { moveStop, reorderStops } from 'src/sections/itinerary/store/itinerary-actions';
 import { DayTotals } from 'src/sections/itinerary/view/DayTotals';
 import { LegRow } from 'src/sections/itinerary/view/LegRow';
-import { createTripStore, TripStoreContext, TripDepsContext } from 'src/stores/trip-store';
+import { createTripStore, TripStoreContext } from 'src/stores/trip-store';
 import { makeEdit, makeTrip, sid } from '../../fixtures/builders';
 
 const PID = 'testtrip0001';
@@ -42,7 +48,59 @@ const D2 = '2026-11-15';
 const saved = (storage: Storage): EditLayer => JSON.parse(storage.getItem(KEY)!) as EditLayer;
 const HINT = '재계산하려면 편집을 파일로 내보내 apply-edit을 실행하세요';
 
-function renderPage(trip: TripData, edit?: EditLayer, search = '?mode=itinerary&day=1') {
+/** 방문 편집을 여는 상세 영역의 시험용 대역(옛 `DetailSurface`의 `stop` 분기만). */
+function TestDetails() {
+  const [detail, setDetail] = useAtom(detailAtom);
+  const store = useStore();
+  if (detail?.kind !== 'stop') return null;
+  return (
+    <Box role="dialog" aria-label="방문 편집">
+      <IconButton aria-label="닫기" onClick={() => setDetail(null)}>
+        ×
+      </IconButton>
+      <StopEditPanel
+        date={detail.date}
+        stopId={detail.stopId}
+        onClose={() => {
+          if (store.get(detailAtom) === detail) setDetail(null);
+        }}
+      />
+    </Box>
+  );
+}
+
+const MAP_PADDING = { top: 24, right: 24, bottom: 24, left: 24 };
+
+/**
+ * 옛 `TripPage`의 일정 모드를 줄인 시험용 화면: 일정 패널, 일정 지도(마커·폴리라인·후보 마커 클릭),
+ * 방문 편집 상세. 지도는 compact처럼 "동선 지도 보기"를 눌러야 보인다.
+ */
+function ItineraryHost() {
+  const day = useAtomValue(selectedDayAtom);
+  const routeMapVisible = useAtomValue(mobileRouteMapAtom);
+  const layers = useItineraryLayers();
+  const onItineraryMarkerClick = useItineraryMarkerClick();
+  const [, setUnavailable] = useState<string | null>(null);
+  return (
+    <>
+      <ItineraryPanel />
+      <MapView
+        visible={routeMapVisible}
+        padding={MAP_PADDING}
+        markers={layers.markers}
+        polylines={layers.polylines}
+        onMarkerClick={(id) => {
+          if (id.startsWith('candidate/')) onItineraryMarkerClick(id);
+        }}
+        fitKey={`itinerary:${day}`}
+        onUnavailable={setUnavailable}
+      />
+      <TestDetails />
+    </>
+  );
+}
+
+function renderPage(trip: TripData, edit?: EditLayer, day: string = D1) {
   vi.stubEnv('VITE_MAP_ADAPTER', 'fake');
   const storage = createMemoryStorage();
   if (edit) storage.setItem(KEY, JSON.stringify(edit));
@@ -53,15 +111,18 @@ function renderPage(trip: TripData, edit?: EditLayer, search = '?mode=itinerary&
         new Response(JSON.stringify(trip), { headers: { 'Content-Type': 'application/json' } }),
     );
   const store = createStore();
-  const router = createMemoryRouter(legacyTripRoutes, { initialEntries: [`/t/${PID}${search}`] });
+  store.set(modeAtom, 'itinerary');
+  store.set(selectedDayAtom, day);
   render(
-    <TripDepsContext
-      value={{ storage, fetchFn, now: () => NOW_MS, nowIso: () => NOW, jotaiStore: store }}
-    >
-      <AppProviders>
-        <RouterProvider router={router} />
-      </AppProviders>
-    </TripDepsContext>,
+    <AppProviders>
+      <LegacyTripScope
+        publicId={PID}
+        jotaiStore={store}
+        deps={{ storage, fetchFn, now: () => NOW_MS, nowIso: () => NOW }}
+      >
+        <ItineraryHost />
+      </LegacyTripScope>
+    </AppProviders>,
   );
   return { storage, store };
 }
@@ -70,11 +131,6 @@ function renderPage(trip: TripData, edit?: EditLayer, search = '?mode=itinerary&
 const settle = () => act(() => new Promise<void>((resolve) => setTimeout(resolve, 20)));
 
 const panel = () => screen.findByTestId('itinerary-panel');
-
-// 라우트가 TripPage를 지연 로드하므로, 부하가 큰 전체 실행에서 첫 테스트가 findBy 시간을 넘지 않게 미리 불러 둔다.
-beforeAll(async () => {
-  await import('src/pages/TripPage');
-}, 20_000);
 
 let mapResources: ReturnType<typeof installMapResources>;
 
@@ -440,7 +496,7 @@ describe('일정 지도', () => {
   it('"전체" 탭: 모든 날 폴리라인이 dayColor(i), 미계산 구간은 dashed', async () => {
     const trip = makeTrip({ days: { [D1]: ['A', 'B'], [D2]: ['C', 'D'] } });
     const edit = reorderStops(trip, makeEdit(), D2, sid('D'), 0, OLD);
-    renderPage(trip, edit, '?mode=itinerary');
+    renderPage(trip, edit, 'all');
     await userEvent.click((await screen.findAllByRole('button', { name: '동선 지도 보기' }))[0]!);
     const l1 = await screen.findByTestId('polyline-2026-11-14/0');
     const l2 = screen.getByTestId('polyline-2026-11-15/0');
@@ -452,11 +508,6 @@ describe('일정 지도', () => {
     expect(screen.getByTestId(`marker-${D2}/n:4`)).toHaveTextContent('①');
   });
 });
-
-function TestDetails() {
-  const setDetail = useSetAtom(detailAtom);
-  return <DetailSurface modal={false} onClose={() => setDetail(null)} />;
-}
 
 function setupItineraryPiece(node: ReactNode, trip: TripData, edit = makeEdit()) {
   const storage = createMemoryStorage();

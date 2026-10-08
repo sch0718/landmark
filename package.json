@@ -56,7 +56,6 @@
     "@effect/vitest": "4.0.2",
     "@eslint/js": "^10.0.1",
     "@iconify-json/lucide": "^1.2.141",
-    "@iconify-json/mdi": "^1.2.3",
     "@playwright/test": "^1.63.0",
     "@rolldown/plugin-babel": "^0.2.4",
     "@testing-library/dom": "^10.4.2",

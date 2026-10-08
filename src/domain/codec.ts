@@ -1,5 +1,5 @@
 import { LIMITS } from 'src/schema/common';
-import type { EditLayer } from 'src/schema/edit-layer';
+import type { EditLayer } from 'src/schema/legacy/edit-layer';
 
 export type CodecErrorCode = 'too-long' | 'too-large' | 'corrupt';
 

@@ -1,7 +1,7 @@
 import { Lat, Lng } from 'src/schema/common';
 import { safeParse } from 'src/schema/parse';
-import type { Place, TripData } from 'src/schema/trip-data';
-import type { TripSource } from 'src/schema/trip-source';
+import type { Place, TripData } from 'src/schema/legacy/trip-data';
+import type { TripSource } from 'src/schema/legacy/trip-source';
 import type { Bookmark, FetchedFolder, NaverPlace } from './naver-client';
 
 export type BuildPlacesReport = {

@@ -1,10 +1,11 @@
 # trip-map
 
-네이버 지도에 저장해 둔 장소와 일정을 한 화면(지도 + 목록 + 일정)으로 보고, 동행자와 링크·파일로 메모·일정 편집을 주고받는 정적 웹앱(PoC)입니다.
+평소에 모아 두고(보관함), 여행 때 꺼내 쓰는(계획) 장소 보관함 웹앱입니다. 맛집·가 보고 싶은 곳을 **라벨**(한 장소에 여러 개)로 모으고 메모를 남기며, 라벨·지역별로 나눠 보고 지도에서 확인합니다. 여행 계획(Day 배치·경로·이동 시간)은 이어지는 하위 프로젝트에서 붙습니다.
 
-- 데이터는 **빌드 타임에 로컬 CLI로 수집**해 `public/data/<publicId>.json`으로 만들고, 앱은 완전한 정적 사이트로 배포합니다. 개인 여행 데이터가 실수로 올라가지 않도록 `trips/*`(예시 `example.yaml` 제외)와 `public/data/*`는 `.gitignore`에 있습니다. 배포할 여행만 `git add -f`로 올립니다.
-- 로그인·서버 DB가 없습니다. 편집은 보는 사람 브라우저의 localStorage에 저장되고, **내보내기(링크/파일) → 상대가 가져오기 → 병합**으로 공유합니다.
-- 설계 문서: `docs/superpowers/specs/2026-10-03-trip-map-design.md`
+- 서버 DB와 로그인이 없습니다. 보관함은 **각 기기 브라우저의 localStorage**(`tripmap:library:v2`)에 저장되고, 화면 설정은 `tripmap:prefs`에 저장됩니다. 저장소를 쓸 수 없는 환경(예: 일부 사생활 보호 모드)에서는 메모리 모드로 동작하며 배너로 알립니다.
+- 옛 버전(정적 여행 뷰어)의 여행은 `/t/<publicId>`에서 **미리보기 → 결정 → 가져오기**로 새 보관함에 옮깁니다. 옛 편집 레이어(`tripmap:edit:<publicId>`)는 읽기만 하고 지우지 않습니다.
+- 앱은 Effect 4 기반입니다(`effect`·`@effect/vitest` 4.0.2 고정).
+- 하위 프로젝트 1(기반 + 보관함) 설계 문서: `docs/superpowers/specs/2026-10-08-place-library-design.md`. 옛 설계: `docs/superpowers/specs/2026-10-03-trip-map-design.md`
 
 ## 설치
 
@@ -47,49 +48,45 @@ yarn dev                           # http://localhost:5173 (네이버 지도, .e
 VITE_MAP_ADAPTER=fake yarn dev     # 가짜 지도
 ```
 
-여행 화면은 `/t/<publicId>`입니다(`/`는 안내 문구만 보여 주며 여행 목록을 노출하지 않습니다). **지도·일정·장소** 세 뷰를 아래 링크로 공유합니다.
+### 화면 경로
 
-```text
-/t/<publicId>?view=map
-/t/<publicId>?view=day&day=2
-/t/<publicId>?view=day&day=all
-/t/<publicId>?view=places&place=n%3A12345
-```
+| 경로           | 화면                                                                       |
+| -------------- | -------------------------------------------------------------------------- |
+| `/`            | 보관함(카드·타일·목록·벤토 보기, 라벨·지역 필터, 정렬, 선택 일괄 작업)     |
+| `/map`         | 보관함 지도(라벨 색 마커, 보관함과 같은 필터)                              |
+| `/place/:id`   | 장소 상세(이름·분류 편집, 라벨 붙이기·떼기, 메모 자동 저장, 삭제 되돌리기) |
+| `/labels`      | 라벨 관리(이름·색·아이콘·순서·병합·삭제)                                   |
+| `/settings`    | 설정(테마, 옛 여행 가져오기)                                               |
+| `/trips`       | 여행(자리 표시. 하위 프로젝트 3에서 채움)                                  |
+| `/t/:publicId` | 옛 여행 가져오기                                                           |
 
-기존 `?mode=explore|itinerary&day=2&place=<PlaceKey>` 링크와 `#e=...` 가져오기도 사용할 수 있습니다. 날짜 번호는 1부터 시작하며 마지막으로 고른 뷰는 브라우저에 여행별로 저장됩니다.
+- 화면 폭에 따라 ≥1280px 3단, 768–1279px 2단 + 상세 오버레이, 768px 미만 하단 탭입니다.
+- **메모 자동 저장**: 입력을 멈춘 뒤 저장하고, 다른 화면으로 이동하거나 탭을 백그라운드로 보낼 때 대기 중인 초안을 먼저 저장합니다. 탭·브라우저를 바로 닫을 때는 저장이 비동기 Web Lock 안에서 실행되므로 **최선 노력(best-effort)** 입니다. 백그라운드 전환과 앱 안 이동에서는 안정적으로 저장됩니다.
+- 장소 상세에 **길찾기 링크는 아직 없습니다.** 네이버 지도 앱 길찾기 URL 형식을 근거 있게 확인하지 못해 일부러 뺐고, 확인되면 추가합니다. "네이버 지도에서 열기"는 있습니다.
 
-모바일에서는 하단에서 뷰를 바꾸고, 지도 목록 시트를 탭하거나 드래그해 peek/half/full로 펼칩니다. 일정은 날짜 탭과 편집 버튼, 장소는 검색·필터·카드/목록·빠른 추가를 제공합니다. 모바일 일정의 지도는 경로 지도 열기로 표시합니다. 데스크톱에서는 왼쪽 탐색과 목록을 쓰며, 넓은 화면(1440px 이상)은 상세를 320px dock으로 나란히 보여 줍니다. 메모 초안은 뷰 전환 후에도 이어서 작성할 수 있습니다.
-
-장소 상세의 **분류 변경**으로 장소 분류를 바꿀 수 있습니다(예: `customPlaces`의 미분류 장소를 "공항"으로). 바꾼 분류는 편집 레이어에 저장되어 목록·카드, 분류 필터 칩과 개수, 지도 마커 색에 반영되고 내보내기·가져오기로 동행자와 병합됩니다. **원본으로**를 누르면 수집한 원본 분류로 돌아갑니다.
-
-편집 공유는 기존처럼 **편집 링크/파일 → 가져오기 → 병합**으로 동작합니다. 편집 내보내기는 `schemaVersion: 1` 계약을 유지하며 뷰·카드/목록·스크롤 같은 UI 선호와 저장 전 초안을 포함하지 않습니다.
-
-[실측 성능과 예산 판정](docs/ui-performance.md), [실물 기기 확인 범위](docs/ui-device-checks.md)를 참고하세요. 실물 iPhone Safari/Android Chrome과 유효 키 Naver SDK는 미실행이며 자동화 결과와 구분합니다.
-
-| 명령             | 내용                                                   |
-| ---------------- | ------------------------------------------------------ |
-| `yarn lint`      | ESLint                                                 |
-| `yarn fm:check`  | Prettier 포맷 검사                                     |
-| `yarn typecheck` | `tsc -b --noEmit`                                      |
-| `yarn test`      | Vitest 단위·컴포넌트 테스트                            |
-| `yarn test:e2e`  | Playwright E2E(아래)                                   |
-| `yarn validate`  | `trips/*.yaml`과 `public/data/*.json` 스키마 검증      |
-| `yarn build`     | 타입 검사 + Vite 빌드 → `dist`                         |
-| `yarn build:ci`  | `validate → typecheck → test → build` (배포 빌드 명령) |
+| 명령                 | 내용                                                                                |
+| -------------------- | ----------------------------------------------------------------------------------- |
+| `yarn lint`          | ESLint                                                                              |
+| `yarn fm:check`      | Prettier 포맷 검사                                                                  |
+| `yarn typecheck`     | `tsc -b --noEmit`                                                                   |
+| `yarn test`          | Vitest 단위·컴포넌트 테스트                                                         |
+| `yarn test:e2e`      | Playwright E2E(아래)                                                                |
+| `yarn validate`      | `trips/*.yaml`과 `public/data/*.json` 스키마 검증                                   |
+| `yarn effect:source` | `.reference/effect/`에 현재 `effect` 버전의 소스를 받습니다(API 확인용, 커밋 안 함) |
+| `yarn build`         | 타입 검사 + Vite 빌드 → `dist`                                                      |
+| `yarn build:ci`      | `validate → typecheck → test → build` (배포 빌드 명령)                              |
 
 ### E2E
 
 ```bash
 yarn playwright install chromium webkit   # 처음 한 번
 yarn test:e2e:ci                          # CI 핵심 사용자 흐름
-yarn test:e2e                             # 필요할 때 세부 회귀 전체
+yarn test:e2e                             # 전체
 ```
 
-- 프로젝트 `desktop`(Chromium 1280×800): 일정 편집·되돌리기·가져오기, 두 탭 동시 저장(Web Locks), 세 뷰·검색·초안·시트·긴 텍스트 회귀. 390–1920px 경계 및 1440/1920px dock도 확인합니다.
-- 프로젝트 `mobile`(iPhone 13 설정, WebKit 390×844): 링크 내보내기·가져오기와 뷰 회귀. 검색 focus는 390×664도 따로 확인합니다.
-- 프로젝트 `narrow-mobile`(Chromium 320×568, touch): 뷰 회귀와 작은 화면 시트 첫 행·빠른 추가 표시. touch/desktop 전용 사례 3개는 OS 조건에 따라 skip합니다.
-- fake 지도 서버(5173)와 빈 Client ID의 Naver 서버(5174)를 실행합니다. CI가 아니면 기존 서버를 재사용하므로, 직접 실행한 서버의 어댑터 설정을 확인하세요. 유효 키의 실 SDK 및 실물 기기 테스트와 구분합니다.
-- global setup이 `tests/fixtures/trips/e2e.json`을 `public/data/e2etest000001.json`으로 복사하고 teardown이 지웁니다. 이 파일은 커밋하지 않습니다(`.gitignore`).
+- 옛 여행 화면용 E2E(`views`·`itinerary`·`concurrent`·`share`)는 화면과 함께 지웠습니다. 새 화면용 E2E를 만들 때 `playwright.config.ts`의 프로젝트 목록(`desktop`·`mobile`·`narrow-mobile`)도 **함께 갱신합니다.** 그 전까지 `yarn test:e2e`는 실행할 spec이 없습니다.
+- global setup이 `tests/fixtures/trips/e2e.json`을 `public/data/e2etest000001.json`으로 복사하고 teardown이 지웁니다. 이 파일은 커밋하지 않습니다(`.gitignore`). 옛 여행 가져오기(`/t/e2etest000001`) 시험에 쓰입니다.
+- 지도는 `VITE_MAP_ADAPTER=fake`로 DOM 가짜 지도를 씁니다. 유효 키의 실 SDK 및 실물 기기 테스트와 구분합니다.
 
 ### 측정과 구현 호환
 
@@ -102,15 +99,17 @@ VITE_MAP_ADAPTER=fake yarn build
 node scripts/measure-ui-assets.mjs dist/assets
 ```
 
-측정 스크립트는 JS/CSS 파일별 원본·gzip 바이트와 전체 합을 JSON으로 출력하며 앱 코드·SDK 키를 읽지 않습니다. source map과 개발용 MDI 컬렉션의 패키지 크기는 다운로드 비용에서 제외합니다. 초기 진입 청크·아이콘만의 비용·외부 SDK 요청은 별도 브라우저 측정이 필요합니다.
+측정 스크립트는 JS/CSS 파일별 원본·gzip 바이트와 전체 합을 JSON으로 출력하며 앱 코드·SDK 키를 읽지 않습니다. source map의 크기는 다운로드 비용에서 제외합니다. 초기 진입 청크·외부 SDK 요청은 별도 브라우저 측정이 필요합니다. v2 전후 번들 비교는 [성능 기록](docs/ui-performance.md)의 `2026-10-08 v2 하위 프로젝트 1` 절에 있습니다.
 
-MDI 아이콘은 개별 정적 import와 로컬 `build/compile-react-svg-icon.ts` compiler로 빌드합니다. 상세 dock은 MUI FocusTrap의 안정된 `isEnabled=false`로 외부 Tab 이동을 허용합니다. 기존 설치 구성에 맞춘 구현이며 런타임 아이콘·새 UI 라이브러리를 추가하지 않습니다.
+아이콘은 Lucide(`~icons/lucide/*`)를 개별 정적 import로 쓰고, 한 곳(`src/components/icons.tsx`)에서 내보냅니다.
 
 단위 테스트는 `vitest.config.ts`에서 기본 worker를 2개로 제한합니다. 여러 jsdom/MUI 통합 테스트를 CPU 수만큼 병렬 실행할 때 생기는 과부하와 타임아웃 후 후속 테스트 간섭을 줄이기 위한 설정입니다. 일반 테스트의 기본 제한은 5초이며, 여러 뷰와 화면 폭을 연속 전환하는 지도 수명 통합 테스트 한 건만 15초입니다. 필요하면 `yarn test --maxWorkers=N`으로 병렬 수를 명시할 수 있습니다.
 
 최종 검증은 lint → typecheck → `yarn test` → validate → build → E2E 순서로 실행합니다. 기존 미추적 scratch 파일 `inspect-mobile.mjs`, `verify-concepts.mjs`가 있는 로컬 checkout에서는 `yarn lint --ignore-pattern inspect-mobile.mjs --ignore-pattern verify-concepts.mjs`로 검사하며 이 제외는 제품 코드 제외가 아닙니다. URL과 UI의 동기화 규칙은 [상태 전이 문서](docs/ui-url-sync.md)에 정리했습니다.
 
-## 여행 추가
+## 여행 추가 (옛 파이프라인 — 하위 프로젝트 2·3에서 대체 예정)
+
+> 이 절과 아래 "일정 재계산 절차"는 옛 정적 뷰어의 데이터 파이프라인입니다. `yarn collect`/`yarn apply-edit`/`yarn validate`와 `pipeline/**`은 그대로 동작하지만, 새 보관함 화면에는 연결되어 있지 않습니다. 이 방식으로 만든 `public/data/<publicId>.json`은 `/t/<publicId>`에서 보관함으로 가져옵니다. 장소 추가(링크 붙여넣기·네이버 폴더 가져오기·핀 찍기)와 여행 계획은 하위 프로젝트 2·3에서 새로 만듭니다.
 
 1. `trips/<여행>.yaml`을 작성합니다. 형식은 `trips/example.yaml` 참고.
    - `folders`에 네이버 지도 공유 폴더의 shareId를 적습니다(배포 JSON에는 들어가지 않음).
@@ -122,7 +121,7 @@ MDI 아이콘은 개별 정적 import와 로컬 `build/compile-react-svg-icon.ts
 2. `yarn collect trips/<여행>.yaml` — 네이버 저장 목록과 자동차 경로를 받아 `public/data/<publicId>.json`을 만듭니다.
    - 실패한 구간은 직선으로 표시되고 다음 collect에서 다시 시도합니다. `--refresh-routes`면 캐시를 무시하고 모든 구간을 다시 조회합니다.
 3. yaml과 JSON을 함께 커밋·push → Cloudflare Pages가 배포합니다.
-4. 공유 링크: `https://<도메인>/t/<publicId>`
+4. 옛 앱에서는 `https://<도메인>/t/<publicId>`가 공유 링크였습니다. 이제 이 경로는 옛 여행 가져오기 화면입니다.
 
 ### 경로 캐시 (`.cache/routes`)
 
@@ -130,7 +129,9 @@ MDI 아이콘은 개별 정적 import와 로컬 `build/compile-react-svg-icon.ts
 - **gitignore 대상**입니다. 다른 컴퓨터나 새 clone에서는 캐시가 비어 있어 첫 collect가 모든 구간을 다시 조회합니다.
 - 실패한 조회는 캐시하지 않습니다.
 
-## 일정 재계산 절차 (작성자)
+## 일정 재계산 절차 (작성자, 옛 파이프라인)
+
+> 옛 편집 내보내기(설정 → 내보내기)와 가져오기·병합 대화상자(`src/sections/share/**`)는 코드로 남아 있지만 지금 라우트에는 연결되어 있지 않습니다. 아래 절차의 1–2단계는 하위 프로젝트 4(공유)에서 새 화면으로 다시 만들어질 때까지 앱에서 할 수 없습니다.
 
 앱에서 바꾼 일정(순서 변경·이동·추가)은 실경로가 없어 "직선 · 재계산 필요"로 표시됩니다. 실경로로 바꾸려면:
 

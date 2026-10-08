@@ -8,7 +8,7 @@ import {
   withEditLock,
   writeEditLayer,
 } from 'src/repositories/edit-layer-repo';
-import type { EditLayer } from 'src/schema/edit-layer';
+import type { EditLayer } from 'src/schema/legacy/edit-layer';
 import { makeEdit, withBulkyMemos } from '../../fixtures/builders';
 
 const PID = 'testtrip0001';

@@ -3,7 +3,7 @@ import {
   EDIT_LAYER_PARSE,
   EditLayerSchema,
   type EditLayer,
-} from 'src/schema/edit-layer';
+} from 'src/schema/legacy/edit-layer';
 import { parseOrThrow, safeParse } from 'src/schema/parse';
 
 /** localStorage 키(§5.1). */

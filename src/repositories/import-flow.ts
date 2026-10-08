@@ -4,9 +4,9 @@ import { reconcile, type ReconcileReport } from 'src/domain/reconcile';
 import { storageKey, withEditLock } from 'src/repositories/edit-layer-repo';
 import type { TripLoadResult } from 'src/repositories/trip-repo';
 import { LIMITS } from 'src/schema/common';
-import { EDIT_LAYER_PARSE, EditLayerSchema, type EditLayer } from 'src/schema/edit-layer';
+import { EDIT_LAYER_PARSE, EditLayerSchema, type EditLayer } from 'src/schema/legacy/edit-layer';
 import { safeParse } from 'src/schema/parse';
-import type { TripData } from 'src/schema/trip-data';
+import type { TripData } from 'src/schema/legacy/trip-data';
 
 export type ImportInput = { kind: 'link'; value: string } | { kind: 'file'; file: Blob };
 

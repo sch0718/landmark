@@ -10,7 +10,7 @@ import TextField from '@mui/material/TextField';
 import { useAtomValue } from 'jotai';
 import { useEffect, useState } from 'react';
 import { encodeEditLayer } from 'src/domain/codec';
-import { serializeEditLayerFile, type EditLayer } from 'src/schema/edit-layer';
+import { serializeEditLayerFile, type EditLayer } from 'src/schema/legacy/edit-layer';
 import {
   buildExportLink,
   exportFileName,

@@ -3,7 +3,7 @@ import { buildPlaces } from '../../../pipeline/build-places';
 import type { Bookmark, FetchedFolder } from '../../../pipeline/naver-client';
 import { UnresolvedPlacesError, resolveStops } from '../../../pipeline/resolve-stops';
 import { parseOrThrow } from 'src/schema/parse';
-import { TripSourceSchema } from 'src/schema/trip-source';
+import { TripSourceSchema } from 'src/schema/legacy/trip-source';
 
 const SHARE = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 

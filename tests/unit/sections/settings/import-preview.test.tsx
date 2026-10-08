@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TRUNCATION_MARK } from 'src/domain/library/legacy-import';
 import { setAppRuntimeForTest } from 'src/lib/effect/runtime';
 import type { Library } from 'src/schema/library';
-import type { TripData } from 'src/schema/trip-data';
+import type { TripData } from 'src/schema/legacy/trip-data';
 import { LIBRARY_KEY } from 'src/services/library-store';
 import { makePlace, renderLibrary, sampleLibrary, withPlaces } from '../library/fixtures';
 import { dialog, jsonFile, NEW_IDS, tripOf } from './import-fixtures';

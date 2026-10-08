@@ -6,10 +6,10 @@ import {
   EditLayerSchema,
   isEditLayerTooLarge,
   MERGE_RESULT_TOO_LARGE,
-} from 'src/schema/edit-layer';
-import type { DayEdit, EditLayer, PlaceEdit } from 'src/schema/edit-layer';
+} from 'src/schema/legacy/edit-layer';
+import type { DayEdit, EditLayer, PlaceEdit } from 'src/schema/legacy/edit-layer';
 import { safeParse } from 'src/schema/parse';
-import type { TripData } from 'src/schema/trip-data';
+import type { TripData } from 'src/schema/legacy/trip-data';
 
 export type MergeSide = 'local' | 'incoming';
 

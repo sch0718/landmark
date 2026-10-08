@@ -1,5 +1,5 @@
-import type { EditLayer } from 'src/schema/edit-layer';
-import type { Day, Leg, Place, TripData } from 'src/schema/trip-data';
+import type { EditLayer } from 'src/schema/legacy/edit-layer';
+import type { Day, Leg, Place, TripData } from 'src/schema/legacy/trip-data';
 
 const FIXED_NOW = '2026-10-03T00:00:00.000Z';
 

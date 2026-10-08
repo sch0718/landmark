@@ -4,10 +4,9 @@ import { StrictMode } from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { MapView } from 'src/components/map/MapView';
 import { FakeMapAdapter } from 'src/components/map/FakeMapAdapter';
-import { ResponsiveTripLayout } from 'src/layouts/ResponsiveTripLayout';
-import type { LayoutKind } from 'src/layouts/layout-metrics';
 import type { ViewMode } from 'src/stores/ui-store';
 import { installMapResources } from './helpers/map-resources';
+type LayoutKind = 'compact' | 'split' | 'wide';
 const auth = vi.hoisted(() => ({ fail: null as (() => void) | null }));
 vi.mock('src/components/map/load-naver-sdk', () => ({
   loadNaverSdk: vi.fn(() => Promise.resolve()),
@@ -35,7 +34,6 @@ const markers = [
 ];
 const markerClick = vi.fn();
 const boundsChange = vi.fn();
-const padding = vi.fn();
 function Shell({
   layout,
   view,
@@ -46,27 +44,24 @@ function Shell({
   unavailable?: string | null;
 }) {
   const visible = !unavailable && (view === 'map' || (view === 'day' && layout !== 'compact'));
+  // 옛 레이아웃처럼 지도 영역은 항상 같은 자리에 두고, 지도를 쓸 수 없을 때만 지도를 치운다.
   return (
-    <ResponsiveTripLayout
-      topBar={<div>상단</div>}
-      map={
-        <MapView
-          visible={visible}
-          markers={markers}
-          polylines={[]}
-          onMarkerClick={markerClick}
-          onBoundsChange={boundsChange}
-          onUnavailable={vi.fn()}
-        />
-      }
-      panel={<div>목록</div>}
-      detail={{ open: false, content: null, onClose: vi.fn() }}
-      layout={layout}
-      view={view}
-      unavailable={unavailable}
-      routeMapVisible={false}
-      onMapPaddingChange={padding}
-    />
+    <div>
+      <div>상단</div>
+      <div data-testid="trip-map-area">
+        {!unavailable && (
+          <MapView
+            visible={visible}
+            markers={markers}
+            polylines={[]}
+            onMarkerClick={markerClick}
+            onBoundsChange={boundsChange}
+            onUnavailable={vi.fn()}
+          />
+        )}
+      </div>
+      <div>목록</div>
+    </div>
   );
 }
 for (const initial of ['places', 'day'] as const)

@@ -1,8 +1,8 @@
 import { dirname, join } from 'node:path';
 import { parseDocument, type Document } from 'yaml';
 import { safeParse, parseOrThrow } from 'src/schema/parse';
-import { TRIP_DATA_PARSE, TripDataSchema, type TripData } from 'src/schema/trip-data';
-import { TripSourceSchema, type TripSource } from 'src/schema/trip-source';
+import { TRIP_DATA_PARSE, TripDataSchema, type TripData } from 'src/schema/legacy/trip-data';
+import { TripSourceSchema, type TripSource } from 'src/schema/legacy/trip-source';
 import { dayTotals } from 'src/domain/day-totals';
 import { buildPlaces, folderSids } from './build-places';
 import type { FsPort } from './fs-port';

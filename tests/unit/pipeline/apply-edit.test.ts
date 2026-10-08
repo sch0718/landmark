@@ -8,10 +8,15 @@ import { ApplyEditError, applyEdit } from '../../../pipeline/apply-edit';
 import { collect } from '../../../pipeline/collect';
 import { createShellGitPort, type GitPort } from '../../../pipeline/git-port';
 import { hashDayStops } from 'src/domain/day-hash';
-import type { DayEdit, EditLayer } from 'src/schema/edit-layer';
+import type { DayEdit, EditLayer } from 'src/schema/legacy/edit-layer';
 import { parseOrThrow, safeParse } from 'src/schema/parse';
-import { TRIP_DATA_PARSE, TripDataSchema, type Stop, type TripData } from 'src/schema/trip-data';
-import { TripSourceSchema } from 'src/schema/trip-source';
+import {
+  TRIP_DATA_PARSE,
+  TripDataSchema,
+  type Stop,
+  type TripData,
+} from 'src/schema/legacy/trip-data';
+import { TripSourceSchema } from 'src/schema/legacy/trip-source';
 import { fixture, NOW, setupCollect, YAML_PATH } from './pipeline-harness';
 
 const EDIT_PATH = 'edits/x.tripedit.json';

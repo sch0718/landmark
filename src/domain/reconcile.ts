@@ -6,9 +6,9 @@ import {
   EditLayerSchema,
   type DayEdit,
   type EditLayer,
-} from 'src/schema/edit-layer';
+} from 'src/schema/legacy/edit-layer';
 import { safeParse } from 'src/schema/parse';
-import type { TripData } from 'src/schema/trip-data';
+import type { TripData } from 'src/schema/legacy/trip-data';
 
 export type ReconcileReport = {
   removedStops: { date: string; stopId: string; placeKey: string }[];

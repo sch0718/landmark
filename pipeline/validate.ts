@@ -1,7 +1,7 @@
 import { parse } from 'yaml';
 import { safeParse, type ParseResult } from 'src/schema/parse';
-import { TRIP_DATA_PARSE, TripDataSchema } from 'src/schema/trip-data';
-import { TripSourceSchema } from 'src/schema/trip-source';
+import { TRIP_DATA_PARSE, TripDataSchema } from 'src/schema/legacy/trip-data';
+import { TripSourceSchema } from 'src/schema/legacy/trip-source';
 import type { FsPort } from './fs-port';
 
 type Validator = (v: unknown) => ParseResult<unknown>;

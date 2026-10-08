@@ -1,6 +1,6 @@
 import { screen } from '@testing-library/react';
 import { vi } from 'vitest';
-import type { TripData } from 'src/schema/trip-data';
+import type { TripData } from 'src/schema/legacy/trip-data';
 import { makeTrip } from '../../../fixtures/builders';
 
 /**

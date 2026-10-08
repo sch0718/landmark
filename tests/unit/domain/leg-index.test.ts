@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { buildLegIndex, effectiveLegs } from 'src/domain/leg-index';
 import { overlay } from 'src/domain/overlay';
 import type { EffectiveDay } from 'src/domain/overlay';
-import type { EditLayer } from 'src/schema/edit-layer';
-import type { Stop, TripData } from 'src/schema/trip-data';
+import type { EditLayer } from 'src/schema/legacy/edit-layer';
+import type { Stop, TripData } from 'src/schema/legacy/trip-data';
 import { makeEdit, makeTrip, sid } from '../../fixtures/builders';
 
 const D1 = '2026-11-14';

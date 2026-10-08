@@ -1,6 +1,6 @@
 import { hashDayStops } from 'src/domain/day-hash';
-import type { EditLayer } from 'src/schema/edit-layer';
-import type { Stop, TripData } from 'src/schema/trip-data';
+import type { EditLayer } from 'src/schema/legacy/edit-layer';
+import type { Stop, TripData } from 'src/schema/legacy/trip-data';
 
 export type EffectiveDay = {
   date: string;

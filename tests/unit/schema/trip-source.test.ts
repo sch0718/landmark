@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseOrThrow, safeParse } from 'src/schema/parse';
-import { TripSourceSchema } from 'src/schema/trip-source';
+import { TripSourceSchema } from 'src/schema/legacy/trip-source';
 
 type SrcStop = { id?: string; place: string; time?: string; note?: string };
 

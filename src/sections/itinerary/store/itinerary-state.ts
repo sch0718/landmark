@@ -7,8 +7,8 @@ import { buildLegIndex, effectiveLegs, type DisplayLeg } from 'src/domain/leg-in
 import { overlay, type EffectiveDay } from 'src/domain/overlay';
 import { effectiveCategory } from 'src/domain/place-category';
 import { LIMITS } from 'src/schema/common';
-import type { EditLayer } from 'src/schema/edit-layer';
-import type { TripData } from 'src/schema/trip-data';
+import type { EditLayer } from 'src/schema/legacy/edit-layer';
+import type { TripData } from 'src/schema/legacy/trip-data';
 import { addStopToDay } from 'src/sections/explore/store/add-stop';
 import { useEditActions, useTripStore } from 'src/stores/trip-store';
 import { modeAtom, selectedDayAtom } from 'src/stores/ui-store';

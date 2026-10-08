@@ -23,8 +23,8 @@ import {
   writeEditLayer,
 } from 'src/repositories/edit-layer-repo';
 import { loadTrip, type TripLoadResult } from 'src/repositories/trip-repo';
-import { newEditLayer, type EditLayer } from 'src/schema/edit-layer';
-import type { TripData } from 'src/schema/trip-data';
+import { newEditLayer, type EditLayer } from 'src/schema/legacy/edit-layer';
+import type { TripData } from 'src/schema/legacy/trip-data';
 
 export type TripStoreDeps = {
   /** 기본값 `window.localStorage`. 쓸 수 없으면 메모리 저장소로 대체한다. */

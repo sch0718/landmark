@@ -1,10 +1,10 @@
 import { Context, Effect, Layer } from 'effect';
 import type { LegacySource } from 'src/domain/library/legacy-import';
 import { migrateEditLayer, storageKey } from 'src/repositories/edit-layer-repo';
-import { EDIT_LAYER_PARSE, EditLayerSchema, type EditLayer } from 'src/schema/edit-layer';
+import { EDIT_LAYER_PARSE, EditLayerSchema, type EditLayer } from 'src/schema/legacy/edit-layer';
 import { PublicId } from 'src/schema/common';
 import { is, safeParse } from 'src/schema/parse';
-import { TRIP_DATA_PARSE, TripDataSchema, type TripData } from 'src/schema/trip-data';
+import { TRIP_DATA_PARSE, TripDataSchema, type TripData } from 'src/schema/legacy/trip-data';
 import { browserStorage } from 'src/services/browser-storage';
 import { LegacyImportInvalid } from 'src/services/errors';
 

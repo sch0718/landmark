@@ -1,6 +1,6 @@
 import { ensureOverride, overlay } from 'src/domain/overlay';
-import type { EditLayer } from 'src/schema/edit-layer';
-import type { TripData } from 'src/schema/trip-data';
+import type { EditLayer } from 'src/schema/legacy/edit-layer';
+import type { TripData } from 'src/schema/legacy/trip-data';
 
 const ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789';
 

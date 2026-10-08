@@ -3,7 +3,7 @@ import { hashDayStops } from 'src/domain/day-hash';
 import { findDuplicateStopIds, overlay } from 'src/domain/overlay';
 import { keepMine, reconcile } from 'src/domain/reconcile';
 import { applyRevert, planRevert } from 'src/domain/revert';
-import { EDIT_LAYER_PARSE, EditLayerSchema } from 'src/schema/edit-layer';
+import { EDIT_LAYER_PARSE, EditLayerSchema } from 'src/schema/legacy/edit-layer';
 import { safeParse } from 'src/schema/parse';
 import { makeEdit, makeTrip, sid } from '../../fixtures/builders';
 

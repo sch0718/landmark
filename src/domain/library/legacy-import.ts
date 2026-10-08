@@ -8,8 +8,8 @@ import {
   type Place,
   type PlaceSource,
 } from 'src/schema/library';
-import type { EditLayer } from 'src/schema/edit-layer';
-import type { TripData } from 'src/schema/trip-data';
+import type { EditLayer } from 'src/schema/legacy/edit-layer';
+import type { TripData } from 'src/schema/legacy/trip-data';
 
 // 옛 여행(TripData + 편집 레이어) → 보관함 변환(스펙 §4.6, §3 중복 규칙).
 // 미리보기와 적용이 같은 계획 함수를 쓰고, 적용 때는 최신 보관함으로 다시 계획해 `semanticKey`로 비교한다.

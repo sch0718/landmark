@@ -1,5 +1,5 @@
 import type { EffectiveTrip } from 'src/domain/overlay';
-import type { TripData } from 'src/schema/trip-data';
+import type { TripData } from 'src/schema/legacy/trip-data';
 
 /** 날짜 → 그날의 stop id 목록. */
 export type Placement = Record<string, string[]>;

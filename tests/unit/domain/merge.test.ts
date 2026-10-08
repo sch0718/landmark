@@ -4,8 +4,8 @@ import { pickLww } from 'src/domain/lww';
 import { applyMerge, planMerge } from 'src/domain/merge';
 import { findDuplicateStopIds, overlay } from 'src/domain/overlay';
 import { LIMITS } from 'src/schema/common';
-import type { DayEdit, EditLayer } from 'src/schema/edit-layer';
-import type { Stop, TripData } from 'src/schema/trip-data';
+import type { DayEdit, EditLayer } from 'src/schema/legacy/edit-layer';
+import type { Stop, TripData } from 'src/schema/legacy/trip-data';
 import { makeEdit, makeTrip, sid, withBulkyMemos } from '../../fixtures/builders';
 
 const T1 = '2026-10-03T00:10:00.000Z';

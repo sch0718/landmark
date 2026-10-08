@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { safeParse } from 'src/schema/parse';
-import { TRIP_DATA_PARSE, TripDataSchema, type TripData } from 'src/schema/trip-data';
+import { TRIP_DATA_PARSE, TripDataSchema, type TripData } from 'src/schema/legacy/trip-data';
 import { makeTrip, sid } from '../../fixtures/builders';
 
 const trip = () =>
