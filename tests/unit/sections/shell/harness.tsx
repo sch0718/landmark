@@ -43,14 +43,16 @@ export function mockViewport(initial: number): { setWidth: (width: number) => vo
 }
 
 /** 실제 라우트 표를 메모리 라우터로 그린다. 저장소는 `storage`(없으면 메모리 모드). */
-export async function renderApp(options: { path?: string; storage?: Storage } = {}) {
-  const { path = '/', storage } = options;
+export async function renderApp(
+  options: { path?: string; storage?: Storage; ids?: string[] } = {},
+) {
+  const { path = '/', storage, ids = [] } = options;
   setAppRuntimeForTest(
     ManagedRuntime.make(
       Layer.mergeAll(
         LibraryStore.layerWith({ storage, events: new EventTarget() }),
         PrefsStore.layerWith({ storage }),
-        IdGen.layerSequence([]),
+        IdGen.layerSequence(ids),
         LegacyTripSource.layerWith({ storage, fetch: (...args) => globalThis.fetch(...args) }),
       ),
     ),

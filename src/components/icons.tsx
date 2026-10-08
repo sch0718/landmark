@@ -14,6 +14,7 @@ import UndoIcon from '~icons/lucide/undo-2';
 import GripIcon from '~icons/lucide/grip-vertical';
 import ExternalLinkIcon from '~icons/lucide/external-link';
 import NavigationIcon from '~icons/lucide/navigation';
+import PencilIcon from '~icons/lucide/pencil';
 import XIcon from '~icons/lucide/x';
 import CheckIcon from '~icons/lucide/check';
 import ChevronLeftIcon from '~icons/lucide/chevron-left';
@@ -76,6 +77,7 @@ export {
   GripIcon,
   ExternalLinkIcon,
   NavigationIcon,
+  PencilIcon,
   XIcon,
   CheckIcon,
   ChevronLeftIcon,

@@ -1,6 +1,7 @@
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import { LibraryPage } from 'src/sections/library/LibraryPage';
+import { PlaceDetail } from 'src/sections/place/PlaceDetail';
 
 /**
  * 셸의 슬롯 자리. 크기·경계·랜드마크는 `AppShell`이 정하고, 안쪽 내용은 각 태스크가 이 컴포넌트를
@@ -34,7 +35,7 @@ export function DetailSlot({ placeId }: { placeId: string | null }) {
   return placeId === null ? (
     <SlotPlaceholder title="장소 상세">장소를 고르면 여기에 보여요</SlotPlaceholder>
   ) : (
-    <SlotPlaceholder title="장소 상세">{placeId}</SlotPlaceholder>
+    <PlaceDetail placeId={placeId} />
   );
 }
 
