@@ -3,7 +3,10 @@ import type { LegacySource, MemoDecision, PendingDecision } from 'src/domain/lib
 import { liveLabels } from 'src/domain/library/query';
 import { LIBRARY_LIMITS, normalizeLabelName, type Library } from 'src/schema/library';
 
-/** 라벨 이름 확인 항목 하나의 입력. `confirmed`가 아니면 아직 결정이 아니다(제안값을 조용히 받지 않는다). */
+/**
+ * 라벨 이름 확인 항목 하나의 입력. `confirmed`는 이름을 확인했다는 뜻이고, 제외(`excluded`)는 그 자체로 결정이다.
+ * 제외를 풀면 `confirmed`가 그대로라서 제안값을 조용히 받지 않는다.
+ */
 export type LabelDraft = { name: string; excluded: boolean; confirmed: boolean };
 
 export type Decisions = {
@@ -104,8 +107,8 @@ export function toChoices(
 ): ImportChoices {
   const labels: ImportChoices['labels'] = {};
   for (const [key, draft] of Object.entries(decisions.labels)) {
-    if (!draft.confirmed) continue;
     if (draft.excluded) labels[key] = { kind: 'exclude' };
+    else if (!draft.confirmed) continue;
     else if (labelNameError(key, decisions, library, source) === null) {
       labels[key] = { kind: 'use', name: draft.name };
     }

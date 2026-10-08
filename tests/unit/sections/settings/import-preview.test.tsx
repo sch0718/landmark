@@ -130,6 +130,31 @@ describe('ImportPreview decisions', () => {
     expect(importButton()).toBeEnabled();
   });
 
+  it('unticking exclude does not turn the suggested name into a decision', async () => {
+    const { user } = await openPreview(pendingTrip());
+    await user.click(within(memoItem()).getByRole('radio', { name: '이 장소 제외' }));
+    const exclude = () => within(labelItem()).getByRole('checkbox', { name: '이 라벨 제외' });
+    await user.click(exclude());
+    expect(importButton()).toBeEnabled();
+
+    await user.click(exclude());
+    expect(nameInput()).toBeEnabled();
+    expect(summary()).toBe('새로 추가 1 · 이미 있음 0(라벨만 합침) · 새 라벨 0 · 확인 필요 1');
+    expect(importButton()).toBeDisabled();
+    expect(within(labelItem()).getByRole('button', { name: '이 이름 사용' })).toBeEnabled();
+  });
+
+  it('unticking exclude keeps a name the user had already confirmed', async () => {
+    const { user } = await openPreview(pendingTrip());
+    await user.click(within(memoItem()).getByRole('radio', { name: '이 장소 제외' }));
+    await user.click(within(labelItem()).getByRole('button', { name: '이 이름 사용' }));
+    const exclude = () => within(labelItem()).getByRole('checkbox', { name: '이 라벨 제외' });
+    await user.click(exclude());
+    await user.click(exclude());
+    expect(summary()).toContain('새 라벨 1');
+    expect(importButton()).toBeEnabled();
+  });
+
   it('applies the truncated memo and the chosen label name', async () => {
     const { user, storage } = await openPreview(pendingTrip());
     await user.click(

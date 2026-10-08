@@ -94,9 +94,7 @@ export function LabelNameItem({ item, draft, error, onChange }: LabelProps) {
         control={
           <Checkbox
             checked={draft.excluded}
-            onChange={(event) =>
-              onChange({ ...draft, excluded: event.target.checked, confirmed: true })
-            }
+            onChange={(event) => onChange({ ...draft, excluded: event.target.checked })}
           />
         }
         label="이 라벨 제외"
