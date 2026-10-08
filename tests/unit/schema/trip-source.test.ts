@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { parseOrThrow, safeParse } from 'src/schema/parse';
 import { TripSourceSchema } from 'src/schema/trip-source';
 
 type SrcStop = { id?: string; place: string; time?: string; note?: string };
@@ -127,39 +128,41 @@ describe('TripSourceSchema', () => {
   it.each(cases)('$name', ({ mutate, ok }) => {
     const s = base();
     mutate(s);
-    expect(TripSourceSchema.safeParse(s).success).toBe(ok);
+    expect(safeParse(TripSourceSchema, s).success).toBe(ok);
   });
 
   it('publish 생략 시 naverMemo === true', () => {
-    const r = TripSourceSchema.parse(base());
+    const r = parseOrThrow(TripSourceSchema, base());
     expect(r.publish.naverMemo).toBe(true);
   });
 
   it('publicId·stop id 생략 가능', () => {
     const s = base();
     s.days[0]!.stops = [{ place: 'start' }];
-    expect(TripSourceSchema.safeParse(s).success).toBe(true);
+    expect(safeParse(TripSourceSchema, s).success).toBe(true);
   });
 
   it('날짜 오류는 해당 경로를 가리킨다', () => {
     const s = base();
     s.days[1]!.date = '2026-11-14';
-    const r = TripSourceSchema.safeParse(s);
+    const r = safeParse(TripSourceSchema, s);
     expect(r.success).toBe(false);
-    if (!r.success) expect(r.error.issues[0]?.path).toEqual(['days', 1, 'date']);
+    if (!r.success) expect(r.issues[0]?.path).toBe('days.1.date');
   });
 });
 
 describe('TripSource naverPlaces', () => {
   it('생략하면 빈 목록이고, 숫자 문자열 장소 ID만 받는다', () => {
-    expect(TripSourceSchema.parse(base()).naverPlaces).toEqual([]);
-    expect(TripSourceSchema.safeParse({ ...base(), naverPlaces: ['20307427'] }).success).toBe(true);
-    expect(TripSourceSchema.safeParse({ ...base(), naverPlaces: ['c:home'] }).success).toBe(false);
+    expect(parseOrThrow(TripSourceSchema, base()).naverPlaces).toEqual([]);
+    expect(safeParse(TripSourceSchema, { ...base(), naverPlaces: ['20307427'] }).success).toBe(
+      true,
+    );
+    expect(safeParse(TripSourceSchema, { ...base(), naverPlaces: ['c:home'] }).success).toBe(false);
   });
 
   it('같은 장소 ID가 두 번 나오면 거부한다', () => {
-    const r = TripSourceSchema.safeParse({ ...base(), naverPlaces: ['20307427', '20307427'] });
+    const r = safeParse(TripSourceSchema, { ...base(), naverPlaces: ['20307427', '20307427'] });
     expect(r.success).toBe(false);
-    expect(r.error?.issues[0]?.path).toEqual(['naverPlaces', 1]);
+    expect(r.success ? undefined : r.issues[0]?.path).toBe('naverPlaces.1');
   });
 });

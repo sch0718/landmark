@@ -9,7 +9,8 @@ import { collect } from '../../../pipeline/collect';
 import { createShellGitPort, type GitPort } from '../../../pipeline/git-port';
 import { hashDayStops } from 'src/domain/day-hash';
 import type { DayEdit, EditLayer } from 'src/schema/edit-layer';
-import { TripDataSchema, type Stop, type TripData } from 'src/schema/trip-data';
+import { parseOrThrow, safeParse } from 'src/schema/parse';
+import { TRIP_DATA_PARSE, TripDataSchema, type Stop, type TripData } from 'src/schema/trip-data';
 import { TripSourceSchema } from 'src/schema/trip-source';
 import { fixture, NOW, setupCollect, YAML_PATH } from './pipeline-harness';
 
@@ -29,7 +30,7 @@ const threeDayYaml = (): string =>
 async function prepared(yaml = fixture('trips/basic.yaml')) {
   const env = setupCollect(yaml);
   const r = await collect(YAML_PATH, { refreshRoutes: false }, env.deps);
-  const json = TripDataSchema.parse(JSON.parse(env.fs.files[r.outPath]!));
+  const json = parseOrThrow(TripDataSchema, JSON.parse(env.fs.files[r.outPath]!), TRIP_DATA_PARSE);
   return { ...env, json, jsonPath: r.outPath };
 }
 
@@ -105,7 +106,8 @@ async function expectFailure(
 }
 
 const yamlStops = (text: string, date: string) =>
-  TripSourceSchema.parse(parseDocument(text).toJS()).days.find((d) => d.date === date)!.stops;
+  parseOrThrow(TripSourceSchema, parseDocument(text).toJS()).days.find((d) => d.date === date)!
+    .stops;
 
 describe('applyEdit', () => {
   it('override인 날만 yaml에 반영하고 주석·reset 날·편집 없는 날은 그대로 둔다', async () => {
@@ -261,11 +263,15 @@ describe('applyEdit', () => {
     const { result } = await runApply(env, edit);
     expect(result).toEqual({ ok: true, value: { appliedDates: [D2] } });
     const after = env.fs.files[YAML_PATH]!;
-    expect(TripSourceSchema.safeParse(parseDocument(after).toJS()).success).toBe(true);
+    expect(safeParse(TripSourceSchema, parseDocument(after).toJS()).success).toBe(true);
     expect(yamlStops(after, D2)).toEqual([]);
 
     const r = await collect(YAML_PATH, { refreshRoutes: false }, env.deps);
-    const data = TripDataSchema.parse(JSON.parse(env.fs.files[r.outPath]!));
+    const data = parseOrThrow(
+      TripDataSchema,
+      JSON.parse(env.fs.files[r.outPath]!),
+      TRIP_DATA_PARSE,
+    );
     expect(dayOf(data, D2)).toMatchObject({ stops: [], legs: [] });
   });
 
@@ -286,7 +292,11 @@ describe('applyEdit', () => {
     const routedBefore = env.calls.routeQueries.length;
     const r = await collect(YAML_PATH, { refreshRoutes: false }, env.deps);
     expect(env.calls.routeQueries.slice(routedBefore)).toEqual([query(a!, c!), query(c!, b!)]);
-    const data = TripDataSchema.parse(JSON.parse(env.fs.files[r.outPath]!));
+    const data = parseOrThrow(
+      TripDataSchema,
+      JSON.parse(env.fs.files[r.outPath]!),
+      TRIP_DATA_PARSE,
+    );
     expect(dayOf(data, D1).stops.map((s) => s.id)).toEqual([a!.id, c!.id, b!.id]);
     expect(data.dataVersion).toBe(NOW);
   });

@@ -1,4 +1,10 @@
-import { assertEditLayerSize, EditLayerSchema, type EditLayer } from 'src/schema/edit-layer';
+import {
+  assertEditLayerSize,
+  EDIT_LAYER_PARSE,
+  EditLayerSchema,
+  type EditLayer,
+} from 'src/schema/edit-layer';
+import { parseOrThrow, safeParse } from 'src/schema/parse';
 
 /** localStorage 키(§5.1). */
 export function storageKey(publicId: string): string {
@@ -136,7 +142,7 @@ function parseStored(raw: string): EditLayer | null {
   } catch {
     return null;
   }
-  const parsed = EditLayerSchema.safeParse(migrated);
+  const parsed = safeParse(EditLayerSchema, migrated, EDIT_LAYER_PARSE);
   return parsed.success ? parsed.data : null;
 }
 
@@ -157,7 +163,7 @@ export async function updateEditLayer(
   return withEditLock(publicId, deps, () => {
     const { edit: current } = readEditLayer(deps.storage, publicId, deps.now());
     const next = fn(current);
-    EditLayerSchema.parse(next);
+    parseOrThrow(EditLayerSchema, next, EDIT_LAYER_PARSE);
     // 내보낼 수 없는 크기로 자라지 않게 막는다(§5.3 크기 제한).
     assertEditLayerSize(next);
     deps.storage.setItem(storageKey(publicId), JSON.stringify(next));

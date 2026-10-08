@@ -1,4 +1,5 @@
 import { Lat, Lng } from 'src/schema/common';
+import { safeParse } from 'src/schema/parse';
 import type { Place, TripData } from 'src/schema/trip-data';
 import type { TripSource } from 'src/schema/trip-source';
 import type { Bookmark, FetchedFolder, NaverPlace } from './naver-client';
@@ -17,7 +18,7 @@ export type BuildPlacesResult = {
 type Occurrence = { folderId: string; bookmark: Bookmark };
 
 const inRange = (b: Bookmark): boolean =>
-  Lng.safeParse(b.px).success && Lat.safeParse(b.py).success;
+  safeParse(Lng, b.px).success && safeParse(Lat, b.py).success;
 
 /** 폴더에 저장된 장소의 sid. 사용 불가·범위 밖으로 제외된 북마크도 포함한다. */
 export function folderSids(folders: FetchedFolder[]): Set<string> {
@@ -90,7 +91,7 @@ export function buildPlaces(
   for (const p of naverPlaces) {
     const key = `n:${p.sid}`;
     if (inFolders.has(p.sid) || places[key]) continue;
-    if (!Lng.safeParse(p.lng).success || !Lat.safeParse(p.lat).success) {
+    if (!safeParse(Lng, p.lng).success || !safeParse(Lat, p.lat).success) {
       report.excludedOutOfRange.push({ sid: p.sid, name: p.name });
       continue;
     }

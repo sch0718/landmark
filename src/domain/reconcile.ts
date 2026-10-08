@@ -1,7 +1,13 @@
 import { groupDates, placementOfEffective, placementOfTrip } from 'src/domain/date-groups';
 import { hashDayStops, sameDayStops } from 'src/domain/day-hash';
 import { findDuplicateStopIds, overlay } from 'src/domain/overlay';
-import { EditLayerSchema, type DayEdit, type EditLayer } from 'src/schema/edit-layer';
+import {
+  EDIT_LAYER_PARSE,
+  EditLayerSchema,
+  type DayEdit,
+  type EditLayer,
+} from 'src/schema/edit-layer';
+import { safeParse } from 'src/schema/parse';
 import type { TripData } from 'src/schema/trip-data';
 
 export type ReconcileReport = {
@@ -115,6 +121,6 @@ export function keepMine(
 
   const result: EditLayer = { ...edit, days };
   if (findDuplicateStopIds(overlay(trip, result).days).length > 0) return null;
-  if (!EditLayerSchema.safeParse(result).success) return null;
+  if (!safeParse(EditLayerSchema, result, EDIT_LAYER_PARSE).success) return null;
   return result;
 }

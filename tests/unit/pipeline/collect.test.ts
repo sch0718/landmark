@@ -2,7 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { collect, SourceValidationError } from '../../../pipeline/collect';
 import { UnresolvedPlacesError } from '../../../pipeline/resolve-stops';
 import { validateAll } from '../../../pipeline/validate';
-import { TripDataSchema } from 'src/schema/trip-data';
+import { parseOrThrow } from 'src/schema/parse';
+import { TRIP_DATA_PARSE, TripDataSchema } from 'src/schema/trip-data';
 import { fixture, NOW, setupCollect as setup, SHARE_ID, YAML_PATH } from './pipeline-harness';
 
 describe('collect', () => {
@@ -19,7 +20,7 @@ describe('collect', () => {
     expect(r.outPath).toBe(`public/data/${r.publicId}.json`);
     const raw = fs.files[r.outPath]!;
     expect(raw).not.toContain('\n');
-    const data = TripDataSchema.parse(JSON.parse(raw));
+    const data = parseOrThrow(TripDataSchema, JSON.parse(raw), TRIP_DATA_PARSE);
     expect(data.dataVersion).toBe(NOW);
     expect(data.folders[0]).toMatchObject({ id: 'f1', name: '속초, 고성, 양양 맛집' });
     expect(raw).not.toContain(SHARE_ID);
@@ -51,7 +52,7 @@ describe('collect', () => {
     expect(yaml).not.toContain('1732759357');
     const { fs, deps } = setup(yaml);
     const r = await collect(YAML_PATH, { refreshRoutes: false }, deps);
-    const data = TripDataSchema.parse(JSON.parse(fs.files[r.outPath]!));
+    const data = parseOrThrow(TripDataSchema, JSON.parse(fs.files[r.outPath]!), TRIP_DATA_PARSE);
     expect(data.days[1]).toMatchObject({ stops: [], legs: [] });
   });
 
@@ -89,7 +90,7 @@ describe('collect', () => {
     expect(day.uncomputedCount).toBe(1);
     expect(day.straightDistanceM).toBeGreaterThan(0);
     expect(day.failed).toHaveLength(1);
-    const data = TripDataSchema.parse(JSON.parse(fs.files[r.outPath]!));
+    const data = parseOrThrow(TripDataSchema, JSON.parse(fs.files[r.outPath]!), TRIP_DATA_PARSE);
     const [routed, failedLeg] = data.days[0]!.legs;
     expect(failedLeg!.status).toBe('failed');
     expect(day.roadDistanceM).toBe(routed!.distanceM);
@@ -123,7 +124,7 @@ days:
     it('저장 폴더 없이 장소 ID로 네이버 분류·링크가 있는 장소를 만든다', async () => {
       const { fs, deps, calls } = setup(yaml("'20307427'"));
       const r = await collect(YAML_PATH, { refreshRoutes: false }, deps);
-      const data = TripDataSchema.parse(JSON.parse(fs.files[r.outPath]!));
+      const data = parseOrThrow(TripDataSchema, JSON.parse(fs.files[r.outPath]!), TRIP_DATA_PARSE);
       expect(calls.placeSids).toEqual(['20307427']);
       expect(data.places['n:20307427']).toMatchObject({
         name: '착한전복 제주중문점',

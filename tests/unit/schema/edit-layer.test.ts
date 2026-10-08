@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   assertEditLayerSize,
+  EDIT_LAYER_PARSE,
   editLayerByteLength,
   EditLayerSchema,
   newEditLayer,
   serializeEditLayerFile,
   type EditLayer,
 } from 'src/schema/edit-layer';
+import { safeParse } from 'src/schema/parse';
 import { makeEdit, sid, withBulkyMemos } from '../../fixtures/builders';
 
 const NOW = '2026-10-03T01:00:00.000Z';
@@ -205,11 +207,11 @@ describe('EditLayerSchema', () => {
   it.each(cases)('$name', ({ mutate, ok }) => {
     const e = structuredClone(makeEdit());
     mutate(e);
-    expect(EditLayerSchema.safeParse(e).success).toBe(ok);
+    expect(safeParse(EditLayerSchema, e, EDIT_LAYER_PARSE).success).toBe(ok);
   });
 
   it('makeEdit()이 스키마를 통과한다', () => {
-    expect(EditLayerSchema.safeParse(makeEdit()).success).toBe(true);
+    expect(safeParse(EditLayerSchema, makeEdit(), EDIT_LAYER_PARSE).success).toBe(true);
   });
 
   it('makeEdit overrides를 적용한다', () => {
@@ -219,9 +221,26 @@ describe('EditLayerSchema', () => {
   it('memos 오류는 경로를 가리킨다', () => {
     const e = makeEdit();
     e.places['n:1'] = memoOf('x', 'ghost');
-    const r = EditLayerSchema.safeParse(e);
+    const r = safeParse(EditLayerSchema, e, EDIT_LAYER_PARSE);
     expect(r.success).toBe(false);
-    if (!r.success) expect(r.error.issues[0]?.path).toEqual(['places', 'n:1', 'memos', 'ghost']);
+    if (!r.success) expect(r.issues[0]?.path).toBe('places.n:1.memos.ghost');
+  });
+
+  it('reset 날에 알 수 없는 키가 있으면 EDIT_LAYER_PARSE로 거부한다', () => {
+    const e = makeEdit();
+    e.days['2026-11-14'] = { mode: 'reset', updatedAt: NOW, junk: 1 } as never;
+    const r = safeParse(EditLayerSchema, e, EDIT_LAYER_PARSE);
+    expect(r.success).toBe(false);
+    if (!r.success) expect(r.issues[0]?.path).toBe('days.2026-11-14.junk');
+  });
+
+  it('category는 앞뒤 공백을 지운 값으로 길이를 검사하고 지운 값을 돌려준다', () => {
+    const e = makeEdit();
+    e.places['n:1'] = categoryOf('  카페  ');
+    const r = safeParse(EditLayerSchema, e, EDIT_LAYER_PARSE);
+    expect(r.success && r.data.places['n:1']?.category?.value).toBe('카페');
+    e.places['n:1'] = categoryOf('   ');
+    expect(safeParse(EditLayerSchema, e, EDIT_LAYER_PARSE).success).toBe(false);
   });
 
   it('newEditLayer는 작성자를 authors에 넣고 비어 있는 레이어를 만든다', () => {
@@ -241,7 +260,7 @@ describe('EditLayerSchema', () => {
       places: {},
       days: {},
     });
-    expect(EditLayerSchema.safeParse(e).success).toBe(true);
+    expect(safeParse(EditLayerSchema, e, EDIT_LAYER_PARSE).success).toBe(true);
   });
 });
 

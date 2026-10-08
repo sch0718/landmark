@@ -1,4 +1,5 @@
-import { TripDataSchema, type TripData } from 'src/schema/trip-data';
+import { safeParse } from 'src/schema/parse';
+import { TRIP_DATA_PARSE, TripDataSchema, type TripData } from 'src/schema/trip-data';
 
 export type TripLoadResult =
   | { ok: true; trip: TripData }
@@ -44,11 +45,11 @@ export async function loadTrip(
     };
   }
 
-  const parsed = TripDataSchema.safeParse(raw);
+  const parsed = safeParse(TripDataSchema, raw, TRIP_DATA_PARSE);
   if (parsed.success) return { ok: true, trip: parsed.data };
 
-  const first = parsed.error.issues[0];
-  const where = first && first.path.length > 0 ? `${first.path.join('.')}: ` : '';
+  const first = parsed.issues[0];
+  const where = first && first.path !== '' ? `${first.path}: ` : '';
   const failure: TripLoadResult = {
     ok: false,
     kind: 'invalid',

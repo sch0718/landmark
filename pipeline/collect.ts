@@ -1,6 +1,7 @@
 import { dirname, join } from 'node:path';
 import { parseDocument, type Document } from 'yaml';
-import { TripDataSchema, type TripData } from 'src/schema/trip-data';
+import { safeParse, parseOrThrow } from 'src/schema/parse';
+import { TRIP_DATA_PARSE, TripDataSchema, type TripData } from 'src/schema/trip-data';
 import { TripSourceSchema, type TripSource } from 'src/schema/trip-source';
 import { dayTotals } from 'src/domain/day-totals';
 import { buildPlaces, folderSids } from './build-places';
@@ -66,11 +67,11 @@ export function parseSource(text: string, file: string): { doc: Document; source
       doc.errors.map((e) => ({ path: '', message: e.message })),
     );
   }
-  const parsed = TripSourceSchema.safeParse(doc.toJS());
+  const parsed = safeParse(TripSourceSchema, doc.toJS());
   if (!parsed.success) {
     throw new SourceValidationError(
       file,
-      parsed.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })),
+      parsed.issues.map((i) => ({ path: i.path, message: i.message })),
     );
   }
   return { doc, source: parsed.data };
@@ -138,17 +139,21 @@ export async function collect(
     now,
   });
 
-  const data: TripData = TripDataSchema.parse({
-    schemaVersion: 1,
-    publicId,
-    title: source.title,
-    startDate: source.startDate,
-    endDate: source.endDate,
-    dataVersion: now,
-    folders: built.folders,
-    places: built.places,
-    days,
-  });
+  const data: TripData = parseOrThrow(
+    TripDataSchema,
+    {
+      schemaVersion: 1,
+      publicId,
+      title: source.title,
+      startDate: source.startDate,
+      endDate: source.endDate,
+      dataVersion: now,
+      folders: built.folders,
+      places: built.places,
+      days,
+    },
+    TRIP_DATA_PARSE,
+  );
 
   const outPath = join(dirname(dirname(yamlPath)), 'public', 'data', `${publicId}.json`);
   await deps.fs.writeTextAtomic(outPath, JSON.stringify(data));

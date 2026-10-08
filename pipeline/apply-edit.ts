@@ -1,8 +1,9 @@
 import { dirname, join } from 'node:path';
 import { isMap, isScalar, isSeq, parseDocument, Scalar, type Document, type YAMLMap } from 'yaml';
 import { reconcile } from 'src/domain/reconcile';
-import { EditLayerSchema, type EditLayer } from 'src/schema/edit-layer';
-import { TripDataSchema, type Stop, type TripData } from 'src/schema/trip-data';
+import { EDIT_LAYER_PARSE, EditLayerSchema, type EditLayer } from 'src/schema/edit-layer';
+import { safeParse } from 'src/schema/parse';
+import { TRIP_DATA_PARSE, TripDataSchema, type Stop, type TripData } from 'src/schema/trip-data';
 import { TripSourceSchema, type TripSource } from 'src/schema/trip-source';
 import { parseSource } from './collect';
 import type { FsPort } from './fs-port';
@@ -187,12 +188,12 @@ function parseEdit(text: string, file: string): EditLayer {
       e instanceof Error ? e.message : String(e),
     ]);
   }
-  const parsed = EditLayerSchema.safeParse(raw);
+  const parsed = safeParse(EditLayerSchema, raw, EDIT_LAYER_PARSE);
   if (!parsed.success) {
     throw new ApplyEditError(
       'invalid-edit',
       `${file}은 올바른 편집 파일이 아닙니다.`,
-      parsed.error.issues.slice(0, 20).map((i) => `${i.path.join('.') || '(루트)'}: ${i.message}`),
+      parsed.issues.slice(0, 20).map((i) => `${i.path || '(루트)'}: ${i.message}`),
     );
   }
   return parsed.data;
@@ -208,11 +209,11 @@ async function readTripData(fs: FsPort, jsonPath: string): Promise<TripData> {
       { cause: e },
     );
   }
-  const parsed = TripDataSchema.safeParse(JSON.parse(text));
+  const parsed = safeParse(TripDataSchema, JSON.parse(text), TRIP_DATA_PARSE);
   if (!parsed.success) {
-    const first = parsed.error.issues[0];
+    const first = parsed.issues[0];
     throw new Error(
-      `기준 JSON 검증 실패 (${jsonPath}): ${first ? `${first.path.join('.')}: ${first.message}` : ''}`,
+      `기준 JSON 검증 실패 (${jsonPath}): ${first ? `${first.path}: ${first.message}` : ''}`,
     );
   }
   return parsed.data;
@@ -324,9 +325,9 @@ function checkResult(text: string, writtenDates: string[]): void {
     );
   };
   if (reparsed.errors.length > 0) fail(reparsed.errors.map((e) => e.message));
-  const parsed = TripSourceSchema.safeParse(reparsed.toJS());
+  const parsed = safeParse(TripSourceSchema, reparsed.toJS());
   if (!parsed.success) {
-    fail(parsed.error.issues.map((i) => `${i.path.join('.') || '(루트)'}: ${i.message}`));
+    fail(parsed.issues.map((i) => `${i.path || '(루트)'}: ${i.message}`));
     return;
   }
   // 반영한 날의 customPlace 참조는 yaml 안에서 확인할 수 있다.
