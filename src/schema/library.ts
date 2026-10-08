@@ -62,6 +62,8 @@ export const LabelId = Schema.String.check(
 );
 export const LabelColor = Schema.Literals(LABEL_COLORS);
 export const LabelIcon = Schema.Literals(LABEL_ICONS);
+export type LabelColor = typeof LabelColor.Type;
+export type LabelIcon = typeof LabelIcon.Type;
 
 /** 필드 단위 최신값 우선(LWW)을 위한 `{ value, updatedAt }` 묶음. */
 export const FieldSchema = <S extends Schema.Constraint>(schema: S) =>
