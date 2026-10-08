@@ -10,6 +10,7 @@ import { createMemoryStorage } from 'src/repositories/edit-layer-repo';
 import { emptyLibrary, type Library, type Place } from 'src/schema/library';
 import { StorageQuotaExceeded } from 'src/services/errors';
 import { IdGen } from 'src/services/id-gen';
+import { LegacyTripSource } from 'src/services/legacy-trip-source';
 import { LIBRARY_KEY, LibraryStore } from 'src/services/library-store';
 import { PrefsStore } from 'src/services/prefs-store';
 import {
@@ -97,6 +98,7 @@ function setup(
     LibraryStore.layerWith({ storage, events, limits }),
     PrefsStore.layerWith({ storage }),
     IdGen.layerSequence(options.ids ?? ['label001']),
+    LegacyTripSource.layerWith({ storage, fetch: (...args) => globalThis.fetch(...args) }),
   );
   const runtime = ManagedRuntime.make(
     options.clock === true ? Layer.mergeAll(layers, TestClock.layer()) : layers,
