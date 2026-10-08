@@ -1,11 +1,12 @@
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import { LibraryPage } from 'src/sections/library/LibraryPage';
+import { LibraryMap } from 'src/sections/map/LibraryMap';
 import { PlaceDetail } from 'src/sections/place/PlaceDetail';
 
 /**
  * 셸의 슬롯 자리. 크기·경계·랜드마크는 `AppShell`이 정하고, 안쪽 내용은 각 태스크가 이 컴포넌트를
- * 채운다(목록 = Task 12, 상세 = Task 13, 지도 = Task 15). `AppShell`은 건드리지 않아도 된다.
+ * 채운다(목록·상세·지도). `AppShell`은 건드리지 않아도 된다.
  */
 function SlotPlaceholder({ title, children }: { title: string; children?: string }) {
   return (
@@ -23,11 +24,7 @@ export function ListSlot() {
 }
 
 export function MapSlot() {
-  return (
-    <Box sx={{ height: '100%', bgcolor: 'var(--tm-bg-raised)' }}>
-      <SlotPlaceholder title="지도" />
-    </Box>
-  );
+  return <LibraryMap />;
 }
 
 /** `placeId`가 없으면(넓은 화면에서 아직 고르지 않음) 안내만 보여 준다. */

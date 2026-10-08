@@ -8,12 +8,10 @@ import { paths } from 'src/routes/paths';
 import { AddSheet } from 'src/sections/shell/AddSheet';
 import { BottomTabs } from 'src/sections/shell/BottomTabs';
 import { NavRail } from 'src/sections/shell/NavRail';
+import { DETAIL_WIDTH, LIST_WIDTH } from 'src/sections/shell/pane-widths';
 import { DetailSlot, ListSlot, MapSlot } from 'src/sections/shell/ShellSlots';
 import { StorageBanner } from 'src/sections/shell/StorageBanner';
 import { useLayout } from 'src/sections/shell/use-layout';
-
-const LIST_WIDTH = 360;
-const DETAIL_WIDTH = 360;
 
 /** 슬롯 하나. 랜드마크(`aria-label`)와 스크롤을 맡는다. */
 function Pane({

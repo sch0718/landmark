@@ -60,14 +60,14 @@ describe('AppShell layout', () => {
     const viewport = mockViewport(1280);
     await renderApp({ path: PLACE });
     const map = screen.getByRole('region', { name: '지도' });
-    const mapSlot = screen.getByText('지도', { selector: 'p' });
+    const mapSlot = within(map).getByTestId('map-host');
     const detail = screen.getByRole('region', { name: '장소 상세' });
     const detailSlot = within(detail).getByText('장소를 찾을 수 없어요');
     expect(screen.queryByRole('button', { name: '닫기' })).not.toBeInTheDocument();
 
     viewport.setWidth(1279);
     expect(screen.getByRole('region', { name: '지도' })).toBe(map);
-    expect(screen.getByText('지도', { selector: 'p' })).toBe(mapSlot);
+    expect(within(map).getByTestId('map-host')).toBe(mapSlot);
     expect(screen.getByRole('region', { name: '장소 상세' })).toBe(detail);
     expect(within(detail).getByText('장소를 찾을 수 없어요')).toBe(detailSlot);
     expect(getComputedStyle(detail).position).toBe('absolute');

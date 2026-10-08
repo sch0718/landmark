@@ -1,33 +1,17 @@
 import CssBaseline from '@mui/material/CssBaseline';
 import { ThemeProvider } from '@mui/material/styles';
-import { useAtomValue } from 'jotai';
-import { useEffect, useLayoutEffect, useMemo, useSyncExternalStore, type ReactNode } from 'react';
-import { prefsAtom } from 'src/stores/prefs-state';
+import { useEffect, useLayoutEffect, useMemo, type ReactNode } from 'react';
 import { createAppTheme, cssVarsOf } from 'src/theme/create-app-theme';
 import { loadDisplayFont } from 'src/theme/fonts';
-import { TOKENS, type ColorMode } from 'src/theme/tokens';
-
-const DARK_QUERY = '(prefers-color-scheme: dark)';
-
-function subscribeSystemDark(onChange: () => void): () => void {
-  if (typeof window.matchMedia !== 'function') return () => undefined;
-  const query = window.matchMedia(DARK_QUERY);
-  query.addEventListener('change', onChange);
-  return () => query.removeEventListener('change', onChange);
-}
-
-const systemIsDark = () =>
-  typeof window.matchMedia === 'function' && window.matchMedia(DARK_QUERY).matches;
+import { TOKENS } from 'src/theme/tokens';
+import { useResolvedTheme } from 'src/theme/use-theme';
 
 /**
  * 저장된 테마·모드(`PrefsStore`)로 MUI 테마와 `<html>`의 `data-theme`·`data-mode`·`--tm-*` 변수를
  * 정한다. 선호가 바뀌면(`prefsAtom`) 새로고침 없이 바뀐다. 저장된 값은 첫 렌더 전에 읽으므로(`prefsAtom`) 기본 테마가 먼저 보이지 않는다.
  */
 export function ThemeRoot({ children }: { children: ReactNode }) {
-  const { theme: name, mode: preference } = useAtomValue(prefsAtom);
-
-  const systemDark = useSyncExternalStore(subscribeSystemDark, systemIsDark, () => false);
-  const mode: ColorMode = preference === 'system' ? (systemDark ? 'dark' : 'light') : preference;
+  const { name, mode } = useResolvedTheme();
 
   const muiTheme = useMemo(() => createAppTheme(name, mode), [name, mode]);
   const vars = useMemo(() => cssVarsOf(TOKENS[name][mode]), [name, mode]);
