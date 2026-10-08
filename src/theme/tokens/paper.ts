@@ -10,7 +10,7 @@ const light: Tokens = {
   bg: { base: '#F6F1E7', surface: '#FFFDF8', raised: '#FFFFFF' },
   text: { primary: '#2B2620', secondary: '#5E5446', muted: '#8A7F70' },
   border: '#E8DFCF',
-  accent: { main: '#C2492D', contrast: '#FFFFFF', gradient: '#C2492D' },
+  accent: { main: '#C2492D', contrast: '#FFFFFF', text: '#B4401F', gradient: '#C2492D' },
   label: {
     red: { fill: '#F6DDD3', text: '#A63A20', marker: '#C2492D' },
     orange: { fill: '#F5E1C8', text: '#8A4A12', marker: '#C9731F' },
@@ -34,7 +34,7 @@ const dark: Tokens = {
   bg: { base: '#1B1713', surface: '#252019', raised: '#2F2921' },
   text: { primary: '#EFE6D6', secondary: '#C2B6A2', muted: '#978B79' },
   border: '#3A3329',
-  accent: { main: '#E8795B', contrast: '#1B1713', gradient: '#E8795B' },
+  accent: { main: '#E8795B', contrast: '#1B1713', text: '#E8795B', gradient: '#E8795B' },
   label: {
     red: { fill: '#43251C', text: '#F4B09B', marker: '#E2684A' },
     orange: { fill: '#432E18', text: '#EFC08A', marker: '#DB8A3A' },

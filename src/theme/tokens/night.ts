@@ -15,6 +15,8 @@ const dark: Tokens = {
     // 그라데이션 시작색(#7C5CFF)은 흰 글자와의 대비가 4.35라서, 단색으로 쓰는 main은 살짝 짙게 한다.
     main: '#7857FF',
     contrast: '#FFFFFF',
+    // 어두운 바탕 위 글자·아웃라인 버튼용. main(#7857FF)은 표면 위 대비가 3.6이라 더 밝은 보라를 쓴다.
+    text: '#A693FF',
     gradient: 'linear-gradient(135deg, #7C5CFF, #3FB6FF)',
   },
   label: {
@@ -43,6 +45,7 @@ const light: Tokens = {
   accent: {
     main: '#6A4BF0',
     contrast: '#FFFFFF',
+    text: '#6A4BF0',
     gradient: 'linear-gradient(135deg, #6A4BF0, #2F9BE0)',
   },
   label: {

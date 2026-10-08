@@ -55,6 +55,13 @@ describe('design tokens', () => {
     }
   });
 
+  it('accent.text is not a Naver/Google accent', () => {
+    const banned = ['#03a65a', '#1a73e8', '#4285f4'];
+    for (const { name, mode, tokens } of all) {
+      expect(banned, `${name}/${mode}`).not.toContain(tokens.accent.text.toLowerCase());
+    }
+  });
+
   it('text.primary on bg.base contrast >= 4.5', () => {
     for (const { name, mode, tokens } of all) {
       expect(
@@ -77,6 +84,9 @@ describe('design tokens', () => {
         check(`${at} text.secondary`, tokens.text.secondary, bg);
       }
       check(`${at} accent`, tokens.accent.contrast, tokens.accent.main);
+      for (const bg of [tokens.bg.base, tokens.bg.surface, tokens.bg.raised]) {
+        check(`${at} accent.text`, tokens.accent.text, bg);
+      }
       for (const color of LABEL_COLORS) {
         check(`${at} label.${color}`, tokens.label[color].text, tokens.label[color].fill);
       }

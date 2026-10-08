@@ -16,6 +16,7 @@ export function cssVarsOf(tokens: Tokens): Record<string, string> {
     '--tm-border': tokens.border,
     '--tm-accent-main': tokens.accent.main,
     '--tm-accent-contrast': tokens.accent.contrast,
+    '--tm-accent-text': tokens.accent.text,
     '--tm-accent-gradient': tokens.accent.gradient,
     '--tm-radius-sm': `${tokens.radius.sm}px`,
     '--tm-radius-md': `${tokens.radius.md}px`,
@@ -55,7 +56,17 @@ export function createAppTheme(name: ThemeName, mode: ColorMode): Theme {
       ...Object.fromEntries(HEADINGS.map((h) => [h, { fontFamily: t.font.display }])),
     },
     components: {
-      MuiButton: { defaultProps: { disableElevation: true } },
+      // MUI 다크 Paper는 높이에 따라 흰 오버레이(backgroundImage)를 덮어 불투명 표면 토큰을 흐린다.
+      MuiPaper: { styleOverrides: { root: { backgroundImage: 'none' } } },
+      MuiButton: {
+        defaultProps: { disableElevation: true },
+        // 채운 버튼은 accent.main 바탕에 contrast 글자. 글자·아웃라인 버튼은 바탕 위 대비가 나오는 accent.text.
+        styleOverrides: {
+          textPrimary: { color: t.accent.text },
+          outlinedPrimary: { color: t.accent.text, borderColor: t.accent.text },
+        },
+      },
+      MuiLink: { styleOverrides: { root: { color: t.accent.text } } },
       MuiIconButton: {
         styleOverrides: { root: { minWidth: 44, minHeight: 44 } },
       },
