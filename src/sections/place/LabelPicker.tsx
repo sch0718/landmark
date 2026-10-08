@@ -19,11 +19,20 @@ type Props = {
 
 const NAME_INVALID = `1–${LIBRARY_LIMITS.labelNameChars}자로 입력하세요`;
 
-const isNameInvalid = (error: unknown): boolean =>
-  typeof error === 'object' &&
-  error !== null &&
-  '_tag' in error &&
-  error._tag === 'LabelNameInvalid';
+/** 연산이 거절한 이유를 입력란 아래에 보일 문구로 바꾼다. 저장소 오류 같은 나머지는 `run`이 토스트로 알린다. */
+function rejectionMessage(error: unknown): string | null {
+  if (typeof error !== 'object' || error === null || !('_tag' in error)) return null;
+  switch (error._tag) {
+    case 'LabelNameInvalid':
+      return NAME_INVALID;
+    case 'LabelNameTaken':
+      return '같은 이름의 라벨이 있어요';
+    case 'NotFound':
+      return '장소를 찾을 수 없어요';
+    default:
+      return null;
+  }
+}
 
 /** 장소 상세의 라벨 칩(켜짐/꺼짐)과 새 라벨 입력란. */
 export function LabelPicker({ labels, attachedIds, onToggle, onCreate }: Props) {
@@ -36,8 +45,8 @@ export function LabelPicker({ labels, attachedIds, onToggle, onCreate }: Props) 
     if (result.ok) {
       setName('');
       setError(null);
-    } else if (isNameInvalid(result.error)) {
-      setError(NAME_INVALID);
+    } else {
+      setError(rejectionMessage(result.error));
     }
   };
 

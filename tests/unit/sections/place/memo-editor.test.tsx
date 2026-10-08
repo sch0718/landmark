@@ -130,9 +130,52 @@ describe('MemoEditor', () => {
     type('가'.repeat(10000));
     expect(screen.getByText('0자 남음')).toBeInTheDocument();
 
+    // 이미 가득 찬 상자에 붙여넣으면 브라우저가 전부 버려 `input`이 오지 않는다.
     fireEvent.paste(textarea(), { clipboardData: { getData: () => '나'.repeat(5) } });
     expect(screen.getByRole('alert')).toHaveTextContent('10,000자를 넘는 부분은 들어가지 않았어요');
+    act(() => void vi.advanceTimersByTime(0));
     type('가'.repeat(9999)); // 다음 입력에서 안내를 지운다.
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('keeps the paste warning through the input event the paste itself triggers', () => {
+    const onSave = vi.fn(async () => ({ ok: true }));
+    render(<MemoEditor placeId="p1" saved="" onSave={onSave} />);
+    type('가'.repeat(9990));
+
+    // 브라우저 순서: paste -> (10,000자로 잘려 삽입) -> input
+    fireEvent.paste(textarea(), { clipboardData: { getData: () => '나'.repeat(20) } });
+    type('가'.repeat(9990) + '나'.repeat(10));
+    expect(textarea()).toHaveValue('가'.repeat(9990) + '나'.repeat(10));
+    expect(screen.getByRole('alert')).toHaveTextContent('10,000자를 넘는 부분은 들어가지 않았어요');
+
+    act(() => void vi.advanceTimersByTime(0));
+    type('가'.repeat(9000)); // 다음 일반 입력이 경고를 지운다.
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('sends the same text once when hidden, pagehide and unmount arrive together', async () => {
+    const save = deferred();
+    const onSave = vi.fn(() => save.promise);
+    const { unmount } = render(<MemoEditor placeId="p1" saved="" onSave={onSave} />);
+    type('탭 닫는 중');
+    act(() => setVisibility('hidden'));
+    act(() => void window.dispatchEvent(new Event('pagehide')));
+    unmount();
+    expect(onSave).toHaveBeenCalledTimes(1);
+    await act(async () => save.resolve({ ok: true }));
+  });
+
+  it('sends again when the text changed or the earlier save failed', async () => {
+    const first = deferred();
+    const onSave = vi.fn<(text: string) => Promise<Result>>(() => first.promise);
+    render(<MemoEditor placeId="p1" saved="" onSave={onSave} />);
+    type('하나');
+    act(() => setVisibility('hidden'));
+    type('하나 둘'); // 저장 중에 더 고쳤다.
+    act(() => void window.dispatchEvent(new Event('pagehide')));
+    expect(onSave.mock.calls.map(([text]) => text)).toEqual(['하나', '하나 둘']);
+
+    await act(async () => first.resolve({ ok: false }));
   });
 });

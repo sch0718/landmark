@@ -84,7 +84,8 @@ function PlaceBody({ place }: { place: Place }) {
   const id = place.id;
   const url = naverPlaceUrlOf(place);
 
-  // 실패(저장소 오류)는 `run`이 토스트로 알린다. 여기서는 중복해서 알리지 않는다.
+  // 저장소 오류는 `run`이 토스트로 알리니 여기서 다시 알리지 않는다. 연산이 거절한 경우(`OpRejected`)는
+  // `run`이 알리지 않으므로 거절될 수 있는 `createAndAttachLabel`은 `LabelPicker`가 입력란에 보여 준다.
   const saveName = (text: string) => run((lib, ctx) => setPlaceName(lib, id, text, ctx));
   const saveCategory = (text: string) =>
     run((lib, ctx) => setPlaceCategory(lib, id, text === '' ? null : text, ctx));

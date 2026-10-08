@@ -23,13 +23,24 @@ type Props = {
 export function MemoEditor({ placeId, saved, onSave }: Props) {
   const draft = useDraft(`memo:${placeId}`, saved);
   const [overflow, setOverflow] = useState(false);
+  // 붙여넣기 직후 브라우저가 보내는 `input`(→ `onChange`)이 방금 켠 경고를 지우지 않게 한다.
+  const pasting = useRef(false);
 
   // 타이머·이벤트·정리 함수가 오래된 클로저를 쓰지 않게 최신 `flush`를 ref로 부른다.
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  // 지금 저장 중인 글. 탭을 닫을 때 `visibilitychange`·`pagehide`·언마운트가 잇따라 와도 같은 글을 또 보내지 않는다.
+  const inflight = useRef<string | null>(null);
+  const send = (text: string) => {
+    inflight.current = text;
+    return onSave(text).finally(() => {
+      if (inflight.current === text) inflight.current = null;
+    });
+  };
   const flush = () => {
     clearTimeout(timer.current);
     timer.current = undefined;
-    void draft.commit(onSave);
+    if (inflight.current === draft.value) return;
+    void draft.commit(send);
   };
   const flushRef = useRef(flush);
   useEffect(() => {
@@ -51,7 +62,8 @@ export function MemoEditor({ placeId, saved, onSave }: Props) {
   }, []);
 
   const onChange = (text: string) => {
-    setOverflow(false);
+    if (!pasting.current) setOverflow(false);
+    pasting.current = false;
     draft.setValue(text);
     clearTimeout(timer.current);
     timer.current = setTimeout(() => flushRef.current(), MEMO_DEBOUNCE_MS);
@@ -62,7 +74,11 @@ export function MemoEditor({ placeId, saved, onSave }: Props) {
     const { value, selectionStart, selectionEnd } = event.currentTarget;
     const pasted = event.clipboardData.getData('text').length;
     const after = value.length - (selectionEnd - selectionStart) + pasted;
-    if (after > LIBRARY_LIMITS.memoChars) setOverflow(true);
+    if (after <= LIBRARY_LIMITS.memoChars) return;
+    setOverflow(true);
+    // `input`은 같은 작업 안에서 이어서 온다. 글이 이미 가득 차 `input`이 안 오면 다음 입력이 경고를 지운다.
+    pasting.current = true;
+    setTimeout(() => (pasting.current = false), 0);
   };
 
   const length = draft.value.length;
