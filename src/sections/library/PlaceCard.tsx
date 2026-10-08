@@ -17,7 +17,7 @@ const clamp = (lines: number) =>
     overflowWrap: 'anywhere',
   }) as const;
 
-/** 카드 보기: 이름 아래 메모 3줄(말줄임)과 라벨 칩. */
+/** 카드 보기: 이름 바로 아래 메모(3줄, 말줄임), 그 아래 지역과 라벨 칩. */
 export function PlaceCard({
   place,
   labels,
@@ -51,27 +51,16 @@ export function PlaceCard({
         <Box component="span" data-part="name" sx={{ ...clamp(2), fontWeight: 800 }}>
           {place.name.value}
         </Box>
-        <Box
-          component="span"
-          sx={{
-            display: 'block',
-            mt: 0.25,
-            fontSize: 12,
-            color: 'var(--tm-text-muted)',
-            overflowWrap: 'anywhere',
-          }}
-        >
-          {regionOf(place.address)}
-        </Box>
         {memo !== '' && (
           <Box
             component="span"
             data-part="memo"
             sx={{
               ...clamp(3),
-              mt: 0.75,
-              fontSize: 14,
-              color: 'var(--tm-text-secondary)',
+              mt: 0.5,
+              // 메모가 이 카드의 핵심이라 이름 바로 아래에 본문 크기·기본 글자색으로 크게 보인다(스펙 §5.2).
+              fontSize: 16,
+              color: 'var(--tm-text-primary)',
               // 메모의 줄바꿈은 살린다.
               whiteSpace: 'pre-line',
             }}
@@ -79,16 +68,28 @@ export function PlaceCard({
             {memo}
           </Box>
         )}
-        {labels.length > 0 && (
+        <Box
+          component="span"
+          sx={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            gap: 0.5,
+            mt: 1,
+            minWidth: 0,
+          }}
+        >
           <Box
             component="span"
-            sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 1, minWidth: 0 }}
+            data-part="region"
+            sx={{ fontSize: 12, color: 'var(--tm-text-muted)', overflowWrap: 'anywhere' }}
           >
-            {labels.map((label) => (
-              <LabelBadge key={label.id} label={label} />
-            ))}
+            {regionOf(place.address)}
           </Box>
-        )}
+          {labels.map((label) => (
+            <LabelBadge key={label.id} label={label} />
+          ))}
+        </Box>
       </Box>
     </Box>
   );

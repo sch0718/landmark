@@ -76,6 +76,25 @@ describe('library long text', () => {
     expect(card.scrollWidth).toBeLessThanOrEqual(card.clientWidth);
   });
 
+  it('card shows the memo right below the name, large, in the primary text color (spec 5.2)', async () => {
+    await renderLibrary(
+      withPlaces(emptyLibrary(), [makePlace(1, { name: '안목 카페', memo: '창가 자리가 좋아요' })]),
+      { prefs: { libraryView: 'cards' } },
+    );
+    const card = within(placeList()).getByRole('button');
+    const name = card.querySelector<HTMLElement>('[data-part="name"]')!;
+    const memo = card.querySelector<HTMLElement>('[data-part="memo"]')!;
+    const region = card.querySelector<HTMLElement>('[data-part="region"]')!;
+
+    expect(name.nextElementSibling).toBe(memo);
+    const style = getComputedStyle(memo);
+    expect(style.fontSize).toBe('16px');
+    expect(style.color).toBe('var(--tm-text-primary)');
+    // 지역은 메모 뒤에, 메모보다 작고 흐리게 놓인다.
+    expect(memo.compareDocumentPosition(region) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(getComputedStyle(region).fontSize).toBe('12px');
+  });
+
   it('long name ellipsizes on a single line in the list row', async () => {
     await renderLibrary(longLibrary(), { prefs: { libraryView: 'list' } });
     const row = within(placeList()).getByRole('button');
