@@ -2,9 +2,9 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { Effect, Layer, ManagedRuntime } from 'effect';
 import { TestClock } from 'effect/testing';
 import { createStore, Provider } from 'jotai';
-import { Suspense, type ReactNode } from 'react';
+import { StrictMode, Suspense, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createLabel, setPlaceMemo } from 'src/domain/library/ops';
+import { createLabel, setPlaceMemo, type OpCtx } from 'src/domain/library/ops';
 import { forkEffect, setAppRuntimeForTest } from 'src/lib/effect/runtime';
 import { createMemoryStorage } from 'src/repositories/edit-layer-repo';
 import { emptyLibrary, type Library, type Place } from 'src/schema/library';
@@ -14,6 +14,7 @@ import { LIBRARY_KEY, LibraryStore } from 'src/services/library-store';
 import { PrefsStore } from 'src/services/prefs-store';
 import {
   libraryAtom,
+  libraryLoadAtom,
   persistenceAtom,
   useDraft,
   useLibraryAction,
@@ -52,12 +53,45 @@ function place(id: string): Place {
 
 const seeded: Library = { ...emptyLibrary(), places: { [P1]: place(P1) } };
 
+/** `seeded`의 메모만 바꾼 문서. */
+const withMemo = (base: Library, text: string, updatedAt: string): Library => ({
+  ...base,
+  places: { ...base.places, [P1]: { ...base.places[P1]!, memo: { value: text, updatedAt } } },
+});
+
 function setup(
-  options: { library?: Library; ids?: string[]; limit?: number; clock?: boolean } = {},
+  options: {
+    library?: Library;
+    ids?: string[];
+    limit?: number;
+    clock?: boolean;
+    strict?: boolean;
+  } = {},
 ) {
   const storage = createMemoryStorage();
   if (options.library !== undefined) storage.setItem(LIBRARY_KEY, JSON.stringify(options.library));
+  // 구독 시점과 저장소 읽기 순서를 관찰한다.
+  const log: string[] = [];
+  const listeners = { active: 0 };
+  const getItem = storage.getItem.bind(storage);
+  storage.getItem = (key) => {
+    if (key === LIBRARY_KEY) {
+      log.push('read');
+    }
+    return getItem(key);
+  };
   const events = new EventTarget();
+  const addListener = events.addEventListener.bind(events);
+  const removeListener = events.removeEventListener.bind(events);
+  events.addEventListener = (...args: Parameters<EventTarget['addEventListener']>) => {
+    listeners.active++;
+    log.push('subscribe');
+    addListener(...args);
+  };
+  events.removeEventListener = (...args: Parameters<EventTarget['removeEventListener']>) => {
+    listeners.active--;
+    removeListener(...args);
+  };
   const limits = options.limit === undefined ? undefined : { libraryChars: options.limit };
   const layers = Layer.mergeAll(
     LibraryStore.layerWith({ storage, events, limits }),
@@ -69,16 +103,22 @@ function setup(
   );
   setAppRuntimeForTest(runtime);
   const store = createStore();
+  const Mode =
+    options.strict === true ? StrictMode : ({ children }: { children: ReactNode }) => children;
   const wrapper = ({ children }: { children: ReactNode }) => (
-    <Provider store={store}>
-      <Suspense fallback={null}>{children}</Suspense>
-    </Provider>
+    <Mode>
+      <Provider store={store}>
+        <Suspense fallback={null}>{children}</Suspense>
+      </Provider>
+    </Mode>
   );
-  const emitRemote = (library: Library) =>
-    events.dispatchEvent(
-      new StorageEvent('storage', { key: LIBRARY_KEY, newValue: JSON.stringify(library) }),
-    );
-  return { storage, store, wrapper, emitRemote, runtime };
+  /** 다른 탭이 `library`를 저장한 것처럼 저장소를 바꾸고 `storage` 이벤트를 보낸다. */
+  const emitRemote = (library: Library) => {
+    const raw = JSON.stringify(library);
+    storage.setItem(LIBRARY_KEY, raw);
+    events.dispatchEvent(new StorageEvent('storage', { key: LIBRARY_KEY, newValue: raw }));
+  };
+  return { storage, store, wrapper, emitRemote, runtime, log, listeners };
 }
 
 /** 로드·동기화가 끝난 `useLibraryAction`. */
@@ -95,6 +135,8 @@ async function renderAction(s: ReturnType<typeof setup>) {
     );
   });
   await waitFor(() => expect(hook.result.current).not.toBeNull());
+  // 구독이 걸릴 때까지 기다린다(포크는 비동기).
+  await waitFor(() => expect(s.listeners.active).toBeGreaterThan(0));
   return hook;
 }
 
@@ -119,14 +161,50 @@ describe('useLibrarySync', () => {
   it('storage change event refreshes libraryAtom', async () => {
     const s = setup({ library: seeded });
     await renderAction(s);
-    const remote: Library = {
-      ...seeded,
-      places: { [P1]: { ...seeded.places[P1]!, memo: { value: '다른 탭 메모', updatedAt: T0 } } },
-    };
-    await waitFor(() => {
-      s.emitRemote(remote);
-      expect(s.store.get(libraryAtom).places[P1]?.memo.value).toBe('다른 탭 메모');
-    });
+    s.emitRemote(withMemo(seeded, '다른 탭 메모', '2026-10-08T03:00:00.000Z'));
+    await waitFor(() =>
+      expect(s.store.get(libraryAtom).places[P1]?.memo.value).toBe('다른 탭 메모'),
+    );
+  });
+
+  it('subscribes to changes before re-reading, so a change between load and mount is not lost', async () => {
+    const s = setup({ library: seeded });
+    await s.store.get(libraryLoadAtom); // 로드는 끝났다.
+    // 로드와 마운트 사이에 다른 탭이 저장했다(이벤트는 아직 구독자가 없어 사라진다).
+    s.storage.setItem(
+      LIBRARY_KEY,
+      JSON.stringify(withMemo(seeded, '사이에 바뀜', '2026-10-08T03:00:00.000Z')),
+    );
+    s.log.length = 0;
+    await renderAction(s);
+    await waitFor(() =>
+      expect(s.store.get(libraryAtom).places[P1]?.memo.value).toBe('사이에 바뀜'),
+    );
+    expect(s.log).toEqual(['subscribe', 'read']);
+  });
+
+  it('unmounting stops the changes subscription', async () => {
+    const s = setup({ library: seeded });
+    const hook = await renderAction(s);
+    expect(s.listeners.active).toBe(1);
+    hook.unmount();
+    await waitFor(() => expect(s.listeners.active).toBe(0));
+    const before = s.store.get(libraryAtom);
+    s.emitRemote(withMemo(seeded, '언마운트 뒤', '2026-10-08T03:00:00.000Z'));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(s.store.get(libraryAtom)).toBe(before);
+  });
+
+  it('keeps exactly one subscription under StrictMode double mount', async () => {
+    const s = setup({ library: seeded, strict: true });
+    await renderAction(s);
+    await waitFor(() => expect(s.listeners.active).toBe(1));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(s.listeners.active).toBe(1);
+    s.log.length = 0;
+    s.emitRemote(withMemo(seeded, '스트릭트', '2026-10-08T03:00:00.000Z'));
+    await waitFor(() => expect(s.store.get(libraryAtom).places[P1]?.memo.value).toBe('스트릭트'));
+    expect(s.log).toEqual(['read']); // 이벤트 하나에 읽기 한 번
   });
 });
 
@@ -188,6 +266,25 @@ describe('useLibraryAction', () => {
     expect(toastMock.error).toHaveBeenCalledWith(
       new StorageQuotaExceeded({ bytes: 0 }).userMessage,
     );
+  });
+
+  it('does not let a run result overwrite a newer document that landed while it ran', async () => {
+    const s = setup({ library: seeded });
+    const { result } = await renderAction(s);
+    const newer = withMemo(seeded, '다른 탭이 나중에 저장', '2026-10-08T05:00:00.000Z');
+    // 우리 쓰기 직후 다른 탭이 저장했고, 그 변경이 우리 결과보다 먼저 화면 상태에 닿았다.
+    const setItem = s.storage.setItem.bind(s.storage);
+    s.storage.setItem = (key, value) => {
+      setItem(key, value);
+      if (key === LIBRARY_KEY && !value.includes('다른 탭이 나중에 저장')) {
+        setItem(key, JSON.stringify(newer));
+        s.store.set(libraryAtom, newer);
+      }
+    };
+    await act(async () => {
+      await result.current.run((lib, ctx: OpCtx) => setPlaceMemo(lib, P1, '내 메모', ctx));
+    });
+    expect(s.store.get(libraryAtom)).toEqual(newer);
   });
 
   it('takes ctx.now from the Effect Clock', async () => {
@@ -335,5 +432,167 @@ describe('useDraft', () => {
     act(() => result.current.setValue('b'));
     rerender({ k: 'p2', saved: 'z' });
     expect(result.current).toMatchObject({ value: 'z', dirty: false });
+  });
+
+  const deferred = () => {
+    let resolve: (r: { ok: boolean }) => void = () => {};
+    const promise = new Promise<{ ok: boolean }>((r) => (resolve = r));
+    return { promise, resolve };
+  };
+
+  it('does not bring the old draft back when returning to a key (A -> B -> A)', () => {
+    const { result, rerender } = renderHook(({ k, saved }) => useDraft(k, saved), {
+      initialProps: { k: 'A', saved: 'a' },
+    });
+    act(() => result.current.setValue('x'));
+    rerender({ k: 'B', saved: 'b' });
+    expect(result.current).toMatchObject({ value: 'b', dirty: false });
+    rerender({ k: 'A', saved: 'a' });
+    expect(result.current).toMatchObject({
+      value: 'a',
+      dirty: false,
+      remoteChanged: false,
+      status: 'idle',
+    });
+  });
+
+  it('ignores a commit that resolves after switching away and back (A -> B -> A)', async () => {
+    const { result, rerender } = renderHook(({ k, saved }) => useDraft(k, saved), {
+      initialProps: { k: 'A', saved: 'a' },
+    });
+    act(() => result.current.setValue('x'));
+    const d = deferred();
+    let committing: Promise<void> = Promise.resolve();
+    act(() => {
+      committing = result.current.commit(() => d.promise);
+    });
+    rerender({ k: 'B', saved: 'b' });
+    await act(async () => {
+      d.resolve({ ok: true });
+      await committing;
+    });
+    rerender({ k: 'A', saved: 'x' });
+    expect(result.current).toMatchObject({
+      value: 'x',
+      dirty: false,
+      remoteChanged: false,
+      status: 'idle',
+    });
+  });
+
+  it('ignores an old commit that resolves after returning to the key', async () => {
+    const { result, rerender } = renderHook(({ k, saved }) => useDraft(k, saved), {
+      initialProps: { k: 'A', saved: 'a' },
+    });
+    act(() => result.current.setValue('x'));
+    const d = deferred();
+    let committing: Promise<void> = Promise.resolve();
+    act(() => {
+      committing = result.current.commit(() => d.promise);
+    });
+    rerender({ k: 'B', saved: 'b' });
+    rerender({ k: 'A', saved: 'a' });
+    act(() => result.current.setValue('y')); // 돌아온 뒤의 새 초안
+    await act(async () => {
+      d.resolve({ ok: true });
+      await committing;
+    });
+    expect(result.current).toMatchObject({
+      value: 'y',
+      dirty: true,
+      remoteChanged: false,
+      status: 'idle',
+    });
+  });
+
+  it('an older commit succeeding while a newer one is saving keeps status saving', async () => {
+    const { result } = renderHook(() => useDraft('p1', 'a'));
+    const d1 = deferred();
+    const d2 = deferred();
+    act(() => result.current.setValue('b'));
+    let c1: Promise<void> = Promise.resolve();
+    let c2: Promise<void> = Promise.resolve();
+    act(() => {
+      c1 = result.current.commit(() => d1.promise);
+    });
+    act(() => result.current.setValue('bc'));
+    act(() => {
+      c2 = result.current.commit(() => d2.promise);
+    });
+
+    await act(async () => {
+      d1.resolve({ ok: true });
+      await c1;
+    });
+    expect(result.current).toMatchObject({ status: 'saving', dirty: true, value: 'bc' });
+
+    await act(async () => {
+      d2.resolve({ ok: true });
+      await c2;
+    });
+    expect(result.current).toMatchObject({ status: 'saved', dirty: false });
+  });
+
+  it('a repeated commit of the same edit never flips saved back to idle', async () => {
+    const { result } = renderHook(() => useDraft('p1', 'a'));
+    const d1 = deferred();
+    const d2 = deferred();
+    act(() => result.current.setValue('b'));
+    let c1: Promise<void> = Promise.resolve();
+    let c2: Promise<void> = Promise.resolve();
+    act(() => {
+      c1 = result.current.commit(() => d1.promise);
+      c2 = result.current.commit(() => d2.promise);
+    });
+    await act(async () => {
+      d1.resolve({ ok: true });
+      await c1;
+    });
+    expect(result.current).toMatchObject({ status: 'saving', dirty: false });
+    await act(async () => {
+      d2.resolve({ ok: true });
+      await c2;
+    });
+    expect(result.current).toMatchObject({ status: 'saved', dirty: false });
+
+    const save = vi.fn(ok);
+    await act(() => result.current.commit(save)); // 저장할 초안이 없다.
+    expect(save).not.toHaveBeenCalled();
+    expect(result.current.status).toBe('saved');
+  });
+
+  it('out-of-order commit results do not move the remote-change baseline back', async () => {
+    const { result, rerender } = renderHook(({ saved }) => useDraft('p1', saved), {
+      initialProps: { saved: 'a' },
+    });
+    const d1 = deferred();
+    const d2 = deferred();
+    act(() => result.current.setValue('b'));
+    let c1: Promise<void> = Promise.resolve();
+    let c2: Promise<void> = Promise.resolve();
+    act(() => {
+      c1 = result.current.commit(() => d1.promise);
+    });
+    act(() => result.current.setValue('bc'));
+    act(() => {
+      c2 = result.current.commit(() => d2.promise);
+    });
+    act(() => result.current.setValue('bcd'));
+
+    await act(async () => {
+      d2.resolve({ ok: true }); // 나중에 시작한 저장이 먼저 끝난다.
+      await c2;
+    });
+    await act(async () => {
+      d1.resolve({ ok: true }); // 오래된 저장이 늦게 끝난다.
+      await c1;
+    });
+    rerender({ saved: 'bc' }); // 저장소는 'bc'다. 기준이 'b'로 돌아갔다면 remoteChanged가 켜진다.
+    expect(result.current).toMatchObject({
+      value: 'bcd',
+      dirty: true,
+      remoteChanged: false,
+      status: 'idle',
+    });
   });
 });
