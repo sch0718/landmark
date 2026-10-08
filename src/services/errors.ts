@@ -25,9 +25,9 @@ export class StorageQuotaExceeded extends Schema.TaggedError<StorageQuotaExceede
   }
 }
 
-/** 저장된 문서가 스키마 검증에 실패했다. 원문은 `backupKey`에 백업돼 있다. */
+/** 저장된 문서가 스키마 검증에 실패했다. 원문은 `backupKey`에 백업돼 있다(`null`이면 백업이 없다). */
 export class LibraryCorrupt extends Schema.TaggedError<LibraryCorrupt>()('LibraryCorrupt', {
-  backupKey: Schema.String,
+  backupKey: Schema.NullOr(Schema.String),
   issues: MutableArray(IssueSchema),
 }) {
   get userMessage(): string {

@@ -59,6 +59,22 @@ const seed = (storage: Storage, library: Library): string => {
   return raw;
 };
 
+/** `setItem` 호출을 기록한다(프로브 이후의 쓰기만 보려면 호출 직후에 만든다). */
+function spyWrites(storage: Storage): string[] {
+  const writes: string[] = [];
+  const setItem = storage.setItem.bind(storage);
+  storage.setItem = (key: string, value: string) => {
+    if (key !== 'tripmap:probe') writes.push(key);
+    setItem(key, value);
+  };
+  return writes;
+}
+
+const corruptKeys = (storage: Storage): string[] =>
+  Array.from({ length: storage.length }, (_, i) => storage.key(i)!).filter((k) =>
+    k.startsWith('tripmap:library:v2:corrupt-'),
+  );
+
 const withStore = <A, E>(
   options: LibraryStoreOptions,
   use: (store: LibraryStore['Service']) => Effect.Effect<A, E>,
@@ -94,9 +110,9 @@ describe('LibraryStore.load', () => {
       storage.setItem(LIBRARY_KEY, '{bad');
       const error = yield* withStore({ storage }, (s) => Effect.flip(s.load));
       expect(error._tag).toBe('LibraryCorrupt');
-      expect(error.backupKey.startsWith('tripmap:library:v2:corrupt-')).toBe(true);
+      expect(error.backupKey?.startsWith('tripmap:library:v2:corrupt-')).toBe(true);
       expect(error.issues.length).toBeGreaterThan(0);
-      expect(storage.getItem(error.backupKey)).toBe('{bad');
+      expect(storage.getItem(error.backupKey!)).toBe('{bad');
       expect(storage.getItem(LIBRARY_KEY)).toBe('{bad');
     }),
   );
@@ -108,7 +124,7 @@ describe('LibraryStore.load', () => {
       storage.setItem(LIBRARY_KEY, raw);
       const error = yield* withStore({ storage }, (s) => Effect.flip(s.load));
       expect(error._tag).toBe('LibraryCorrupt');
-      expect(storage.getItem(error.backupKey)).toBe(raw);
+      expect(storage.getItem(error.backupKey!)).toBe(raw);
       expect(storage.getItem(LIBRARY_KEY)).toBe(raw);
     }),
   );
@@ -121,12 +137,127 @@ describe('LibraryStore.load', () => {
         Effect.gen(function* () {
           const error = yield* Effect.flip(s.load);
           const reset = yield* s.resetWithBackup;
-          expect(storage.getItem(error.backupKey)).toBe('{bad');
+          expect(storage.getItem(error.backupKey!)).toBe('{bad');
           return reset;
         }),
       );
       expect(library).toEqual(emptyLibrary());
       expect(storage.getItem(LIBRARY_KEY)).toBe(JSON.stringify(emptyLibrary()));
+    }),
+  );
+
+  it.effect('repeated load of the same corrupt raw creates only one backup', () =>
+    Effect.gen(function* () {
+      const storage = createMemoryStorage();
+      storage.setItem(LIBRARY_KEY, '{bad');
+      const keys = yield* withStore({ storage }, (s) =>
+        Effect.gen(function* () {
+          const first = yield* Effect.flip(s.load);
+          const second = yield* Effect.flip(s.load);
+          return [first.backupKey, second.backupKey];
+        }),
+      );
+      expect(keys[0]).not.toBeNull();
+      expect(keys[1]).toBe(keys[0]);
+      expect(corruptKeys(storage)).toEqual([keys[0]]);
+    }),
+  );
+
+  it.effect('load reports backupKey null when the backup cannot be written', () =>
+    Effect.gen(function* () {
+      const storage = createMemoryStorage();
+      storage.setItem(LIBRARY_KEY, '{bad');
+      const setItem = storage.setItem.bind(storage);
+      storage.setItem = (key: string, value: string) => {
+        if (key.startsWith('tripmap:library:v2:corrupt-')) {
+          throw new DOMException('', 'QuotaExceededError');
+        }
+        setItem(key, value);
+      };
+      const error = yield* withStore({ storage }, (s) => Effect.flip(s.load));
+      expect(error).toBeInstanceOf(LibraryCorrupt);
+      expect(error.backupKey).toBeNull();
+      expect(corruptKeys(storage)).toEqual([]);
+      expect(storage.getItem(LIBRARY_KEY)).toBe('{bad');
+    }),
+  );
+
+  it.effect('resetWithBackup on a valid document writes nothing and returns it', () =>
+    Effect.gen(function* () {
+      const storage = createMemoryStorage();
+      const library = libraryOf(place(P1));
+      const raw = seed(storage, library);
+      const writes = spyWrites(storage);
+      const reset = yield* withStore({ storage }, (s) => s.resetWithBackup);
+      expect(reset).toEqual(library);
+      expect(writes).toEqual([]);
+      expect(storage.getItem(LIBRARY_KEY)).toBe(raw);
+    }),
+  );
+
+  it.effect('resetWithBackup on a missing key writes nothing', () =>
+    Effect.gen(function* () {
+      const storage = createMemoryStorage();
+      const writes = spyWrites(storage);
+      const reset = yield* withStore({ storage }, (s) => s.resetWithBackup);
+      expect(reset).toEqual(emptyLibrary());
+      expect(writes).toEqual([]);
+      expect(storage.getItem(LIBRARY_KEY)).toBeNull();
+    }),
+  );
+
+  it.effect('resetWithBackup backs up a different corrupt document before overwriting', () =>
+    Effect.gen(function* () {
+      const storage = createMemoryStorage();
+      storage.setItem(LIBRARY_KEY, '{first');
+      yield* withStore({ storage }, (s) => Effect.flip(s.load));
+      // 다른 탭이 다른 손상 문서를 남겼다(이 탭은 아직 모른다).
+      storage.setItem(LIBRARY_KEY, '{second');
+      const reset = yield* withStore({ storage }, (s) => s.resetWithBackup);
+      expect(reset).toEqual(emptyLibrary());
+      expect(storage.getItem(LIBRARY_KEY)).toBe(JSON.stringify(emptyLibrary()));
+      expect(
+        corruptKeys(storage)
+          .map((k) => storage.getItem(k))
+          .sort(),
+      ).toEqual(['{first', '{second']);
+    }),
+  );
+
+  it.effect('resetWithBackup does not overwrite when the backup cannot be written', () =>
+    Effect.gen(function* () {
+      const storage = createMemoryStorage();
+      storage.setItem(LIBRARY_KEY, '{bad');
+      const setItem = storage.setItem.bind(storage);
+      storage.setItem = (key: string, value: string) => {
+        if (key.startsWith('tripmap:library:v2:corrupt-')) {
+          throw new DOMException('', 'QuotaExceededError');
+        }
+        setItem(key, value);
+      };
+      const error = yield* withStore({ storage }, (s) => Effect.flip(s.resetWithBackup));
+      expect(error).toBeInstanceOf(StorageQuotaExceeded);
+      expect(storage.getItem(LIBRARY_KEY)).toBe('{bad');
+    }),
+  );
+
+  it.effect('a stale recovery screen does not wipe a document recovered in another tab', () =>
+    Effect.gen(function* () {
+      const storage = createMemoryStorage();
+      const held = createHeldLocks();
+      storage.setItem(LIBRARY_KEY, '{bad');
+      const options = { storage, locks: held.locks };
+      const tabA = yield* withStore(options, (s) => Effect.succeed(s));
+      const tabB = yield* withStore(options, (s) => Effect.succeed(s));
+      yield* Effect.flip(tabA.load);
+      yield* Effect.flip(tabB.load);
+      yield* tabA.resetWithBackup;
+      yield* tabA.update((lib) => Effect.succeed({ ...lib, places: { [P1]: place(P1) } }));
+      const result = yield* tabB.resetWithBackup;
+      expect(Object.keys(result.places)).toEqual([P1]);
+      expect(Object.keys((JSON.parse(storage.getItem(LIBRARY_KEY)!) as Library).places)).toEqual([
+        P1,
+      ]);
     }),
   );
 
@@ -298,10 +429,11 @@ describe('LibraryStore.update', () => {
     }),
   );
 
-  it.effect('corrupt stored document fails update with LibraryCorrupt and does not run f', () =>
+  it.effect('update on a corrupt document writes nothing and reports no backup', () =>
     Effect.gen(function* () {
       const storage = createMemoryStorage();
       storage.setItem(LIBRARY_KEY, '{bad');
+      const writes = spyWrites(storage);
       let ran = false;
       const error = yield* withStore({ storage }, (s) =>
         Effect.flip(
@@ -312,11 +444,48 @@ describe('LibraryStore.update', () => {
         ),
       );
       expect(error).toBeInstanceOf(LibraryCorrupt);
+      expect((error as LibraryCorrupt).backupKey).toBeNull();
       expect(ran).toBe(false);
+      expect(writes).toEqual([]);
+      expect(corruptKeys(storage)).toEqual([]);
       expect(storage.getItem(LIBRARY_KEY)).toBe('{bad');
-      expect(storage.getItem((error as LibraryCorrupt).backupKey)).toBe('{bad');
     }),
   );
+
+  it.effect('update on a corrupt document reports the existing backup key', () =>
+    Effect.gen(function* () {
+      const storage = createMemoryStorage();
+      storage.setItem(LIBRARY_KEY, '{bad');
+      const writes = spyWrites(storage);
+      const error = yield* withStore({ storage }, (s) =>
+        Effect.gen(function* () {
+          const loaded = yield* Effect.flip(s.load);
+          writes.length = 0;
+          const failed = yield* Effect.flip(s.update(Effect.succeed));
+          expect((failed as LibraryCorrupt).backupKey).toBe(loaded.backupKey);
+          return failed;
+        }),
+      );
+      expect(error).toBeInstanceOf(LibraryCorrupt);
+      expect(writes).toEqual([]);
+    }),
+  );
+
+  vitestIt('reads the latest document after the lock is acquired', async () => {
+    const storage = createMemoryStorage();
+    const held = createHeldLocks();
+    seed(storage, libraryOf(place(P1)));
+    held.hold();
+    const pending = Effect.runPromise(
+      withStore({ storage, locks: held.locks }, (s) => s.update((lib) => Effect.succeed(lib))),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    // 다른 탭이 잠금을 쥔 채로 문서를 바꾼다.
+    const changed = libraryOf(place(P1), place(P2));
+    seed(storage, changed);
+    held.release();
+    expect(await pending).toEqual(changed);
+  });
 
   it.effect("keeps f's typed error and writes nothing", () =>
     Effect.gen(function* () {
@@ -342,6 +511,29 @@ describe('LibraryStore.update', () => {
 });
 
 describe('LibraryStore.changes', () => {
+  it.effect('changes is empty in memory mode even with an event source', () =>
+    Effect.gen(function* () {
+      const storage = createMemoryStorage();
+      storage.setItem = () => {
+        throw new DOMException('denied', 'SecurityError');
+      };
+      const events = new EventTarget();
+      const emitted = yield* withStore({ storage, events }, (s) =>
+        Effect.gen(function* () {
+          const fiber = yield* Effect.forkChild(Stream.runCollect(s.changes));
+          events.dispatchEvent(
+            new StorageEvent('storage', {
+              key: LIBRARY_KEY,
+              newValue: JSON.stringify(libraryOf()),
+            }),
+          );
+          return yield* Fiber.join(fiber);
+        }),
+      );
+      expect(emitted).toEqual([]);
+    }),
+  );
+
   it.effect('changes emits on storage event for LIBRARY_KEY only', () =>
     Effect.gen(function* () {
       const events = new EventTarget();
@@ -395,7 +587,7 @@ describe('constants and errors', () => {
     expect(new LegacyImportInvalid({ message: '파일이 이상해요' }).userMessage).toBe(
       '파일이 이상해요',
     );
-    expect(new LibraryCorrupt({ backupKey: 'k', issues: [] })._tag).toBe('LibraryCorrupt');
+    expect(new LibraryCorrupt({ backupKey: null, issues: [] })._tag).toBe('LibraryCorrupt');
     expect(new StorageUnavailable().userMessage.length).toBeGreaterThan(0);
   });
 });
