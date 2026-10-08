@@ -118,13 +118,60 @@ describe('ThemeRoot', () => {
     });
   });
 
-  it('keeps a choice made before the saved prefs arrive', async () => {
+  it('keeps a choice made before the first render', async () => {
     mockSystemDark(false);
     const { renderRoot, store } = setup({ theme: 'night', mode: 'dark' });
     store.set(setPrefsAtom, { ...DEFAULT_PREFS, theme: 'paper', mode: 'light' });
     await renderRoot();
     expect(html.dataset.theme).toBe('paper');
     expect(html.dataset.mode).toBe('light');
+  });
+
+  it('paints saved prefs on the first render without flashing the defaults', async () => {
+    mockSystemDark(false);
+    const { renderRoot } = setup({ theme: 'night', mode: 'dark' });
+    const seen: (string | null)[] = [];
+    const observer = new MutationObserver((records) => {
+      for (const record of records) seen.push(record.oldValue);
+    });
+    observer.observe(html, {
+      attributes: true,
+      attributeFilter: ['data-theme'],
+      attributeOldValue: true,
+    });
+    await renderRoot();
+    observer.disconnect();
+    // 속성이 처음 생긴 뒤 다른 값으로 바뀐 적이 없다(oldValue가 null뿐).
+    expect(seen).toEqual([null]);
+    expect(html.dataset.theme).toBe('night');
+  });
+
+  it('keeps other saved fields when prefs change right after mount', async () => {
+    mockSystemDark(false);
+    const saved = {
+      theme: 'night',
+      mode: 'dark',
+      libraryView: 'list',
+      query: { ...DEFAULT_PREFS.query, text: '물회', sort: 'name' },
+    } satisfies Partial<Prefs>;
+    const { renderRoot, store, storage } = setup(saved);
+    await renderRoot();
+    await act(async () => {
+      store.set(setPrefsAtom, { ...store.get(prefsAtom), theme: 'paper' });
+    });
+    expect(JSON.parse(storage.getItem(PREFS_KEY) ?? 'null')).toEqual({ ...saved, theme: 'paper' });
+  });
+
+  it('keeps other saved fields when prefs change before mount', async () => {
+    mockSystemDark(false);
+    const { renderRoot, store, storage } = setup({ libraryView: 'cards', mode: 'dark' });
+    store.set(setPrefsAtom, { ...store.get(prefsAtom), theme: 'paper' });
+    await renderRoot();
+    expect(JSON.parse(storage.getItem(PREFS_KEY) ?? 'null')).toMatchObject({
+      theme: 'paper',
+      mode: 'dark',
+      libraryView: 'cards',
+    });
   });
 
   it('system mode follows prefers-color-scheme change', async () => {

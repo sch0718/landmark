@@ -34,6 +34,14 @@ export function startEffect<A, E>(effect: Effect.Effect<A, E, AppServices>): Pro
 }
 
 /**
+ * 동기 실행. 화면을 처음 그리기 전에 저장값을 읽는 것처럼 비동기를 기다릴 수 없을 때만 쓴다.
+ * 효과와 서비스 레이어가 모두 동기로 끝나야 한다(아니면 던진다).
+ */
+export function startEffectSync<A, E>(effect: Effect.Effect<A, E, AppServices>): A {
+  return current.runSync(withAppErrorReporter(effect));
+}
+
+/**
  * 백그라운드 실행. 처리되지 않은 실패는 `withErrorReporting`으로 보고한다.
  * 돌려주는 함수를 부르면 실행을 중단한다(React 효과 정리용).
  */

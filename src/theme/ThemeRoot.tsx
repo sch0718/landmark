@@ -1,8 +1,8 @@
 import CssBaseline from '@mui/material/CssBaseline';
 import { ThemeProvider } from '@mui/material/styles';
-import { useAtomValue, useSetAtom } from 'jotai';
+import { useAtomValue } from 'jotai';
 import { useEffect, useLayoutEffect, useMemo, useSyncExternalStore, type ReactNode } from 'react';
-import { loadPrefsAtom, prefsAtom } from 'src/stores/prefs-state';
+import { prefsAtom } from 'src/stores/prefs-state';
 import { createAppTheme, cssVarsOf } from 'src/theme/create-app-theme';
 import { loadDisplayFont } from 'src/theme/fonts';
 import { TOKENS, type ColorMode } from 'src/theme/tokens';
@@ -21,12 +21,10 @@ const systemIsDark = () =>
 
 /**
  * 저장된 테마·모드(`PrefsStore`)로 MUI 테마와 `<html>`의 `data-theme`·`data-mode`·`--tm-*` 변수를
- * 정한다. 선호가 바뀌면(`prefsAtom`) 새로고침 없이 바뀐다. 저장된 값을 읽는 동안은 기본값으로 그린다.
+ * 정한다. 선호가 바뀌면(`prefsAtom`) 새로고침 없이 바뀐다. 저장된 값은 첫 렌더 전에 읽으므로(`prefsAtom`) 기본 테마가 먼저 보이지 않는다.
  */
 export function ThemeRoot({ children }: { children: ReactNode }) {
   const { theme: name, mode: preference } = useAtomValue(prefsAtom);
-  const loadPrefs = useSetAtom(loadPrefsAtom);
-  useEffect(() => loadPrefs(), [loadPrefs]);
 
   const systemDark = useSyncExternalStore(subscribeSystemDark, systemIsDark, () => false);
   const mode: ColorMode = preference === 'system' ? (systemDark ? 'dark' : 'light') : preference;
