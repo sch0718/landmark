@@ -36,39 +36,66 @@ function Pane({
   );
 }
 
-/** 지도 위(중간 폭) 또는 화면 전체(좁은 폭)를 덮는 상세. 닫으면 보관함으로 돌아간다. */
-function DetailOverlay({
+/** 지도 슬롯. 지도는 스스로 크기를 정하므로 가운데 칸을 꽉 채우고 넘치는 부분은 자른다. */
+const MAP_PANE_SX: SxProps<Theme> = { flex: 1, height: '100%', overflow: 'hidden' };
+
+type DetailMode = 'column' | 'overlay' | 'sheet';
+
+/**
+ * 상세 슬롯 하나. 폭에 따라 모양만 바뀌고 트리 위치는 그대로라서(`column` ↔ `overlay`) 창 폭이
+ * 1280px을 오가도 안쪽 상세가 다시 만들어지지 않는다.
+ * - `column`: 넓은 화면의 오른쪽 칸(항상 있고, 고른 장소가 없으면 안내만 보인다).
+ * - `overlay`: 중간 폭에서 지도 오른쪽을 덮는 360px 패널.
+ * - `sheet`: 좁은 화면의 전체 화면 시트.
+ */
+function DetailPane({
+  mode,
   placeId,
-  fullScreen,
   onClose,
 }: {
-  placeId: string;
-  fullScreen: boolean;
+  mode: DetailMode;
+  placeId: string | null;
   onClose: () => void;
 }) {
+  const floating = mode !== 'column';
+  const sheet = mode === 'sheet';
   return (
     <Box
       component="section"
       aria-label="장소 상세"
       sx={{
-        position: fullScreen ? 'fixed' : 'absolute',
-        zIndex: 1100,
-        top: 0,
-        right: 0,
-        bottom: 0,
-        ...(fullScreen ? { left: 0 } : { width: DETAIL_WIDTH, maxWidth: '100%' }),
+        minWidth: 0,
+        minHeight: 0,
         display: 'flex',
         flexDirection: 'column',
         bgcolor: 'var(--tm-bg-surface)',
-        borderLeft: fullScreen ? 0 : '1px solid var(--tm-border)',
-        boxShadow: fullScreen ? 'none' : 'var(--tm-shadow-2)',
+        ...(floating
+          ? {
+              position: sheet ? 'fixed' : 'absolute',
+              zIndex: 1100,
+              top: 0,
+              right: 0,
+              bottom: 0,
+              ...(sheet
+                ? { left: 0, pt: 'env(safe-area-inset-top, 0px)' }
+                : { width: DETAIL_WIDTH, maxWidth: '100%' }),
+              borderLeft: sheet ? 0 : '1px solid var(--tm-border)',
+              boxShadow: sheet ? 'none' : 'var(--tm-shadow-2)',
+            }
+          : {
+              flex: 'none',
+              width: DETAIL_WIDTH,
+              borderLeft: '1px solid var(--tm-border)',
+            }),
       }}
     >
-      <Box sx={{ flex: 'none', display: 'flex', p: 0.5 }}>
-        <IconButton onClick={onClose} aria-label={fullScreen ? '목록으로' : '닫기'}>
-          {fullScreen ? <ChevronLeftIcon aria-hidden="true" /> : <XIcon aria-hidden="true" />}
-        </IconButton>
-      </Box>
+      {floating && (
+        <Box sx={{ flex: 'none', display: 'flex', p: 0.5 }}>
+          <IconButton onClick={onClose} aria-label={sheet ? '목록으로' : '닫기'}>
+            {sheet ? <ChevronLeftIcon aria-hidden="true" /> : <XIcon aria-hidden="true" />}
+          </IconButton>
+        </Box>
+      )}
       <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
         <DetailSlot placeId={placeId} />
       </Box>
@@ -83,13 +110,32 @@ function DetailOverlay({
  */
 export function AppShell() {
   const layout = useLayout();
-  const { pathname } = useLocation();
+  const location = useLocation();
+  const { pathname } = location;
   const navigate = useNavigate();
   const [addOpen, setAddOpen] = useState(false);
 
+  // 끝의 `/`가 있어도(`/map/`) 같은 경로로 본다.
   const placeId = matchPath(paths.place(':id'), pathname)?.params.id ?? null;
-  const isLibraryView = pathname === paths.library || pathname === paths.map || placeId !== null;
-  const closeDetail = () => void navigate(paths.library);
+  const isMap = matchPath(paths.map, pathname) !== null;
+  const isLibraryView = isMap || placeId !== null || matchPath(paths.library, pathname) !== null;
+
+  // 좁은 화면에서 장소 시트 뒤에 깔리는 화면(목록/지도). 마지막으로 본 쪽을 기억한다.
+  const [origin, setOrigin] = useState<'list' | 'map'>('list');
+  const viewOrigin = isMap ? 'map' : 'list';
+  if (placeId === null && isLibraryView && origin !== viewOrigin) setOrigin(viewOrigin); // 렌더 중 상태 갱신
+  const sheetOnMap = placeId !== null && origin === 'map';
+
+  const closeDetail = () => {
+    // 좁은 화면은 시트를 연 기록을 되감아 모바일 뒤로가기와 어긋나지 않게 한다. 앱 안에서 연
+    // 기록이 없으면(링크로 바로 들어옴) 앱을 벗어나지 않도록 기록을 교체한다.
+    if (layout === 'compact') {
+      if (location.key !== 'default') void navigate(-1);
+      else void navigate(origin === 'map' ? paths.map : paths.library, { replace: true });
+      return;
+    }
+    void navigate(paths.library);
+  };
 
   let body: ReactNode;
   if (!isLibraryView) {
@@ -98,50 +144,30 @@ export function AppShell() {
         <Outlet />
       </Box>
     );
-  } else if (layout === 'wide') {
+  } else if (layout !== 'compact') {
+    // 넓은/중간 폭은 같은 트리: [목록][지도][상세]. 상세는 넓으면 오른쪽 칸, 중간이면 지도를 덮는다.
+    const wide = layout === 'wide';
     body = (
-      <Box sx={{ flex: 1, minHeight: 0, display: 'flex' }}>
+      <Box sx={{ flex: 1, minHeight: 0, display: 'flex', position: 'relative' }}>
         <Pane
           label="장소 목록"
           sx={{ flex: 'none', width: LIST_WIDTH, borderRight: '1px solid var(--tm-border)' }}
         >
           <ListSlot />
         </Pane>
-        <Pane label="지도" sx={{ flex: 1 }}>
+        <Pane label="지도" sx={MAP_PANE_SX}>
           <MapSlot />
         </Pane>
-        <Pane
-          label="장소 상세"
-          sx={{ flex: 'none', width: DETAIL_WIDTH, borderLeft: '1px solid var(--tm-border)' }}
-        >
-          <DetailSlot placeId={placeId} />
-        </Pane>
-      </Box>
-    );
-  } else if (layout === 'medium') {
-    body = (
-      <Box sx={{ flex: 1, minHeight: 0, display: 'flex' }}>
-        <Pane
-          label="장소 목록"
-          sx={{ flex: 'none', width: LIST_WIDTH, borderRight: '1px solid var(--tm-border)' }}
-        >
-          <ListSlot />
-        </Pane>
-        <Box sx={{ flex: 1, minWidth: 0, position: 'relative' }}>
-          <Pane label="지도" sx={{ height: '100%' }}>
-            <MapSlot />
-          </Pane>
-          {placeId !== null && (
-            <DetailOverlay placeId={placeId} fullScreen={false} onClose={closeDetail} />
-          )}
-        </Box>
+        {(wide || placeId !== null) && (
+          <DetailPane mode={wide ? 'column' : 'overlay'} placeId={placeId} onClose={closeDetail} />
+        )}
       </Box>
     );
   } else {
     body = (
       <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-        {pathname === paths.map ? (
-          <Pane label="지도" sx={{ flex: 1 }}>
+        {isMap || sheetOnMap ? (
+          <Pane label="지도" sx={MAP_PANE_SX}>
             <MapSlot />
           </Pane>
         ) : (
@@ -149,7 +175,7 @@ export function AppShell() {
             <ListSlot />
           </Pane>
         )}
-        {placeId !== null && <DetailOverlay placeId={placeId} fullScreen onClose={closeDetail} />}
+        {placeId !== null && <DetailPane mode="sheet" placeId={placeId} onClose={closeDetail} />}
       </Box>
     );
   }

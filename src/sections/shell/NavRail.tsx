@@ -27,7 +27,9 @@ export function NavRail({ onAdd }: { onAdd: () => void }) {
       aria-label="사이드 메뉴"
       sx={{
         flex: 'none',
-        width: 64,
+        boxSizing: 'border-box',
+        width: 'calc(64px + env(safe-area-inset-left, 0px))',
+        pl: 'env(safe-area-inset-left, 0px)',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',

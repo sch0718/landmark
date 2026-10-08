@@ -22,13 +22,19 @@ function readBackupText(backupKey: string | null): string | null {
   }
 }
 
+const REVOKE_DELAY_MS = 30_000;
+
 function downloadText(text: string, filename: string): void {
   const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
   const link = document.createElement('a');
   link.href = url;
   link.download = filename;
+  // 문서에 붙여 누르고, 주소는 브라우저가 파일을 가져갈 시간을 준 뒤 해제한다(WebKit은 바로 해제하면
+  // 빈 파일이 되거나 실패한다).
+  document.body.append(link);
   link.click();
-  URL.revokeObjectURL(url);
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), REVOKE_DELAY_MS);
 }
 
 const reset = Effect.gen(function* () {
@@ -90,6 +96,7 @@ export function CorruptScreen({
         justifyContent: 'center',
         gap: 1.5,
         p: 3,
+        pt: 'calc(24px + env(safe-area-inset-top, 0px))',
         textAlign: 'center',
         bgcolor: 'var(--tm-bg-base)',
         color: 'var(--tm-text-primary)',

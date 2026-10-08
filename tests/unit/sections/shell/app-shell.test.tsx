@@ -56,6 +56,46 @@ describe('AppShell layout', () => {
     expect(getComputedStyle(detail).width).toBe('360px');
   });
 
+  it('keeps the map and detail DOM nodes when crossing 1280px', async () => {
+    const viewport = mockViewport(1280);
+    await renderApp({ path: PLACE });
+    const map = screen.getByRole('region', { name: '지도' });
+    const mapSlot = screen.getByText('지도', { selector: 'p' });
+    const detail = screen.getByRole('region', { name: '장소 상세' });
+    const detailSlot = within(detail).getByText('장소 상세');
+    expect(screen.queryByRole('button', { name: '닫기' })).not.toBeInTheDocument();
+
+    viewport.setWidth(1279);
+    expect(screen.getByRole('region', { name: '지도' })).toBe(map);
+    expect(screen.getByText('지도', { selector: 'p' })).toBe(mapSlot);
+    expect(screen.getByRole('region', { name: '장소 상세' })).toBe(detail);
+    expect(within(detail).getByText('장소 상세')).toBe(detailSlot);
+    expect(getComputedStyle(detail).position).toBe('absolute');
+    expect(screen.getByRole('button', { name: '닫기' })).toBeInTheDocument();
+
+    viewport.setWidth(1280);
+    expect(screen.getByRole('region', { name: '지도' })).toBe(map);
+    expect(screen.getByRole('region', { name: '장소 상세' })).toBe(detail);
+    expect(getComputedStyle(detail).position).not.toBe('absolute');
+  });
+
+  it('keeps the map node when crossing 1280px with no place open', async () => {
+    const viewport = mockViewport(1300);
+    await renderApp({ path: '/' });
+    const map = screen.getByRole('region', { name: '지도' });
+    viewport.setWidth(1000);
+    expect(screen.getByRole('region', { name: '지도' })).toBe(map);
+    expect(screen.queryByRole('region', { name: '장소 상세' })).not.toBeInTheDocument();
+  });
+
+  it('map pane clips its content and fills the height', async () => {
+    mockViewport(1280);
+    await renderApp();
+    const style = getComputedStyle(screen.getByRole('region', { name: '지도' }));
+    expect(style.overflow).toBe('hidden');
+    expect(style.height).toBe('100%');
+  });
+
   it('closes the medium overlay back to the library', async () => {
     mockViewport(900);
     const { router } = await renderApp({ path: PLACE });
@@ -83,7 +123,60 @@ describe('AppShell layout', () => {
     const sheet = screen.getByRole('region', { name: '장소 상세' });
     expect(getComputedStyle(sheet).position).toBe('fixed');
     await userEvent.click(screen.getByRole('button', { name: '목록으로' }));
+    expect(router.state.location.pathname).toBe('/map');
+  });
+
+  it('compact: closing a sheet opened from the list goes back instead of pushing', async () => {
+    mockViewport(390);
+    const { router } = await renderApp({ path: '/' });
+    await act(async () => {
+      await router.navigate(PLACE);
+    });
+    expect(screen.getByRole('region', { name: '장소 목록' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: '목록으로' }));
     expect(router.state.location.pathname).toBe('/');
+    // 기록을 되감았으므로(POP) 뒤로가기가 시트를 다시 열지 않는다.
+    expect(router.state.historyAction).toBe('POP');
+    expect(screen.queryByRole('region', { name: '장소 상세' })).not.toBeInTheDocument();
+  });
+
+  it('compact: a sheet opened from the map keeps the map behind it and closes to the map', async () => {
+    mockViewport(390);
+    const { router } = await renderApp({ path: '/map' });
+    await act(async () => {
+      await router.navigate(PLACE);
+    });
+    expect(screen.getByRole('region', { name: '지도' })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: '장소 목록' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: '목록으로' }));
+    expect(router.state.location.pathname).toBe('/map');
+    expect(router.state.historyAction).toBe('POP');
+    expect(screen.getByRole('region', { name: '지도' })).toBeInTheDocument();
+  });
+
+  it('compact: a sheet entered directly replaces history instead of leaving the app', async () => {
+    mockViewport(390);
+    const { router } = await renderApp({ path: PLACE });
+    expect(router.state.location.key).toBe('default');
+    await userEvent.click(screen.getByRole('button', { name: '목록으로' }));
+    expect(router.state.location.pathname).toBe('/');
+    expect(router.state.historyAction).toBe('REPLACE');
+    expect(screen.getByRole('region', { name: '장소 목록' })).toBeInTheDocument();
+  });
+
+  it('treats a trailing slash as the same path', async () => {
+    mockViewport(390);
+    await renderApp({ path: '/map/' });
+    expect(screen.getByRole('region', { name: '지도' })).toBeInTheDocument();
+    cleanup();
+
+    await renderApp({ path: `${PLACE}/` });
+    expect(screen.getByRole('region', { name: '장소 상세' })).toBeInTheDocument();
+    cleanup();
+
+    mockViewport(1280);
+    await renderApp({ path: '/map/' });
+    expect(screen.getByRole('region', { name: '장소 목록' })).toBeInTheDocument();
   });
 
   it('marks the current destination and keeps library active on a place', async () => {
