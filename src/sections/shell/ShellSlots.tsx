@@ -1,5 +1,6 @@
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
+import { LibraryPage } from 'src/sections/library/LibraryPage';
 
 /**
  * 셸의 슬롯 자리. 크기·경계·랜드마크는 `AppShell`이 정하고, 안쪽 내용은 각 태스크가 이 컴포넌트를
@@ -17,7 +18,7 @@ function SlotPlaceholder({ title, children }: { title: string; children?: string
 }
 
 export function ListSlot() {
-  return <SlotPlaceholder title="보관함" />;
+  return <LibraryPage />;
 }
 
 export function MapSlot() {
