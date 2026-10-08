@@ -1,6 +1,7 @@
 node_modules
 dist
 .cache/
+.reference/
 playwright-report/
 test-results/
 .env*.local

@@ -19,6 +19,7 @@
     "collect": "tsx pipeline/cli/collect.ts",
     "apply-edit": "tsx pipeline/cli/apply-edit.ts",
     "validate": "tsx pipeline/cli/validate.ts",
+    "effect:source": "node scripts/effect-source.mjs",
     "build:ci": "yarn validate && yarn typecheck && yarn test && yarn build",
     "prepare": "husky"
   },
@@ -38,6 +39,7 @@
     "@mui/material": "^7",
     "@tanstack/react-virtual": "3.14.13",
     "dayjs": "^1.11.23",
+    "effect": "4.0.2",
     "es-toolkit": "^1.52.0",
     "jotai": "^3.0.1",
     "react": "^19.3.0",
@@ -50,6 +52,7 @@
   },
   "devDependencies": {
     "@babel/core": "^8.0.6",
+    "@effect/vitest": "4.0.2",
     "@eslint/js": "^10.0.1",
     "@iconify-json/mdi": "^1.2.3",
     "@playwright/test": "^1.63.0",

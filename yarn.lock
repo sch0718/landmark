@@ -400,6 +400,11 @@
   dependencies:
     tslib "^2.0.0"
 
+"@effect/vitest@4.0.2":
+  version "4.0.2"
+  resolved "https://registry.yarnpkg.com/@effect/vitest/-/vitest-4.0.2.tgz#40a1471753bd4cef03b0ad178c4d4a1b710eceb8"
+  integrity sha512-Zb72nu7iUy3rNdBp9J1Xu5oUQGwJ8cOYsUwmYgujj88aqyvASRDjOS01SjlcPViqf77csduetKdCJTVndMNfzw==
+
 "@emotion/babel-plugin@^11.13.5":
   version "11.13.5"
   resolved "https://registry.yarnpkg.com/@emotion/babel-plugin/-/babel-plugin-11.13.5.tgz#eab8d65dbded74e0ecfd28dc218e75607c4e7bc0"
@@ -1522,6 +1527,11 @@ dom-helpers@^5.0.1:
   dependencies:
     "@babel/runtime" "^7.8.7"
     csstype "^3.0.2"
+
+effect@4.0.2:
+  version "4.0.2"
+  resolved "https://registry.yarnpkg.com/effect/-/effect-4.0.2.tgz#568ce7989ece849f55f1acea644bc85b5ea88b2e"
+  integrity sha512-YeYnLqSFrL4+tCOXRrfNP03w8FILoF/wDl+ukraJAGzXrjcS383W7LAAvGBbLatEyktmLxRq+9xJinx7QzXW5A==
 
 electron-to-chromium@^1.5.439:
   version "1.5.444"
