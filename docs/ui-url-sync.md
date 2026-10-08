@@ -1,3 +1,5 @@
+> **옛 화면 문서 — v2에서 대체됨.** 이 문서가 설명하는 `useViewQuerySync`·`useUrlPlaceDetailSync`와 일정·탐색 뷰는 v2(장소 보관함)에서 삭제됐습니다. 현재 라우팅은 `src/routes/paths.ts`와 `src/sections/shell/AppShell.tsx`를 보세요. 아래 내용은 기록으로만 보존합니다.
+
 # URL·뷰·상세 동기화
 
 `useViewQuerySync`는 URL과 뷰·날짜·선택 atom을 양방향으로 동기화한다. `useUrlPlaceDetailSync`는 URL의 장소를 상세 화면에 반영한다. 상세를 X로 닫아도 선택 atom과 URL은 유지한다.

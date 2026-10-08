@@ -84,7 +84,11 @@ yarn test:e2e:ci                          # CI 핵심 사용자 흐름
 yarn test:e2e                             # 전체
 ```
 
-- 옛 여행 화면용 E2E(`views`·`itinerary`·`concurrent`·`share`)는 화면과 함께 지웠습니다. 새 화면용 E2E를 만들 때 `playwright.config.ts`의 프로젝트 목록(`desktop`·`mobile`·`narrow-mobile`)도 **함께 갱신합니다.** 그 전까지 `yarn test:e2e`는 실행할 spec이 없습니다.
+- 프로젝트(`playwright.config.ts`): `desktop`(Chromium 1280×800, 3단), `iphone`(WebKit, iPhone 13 390×844), `galaxy`(Chromium 360×780, 터치). 핵심 흐름 테스트 제목에 `@smoke`가 붙어 있고 CI(`test:e2e:ci`)는 그것만 돌립니다.
+- spec: `library.spec.ts`(라벨 필터·목록·지도·상세, 모바일 시트·라벨·메모·새로고침, 두 탭 동시 메모), `legacy-import.spec.ts`(`/t/e2etest000001` 가져오기), `themes.spec.ts`(테마 3 × 라이트/다크 스크린샷).
+- 보관함 시드는 `tests/fixtures/library/seed.json`(장소 30·라벨 6)을 `page.addInitScript`로 `localStorage['tripmap:library:v2']`에 심습니다. 형식은 `tests/unit/schema/library-seed.test.ts`가 `LibrarySchema`로 검증합니다.
+- 스크린샷은 `test-results/screens/`(보관함·상세)와 `test-results/themes/<project>-<theme>-<mode>.png`에 남습니다. 비교 단언 없는 산출물이며, Playwright가 실행할 때마다 `test-results/`를 비우므로 전체 실행(`yarn test:e2e`) 뒤에 확인하세요.
+- 실물 iPhone·Android는 이 E2E로 대체되지 않습니다(에뮬레이션). 실물 기기 점검은 하위 프로젝트 5에서 하며 아직 하지 않았습니다.
 - global setup이 `tests/fixtures/trips/e2e.json`을 `public/data/e2etest000001.json`으로 복사하고 teardown이 지웁니다. 이 파일은 커밋하지 않습니다(`.gitignore`). 옛 여행 가져오기(`/t/e2etest000001`) 시험에 쓰입니다.
 - 지도는 `VITE_MAP_ADAPTER=fake`로 DOM 가짜 지도를 씁니다. 유효 키의 실 SDK 및 실물 기기 테스트와 구분합니다.
 
@@ -92,7 +96,7 @@ yarn test:e2e                             # 전체
 
 제품 `f9f8fc2`의 과거 검증은 CI678·native68 PASS/3 skip·production39 first PASS/FLAKY0입니다. 활성 geometry의 과거 cache 복귀를 막는 수정과 실제 입력 회귀를 포함합니다. 당시 CPU4x p95 60.4/56.0/122.0/49.5/135.5ms와 장소→일정 >100ms 작업3건은 이전 엄격한 예산에서 FAIL이었습니다. 2026-10-05 사용자 결정으로 PoC 목표를 p95≤300ms·30회 중 >100ms 작업 최대5회로 완화해 이 기록을 수용합니다. 최신 성능 재측정 결과는 아닙니다. [성능 기록](docs/ui-performance.md)에 과거 판정과 원자료를 보존합니다.
 
-CI는 PR과 main push에서 핵심 사용자 흐름만 실행합니다. 500곳 전수 순회·20회 왕복 검사를 축소/제거하고, 세부 E2E는 수동 실행으로 분리했습니다. [검증 범위](docs/ui-validation.md)에 유지·제거한 항목과 실행 방법을 정리했습니다.
+CI는 PR과 main push에서 핵심 사용자 흐름(`@smoke`)만 실행하고, 전체 E2E는 수동 실행(workflow_dispatch)으로 분리했습니다. (옛 화면 시절의 [검증 범위](docs/ui-validation.md) 문서는 v2에서 대체됐습니다.)
 
 ```bash
 VITE_MAP_ADAPTER=fake yarn build
@@ -105,7 +109,7 @@ node scripts/measure-ui-assets.mjs dist/assets
 
 단위 테스트는 `vitest.config.ts`에서 기본 worker를 2개로 제한합니다. 여러 jsdom/MUI 통합 테스트를 CPU 수만큼 병렬 실행할 때 생기는 과부하와 타임아웃 후 후속 테스트 간섭을 줄이기 위한 설정입니다. 일반 테스트의 기본 제한은 5초이며, 여러 뷰와 화면 폭을 연속 전환하는 지도 수명 통합 테스트 한 건만 15초입니다. 필요하면 `yarn test --maxWorkers=N`으로 병렬 수를 명시할 수 있습니다.
 
-최종 검증은 lint → typecheck → `yarn test` → validate → build → E2E 순서로 실행합니다. 기존 미추적 scratch 파일 `inspect-mobile.mjs`, `verify-concepts.mjs`가 있는 로컬 checkout에서는 `yarn lint --ignore-pattern inspect-mobile.mjs --ignore-pattern verify-concepts.mjs`로 검사하며 이 제외는 제품 코드 제외가 아닙니다. URL과 UI의 동기화 규칙은 [상태 전이 문서](docs/ui-url-sync.md)에 정리했습니다.
+최종 검증은 lint → typecheck → `yarn test` → validate → build → E2E 순서로 실행합니다. 기존 미추적 scratch 파일 `inspect-mobile.mjs`, `verify-concepts.mjs`가 있는 로컬 checkout에서는 `yarn lint --ignore-pattern inspect-mobile.mjs --ignore-pattern verify-concepts.mjs`로 검사하며 이 제외는 제품 코드 제외가 아닙니다.
 
 ## 여행 추가 (옛 파이프라인 — 하위 프로젝트 2·3에서 대체 예정)
 

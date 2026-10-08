@@ -10,7 +10,7 @@ describe('E2E fixture TripData', () => {
     expect(parsed.success ? undefined : parsed.issues).toBeUndefined();
     const data = parsed.success ? parsed.data : undefined;
     expect(data?.publicId).toBe('e2etest000001');
-    // concurrent.spec이 장소 1~42를 쓴다.
+    // legacy-import.spec이 장소 42곳 가져오기를 기대한다.
     expect(Object.keys(data?.places ?? {})).toHaveLength(42);
   });
 });
