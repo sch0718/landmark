@@ -7,6 +7,7 @@ import type { Label, Place } from 'src/schema/library';
 import { PlaceCard } from 'src/sections/library/PlaceCard';
 import { PlaceRow } from 'src/sections/library/PlaceRow';
 import { placeLabels } from 'src/sections/library/place-labels';
+import { useOpenPlaceId } from 'src/sections/library/use-open-place-id';
 import { VirtualRows } from 'src/sections/library/views/VirtualRows';
 import { libraryAtom } from 'src/stores/library-state';
 import { focusPlaceAtom } from 'src/stores/library-ui';
@@ -35,9 +36,10 @@ export function PlaceList({
   // 지역은 보관함 전체 기준으로 한 번만 구한다(주소가 없는 장소는 가까운 장소의 지역을 빌린다).
   const library = useAtomValue(libraryAtom);
   const regions = useMemo(() => regionsByPlace(livePlaces(library)), [library]);
+  const openId = useOpenPlaceId();
   const selecting = selection.size > 0;
   const card = variant === 'card';
-  // 지도에서 마커를 누르면 그 장소의 행으로 스크롤한다.
+  // 지도에서 마커를 누르거나 장소가 열리면 그 장소의 행으로 스크롤한다.
   const focus = useAtomValue(focusPlaceAtom);
   const scrollTo =
     focus === null
@@ -60,6 +62,7 @@ export function PlaceList({
           labels: placeLabels(place, labelsById),
           selecting,
           selected: selection.has(place.id),
+          current: place.id === openId,
           onOpen,
           onToggle,
         };

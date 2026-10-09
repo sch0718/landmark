@@ -1,11 +1,12 @@
 import Box from '@mui/material/Box';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { useCallback, useMemo, useState } from 'react';
-import { matchPath, useLocation, useNavigate } from 'react-router';
+import { useNavigate } from 'react-router';
 import type { MapPadding } from 'src/components/map/MapAdapter';
 import { MapView } from 'src/components/map/MapView';
 import { labelCounts, liveLabels, queryPlaces } from 'src/domain/library/query';
 import { paths } from 'src/routes/paths';
+import { useOpenPlaceId } from 'src/sections/library/use-open-place-id';
 import { LabelChips } from 'src/sections/library/LabelChips';
 import { useLibraryQuery } from 'src/sections/library/use-library-query';
 import { toMarkers } from 'src/sections/map/markers';
@@ -36,8 +37,7 @@ export function LibraryMap() {
   const layout = useLayout();
   const navigate = useNavigate();
   const requestListScroll = useSetAtom(focusPlaceAtom);
-  const { pathname } = useLocation();
-  const placeId = matchPath(paths.place(':id'), pathname)?.params.id ?? null;
+  const placeId = useOpenPlaceId();
 
   const clusterStyle = useMemo(
     () => ({ color: tokens.accent.main, textColor: tokens.accent.contrast }),

@@ -26,13 +26,13 @@ describe('library views', () => {
     const switcher = screen.getByRole('group', { name: '보기 방식' });
     const pick = (name: string) => user.click(within(switcher).getByRole('button', { name }));
 
-    // 기본: 벤토. 필터가 없으면 라벨 블록만 보인다.
+    // 기본: 벤토. 필터가 없어도 라벨 블록 아래에 장소 목록이 함께 보인다.
     expect(within(switcher).getByRole('button', { name: '벤토' })).toHaveAttribute(
       'aria-pressed',
       'true',
     );
     expect(overview()).toBeInTheDocument();
-    expect(placeList()).not.toBeInTheDocument();
+    expect(within(placeList()!).getAllByRole('listitem')).toHaveLength(5);
 
     await pick('카드');
     expect(overview()).not.toBeInTheDocument();
@@ -44,7 +44,7 @@ describe('library views', () => {
     await pick('타일');
     expect(overview()).toBeInTheDocument();
     expect(getComputedStyle(overview()!).gridTemplateColumns).toBe('repeat(2, minmax(0, 1fr))');
-    expect(placeList()).not.toBeInTheDocument();
+    expect(within(placeList()!).getAllByRole('listitem')).toHaveLength(5);
     await waitFor(() => expect(savedView()).toBe('tiles'));
 
     await pick('목록');
@@ -102,9 +102,10 @@ describe('library views', () => {
       expect(JSON.parse(storage.getItem(PREFS_KEY)!).query.labelIds).toEqual([L_FOOD]),
     );
 
-    // 같은 블록을 다시 누르면 푼다.
+    // 같은 블록을 다시 누르면 푼다. 필터가 없어도 목록은 전부 보인다.
     await user.click(block(/^맛집/));
-    expect(placeList()).not.toBeInTheDocument();
+    expect(block(/^맛집/)).toHaveAttribute('aria-pressed', 'false');
+    expect(within(placeList()!).getAllByRole('listitem')).toHaveLength(5);
   });
 
   it('tile selects a label and 미분류 shows unlabeled places in a list below', async () => {

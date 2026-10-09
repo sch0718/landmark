@@ -23,6 +23,7 @@ export function PlaceCard({
   labels,
   selecting,
   selected,
+  current = false,
   onOpen,
   onToggle,
 }: PlaceItemProps) {
@@ -33,6 +34,7 @@ export function PlaceCard({
       component="button"
       type="button"
       aria-pressed={selecting ? selected : undefined}
+      aria-current={current ? 'true' : undefined}
       {...gestures}
       sx={{
         ...ITEM_BUTTON_SX,
@@ -43,7 +45,7 @@ export function PlaceCard({
         bgcolor: 'var(--tm-bg-surface)',
         boxShadow: 'var(--tm-shadow-1)',
         border: '1px solid',
-        borderColor: selected ? 'var(--tm-accent-main)' : 'var(--tm-border)',
+        borderColor: selected || current ? 'var(--tm-accent-main)' : 'var(--tm-border)',
       }}
     >
       {selecting && <SelectMark checked={selected} />}
