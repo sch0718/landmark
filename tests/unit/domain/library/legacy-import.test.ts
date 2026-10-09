@@ -410,6 +410,22 @@ describe('planLegacyImport / applyImportPlan', () => {
       expect(Object.keys(result.labels)).toHaveLength(0);
     });
 
+    it('exclude-place stays excluded when another tab later saves a place with the same sid', () => {
+      const s = src(tripWithMemo('가'.repeat(10_001)));
+      const choices: ImportChoices = { labels: {}, memos: { 'n:1': 'exclude-place' } };
+      const first = plan(emptyLibrary(), s, choices);
+      expect(first.places[0]!.action).toBe('exclude');
+
+      const lib = libWith([libPlace('exist00001')]); // sid '1'
+      const second = plan(lib, s, choices, first.ids);
+      expect(second.places[0]!.action).toBe('exclude');
+      expect(semanticKey(second)).toBe(semanticKey(first));
+
+      const result = applyImportPlan(lib, second);
+      expect(result.places['exist00001']!.labelIds.value).toEqual([]);
+      expect(Object.keys(result.labels)).toHaveLength(0);
+    });
+
     it('a merged place needs no memo decision (memo is not imported)', () => {
       const lib = libWith([libPlace('exist00001')]);
       const p = plan(lib, src(tripWithMemo('가'.repeat(10_001))));

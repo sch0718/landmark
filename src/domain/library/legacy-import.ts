@@ -212,6 +212,15 @@ export function planLegacyImport(
     const fullMemo = combineMemos(source, placeKey);
     const common = { placeKey, labelNames: [] as string[], fullMemo, base };
 
+    const tooLong = fullMemo.length > LIBRARY_LIMITS.memoChars;
+    const decision = choices.memos[placeKey];
+    // 사용자가 제외하기로 한 장소는 그 사이 다른 탭이 같은 장소를 저장했더라도 제외로 둔다.
+    if (tooLong && decision === 'exclude-place') {
+      const targetPlaceId = (outIds.places[placeKey] ??= newId('place'));
+      places.push({ ...common, action: 'exclude', targetPlaceId, memo: '', category: null });
+      continue;
+    }
+
     const existing = findExisting(lib, base.source);
     const sidKey = base.source.kind === 'naver' ? base.source.sid : null;
     const earlier = sidKey === null ? undefined : addedBySid.get(sidKey);
@@ -227,12 +236,6 @@ export function planLegacyImport(
     }
 
     const targetPlaceId = (outIds.places[placeKey] ??= newId('place'));
-    const tooLong = fullMemo.length > LIBRARY_LIMITS.memoChars;
-    const decision = choices.memos[placeKey];
-    if (tooLong && decision === 'exclude-place') {
-      places.push({ ...common, action: 'exclude', targetPlaceId, memo: '', category: null });
-      continue;
-    }
     if (tooLong && decision === undefined) {
       pending.push({
         kind: 'memo-too-long',
