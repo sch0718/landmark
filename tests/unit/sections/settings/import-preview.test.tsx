@@ -181,6 +181,24 @@ describe('ImportPreview decisions', () => {
     expect(blobs[0]!.type).toContain('text/plain');
   });
 
+  it('a label carried only by an excluded place does not block a rename', async () => {
+    const trip = tripOf();
+    trip.folders[0]!.name = LONG_NAME; // A만 쓰는 폴더
+    trip.folders.push({ id: 'f2', name: '충돌', count: 1 }); // B만 쓰는 폴더
+    trip.places['n:1']!.folderIds = ['f1'];
+    trip.places['n:2']!.folderIds = ['f2'];
+    trip.places['n:2']!.naverMemos = [{ folderId: 'f2', memo: HUGE_MEMO }];
+    const { user } = await openPreview(trip);
+    await user.click(within(memoItem()).getByRole('radio', { name: '이 장소 제외' }));
+
+    await user.clear(nameInput());
+    await user.type(nameInput(), '충돌');
+    expect(labelItem()).not.toHaveTextContent('같은 이름의 라벨이 있어요');
+    expect(nameInput()).toHaveValue('충돌');
+    expect(summary()).toBe('새로 추가 1 · 이미 있음 0(라벨만 합침) · 새 라벨 1 · 확인 필요 0');
+    expect(importButton()).toBeEnabled();
+  });
+
   it('stale apply shows recomputed preview and keeps decisions', async () => {
     const trip = tripOf();
     trip.folders[0]!.name = LONG_NAME;

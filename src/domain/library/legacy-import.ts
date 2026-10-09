@@ -188,6 +188,19 @@ export function legacyLabelSources(source: LegacySource): LabelSource[] {
   return [...byKey.values()];
 }
 
+/** 라벨 출처 키 → 그 출처를 쓰는 옛 장소 키들. 화면이 제외된 장소만 쓰는 출처를 가려내는 데 쓴다. */
+export function legacyLabelPlaceKeys(source: LegacySource): Map<string, string[]> {
+  const byKey = new Map<string, string[]>();
+  for (const placeKey of Object.keys(source.trip.places)) {
+    for (const { key } of labelSourcesOf(source, placeKey)) {
+      const keys = byKey.get(key);
+      if (keys === undefined) byKey.set(key, [placeKey]);
+      else if (!keys.includes(placeKey)) keys.push(placeKey);
+    }
+  }
+  return byKey;
+}
+
 export function planLegacyImport(
   lib: Library,
   source: LegacySource,

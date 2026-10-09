@@ -1,4 +1,8 @@
-import { legacyLabelSources, type ImportChoices } from 'src/domain/library/legacy-import';
+import {
+  legacyLabelPlaceKeys,
+  legacyLabelSources,
+  type ImportChoices,
+} from 'src/domain/library/legacy-import';
 import type { LegacySource, MemoDecision, PendingDecision } from 'src/domain/library/legacy-import';
 import { liveLabels } from 'src/domain/library/query';
 import { LIBRARY_LIMITS, normalizeLabelName, type Library } from 'src/schema/library';
@@ -71,7 +75,7 @@ const lengthOk = (name: string): boolean =>
 
 /**
  * 고른 라벨 이름의 오류 문구(없으면 `null`). 비었거나 30자 초과이거나, 보관함의 살아 있는 라벨 또는
- * 가져올 다른 라벨과 정규화한 이름이 같으면 오류다(도메인은 같은 이름을 조용히 재사용하므로 화면이 막는다).
+ * 가져올 다른 라벨(제외한 장소만 쓰는 것은 빼고)과 정규화한 이름이 같으면 오류다(도메인은 같은 이름을 조용히 재사용하므로 화면이 막는다).
  */
 export function labelNameError(
   key: string,
@@ -87,10 +91,14 @@ export function labelNameError(
   if (liveLabels(library).some((l) => normalizeLabelName(l.name.value) === normalized)) {
     return NAME_TAKEN_MESSAGE;
   }
+  const placesOf = legacyLabelPlaceKeys(source);
   for (const other of legacyLabelSources(source)) {
     if (other.key === key) continue;
     const otherDraft = decisions.labels[other.key];
     if (otherDraft?.excluded === true) continue;
+    // 제외한 장소만 쓰는 출처는 가져오지 않으니 이름이 겹쳐도 막지 않는다.
+    const used = placesOf.get(other.key) ?? [];
+    if (used.every((placeKey) => decisions.memos[placeKey] === 'exclude-place')) continue;
     const otherName = (otherDraft?.name ?? other.rawName).trim();
     if (lengthOk(otherName) && normalizeLabelName(otherName) === normalized) {
       return NAME_TAKEN_MESSAGE;
