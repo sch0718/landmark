@@ -10,7 +10,6 @@ import type { MapMarker } from 'src/components/map/MapAdapter';
 import { fitPoints, MapView } from 'src/components/map/MapView';
 import { StrictMode } from 'react';
 import { installMapResources } from './helpers/map-resources';
-import { TripLayout } from 'src/layouts/TripLayout';
 import { createTripStore, TripStoreContext } from 'src/stores/trip-store';
 
 const sdk = vi.hoisted(() => ({
@@ -172,7 +171,7 @@ describe('MapView fitKey', () => {
 });
 
 describe('지도 사용 불가', () => {
-  it('SDK 로드가 실패하면 사유를 알리고, TripLayout은 지도 없이 패널과 사유를 보여 준다', async () => {
+  it('SDK 로드가 실패하면 사유를 알리고, 호출자는 지도 없이 패널과 사유를 보여 준다', async () => {
     vi.stubEnv('VITE_MAP_ADAPTER', '');
     vi.stubEnv('VITE_NAVER_MAP_CLIENT_ID', 'cid');
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -184,27 +183,23 @@ describe('지도 사용 불가', () => {
       const setUnavailable = useSetAtom(ts.mapUnavailableAtom);
       const unavailable = useAtomValue(ts.mapUnavailableAtom);
       return (
-        <TripLayout
-          topBar={<div>top</div>}
-          view="map"
-          layout="compact"
-          detail={{ open: false, content: null, onClose: vi.fn() }}
-          unavailable={unavailable}
-          routeMapVisible={false}
-          onMapPaddingChange={vi.fn()}
-          map={
-            <MapView
-              markers={[]}
-              polylines={[]}
-              onMarkerClick={vi.fn()}
-              onUnavailable={(r) => {
-                reasons.push(r);
-                setUnavailable(r);
-              }}
-            />
-          }
-          panel={<div>panel-content</div>}
-        />
+        <>
+          <div data-testid="trip-map-area">
+            {!unavailable && (
+              <MapView
+                markers={[]}
+                polylines={[]}
+                onMarkerClick={vi.fn()}
+                onUnavailable={(r) => {
+                  reasons.push(r);
+                  setUnavailable(r);
+                }}
+              />
+            )}
+          </div>
+          {unavailable && <p>{unavailable}</p>}
+          <div>panel-content</div>
+        </>
       );
     }
     render(

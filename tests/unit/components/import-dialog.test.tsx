@@ -1,17 +1,24 @@
 import { cleanup, act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { createStore } from 'jotai';
-import { createMemoryRouter, RouterProvider } from 'react-router';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { useAtomValue } from 'jotai';
+import { useState } from 'react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import Button from '@mui/material/Button';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogTitle from '@mui/material/DialogTitle';
+import TextField from '@mui/material/TextField';
 import { AppProviders } from 'src/app';
-import { installMapResources } from './helpers/map-resources';
+import { LegacyTripScope } from '../../fixtures/legacy-trip-scope';
 import { hashDayStops } from 'src/domain/day-hash';
 import { encodeEditLayer } from 'src/domain/codec';
 import { createMemoryStorage, storageKey } from 'src/repositories/edit-layer-repo';
-import { routes } from 'src/routes/router';
-import type { EditLayer } from 'src/schema/edit-layer';
-import type { TripData } from 'src/schema/trip-data';
-import { TripDepsContext } from 'src/stores/trip-store';
+import type { EditLayer } from 'src/schema/legacy/edit-layer';
+import type { TripData } from 'src/schema/legacy/trip-data';
+import type { ImportInput } from 'src/repositories/import-flow';
+import { useHashImport } from 'src/sections/share/use-hash-import';
+import { ImportDialog } from 'src/sections/share/view/ImportDialog';
+import { useTripStore } from 'src/stores/trip-store';
 import { makeEdit, makeTrip, sid } from '../../fixtures/builders';
 import { createHeldLocks } from '../../fixtures/fake-locks';
 
@@ -58,6 +65,58 @@ function withP1(edit: EditLayer): EditLayer {
   };
 }
 
+/**
+ * 옛 `TripPage`가 가져오기에 연결하던 부분만 옮긴 시험용 화면: 해시 진입(`useHashImport`), 파일 선택,
+ * 가져오기 대화상자, 첫 편집 때 뜨는 닉네임 요청, 불러온 원본의 제목.
+ */
+function ImportHost() {
+  const ts = useTripStore();
+  const trip = useAtomValue(ts.tripAtom);
+  const request = useAtomValue(ts.nicknameRequestAtom);
+  const [importing, setImporting] = useState<{ seq: number; input: ImportInput } | null>(null);
+  const start = (input: ImportInput) =>
+    setImporting((prev) => ({ seq: (prev?.seq ?? 0) + 1, input }));
+  useHashImport(start);
+  return (
+    <>
+      <h1>{trip?.title}</h1>
+      <input
+        type="file"
+        hidden
+        aria-label="편집 파일 선택"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          e.target.value = '';
+          if (file) start({ kind: 'file', file });
+        }}
+      />
+      {importing && (
+        <ImportDialog
+          key={importing.seq}
+          input={importing.input}
+          onClose={() => setImporting(null)}
+        />
+      )}
+      <NicknamePrompt open={request !== null} resolve={(v) => request?.resolve(v)} />
+    </>
+  );
+}
+
+/** 닉네임 요청의 시험용 대역 — 대화상자 이름·입력 라벨·버튼 이름은 옛 `NicknameDialog`와 같다. */
+function NicknamePrompt({ open, resolve }: { open: boolean; resolve(v: string | null): void }) {
+  const [value, setValue] = useState('');
+  return (
+    <Dialog open={open} onClose={() => resolve(null)}>
+      <DialogTitle>닉네임 입력</DialogTitle>
+      <TextField label="닉네임" value={value} onChange={(e) => setValue(e.target.value)} />
+      <DialogActions>
+        <Button onClick={() => resolve(null)}>취소</Button>
+        <Button onClick={() => resolve(value.trim())}>저장</Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
 function renderPage(
   opts: {
     storage?: Storage;
@@ -66,7 +125,6 @@ function renderPage(
     locks?: LockManager;
   } = {},
 ) {
-  vi.stubEnv('VITE_MAP_ADAPTER', 'fake');
   const storage = opts.storage ?? createMemoryStorage();
   const fetchFn = vi.fn<typeof fetch>().mockImplementation(async (_url, init) => {
     const body = init?.cache === 'no-cache' ? (opts.refetchTrip ?? trip) : trip;
@@ -75,23 +133,22 @@ function renderPage(
   // react-router(BrowserRouter)가 history.state에 두는 값을 흉내 낸다. 해시를 지워도 남아야 한다.
   if (opts.hash !== undefined)
     window.history.replaceState(ROUTER_STATE, '', `/t/${PID}${opts.hash}`);
-  const router = createMemoryRouter(routes, { initialEntries: [`/t/${PID}`] });
   render(
-    <TripDepsContext
-      value={{
-        storage,
-        fetchFn,
-        now: () => NOW_MS,
-        nowIso: () => NOW_ISO,
-        randomId: () => 'a-new',
-        jotaiStore: createStore(),
-        ...(opts.locks ? { locks: opts.locks } : {}),
-      }}
-    >
-      <AppProviders>
-        <RouterProvider router={router} />
-      </AppProviders>
-    </TripDepsContext>,
+    <AppProviders>
+      <LegacyTripScope
+        publicId={PID}
+        deps={{
+          storage,
+          fetchFn,
+          now: () => NOW_MS,
+          nowIso: () => NOW_ISO,
+          randomId: () => 'a-new',
+          ...(opts.locks ? { locks: opts.locks } : {}),
+        }}
+      >
+        <ImportHost />
+      </LegacyTripScope>
+    </AppProviders>,
   );
   return { storage, fetchFn };
 }
@@ -112,23 +169,13 @@ async function enterNickname(user: ReturnType<typeof userEvent.setup>, nickname:
   await user.click(within(dialog).getByRole('button', { name: '저장' }));
 }
 
-// 라우트가 TripPage를 지연 로드하므로, 부하가 큰 전체 실행에서 첫 테스트가 findBy 시간을 넘지 않게 미리 불러 둔다.
-beforeAll(async () => {
-  await import('src/pages/TripPage');
-}, 20_000);
-
-let mapResources: ReturnType<typeof installMapResources>;
-
 beforeEach(() => {
-  mapResources = installMapResources();
   window.localStorage.clear();
 });
 
 afterEach(() => {
   cleanup();
-  mapResources.restore();
   window.history.replaceState(null, '', '/');
-  vi.unstubAllEnvs();
   vi.restoreAllMocks();
 });
 

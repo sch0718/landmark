@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { hashDayStops } from 'src/domain/day-hash';
 import { ensureOverride, findDuplicateStopIds, overlay } from 'src/domain/overlay';
-import type { Stop } from 'src/schema/trip-data';
+import type { Stop } from 'src/schema/legacy/trip-data';
 import { makeEdit, makeTrip, sid } from '../../fixtures/builders';
 
 const NOW = '2026-10-03T01:00:00.000Z';

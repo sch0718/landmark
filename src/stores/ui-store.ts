@@ -8,7 +8,7 @@ export const viewModeAtom = atom<ViewMode>('map');
 export type UiQuerySession = {
   owner: import('src/stores/trip-store').TripStore;
   load: import('src/stores/trip-store').LoadState;
-  trip: import('src/schema/trip-data').TripData;
+  trip: import('src/schema/legacy/trip-data').TripData;
 };
 export const uiQueryReadyAtom = atom<UiQuerySession | false>(false);
 export const modeAtom = atom(

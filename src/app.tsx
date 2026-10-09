@@ -1,18 +1,15 @@
-import CssBaseline from '@mui/material/CssBaseline';
-import { ThemeProvider } from '@mui/material/styles';
 import { useState, type ReactNode } from 'react';
 import { RouterProvider } from 'react-router';
 import { Toaster } from 'sonner';
 import { createAppRouter } from 'src/routes/router';
-import { theme } from 'src/theme/theme';
+import { ThemeRoot } from 'src/theme/ThemeRoot';
 
 export function AppProviders({ children }: { children: ReactNode }) {
   return (
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
+    <ThemeRoot>
       {children}
       <Toaster position="top-center" />
-    </ThemeProvider>
+    </ThemeRoot>
   );
 }
 

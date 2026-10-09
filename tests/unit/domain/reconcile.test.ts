@@ -3,7 +3,8 @@ import { hashDayStops } from 'src/domain/day-hash';
 import { findDuplicateStopIds, overlay } from 'src/domain/overlay';
 import { keepMine, reconcile } from 'src/domain/reconcile';
 import { applyRevert, planRevert } from 'src/domain/revert';
-import { EditLayerSchema } from 'src/schema/edit-layer';
+import { EDIT_LAYER_PARSE, EditLayerSchema } from 'src/schema/legacy/edit-layer';
+import { safeParse } from 'src/schema/parse';
 import { makeEdit, makeTrip, sid } from '../../fixtures/builders';
 
 const OLD = '2026-10-03T00:30:00.000Z';
@@ -118,7 +119,7 @@ describe('reconcile', () => {
     });
     expect(findDuplicateStopIds(overlay(trip, edit).days)).toEqual([sid('X')]);
     expect(keepMine(trip, edit, [D1, D2], NOW)).toBeNull();
-    expect(EditLayerSchema.safeParse(edit).success).toBe(true);
+    expect(safeParse(EditLayerSchema, edit, EDIT_LAYER_PARSE).success).toBe(true);
   });
 });
 

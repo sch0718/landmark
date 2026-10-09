@@ -1,0 +1,82 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import type { Page } from '@playwright/test';
+
+/** 옛 여행 가져오기 시험용 fixture(`global-setup`이 `public/data/`로 복사한다). */
+export const E2E_PUBLIC_ID = 'e2etest000001';
+export const E2E_FIXTURE_FILE = fileURLToPath(
+  new URL('../fixtures/trips/e2e.json', import.meta.url),
+);
+export const E2E_DATA_FILE = fileURLToPath(
+  new URL(`../../public/data/${E2E_PUBLIC_ID}.json`, import.meta.url),
+);
+
+const SEED_FILE = fileURLToPath(new URL('../fixtures/library/seed.json', import.meta.url));
+
+export const LIBRARY_KEY = 'tripmap:library:v2';
+export const PREFS_KEY = 'tripmap:prefs';
+
+/** 보관함 시드 JSON 문자열(장소 30 · 라벨 6). */
+export const seedJson: string = readFileSync(SEED_FILE, 'utf8');
+export const seed = JSON.parse(seedJson) as {
+  places: Record<string, { id: string; name: { value: string } }>;
+  labels: Record<string, { id: string }>;
+};
+export const SEED_PLACE_COUNT = Object.keys(seed.places).length;
+
+export type PrefsSeed = {
+  theme?: 'pastel' | 'paper' | 'night';
+  mode?: 'system' | 'light' | 'dark';
+  libraryView?: 'bento' | 'cards' | 'tiles' | 'list';
+};
+
+/**
+ * 첫 로드 전에 localStorage에 보관함 시드(와 UI 선호)를 심는다. 이미 값이 있으면 건드리지 않아서
+ * 새로고침 후에도 앱이 저장한 값이 유지된다.
+ */
+export async function seedStorage(
+  page: Page,
+  options: { library?: boolean; prefs?: PrefsSeed } = {},
+): Promise<void> {
+  const { library = true, prefs } = options;
+  const prefsJson =
+    prefs === undefined
+      ? null
+      : JSON.stringify({
+          theme: 'pastel',
+          mode: 'light',
+          libraryView: 'list',
+          query: {
+            labelIds: [],
+            mode: 'any',
+            unlabeled: false,
+            regions: [],
+            text: '',
+            sort: 'recent',
+          },
+          ...prefs,
+        });
+  await page.addInitScript(
+    ({ libraryKey, prefsKey, libraryJson, prefsValue }) => {
+      if (libraryJson !== null && localStorage.getItem(libraryKey) === null) {
+        localStorage.setItem(libraryKey, libraryJson);
+      }
+      if (prefsValue !== null && localStorage.getItem(prefsKey) === null) {
+        localStorage.setItem(prefsKey, prefsValue);
+      }
+    },
+    {
+      libraryKey: LIBRARY_KEY,
+      prefsKey: PREFS_KEY,
+      libraryJson: library ? seedJson : null,
+      prefsValue: prefsJson,
+    },
+  );
+}
+
+/** 시드에서 이름으로 장소 id를 찾는다. */
+export function placeIdByName(name: string): string {
+  const found = Object.values(seed.places).find((p) => p.name.value === name);
+  if (found === undefined) throw new Error(`시드에 없는 장소: ${name}`);
+  return found.id;
+}

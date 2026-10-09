@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { buildPlaces } from '../../../pipeline/build-places';
 import type { Bookmark, FetchedFolder } from '../../../pipeline/naver-client';
 import { UnresolvedPlacesError, resolveStops } from '../../../pipeline/resolve-stops';
-import { TripSourceSchema } from 'src/schema/trip-source';
+import { parseOrThrow } from 'src/schema/parse';
+import { TripSourceSchema } from 'src/schema/legacy/trip-source';
 
 const SHARE = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 
@@ -20,7 +21,7 @@ const bm = (sid: string, px = 128.59, py = 38.2): Bookmark => ({
 });
 
 function setup(stops: { id?: string; place: string; time?: string; note?: string }[]) {
-  const source = TripSourceSchema.parse({
+  const source = parseOrThrow(TripSourceSchema, {
     title: 't',
     startDate: '2026-10-10',
     endDate: '2026-10-11',

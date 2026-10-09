@@ -1,0 +1,134 @@
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Typography from '@mui/material/Typography';
+import { useAtomValue, useSetAtom } from 'jotai';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useSearchParams } from 'react-router';
+import { MonitorIcon, MoonIcon, SunIcon } from 'src/components/icons';
+import { liveLabels, livePlaces } from 'src/domain/library/query';
+import type { Prefs } from 'src/schema/prefs';
+import { LegacyImportDialog } from 'src/sections/settings/LegacyImportDialog';
+import { OptionGroup, type Option } from 'src/sections/settings/OptionGroup';
+import { ThemePicker } from 'src/sections/settings/ThemePicker';
+import { libraryAtom } from 'src/stores/library-state';
+import { prefsAtom, setPrefsAtom } from 'src/stores/prefs-state';
+
+const MODES: ReadonlyArray<Option<Prefs['mode']>> = [
+  { value: 'system', label: '시스템', Icon: MonitorIcon },
+  { value: 'light', label: '라이트', Icon: SunIcon },
+  { value: 'dark', label: '다크', Icon: MoonIcon },
+];
+
+const VIEWS: ReadonlyArray<Option<Prefs['libraryView']>> = [
+  { value: 'bento', label: '벤토' },
+  { value: 'cards', label: '카드' },
+  { value: 'tiles', label: '타일' },
+  { value: 'list', label: '목록' },
+];
+
+/** 쿼리로 대화상자를 바로 여는 키(보관함 빈 화면의 "옛 여행 가져오기"). */
+const IMPORT_PARAM = 'import';
+
+function Section({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <Box
+      component="section"
+      aria-label={title}
+      sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}
+    >
+      <Typography component="h2" sx={{ fontSize: 15, fontWeight: 800 }}>
+        {title}
+      </Typography>
+      {children}
+    </Box>
+  );
+}
+
+/** 직렬화 길이 × 2바이트(UTF-16)로 어림한 사용 용량, KB. */
+const approxKb = (library: unknown): number =>
+  Math.max(1, Math.round((JSON.stringify(library).length * 2) / 1024));
+
+/** 설정(스펙 §4.7): 테마·모드·보관함 보기·옛 여행 가져오기·데이터 정보. */
+export function SettingsPage() {
+  const prefs = useAtomValue(prefsAtom);
+  const setPrefs = useSetAtom(setPrefsAtom);
+  const library = useAtomValue(libraryAtom);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [importOpen, setImportOpen] = useState(() => searchParams.has(IMPORT_PARAM));
+
+  // 쿼리로 들어왔으면 대화상자는 이미 열렸으니 주소에서 지운다(새로고침해도 다시 열리지 않게).
+  useEffect(() => {
+    if (!searchParams.has(IMPORT_PARAM)) return;
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete(IMPORT_PARAM);
+        return next;
+      },
+      { replace: true },
+    );
+  }, [searchParams, setSearchParams]);
+
+  const info = useMemo(
+    () =>
+      `장소 ${livePlaces(library).length}곳 · 라벨 ${liveLabels(library).length}개 · 사용 용량 약 ${approxKb(library).toLocaleString('ko-KR')} KB`,
+    [library],
+  );
+
+  return (
+    <Box
+      sx={{
+        maxWidth: 640,
+        mx: 'auto',
+        px: 2,
+        py: 2,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 3,
+      }}
+    >
+      <Box component="h1" sx={{ m: 0, fontSize: 20, fontWeight: 800 }}>
+        설정
+      </Box>
+
+      <Section title="테마">
+        <ThemePicker value={prefs.theme} onChange={(theme) => setPrefs({ ...prefs, theme })} />
+      </Section>
+      <Section title="모드">
+        <OptionGroup
+          label="모드"
+          value={prefs.mode}
+          options={MODES}
+          onChange={(mode) => setPrefs({ ...prefs, mode })}
+        />
+      </Section>
+      <Section title="보관함 보기">
+        <OptionGroup
+          label="보관함 보기"
+          value={prefs.libraryView}
+          options={VIEWS}
+          onChange={(libraryView) => setPrefs({ ...prefs, libraryView })}
+        />
+      </Section>
+      <Section title="가져오기">
+        <Typography variant="body2" sx={{ color: 'var(--tm-text-secondary)' }}>
+          예전 여행 데이터의 장소와 라벨을 보관함으로 가져와요.
+        </Typography>
+        <Box>
+          <Button variant="outlined" onClick={() => setImportOpen(true)} sx={{ minHeight: 44 }}>
+            옛 여행 가져오기
+          </Button>
+        </Box>
+      </Section>
+      <Section title="데이터 정보">
+        <Typography variant="body2">{info}</Typography>
+      </Section>
+
+      <LegacyImportDialog
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        onImported={() => setImportOpen(false)}
+      />
+    </Box>
+  );
+}

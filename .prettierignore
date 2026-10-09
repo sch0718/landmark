@@ -4,5 +4,6 @@ docs
 public/data
 .claude
 .superpowers
+.reference
 yarn.lock
 tests/fixtures/naver/

@@ -1,5 +1,5 @@
-import type { EditLayer, PlaceEdit } from 'src/schema/edit-layer';
-import type { Place, TripData } from 'src/schema/trip-data';
+import type { EditLayer, PlaceEdit } from 'src/schema/legacy/edit-layer';
+import type { Place, TripData } from 'src/schema/legacy/trip-data';
 
 /** 편집 레이어의 분류를 적용한 분류. null이면 미분류. */
 export function effectiveCategory(place: Place, edit: PlaceEdit | undefined): string | null {

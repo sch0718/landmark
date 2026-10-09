@@ -25,7 +25,7 @@ import { Fragment, useState } from 'react';
 import { toast } from 'sonner';
 import { overlay } from 'src/domain/overlay';
 import { LIMITS } from 'src/schema/common';
-import type { Stop, TripData } from 'src/schema/trip-data';
+import type { Stop, TripData } from 'src/schema/legacy/trip-data';
 import { circled, dayLabel } from 'src/sections/itinerary/store/format';
 import { moveStop, removeStop, reorderStops } from 'src/sections/itinerary/store/itinerary-actions';
 import { useItinerarySave, type ItineraryDay } from 'src/sections/itinerary/store/itinerary-state';
@@ -34,8 +34,7 @@ import {
   itineraryEditingAtom,
   stopDraftsAtom,
 } from 'src/sections/views/store/view-session';
-import DragIcon from '~icons/mdi/drag';
-import MoreIcon from '~icons/mdi/dots-horizontal';
+import { EllipsisIcon, GripIcon } from 'src/components/icons';
 import { LegRow } from './LegRow';
 
 type Props = { trip: TripData; item: ItineraryDay };
@@ -160,7 +159,7 @@ function StopRow({ trip, date, stop, position, dayStopCount }: RowProps) {
             {...attributes}
             {...listeners}
           >
-            <DragIcon width={20} height={20} />
+            <GripIcon width={20} height={20} />
           </IconButton>
         )}
         <Typography component="span" sx={{ fontWeight: 700 }} aria-hidden>
@@ -192,7 +191,7 @@ function StopRow({ trip, date, stop, position, dayStopCount }: RowProps) {
           aria-label={`${name} 메뉴`}
           onClick={(e) => setMenuAnchor(e.currentTarget)}
         >
-          <MoreIcon width={22} height={22} />
+          <EllipsisIcon width={22} height={22} />
         </IconButton>
         <Menu anchorEl={menuAnchor} open={menuAnchor !== null} onClose={() => setMenuAnchor(null)}>
           {[

@@ -1,4 +1,4 @@
-import type { Day, Leg, Place, Stop } from 'src/schema/trip-data';
+import type { Day, Leg, Place, Stop } from 'src/schema/legacy/trip-data';
 import type { RouteResult } from './naver-client';
 import { routeCacheKey, type CachedRoute, type RouteCache } from './route-cache';
 import { simplifyPath } from './simplify';

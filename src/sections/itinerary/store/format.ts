@@ -1,6 +1,6 @@
 import type { DayTotals } from 'src/domain/day-totals';
 import type { DisplayLeg } from 'src/domain/leg-index';
-import type { TripData } from 'src/schema/trip-data';
+import type { TripData } from 'src/schema/legacy/trip-data';
 
 const wonFormat = new Intl.NumberFormat('ko-KR');
 

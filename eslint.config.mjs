@@ -4,7 +4,7 @@ import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  { ignores: ['dist', 'node_modules', 'docs', 'public', '.claude', '.superpowers'] },
+  { ignores: ['dist', 'node_modules', 'docs', 'public', '.claude', '.superpowers', '.reference'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {

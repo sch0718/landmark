@@ -1,22 +1,22 @@
 import { parse } from 'yaml';
-import { TripDataSchema } from 'src/schema/trip-data';
-import { TripSourceSchema } from 'src/schema/trip-source';
+import { safeParse, type ParseResult } from 'src/schema/parse';
+import { TRIP_DATA_PARSE, TripDataSchema } from 'src/schema/legacy/trip-data';
+import { TripSourceSchema } from 'src/schema/legacy/trip-source';
 import type { FsPort } from './fs-port';
 
-type Issue = { path: PropertyKey[]; message: string };
-type Schema = { safeParse(v: unknown): { success: boolean; error?: { issues: Issue[] } } };
+type Validator = (v: unknown) => ParseResult<unknown>;
 
 export async function validateAll(deps: {
   fs: FsPort;
 }): Promise<{ ok: boolean; errors: { file: string; message: string }[] }> {
   const errors: { file: string; message: string }[] = [];
-  const check = async (file: string, load: (t: string) => unknown, schema: Schema) => {
+  const check = async (file: string, load: (t: string) => unknown, validate: Validator) => {
     try {
-      const r = schema.safeParse(load(await deps.fs.readText(file)));
+      const r = validate(load(await deps.fs.readText(file)));
       if (!r.success) {
-        const message = (r.error?.issues ?? [])
+        const message = r.issues
           .slice(0, 5)
-          .map((i) => `${i.path.map(String).join('.') || '(루트)'}: ${i.message}`)
+          .map((i) => `${i.path || '(루트)'}: ${i.message}`)
           .join('; ');
         errors.push({ file, message });
       }
@@ -25,10 +25,18 @@ export async function validateAll(deps: {
     }
   };
   for (const f of await deps.fs.listFiles('trips', '.yaml')) {
-    await check(f, (t) => parse(t) as unknown, TripSourceSchema);
+    await check(
+      f,
+      (t) => parse(t) as unknown,
+      (v) => safeParse(TripSourceSchema, v),
+    );
   }
   for (const f of await deps.fs.listFiles('public/data', '.json')) {
-    await check(f, (t) => JSON.parse(t) as unknown, TripDataSchema);
+    await check(
+      f,
+      (t) => JSON.parse(t) as unknown,
+      (v) => safeParse(TripDataSchema, v, TRIP_DATA_PARSE),
+    );
   }
   return { ok: errors.length === 0, errors };
 }

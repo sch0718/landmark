@@ -8,6 +8,7 @@ import { useState, type FormEvent } from 'react';
 import { toast } from 'sonner';
 import { overlay } from 'src/domain/overlay';
 import { HHmm, LIMITS } from 'src/schema/common';
+import { safeParse } from 'src/schema/parse';
 import { detailAtom, stopDraftsAtom } from 'src/sections/views/store/view-session';
 import { useEditActions, useTripStore } from 'src/stores/trip-store';
 import { updateStop } from '../store/itinerary-actions';
@@ -75,7 +76,7 @@ export function StopEditPanel({
     const submitted = { date: draft.date, time: draft.time, note: draft.note };
     const t = submitted.time.trim(),
       n = submitted.note.trim();
-    if (t !== '' && !HHmm.safeParse(t).success) {
+    if (t !== '' && !safeParse(HHmm, t).success) {
       setError('시간은 HH:mm 형식으로 입력하세요');
       return;
     }

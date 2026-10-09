@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { TripDataSchema, type TripData } from 'src/schema/trip-data';
+import { safeParse } from 'src/schema/parse';
+import { TRIP_DATA_PARSE, TripDataSchema, type TripData } from 'src/schema/legacy/trip-data';
 import { makeTrip, sid } from '../../fixtures/builders';
 
 const trip = () =>
@@ -125,12 +126,12 @@ describe('TripDataSchema', () => {
   it.each(cases)('$name', ({ mutate, ok }) => {
     const t = trip();
     mutate(t);
-    expect(TripDataSchema.safeParse(t).success).toBe(ok);
+    expect(safeParse(TripDataSchema, t, TRIP_DATA_PARSE).success).toBe(ok);
   });
 
   it('빌더 결과가 스키마를 통과한다', () => {
     const t = makeTrip({ days: { '2026-11-14': ['X', 'Y'], '2026-11-15': [] } });
-    expect(TripDataSchema.safeParse(t).success).toBe(true);
+    expect(safeParse(TripDataSchema, t, TRIP_DATA_PARSE).success).toBe(true);
   });
 
   it('H와 H2는 같은 placeKey를 쓰고 stop id는 다르다', () => {
@@ -144,27 +145,40 @@ describe('TripDataSchema', () => {
   it('folder에 shareId 같은 모르는 키가 있으면 거부한다', () => {
     const t = trip();
     t.folders = [{ id: 'f1', name: '폴더', count: 1 }];
-    expect(TripDataSchema.safeParse(t).success).toBe(true);
+    expect(safeParse(TripDataSchema, t, TRIP_DATA_PARSE).success).toBe(true);
     (t.folders[0] as Record<string, unknown>).shareId = 'fb65e7f93f8a4144a4ded594d604a7aa';
-    const r = TripDataSchema.safeParse(t);
+    const r = safeParse(TripDataSchema, t, TRIP_DATA_PARSE);
     expect(r.success).toBe(false);
-    if (!r.success) expect(r.error.issues[0]?.path).toEqual(['folders', 0]);
+    if (!r.success) expect(r.issues[0]?.path).toBe('folders.0.shareId');
   });
 
   it('place에 shareId 같은 모르는 키가 있으면 거부한다', () => {
     const t = trip();
     const key = Object.keys(t.places)[0]!;
     (t.places[key] as Record<string, unknown>).shareId = 'fb65e7f93f8a4144a4ded594d604a7aa';
-    const r = TripDataSchema.safeParse(t);
+    const r = safeParse(TripDataSchema, t, TRIP_DATA_PARSE);
     expect(r.success).toBe(false);
-    if (!r.success) expect(r.error.issues[0]?.path).toEqual(['places', key]);
+    if (!r.success) expect(r.issues[0]?.path).toBe(`places.${key}.shareId`);
+  });
+
+  it('rejects unknown key in folder and place', () => {
+    const t = trip();
+    t.folders = [{ id: 'f1', name: '폴더', count: 1 }];
+    (t.folders[0] as Record<string, unknown>).shareId = 'x';
+    expect(safeParse(TripDataSchema, t, TRIP_DATA_PARSE).success).toBe(false);
+    t.folders = [{ id: 'f1', name: '폴더', count: 1 }];
+    const key = Object.keys(t.places)[0]!;
+    (t.places[key] as Record<string, unknown>).shareId = 'x';
+    expect(safeParse(TripDataSchema, t, TRIP_DATA_PARSE).success).toBe(false);
+    // 옵션 없이는 알 수 없는 키를 버린다(Effect 기본값). 호출부가 TRIP_DATA_PARSE를 넘겨야 한다.
+    expect(safeParse(TripDataSchema, t).success).toBe(true);
   });
 
   it('legs 오류는 경로를 가리킨다', () => {
     const t = trip();
     t.days[0]!.legs.pop();
-    const r = TripDataSchema.safeParse(t);
+    const r = safeParse(TripDataSchema, t, TRIP_DATA_PARSE);
     expect(r.success).toBe(false);
-    if (!r.success) expect(r.error.issues[0]?.path).toEqual(['days', 0, 'legs']);
+    if (!r.success) expect(r.issues[0]?.path).toBe('days.0.legs');
   });
 });

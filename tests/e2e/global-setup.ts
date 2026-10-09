@@ -1,7 +1,7 @@
 import { copyFileSync } from 'node:fs';
-import { E2E_DATA_FILE, E2E_FIXTURE_FILE } from './trip';
+import { E2E_DATA_FILE, E2E_FIXTURE_FILE } from './fixtures';
 
-/** fixture TripData를 dev 서버가 내주는 `public/data/`에 둔다(커밋하지 않음 — .gitignore). */
+/** 옛 여행 fixture를 dev 서버가 내주는 `public/data/`에 둔다(커밋하지 않음 — .gitignore). */
 export default function globalSetup(): void {
   copyFileSync(E2E_FIXTURE_FILE, E2E_DATA_FILE);
 }

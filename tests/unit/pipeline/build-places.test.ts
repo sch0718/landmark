@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { buildPlaces } from '../../../pipeline/build-places';
 import type { Bookmark, FetchedFolder, NaverPlace } from '../../../pipeline/naver-client';
-import { TripSourceSchema } from 'src/schema/trip-source';
+import { parseOrThrow } from 'src/schema/parse';
+import { TripSourceSchema } from 'src/schema/legacy/trip-source';
 
 const SHARE_A = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 const SHARE_B = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
@@ -22,7 +23,7 @@ function bm(over: Partial<Bookmark> & { sid: string }): Bookmark {
 }
 
 function source(over: Record<string, unknown> = {}) {
-  return TripSourceSchema.parse({
+  return parseOrThrow(TripSourceSchema, {
     title: '속초',
     startDate: '2026-10-10',
     endDate: '2026-10-11',

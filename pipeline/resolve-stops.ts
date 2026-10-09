@@ -1,5 +1,5 @@
-import type { Place, Stop } from 'src/schema/trip-data';
-import type { TripSource } from 'src/schema/trip-source';
+import type { Place, Stop } from 'src/schema/legacy/trip-data';
+import type { TripSource } from 'src/schema/legacy/trip-source';
 
 export class UnresolvedPlacesError extends Error {
   places: { date: string; place: string }[];

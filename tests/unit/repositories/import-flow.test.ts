@@ -4,8 +4,8 @@ import { readEditLayer, storageKey, writeEditLayer } from 'src/repositories/edit
 import { commitImport, prepareImport, type PreparedImport } from 'src/repositories/import-flow';
 import type { TripLoadResult } from 'src/repositories/trip-repo';
 import { LIMITS } from 'src/schema/common';
-import type { EditLayer } from 'src/schema/edit-layer';
-import type { TripData } from 'src/schema/trip-data';
+import type { EditLayer } from 'src/schema/legacy/edit-layer';
+import type { TripData } from 'src/schema/legacy/trip-data';
 import { makeEdit, makeTrip, withBulkyMemos } from '../../fixtures/builders';
 import { createHeldLocks } from '../../fixtures/fake-locks';
 

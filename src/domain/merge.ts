@@ -2,12 +2,14 @@ import { groupDates, placementOfEffective, placementOfTrip } from 'src/domain/da
 import { pickLww } from 'src/domain/lww';
 import { findDuplicateStopIds, overlay } from 'src/domain/overlay';
 import {
+  EDIT_LAYER_PARSE,
   EditLayerSchema,
   isEditLayerTooLarge,
   MERGE_RESULT_TOO_LARGE,
-} from 'src/schema/edit-layer';
-import type { DayEdit, EditLayer, PlaceEdit } from 'src/schema/edit-layer';
-import type { TripData } from 'src/schema/trip-data';
+} from 'src/schema/legacy/edit-layer';
+import type { DayEdit, EditLayer, PlaceEdit } from 'src/schema/legacy/edit-layer';
+import { safeParse } from 'src/schema/parse';
+import type { TripData } from 'src/schema/legacy/trip-data';
 
 export type MergeSide = 'local' | 'incoming';
 
@@ -271,10 +273,10 @@ export function applyMerge(
     days,
   };
 
-  const parsed = EditLayerSchema.safeParse(merged);
+  const parsed = safeParse(EditLayerSchema, merged, EDIT_LAYER_PARSE);
   if (!parsed.success) {
-    const issue = parsed.error.issues[0];
-    const where = issue ? issue.path.map(String).join('.') : '';
+    const issue = parsed.issues[0];
+    const where = issue ? issue.path : '';
     return {
       ok: false,
       reason: `병합 결과가 유효하지 않아요: ${where} ${issue?.message ?? ''}`.trim(),

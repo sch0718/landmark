@@ -1,22 +1,19 @@
 import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { createStore } from 'jotai';
-import { createMemoryRouter, RouterProvider } from 'react-router';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppProviders } from 'src/app';
-import { installMapResources } from './helpers/map-resources';
+import { LegacyTripScope } from '../../fixtures/legacy-trip-scope';
 import { decodeEditLayer, encodeEditLayer } from 'src/domain/codec';
 import { createMemoryStorage, storageKey } from 'src/repositories/edit-layer-repo';
-import { routes } from 'src/routes/router';
-import type { EditLayer } from 'src/schema/edit-layer';
-import type { TripData } from 'src/schema/trip-data';
+import type { EditLayer } from 'src/schema/legacy/edit-layer';
+import type { TripData } from 'src/schema/legacy/trip-data';
 import {
   buildExportLink,
   exportFileName,
   isLinkOverLimit,
   isLinkTooLong,
 } from 'src/sections/share/store/export-link';
-import { TripDepsContext } from 'src/stores/trip-store';
+import { ExportDialog } from 'src/sections/share/view/ExportDialog';
 import { makeEdit, makeTrip } from '../../fixtures/builders';
 
 const PID = 'testtrip0001';
@@ -34,7 +31,6 @@ const memoEdit = (): EditLayer =>
   });
 
 function renderPage(opts: { trip?: TripData; edit?: EditLayer; storage?: Storage } = {}) {
-  vi.stubEnv('VITE_MAP_ADAPTER', 'fake');
   const storage = opts.storage ?? createMemoryStorage();
   if (opts.edit) storage.setItem(KEY, JSON.stringify(opts.edit));
   const fetchFn = vi.fn<typeof fetch>().mockImplementation(
@@ -43,21 +39,15 @@ function renderPage(opts: { trip?: TripData; edit?: EditLayer; storage?: Storage
         headers: { 'Content-Type': 'application/json' },
       }),
   );
-  const router = createMemoryRouter(routes, { initialEntries: [`/t/${PID}`] });
   render(
-    <TripDepsContext
-      value={{
-        storage,
-        fetchFn,
-        now: () => NOW_MS,
-        nowIso: () => NOW_ISO,
-        jotaiStore: createStore(),
-      }}
-    >
-      <AppProviders>
-        <RouterProvider router={router} />
-      </AppProviders>
-    </TripDepsContext>,
+    <AppProviders>
+      <LegacyTripScope
+        publicId={PID}
+        deps={{ storage, fetchFn, now: () => NOW_MS, nowIso: () => NOW_ISO }}
+      >
+        <ExportDialog open onClose={() => {}} />
+      </LegacyTripScope>
+    </AppProviders>,
   );
   return { storage };
 }
@@ -68,11 +58,7 @@ function setNavigator({ share, clipboard }: NavOverrides) {
   Object.defineProperty(window.navigator, 'clipboard', { configurable: true, value: clipboard });
 }
 
-async function openExport(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(await screen.findByRole('button', { name: '설정' }));
-  await user.click(await screen.findByRole('menuitem', { name: /내보내기/ }));
-  return screen.findByRole('dialog', { name: '편집 내보내기' });
-}
+const openExport = () => screen.findByRole('dialog', { name: '편집 내보내기' });
 
 /** 압축이 거의 안 되는 메모로 링크를 길게 만든다(기본 6개 → 8,000자 초과·16,000자 이하). */
 function bigEdit(count = 6): EditLayer {
@@ -90,23 +76,13 @@ function bigEdit(count = 6): EditLayer {
   return makeEdit({ places });
 }
 
-// 라우트가 TripPage를 지연 로드하므로, 부하가 큰 전체 실행에서 첫 테스트가 findBy 시간을 넘지 않게 미리 불러 둔다.
-beforeAll(async () => {
-  await import('src/pages/TripPage');
-}, 20_000);
-
-let mapResources: ReturnType<typeof installMapResources>;
-
 beforeEach(() => {
-  mapResources = installMapResources();
   window.localStorage.clear();
 });
 
 afterEach(() => {
   cleanup();
-  mapResources.restore();
   setNavigator({ share: undefined, clipboard: undefined });
-  vi.unstubAllEnvs();
   vi.restoreAllMocks();
 });
 
@@ -143,7 +119,7 @@ describe('ExportDialog', () => {
     const writeText = vi.fn<(text: string) => Promise<void>>().mockResolvedValue(undefined);
     setNavigator({ share: undefined, clipboard: { writeText } });
 
-    const dialog = await openExport(user);
+    const dialog = await openExport();
     await user.click(await within(dialog).findByRole('button', { name: '링크 공유' }));
 
     expect(await within(dialog).findByText('링크를 복사했어요')).toBeInTheDocument();
@@ -161,7 +137,7 @@ describe('ExportDialog', () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     setNavigator({ share, clipboard: { writeText } });
 
-    const dialog = await openExport(user);
+    const dialog = await openExport();
     await user.click(await within(dialog).findByRole('button', { name: '링크 공유' }));
 
     expect(await within(dialog).findByText('공유했어요')).toBeInTheDocument();
@@ -179,7 +155,7 @@ describe('ExportDialog', () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     setNavigator({ share, clipboard: { writeText } });
 
-    const dialog = await openExport(user);
+    const dialog = await openExport();
     await user.click(await within(dialog).findByRole('button', { name: '링크 공유' }));
 
     expect(await within(dialog).findByText('링크를 복사했어요')).toBeInTheDocument();
@@ -192,7 +168,7 @@ describe('ExportDialog', () => {
     renderPage({ edit });
     setNavigator({ share: undefined, clipboard: undefined });
 
-    const dialog = await openExport(user);
+    const dialog = await openExport();
     await user.click(await within(dialog).findByRole('button', { name: '링크 공유' }));
 
     const field = await within(dialog).findByRole('textbox', { name: '링크' });
@@ -209,7 +185,7 @@ describe('ExportDialog', () => {
       clipboard: { writeText: vi.fn().mockRejectedValue(new Error('denied')) },
     });
 
-    const dialog = await openExport(user);
+    const dialog = await openExport();
     await user.click(await within(dialog).findByRole('button', { name: '링크 공유' }));
 
     const field = await within(dialog).findByRole('textbox', { name: '링크' });
@@ -217,14 +193,13 @@ describe('ExportDialog', () => {
   });
 
   it('8,000자 넘는 링크 → 파일 안내 문구와 파일 버튼 강조', async () => {
-    const user = userEvent.setup();
     const edit = bigEdit();
     const link = buildExportLink(location.origin, PID, await encodeEditLayer(edit));
     expect(link.length).toBeGreaterThan(8000);
     expect(link.length).toBeLessThanOrEqual(16000);
     renderPage({ edit });
 
-    const dialog = await openExport(user);
+    const dialog = await openExport();
     expect(
       await within(dialog).findByText('링크가 길어요. 파일로 내보내 주세요'),
     ).toBeInTheDocument();
@@ -236,7 +211,6 @@ describe('ExportDialog', () => {
   });
 
   it('16,000자 넘는 링크 → 링크 공유를 막고 파일 안내와 파일 버튼만 남긴다', async () => {
-    const user = userEvent.setup();
     const share = vi.fn();
     const writeText = vi.fn();
     setNavigator({ share, clipboard: { writeText } });
@@ -246,7 +220,7 @@ describe('ExportDialog', () => {
     ).toBeGreaterThan(16000);
     renderPage({ edit });
 
-    const dialog = await openExport(user);
+    const dialog = await openExport();
     expect(
       await within(dialog).findByText('링크가 길어요. 파일로 내보내 주세요'),
     ).toBeInTheDocument();
@@ -261,9 +235,8 @@ describe('ExportDialog', () => {
   });
 
   it('짧은 링크에는 파일 안내가 없다', async () => {
-    const user = userEvent.setup();
     renderPage({ edit: memoEdit() });
-    const dialog = await openExport(user);
+    const dialog = await openExport();
     await within(dialog).findByRole('button', { name: '링크 공유' });
     await vi.waitFor(() =>
       expect(within(dialog).getByRole('button', { name: '링크 공유' })).toBeEnabled(),
@@ -291,7 +264,7 @@ describe('ExportDialog', () => {
       names.push(this.download);
     });
 
-    const dialog = await openExport(user);
+    const dialog = await openExport();
     await user.click(within(dialog).getByRole('button', { name: '파일로 저장' }));
 
     expect(names).toEqual([exportFileName('테스트 여행', '나', new Date(NOW_MS))]);
@@ -300,32 +273,10 @@ describe('ExportDialog', () => {
   });
 
   it('편집이 없으면 안내하고 버튼을 끈다', async () => {
-    const user = userEvent.setup();
     renderPage();
-    const dialog = await openExport(user);
+    const dialog = await openExport();
     expect(within(dialog).getByText(/아직 내보낼 편집이 없어요/)).toBeInTheDocument();
     expect(within(dialog).getByRole('button', { name: '링크 공유' })).toBeDisabled();
     expect(within(dialog).getByRole('button', { name: '파일로 저장' })).toBeDisabled();
-  });
-
-  it('저장소를 쓸 수 없으면 내보내기 메뉴를 강조한다', async () => {
-    const user = userEvent.setup();
-    const broken = createMemoryStorage();
-    broken.setItem = () => {
-      throw new Error('quota');
-    };
-    renderPage({ storage: broken });
-    await user.click(await screen.findByRole('button', { name: '설정' }));
-    const item = await screen.findByRole('menuitem', { name: /내보내기/ });
-    expect(item).toHaveAttribute('data-emphasized', 'true');
-    expect(item).toHaveTextContent('이 브라우저에는 저장되지 않아요');
-  });
-
-  it('저장소가 정상이면 강조하지 않는다', async () => {
-    const user = userEvent.setup();
-    renderPage();
-    await user.click(await screen.findByRole('button', { name: '설정' }));
-    const item = await screen.findByRole('menuitem', { name: /내보내기/ });
-    expect(item).toHaveAttribute('data-emphasized', 'false');
   });
 });

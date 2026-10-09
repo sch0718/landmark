@@ -4,8 +4,9 @@ import { reconcile, type ReconcileReport } from 'src/domain/reconcile';
 import { storageKey, withEditLock } from 'src/repositories/edit-layer-repo';
 import type { TripLoadResult } from 'src/repositories/trip-repo';
 import { LIMITS } from 'src/schema/common';
-import { EditLayerSchema, type EditLayer } from 'src/schema/edit-layer';
-import type { TripData } from 'src/schema/trip-data';
+import { EDIT_LAYER_PARSE, EditLayerSchema, type EditLayer } from 'src/schema/legacy/edit-layer';
+import { safeParse } from 'src/schema/parse';
+import type { TripData } from 'src/schema/legacy/trip-data';
 
 export type ImportInput = { kind: 'link'; value: string } | { kind: 'file'; file: Blob };
 
@@ -75,7 +76,7 @@ export async function prepareImport(
   const decoded = await decodeInput(input);
   if (!decoded.ok) return decoded;
 
-  const parsed = EditLayerSchema.safeParse(decoded.value);
+  const parsed = safeParse(EditLayerSchema, decoded.value, EDIT_LAYER_PARSE);
   if (!parsed.success) return fail('invalid');
   const rawIncoming = parsed.data;
 

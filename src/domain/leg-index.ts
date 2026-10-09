@@ -1,5 +1,5 @@
 import type { EffectiveDay } from 'src/domain/overlay';
-import type { Leg, Stop, TripData } from 'src/schema/trip-data';
+import type { Leg, Stop, TripData } from 'src/schema/legacy/trip-data';
 
 /** 화면용 구간. 원본에 없는 쌍은 `unrouted`(직선거리)로 만든다. */
 export type DisplayLeg = Omit<Leg, 'status'> & { status: 'routed' | 'failed' | 'unrouted' };

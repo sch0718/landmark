@@ -10,7 +10,7 @@ import { useState } from 'react';
 import { dayTotals } from 'src/domain/day-totals';
 import { planRevert } from 'src/domain/revert';
 import { naverPlaceUrl } from 'src/models/place';
-import type { TripData } from 'src/schema/trip-data';
+import type { TripData } from 'src/schema/legacy/trip-data';
 import { dayLabel } from 'src/sections/itinerary/store/format';
 import {
   candidateLayerAtom,

@@ -3,7 +3,13 @@ import { describe, expect, it, vi } from 'vitest';
 import { buildLegs } from '../../../pipeline/legs';
 import type { RouteResult } from '../../../pipeline/naver-client';
 import { routeCacheKey, type RouteCache } from '../../../pipeline/route-cache';
-import { TripDataSchema, type Place, type Stop } from 'src/schema/trip-data';
+import { parseOrThrow } from 'src/schema/parse';
+import {
+  TRIP_DATA_PARSE,
+  TripDataSchema,
+  type Place,
+  type Stop,
+} from 'src/schema/legacy/trip-data';
 
 type Entry = RouteResult & { queriedAt: string };
 const NOW = '2026-10-03T01:00:00.000Z';
@@ -55,17 +61,21 @@ function memCache(): RouteCache & { store: Map<string, Entry> } {
 }
 
 const wrap = (days: Awaited<ReturnType<typeof buildLegs>>['days']) =>
-  TripDataSchema.parse({
-    schemaVersion: 1,
-    publicId: 'abcdefghij',
-    title: 't',
-    startDate: '2026-10-10',
-    endDate: '2026-10-10',
-    dataVersion: NOW,
-    folders: [],
-    places,
-    days,
-  });
+  parseOrThrow(
+    TripDataSchema,
+    {
+      schemaVersion: 1,
+      publicId: 'abcdefghij',
+      title: 't',
+      startDate: '2026-10-10',
+      endDate: '2026-10-10',
+      dataVersion: NOW,
+      folders: [],
+      places,
+      days,
+    },
+    TRIP_DATA_PARSE,
+  );
 
 describe('buildLegs', () => {
   it('성공 구간은 routed Leg, 캐시 저장(원본 경로), 경로는 단순화', async () => {
@@ -199,17 +209,21 @@ describe('buildLegs', () => {
       { date: '2026-10-11', from: 'c:a', to: 'c:b' },
     ]);
     expect(() =>
-      TripDataSchema.parse({
-        schemaVersion: 1,
-        publicId: 'abcdefghij',
-        title: 't',
-        startDate: '2026-10-10',
-        endDate: '2026-10-11',
-        dataVersion: NOW,
-        folders: [],
-        places,
-        days: r.days,
-      }),
+      parseOrThrow(
+        TripDataSchema,
+        {
+          schemaVersion: 1,
+          publicId: 'abcdefghij',
+          title: 't',
+          startDate: '2026-10-10',
+          endDate: '2026-10-11',
+          dataVersion: NOW,
+          folders: [],
+          places,
+          days: r.days,
+        },
+        TRIP_DATA_PARSE,
+      ),
     ).not.toThrow();
   });
 

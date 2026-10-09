@@ -1,0 +1,1094 @@
+{
+  "schemaVersion": 2,
+  "places": {
+    "pl01abcdef": {
+      "id": "pl01abcdef",
+      "source": {
+        "kind": "naver",
+        "sid": "2000000"
+      },
+      "name": {
+        "value": "초당순두부 본점",
+        "updatedAt": "2026-09-05T04:00:00.000Z"
+      },
+      "address": "강원특별자치도 강릉시 초당순두부길 77",
+      "lng": 128.9,
+      "lat": 37.79,
+      "category": {
+        "value": "한식",
+        "updatedAt": "2026-09-05T04:00:00.000Z"
+      },
+      "labelIds": {
+        "value": ["lb01abcd"],
+        "updatedAt": "2026-09-05T04:00:00.000Z"
+      },
+      "memo": {
+        "value": "순두부 정식, 오전 일찍 가기",
+        "updatedAt": "2026-09-05T04:00:00.000Z"
+      },
+      "saved": {
+        "value": true,
+        "updatedAt": "2026-09-05T04:00:00.000Z"
+      },
+      "createdAt": "2026-09-05T04:00:00.000Z",
+      "deletedAt": null
+    },
+    "pl02abcdef": {
+      "id": "pl02abcdef",
+      "source": {
+        "kind": "naver",
+        "sid": "2000001"
+      },
+      "name": {
+        "value": "안목해변 커피거리",
+        "updatedAt": "2026-09-05T05:00:00.000Z"
+      },
+      "address": "강원특별자치도 강릉시 창해로14번길 20",
+      "lng": 128.95,
+      "lat": 37.77,
+      "category": {
+        "value": "카페",
+        "updatedAt": "2026-09-05T05:00:00.000Z"
+      },
+      "labelIds": {
+        "value": ["lb02abcd", "lb03abcd"],
+        "updatedAt": "2026-09-05T05:00:00.000Z"
+      },
+      "memo": {
+        "value": "",
+        "updatedAt": "2026-09-05T05:00:00.000Z"
+      },
+      "saved": {
+        "value": true,
+        "updatedAt": "2026-09-05T05:00:00.000Z"
+      },
+      "createdAt": "2026-09-05T05:00:00.000Z",
+      "deletedAt": null
+    },
+    "pl03abcdef": {
+      "id": "pl03abcdef",
+      "source": {
+        "kind": "naver",
+        "sid": "2000002"
+      },
+      "name": {
+        "value": "경포대",
+        "updatedAt": "2026-09-05T06:00:00.000Z"
+      },
+      "address": "강원특별자치도 강릉시 경포로 365",
+      "lng": 128.9,
+      "lat": 37.8,
+      "category": {
+        "value": "관광명소",
+        "updatedAt": "2026-09-05T06:00:00.000Z"
+      },
+      "labelIds": {
+        "value": ["lb03abcd", "lb05abcd"],
+        "updatedAt": "2026-09-05T06:00:00.000Z"
+      },
+      "memo": {
+        "value": "일출 보기 좋음",
+        "updatedAt": "2026-09-05T06:00:00.000Z"
+      },
+      "saved": {
+        "value": true,
+        "updatedAt": "2026-09-05T06:00:00.000Z"
+      },
+      "createdAt": "2026-09-05T06:00:00.000Z",
+      "deletedAt": null
+    },
+    "pl04abcdef": {
+      "id": "pl04abcdef",
+      "source": {
+        "kind": "naver",
+        "sid": "2000003"
+      },
+      "name": {
+        "value": "강릉 중앙시장",
+        "updatedAt": "2026-09-05T07:00:00.000Z"
+      },
+      "address": "강원특별자치도 강릉시 금성로 21",
+      "lng": 128.9,
+      "lat": 37.75,
+      "category": {
+        "value": "시장",
+        "updatedAt": "2026-09-05T07:00:00.000Z"
+      },
+      "labelIds": {
+        "value": ["lb01abcd", "lb06abcd"],
+        "updatedAt": "2026-09-05T07:00:00.000Z"
+      },
+      "memo": {
+        "value": "",
+        "updatedAt": "2026-09-05T07:00:00.000Z"
+      },
+      "saved": {
+        "value": true,
+        "updatedAt": "2026-09-05T07:00:00.000Z"
+      },
+      "createdAt": "2026-09-05T07:00:00.000Z",
+      "deletedAt": null
+    },
+    "pl05abcdef": {
+      "id": "pl05abcdef",
+      "source": {
+        "kind": "naver",
+        "sid": "2000004"
+      },
+      "name": {
+        "value": "오죽헌",
+        "updatedAt": "2026-09-05T08:00:00.000Z"
+      },
+      "address": "강원특별자치도 강릉시 율곡로3139번길 24",
+      "lng": 128.88,
+      "lat": 37.78,
+      "category": {
+        "value": "관광명소",
+        "updatedAt": "2026-09-05T08:00:00.000Z"
+      },
+      "labelIds": {
+        "value": ["lb05abcd"],
+        "updatedAt": "2026-09-05T08:00:00.000Z"
+      },
+      "memo": {
+        "value": "",
+        "updatedAt": "2026-09-05T08:00:00.000Z"
+      },
+      "saved": {
+        "value": true,
+        "updatedAt": "2026-09-05T08:00:00.000Z"
+      },
+      "createdAt": "2026-09-05T08:00:00.000Z",
+      "deletedAt": null
+    },
+    "pl06abcdef": {
+      "id": "pl06abcdef",
+      "source": {
+        "kind": "naver",
+        "sid": "2000005"
+      },
+      "name": {
+        "value": "테라로사 강릉 본점",
+        "updatedAt": "2026-09-05T09:00:00.000Z"
+      },
+      "address": "강원특별자치도 강릉시 난설헌로 177",
+      "lng": 128.86,
+      "lat": 37.74,
+      "category": {
+        "value": "카페",
+        "updatedAt": "2026-09-05T09:00:00.000Z"
+      },
+      "labelIds": {
+        "value": ["lb02abcd"],
+        "updatedAt": "2026-09-05T09:00:00.000Z"
+      },
+      "memo": {
+        "value": "원두 사 가기",
+        "updatedAt": "2026-09-05T09:00:00.000Z"
+      },
+      "saved": {
+        "value": true,
+        "updatedAt": "2026-09-05T09:00:00.000Z"
+      },
+      "createdAt": "2026-09-05T09:00:00.000Z",
+      "deletedAt": null
+    },
+    "pl07abcdef": {
+      "id": "pl07abcdef",
+      "source": {
+        "kind": "naver",
+        "sid": "2000006"
+      },
+      "name": {
+        "value": "강릉 씨마크 호텔",
+        "updatedAt": "2026-09-05T10:00:00.000Z"
+      },
+      "address": "강원특별자치도 강릉시 해안로 476",
+      "lng": 128.95,
+      "lat": 37.78,
+      "category": {
+        "value": "호텔",
+        "updatedAt": "2026-09-05T10:00:00.000Z"
+      },
+      "labelIds": {
+        "value": ["lb04abcd", "lb03abcd"],
+        "updatedAt": "2026-09-05T10:00:00.000Z"
+      },
+      "memo": {
+        "value": "",
+        "updatedAt": "2026-09-05T10:00:00.000Z"
+      },
+      "saved": {
+        "value": true,
+        "updatedAt": "2026-09-05T10:00:00.000Z"
+      },
+      "createdAt": "2026-09-05T10:00:00.000Z",
+      "deletedAt": null
+    },
+    "pl08abcdef": {
+      "id": "pl08abcdef",
+      "source": {
+        "kind": "naver",
+        "sid": "2000007"
+      },
+      "name": {
+        "value": "주문진 수산시장",
+        "updatedAt": "2026-09-05T11:00:00.000Z"
+      },
+      "address": "강원특별자치도 강릉시 주문진읍 해안로 1",
+      "lng": 128.82,
+      "lat": 37.89,
+      "category": {
+        "value": "시장",
+        "updatedAt": "2026-09-05T11:00:00.000Z"
+      },
+      "labelIds": {
+        "value": ["lb01abcd", "lb03abcd"],
+        "updatedAt": "2026-09-05T11:00:00.000Z"
+      },
+      "memo": {
+        "value": "",
+        "updatedAt": "2026-09-05T11:00:00.000Z"
+      },
+      "saved": {
+        "value": true,
+        "updatedAt": "2026-09-05T11:00:00.000Z"
+      },
+      "createdAt": "2026-09-05T11:00:00.000Z",
+      "deletedAt": null
+    },
+    "pl09abcdef": {
+      "id": "pl09abcdef",
+      "source": {
+        "kind": "naver",
+        "sid": "2000008"
+      },
+      "name": {
+        "value": "정동진 해변",
+        "updatedAt": "2026-09-05T12:00:00.000Z"
+      },
+      "address": "강원특별자치도 강릉시 강동면 정동진리",
+      "lng": 129.03,
+      "lat": 37.69,
+      "category": {
+        "value": "해변",
+        "updatedAt": "2026-09-05T12:00:00.000Z"
+      },
+      "labelIds": {
+        "value": ["lb03abcd", "lb05abcd"],
+        "updatedAt": "2026-09-05T12:00:00.000Z"
+      },
+      "memo": {
+        "value": "",
+        "updatedAt": "2026-09-05T12:00:00.000Z"
+      },
+      "saved": {
+        "value": true,
+        "updatedAt": "2026-09-05T12:00:00.000Z"
+      },
+      "createdAt": "2026-09-05T12:00:00.000Z",
+      "deletedAt": null
+    },
+    "pl10abcdef": {
+      "id": "pl10abcdef",
+      "source": {
+        "kind": "naver",
+        "sid": "2000009"
+      },
+      "name": {
+        "value": "아르떼뮤지엄 강릉",
+        "updatedAt": "2026-09-05T13:00:00.000Z"
+      },
+      "address": "강원특별자치도 강릉시 난설헌로 131",
+      "lng": 128.88,
+      "lat": 37.77,
+      "category": {
+        "value": "전시",
+        "updatedAt": "2026-09-05T13:00:00.000Z"
+      },
+      "labelIds": {
+        "value": [],
+        "updatedAt": "2026-09-05T13:00:00.000Z"
+      },
+      "memo": {
+        "value": "",
+        "updatedAt": "2026-09-05T13:00:00.000Z"
+      },
+      "saved": {
+        "value": true,
+        "updatedAt": "2026-09-05T13:00:00.000Z"
+      },
+      "createdAt": "2026-09-05T13:00:00.000Z",
+      "deletedAt": null
+    },
+    "pl11abcdef": {
+      "id": "pl11abcdef",
+      "source": {
+        "kind": "naver",
+        "sid": "2000010"
+      },
+      "name": {
+        "value": "속초 중앙시장 닭강정",
+        "updatedAt": "2026-09-05T14:00:00.000Z"
+      },
+      "address": "강원특별자치도 속초시 중앙로147번길 16",
+      "lng": 128.59,
+      "lat": 38.2,
+      "category": {
+        "value": "음식점",
+        "updatedAt": "2026-09-05T14:00:00.000Z"
+      },
+      "labelIds": {
+        "value": ["lb01abcd", "lb06abcd"],
+        "updatedAt": "2026-09-05T14:00:00.000Z"
+      },
+      "memo": {
+        "value": "웨이팅 길다",
+        "updatedAt": "2026-09-05T14:00:00.000Z"
+      },
+      "saved": {
+        "value": true,
+        "updatedAt": "2026-09-05T14:00:00.000Z"
+      },
+      "createdAt": "2026-09-05T14:00:00.000Z",
+      "deletedAt": null
+    },
+    "pl12abcdef": {
+      "id": "pl12abcdef",
+      "source": {
+        "kind": "naver",
+        "sid": "2000011"
+      },
+      "name": {
+        "value": "영금정",
+        "updatedAt": "2026-09-05T15:00:00.000Z"
+      },
+      "address": "강원특별자치도 속초시 영금정로5길 16",
+      "lng": 128.6,
+      "lat": 38.21,
+      "category": {
+        "value": "관광명소",
+        "updatedAt": "2026-09-05T15:00:00.000Z"
+      },
+      "labelIds": {
+        "value": ["lb03abcd", "lb05abcd"],
+        "updatedAt": "2026-09-05T15:00:00.000Z"
+      },
+      "memo": {
+        "value": "",
+        "updatedAt": "2026-09-05T15:00:00.000Z"
+      },
+      "saved": {
+        "value": true,
+        "updatedAt": "2026-09-05T15:00:00.000Z"
+      },
+      "createdAt": "2026-09-05T15:00:00.000Z",
+      "deletedAt": null
+    },
+    "pl13abcdef": {
+      "id": "pl13abcdef",
+      "source": {
+        "kind": "naver",
+        "sid": "2000012"
+      },
+      "name": {
+        "value": "대포항",
+        "updatedAt": "2026-09-05T16:00:00.000Z"
+      },
+      "address": "강원특별자치도 속초시 대포항길 12",
+      "lng": 128.6,
+      "lat": 38.17,
+      "category": {
+        "value": "항구",
+        "updatedAt": "2026-09-05T16:00:00.000Z"
+      },
+      "labelIds": {
+        "value": ["lb01abcd", "lb03abcd"],
+        "updatedAt": "2026-09-05T16:00:00.000Z"
+      },
+      "memo": {
+        "value": "",
+        "updatedAt": "2026-09-05T16:00:00.000Z"
+      },
+      "saved": {
+        "value": true,
+        "updatedAt": "2026-09-05T16:00:00.000Z"
+      },
+      "createdAt": "2026-09-05T16:00:00.000Z",
+      "deletedAt": null
+    },
+    "pl14abcdef": {
+      "id": "pl14abcdef",
+      "source": {
+        "kind": "naver",
+        "sid": "2000013"
+      },
+      "name": {
+        "value": "설악산 케이블카",
+        "updatedAt": "2026-09-05T17:00:00.000Z"
+      },
+      "address": "강원특별자치도 속초시 설악산로 1085",
+      "lng": 128.5,
+      "lat": 38.17,
+      "category": {
+        "value": "관광명소",
+        "updatedAt": "2026-09-05T17:00:00.000Z"
+      },
+      "labelIds": {
+        "value": ["lb05abcd"],
+        "updatedAt": "2026-09-05T17:00:00.000Z"
+      },
+      "memo": {
+        "value": "",
+        "updatedAt": "2026-09-05T17:00:00.000Z"
+      },
+      "saved": {
+        "value": true,
+        "updatedAt": "2026-09-05T17:00:00.000Z"
+      },
+      "createdAt": "2026-09-05T17:00:00.000Z",
+      "deletedAt": null
+    },
+    "pl15abcdef": {
+      "id": "pl15abcdef",
+      "source": {
+        "kind": "naver",
+        "sid": "2000014"
+      },
+      "name": {
+        "value": "칠성조선소",
+        "updatedAt": "2026-09-05T18:00:00.000Z"
+      },
+      "address": "강원특별자치도 속초시 중앙로46번길 45",
+      "lng": 128.6,
+      "lat": 38.2,
+      "category": {
+        "value": "카페",
+        "updatedAt": "2026-09-05T18:00:00.000Z"
+      },
+      "labelIds": {
+        "value": ["lb02abcd"],
+        "updatedAt": "2026-09-05T18:00:00.000Z"
+      },
+      "memo": {
+        "value": "",
+        "updatedAt": "2026-09-05T18:00:00.000Z"
+      },
+      "saved": {
+        "value": true,
+        "updatedAt": "2026-09-05T18:00:00.000Z"
+      },
+      "createdAt": "2026-09-05T18:00:00.000Z",
+      "deletedAt": null
+    },
+    "pl16abcdef": {
+      "id": "pl16abcdef",
+      "source": {
+        "kind": "naver",
+        "sid": "2000015"
+      },
+      "name": {
+        "value": "속초 아바이마을",
+        "updatedAt": "2026-09-05T19:00:00.000Z"
+      },
+      "address": "강원특별자치도 속초시 청호로 122",
+      "lng": 128.6,
+      "lat": 38.2,
+      "category": {
+        "value": "마을",
+        "updatedAt": "2026-09-05T19:00:00.000Z"
+      },
+      "labelIds": {
+        "value": ["lb05abcd"],
+        "updatedAt": "2026-09-05T19:00:00.000Z"
+      },
+      "memo": {
+        "value": "",
+        "updatedAt": "2026-09-05T19:00:00.000Z"
+      },
+      "saved": {
+        "value": true,
+        "updatedAt": "2026-09-05T19:00:00.000Z"
+      },
+      "createdAt": "2026-09-05T19:00:00.000Z",
+      "deletedAt": null
+    },
+    "pl17abcdef": {
+      "id": "pl17abcdef",
+      "source": {
+        "kind": "naver",
+        "sid": "2000016"
+      },
+      "name": {
+        "value": "속초 바다뷰 호텔",
+        "updatedAt": "2026-09-05T20:00:00.000Z"
+      },
+      "address": "강원특별자치도 속초시 해오름로 190",
+      "lng": 128.6,
+      "lat": 38.19,
+      "category": {
+        "value": "호텔",
+        "updatedAt": "2026-09-05T20:00:00.000Z"
+      },
+      "labelIds": {
+        "value": ["lb04abcd"],
+        "updatedAt": "2026-09-05T20:00:00.000Z"
+      },
+      "memo": {
+        "value": "",
+        "updatedAt": "2026-09-05T20:00:00.000Z"
+      },
+      "saved": {
+        "value": true,
+        "updatedAt": "2026-09-05T20:00:00.000Z"
+      },
+      "createdAt": "2026-09-05T20:00:00.000Z",
+      "deletedAt": null
+    },
+    "pl18abcdef": {
+      "id": "pl18abcdef",
+      "source": {
+        "kind": "naver",
+        "sid": "2000017"
+      },
+      "name": {
+        "value": "만석닭강정 본점",
+        "updatedAt": "2026-09-05T21:00:00.000Z"
+      },
+      "address": "강원특별자치도 속초시 수복로 12",
+      "lng": 128.59,
+      "lat": 38.2,
+      "category": {
+        "value": "음식점",
+        "updatedAt": "2026-09-05T21:00:00.000Z"
+      },
+      "labelIds": {
+        "value": ["lb01abcd"],
+        "updatedAt": "2026-09-05T21:00:00.000Z"
+      },
+      "memo": {
+        "value": "",
+        "updatedAt": "2026-09-05T21:00:00.000Z"
+      },
+      "saved": {
+        "value": true,
+        "updatedAt": "2026-09-05T21:00:00.000Z"
+      },
+      "createdAt": "2026-09-05T21:00:00.000Z",
+      "deletedAt": null
+    },
+    "pl19abcdef": {
+      "id": "pl19abcdef",
+      "source": {
+        "kind": "naver",
+        "sid": "2000018"
+      },
+      "name": {
+        "value": "제주 흑돼지 거리 맛집",
+        "updatedAt": "2026-09-05T22:00:00.000Z"
+      },
+      "address": "제주특별자치도 제주시 탑동로 44",
+      "lng": 126.52,
+      "lat": 33.52,
+      "category": {
+        "value": "고깃집",
+        "updatedAt": "2026-09-05T22:00:00.000Z"
+      },
+      "labelIds": {
+        "value": ["lb01abcd"],
+        "updatedAt": "2026-09-05T22:00:00.000Z"
+      },
+      "memo": {
+        "value": "",
+        "updatedAt": "2026-09-05T22:00:00.000Z"
+      },
+      "saved": {
+        "value": true,
+        "updatedAt": "2026-09-05T22:00:00.000Z"
+      },
+      "createdAt": "2026-09-05T22:00:00.000Z",
+      "deletedAt": null
+    },
+    "pl20abcdef": {
+      "id": "pl20abcdef",
+      "source": {
+        "kind": "naver",
+        "sid": "2000019"
+      },
+      "name": {
+        "value": "협재 해수욕장",
+        "updatedAt": "2026-09-05T23:00:00.000Z"
+      },
+      "address": "제주특별자치도 제주시 한림읍 협재리 2497-1",
+      "lng": 126.24,
+      "lat": 33.39,
+      "category": {
+        "value": "해변",
+        "updatedAt": "2026-09-05T23:00:00.000Z"
+      },
+      "labelIds": {
+        "value": ["lb03abcd", "lb05abcd"],
+        "updatedAt": "2026-09-05T23:00:00.000Z"
+      },
+      "memo": {
+        "value": "물 색이 에메랄드",
+        "updatedAt": "2026-09-05T23:00:00.000Z"
+      },
+      "saved": {
+        "value": true,
+        "updatedAt": "2026-09-05T23:00:00.000Z"
+      },
+      "createdAt": "2026-09-05T23:00:00.000Z",
+      "deletedAt": null
+    },
+    "pl21abcdef": {
+      "id": "pl21abcdef",
+      "source": {
+        "kind": "naver",
+        "sid": "2000020"
+      },
+      "name": {
+        "value": "성산일출봉",
+        "updatedAt": "2026-09-06T00:00:00.000Z"
+      },
+      "address": "제주특별자치도 제주시 성산읍 성산리 1",
+      "lng": 126.94,
+      "lat": 33.46,
+      "category": {
+        "value": "관광명소",
+        "updatedAt": "2026-09-06T00:00:00.000Z"
+      },
+      "labelIds": {
+        "value": ["lb05abcd"],
+        "updatedAt": "2026-09-06T00:00:00.000Z"
+      },
+      "memo": {
+        "value": "",
+        "updatedAt": "2026-09-06T00:00:00.000Z"
+      },
+      "saved": {
+        "value": true,
+        "updatedAt": "2026-09-06T00:00:00.000Z"
+      },
+      "createdAt": "2026-09-06T00:00:00.000Z",
+      "deletedAt": null
+    },
+    "pl22abcdef": {
+      "id": "pl22abcdef",
+      "source": {
+        "kind": "naver",
+        "sid": "2000021"
+      },
+      "name": {
+        "value": "제주 동문시장",
+        "updatedAt": "2026-09-06T01:00:00.000Z"
+      },
+      "address": "제주특별자치도 제주시 관덕로14길 20",
+      "lng": 126.53,
+      "lat": 33.51,
+      "category": {
+        "value": "시장",
+        "updatedAt": "2026-09-06T01:00:00.000Z"
+      },
+      "labelIds": {
+        "value": ["lb06abcd", "lb01abcd"],
+        "updatedAt": "2026-09-06T01:00:00.000Z"
+      },
+      "memo": {
+        "value": "",
+        "updatedAt": "2026-09-06T01:00:00.000Z"
+      },
+      "saved": {
+        "value": true,
+        "updatedAt": "2026-09-06T01:00:00.000Z"
+      },
+      "createdAt": "2026-09-06T01:00:00.000Z",
+      "deletedAt": null
+    },
+    "pl23abcdef": {
+      "id": "pl23abcdef",
+      "source": {
+        "kind": "naver",
+        "sid": "2000022"
+      },
+      "name": {
+        "value": "애월 카페거리",
+        "updatedAt": "2026-09-06T02:00:00.000Z"
+      },
+      "address": "제주특별자치도 제주시 애월읍 애월로 1",
+      "lng": 126.31,
+      "lat": 33.46,
+      "category": {
+        "value": "카페",
+        "updatedAt": "2026-09-06T02:00:00.000Z"
+      },
+      "labelIds": {
+        "value": ["lb02abcd", "lb03abcd"],
+        "updatedAt": "2026-09-06T02:00:00.000Z"
+      },
+      "memo": {
+        "value": "",
+        "updatedAt": "2026-09-06T02:00:00.000Z"
+      },
+      "saved": {
+        "value": true,
+        "updatedAt": "2026-09-06T02:00:00.000Z"
+      },
+      "createdAt": "2026-09-06T02:00:00.000Z",
+      "deletedAt": null
+    },
+    "pl24abcdef": {
+      "id": "pl24abcdef",
+      "source": {
+        "kind": "naver",
+        "sid": "2000023"
+      },
+      "name": {
+        "value": "제주 오션 리조트",
+        "updatedAt": "2026-09-06T03:00:00.000Z"
+      },
+      "address": "제주특별자치도 제주시 서귀포시 중문관광로 72",
+      "lng": 126.41,
+      "lat": 33.25,
+      "category": {
+        "value": "리조트",
+        "updatedAt": "2026-09-06T03:00:00.000Z"
+      },
+      "labelIds": {
+        "value": ["lb04abcd"],
+        "updatedAt": "2026-09-06T03:00:00.000Z"
+      },
+      "memo": {
+        "value": "",
+        "updatedAt": "2026-09-06T03:00:00.000Z"
+      },
+      "saved": {
+        "value": true,
+        "updatedAt": "2026-09-06T03:00:00.000Z"
+      },
+      "createdAt": "2026-09-06T03:00:00.000Z",
+      "deletedAt": null
+    },
+    "pl25abcdef": {
+      "id": "pl25abcdef",
+      "source": {
+        "kind": "naver",
+        "sid": "2000024"
+      },
+      "name": {
+        "value": "을지로 노가리 골목",
+        "updatedAt": "2026-09-06T04:00:00.000Z"
+      },
+      "address": "서울특별시 중구 을지로 157",
+      "lng": 126.99,
+      "lat": 37.57,
+      "category": {
+        "value": "술집",
+        "updatedAt": "2026-09-06T04:00:00.000Z"
+      },
+      "labelIds": {
+        "value": ["lb01abcd"],
+        "updatedAt": "2026-09-06T04:00:00.000Z"
+      },
+      "memo": {
+        "value": "",
+        "updatedAt": "2026-09-06T04:00:00.000Z"
+      },
+      "saved": {
+        "value": true,
+        "updatedAt": "2026-09-06T04:00:00.000Z"
+      },
+      "createdAt": "2026-09-06T04:00:00.000Z",
+      "deletedAt": null
+    },
+    "pl26abcdef": {
+      "id": "pl26abcdef",
+      "source": {
+        "kind": "naver",
+        "sid": "2000025"
+      },
+      "name": {
+        "value": "성수동 카페거리",
+        "updatedAt": "2026-09-06T05:00:00.000Z"
+      },
+      "address": "서울특별시 성동구 성수이로 7",
+      "lng": 127.05,
+      "lat": 37.54,
+      "category": {
+        "value": "카페",
+        "updatedAt": "2026-09-06T05:00:00.000Z"
+      },
+      "labelIds": {
+        "value": ["lb02abcd", "lb06abcd"],
+        "updatedAt": "2026-09-06T05:00:00.000Z"
+      },
+      "memo": {
+        "value": "",
+        "updatedAt": "2026-09-06T05:00:00.000Z"
+      },
+      "saved": {
+        "value": true,
+        "updatedAt": "2026-09-06T05:00:00.000Z"
+      },
+      "createdAt": "2026-09-06T05:00:00.000Z",
+      "deletedAt": null
+    },
+    "pl27abcdef": {
+      "id": "pl27abcdef",
+      "source": {
+        "kind": "naver",
+        "sid": "2000026"
+      },
+      "name": {
+        "value": "북촌 한옥마을",
+        "updatedAt": "2026-09-06T06:00:00.000Z"
+      },
+      "address": "서울특별시 종로구 계동길 37",
+      "lng": 126.98,
+      "lat": 37.58,
+      "category": {
+        "value": "관광명소",
+        "updatedAt": "2026-09-06T06:00:00.000Z"
+      },
+      "labelIds": {
+        "value": ["lb05abcd"],
+        "updatedAt": "2026-09-06T06:00:00.000Z"
+      },
+      "memo": {
+        "value": "",
+        "updatedAt": "2026-09-06T06:00:00.000Z"
+      },
+      "saved": {
+        "value": true,
+        "updatedAt": "2026-09-06T06:00:00.000Z"
+      },
+      "createdAt": "2026-09-06T06:00:00.000Z",
+      "deletedAt": null
+    },
+    "pl28abcdef": {
+      "id": "pl28abcdef",
+      "source": {
+        "kind": "naver",
+        "sid": "2000027"
+      },
+      "name": {
+        "value": "남산서울타워",
+        "updatedAt": "2026-09-06T07:00:00.000Z"
+      },
+      "address": "서울특별시 용산구 남산공원길 105",
+      "lng": 126.99,
+      "lat": 37.55,
+      "category": {
+        "value": "관광명소",
+        "updatedAt": "2026-09-06T07:00:00.000Z"
+      },
+      "labelIds": {
+        "value": ["lb05abcd"],
+        "updatedAt": "2026-09-06T07:00:00.000Z"
+      },
+      "memo": {
+        "value": "",
+        "updatedAt": "2026-09-06T07:00:00.000Z"
+      },
+      "saved": {
+        "value": true,
+        "updatedAt": "2026-09-06T07:00:00.000Z"
+      },
+      "createdAt": "2026-09-06T07:00:00.000Z",
+      "deletedAt": null
+    },
+    "pl29abcdef": {
+      "id": "pl29abcdef",
+      "source": {
+        "kind": "naver",
+        "sid": "2000028"
+      },
+      "name": {
+        "value": "강남 소공원 호텔",
+        "updatedAt": "2026-09-06T08:00:00.000Z"
+      },
+      "address": "서울특별시 강남구 테헤란로 521",
+      "lng": 127.06,
+      "lat": 37.51,
+      "category": {
+        "value": "호텔",
+        "updatedAt": "2026-09-06T08:00:00.000Z"
+      },
+      "labelIds": {
+        "value": ["lb04abcd"],
+        "updatedAt": "2026-09-06T08:00:00.000Z"
+      },
+      "memo": {
+        "value": "",
+        "updatedAt": "2026-09-06T08:00:00.000Z"
+      },
+      "saved": {
+        "value": true,
+        "updatedAt": "2026-09-06T08:00:00.000Z"
+      },
+      "createdAt": "2026-09-06T08:00:00.000Z",
+      "deletedAt": null
+    },
+    "pl30abcdef": {
+      "id": "pl30abcdef",
+      "source": {
+        "kind": "naver",
+        "sid": "2000029"
+      },
+      "name": {
+        "value": "아주아주아주 긴 이름을 가진 바닷가 앞 전통 손칼국수와 해물파전 전문 노포 식당 강릉 안목 본점 별관",
+        "updatedAt": "2026-09-06T09:00:00.000Z"
+      },
+      "address": "강원특별자치도 강릉시 안목해변길 33",
+      "lng": 128.95,
+      "lat": 37.77,
+      "category": {
+        "value": "한식",
+        "updatedAt": "2026-09-06T09:00:00.000Z"
+      },
+      "labelIds": {
+        "value": ["lb01abcd"],
+        "updatedAt": "2026-09-06T09:00:00.000Z"
+      },
+      "memo": {
+        "value": "🌊🍜 파도 소리 들으며 물회 먹기!\n☕️🥐 후식은 옆 카페에서 — 웨이팅 1시간 각오 😅\n👨‍👩‍👧‍👦 가족 모임 예약은 전화로만 가능",
+        "updatedAt": "2026-09-06T09:00:00.000Z"
+      },
+      "saved": {
+        "value": true,
+        "updatedAt": "2026-09-06T09:00:00.000Z"
+      },
+      "createdAt": "2026-09-06T09:00:00.000Z",
+      "deletedAt": null
+    }
+  },
+  "labels": {
+    "lb01abcd": {
+      "id": "lb01abcd",
+      "name": {
+        "value": "맛집",
+        "updatedAt": "2026-09-01T00:00:00.000Z"
+      },
+      "color": {
+        "value": "red",
+        "updatedAt": "2026-09-01T00:00:00.000Z"
+      },
+      "icon": {
+        "value": "utensils",
+        "updatedAt": "2026-09-01T00:00:00.000Z"
+      },
+      "order": {
+        "value": 1,
+        "updatedAt": "2026-09-01T00:00:00.000Z"
+      },
+      "createdAt": "2026-09-01T00:00:00.000Z",
+      "deletedAt": null
+    },
+    "lb02abcd": {
+      "id": "lb02abcd",
+      "name": {
+        "value": "카페",
+        "updatedAt": "2026-09-01T01:00:00.000Z"
+      },
+      "color": {
+        "value": "orange",
+        "updatedAt": "2026-09-01T01:00:00.000Z"
+      },
+      "icon": {
+        "value": "coffee",
+        "updatedAt": "2026-09-01T01:00:00.000Z"
+      },
+      "order": {
+        "value": 2,
+        "updatedAt": "2026-09-01T01:00:00.000Z"
+      },
+      "createdAt": "2026-09-01T01:00:00.000Z",
+      "deletedAt": null
+    },
+    "lb03abcd": {
+      "id": "lb03abcd",
+      "name": {
+        "value": "바다",
+        "updatedAt": "2026-09-01T02:00:00.000Z"
+      },
+      "color": {
+        "value": "blue",
+        "updatedAt": "2026-09-01T02:00:00.000Z"
+      },
+      "icon": {
+        "value": "waves",
+        "updatedAt": "2026-09-01T02:00:00.000Z"
+      },
+      "order": {
+        "value": 3,
+        "updatedAt": "2026-09-01T02:00:00.000Z"
+      },
+      "createdAt": "2026-09-01T02:00:00.000Z",
+      "deletedAt": null
+    },
+    "lb04abcd": {
+      "id": "lb04abcd",
+      "name": {
+        "value": "숙소",
+        "updatedAt": "2026-09-01T03:00:00.000Z"
+      },
+      "color": {
+        "value": "purple",
+        "updatedAt": "2026-09-01T03:00:00.000Z"
+      },
+      "icon": {
+        "value": "bed",
+        "updatedAt": "2026-09-01T03:00:00.000Z"
+      },
+      "order": {
+        "value": 4,
+        "updatedAt": "2026-09-01T03:00:00.000Z"
+      },
+      "createdAt": "2026-09-01T03:00:00.000Z",
+      "deletedAt": null
+    },
+    "lb05abcd": {
+      "id": "lb05abcd",
+      "name": {
+        "value": "산책",
+        "updatedAt": "2026-09-01T04:00:00.000Z"
+      },
+      "color": {
+        "value": "green",
+        "updatedAt": "2026-09-01T04:00:00.000Z"
+      },
+      "icon": {
+        "value": "trees",
+        "updatedAt": "2026-09-01T04:00:00.000Z"
+      },
+      "order": {
+        "value": 5,
+        "updatedAt": "2026-09-01T04:00:00.000Z"
+      },
+      "createdAt": "2026-09-01T04:00:00.000Z",
+      "deletedAt": null
+    },
+    "lb06abcd": {
+      "id": "lb06abcd",
+      "name": {
+        "value": "쇼핑",
+        "updatedAt": "2026-09-01T05:00:00.000Z"
+      },
+      "color": {
+        "value": "pink",
+        "updatedAt": "2026-09-01T05:00:00.000Z"
+      },
+      "icon": {
+        "value": "shopping-bag",
+        "updatedAt": "2026-09-01T05:00:00.000Z"
+      },
+      "order": {
+        "value": 6,
+        "updatedAt": "2026-09-01T05:00:00.000Z"
+      },
+      "createdAt": "2026-09-01T05:00:00.000Z",
+      "deletedAt": null
+    }
+  },
+  "trips": {}
+}

@@ -1,6 +1,6 @@
 import { ensureOverride } from 'src/domain/overlay';
-import type { EditLayer } from 'src/schema/edit-layer';
-import type { Stop, TripData } from 'src/schema/trip-data';
+import type { EditLayer } from 'src/schema/legacy/edit-layer';
+import type { Stop, TripData } from 'src/schema/legacy/trip-data';
 
 /**
  * 일정 편집 액션(순수 함수). 모두 `ensureOverride`로 그날을 override로 만든 뒤 적용한다.
