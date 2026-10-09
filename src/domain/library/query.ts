@@ -1,5 +1,5 @@
 import type { Label, Library, Place } from 'src/schema/library';
-import { regionOf } from 'src/domain/library/region';
+import { regionsByPlace } from 'src/domain/library/region';
 
 export type LibraryQuery = {
   labelIds: string[];
@@ -52,6 +52,8 @@ type Context = {
   byId: ReadonlyMap<string, Label>;
   needle: string;
   regions: ReadonlySet<string>;
+  /** 장소 id → 지역(주소가 없으면 가까운 장소에서 빌린 지역). */
+  regionOf: ReadonlyMap<string, string>;
 };
 
 function contextOf(lib: Library, q: LibraryQuery): Context {
@@ -59,6 +61,7 @@ function contextOf(lib: Library, q: LibraryQuery): Context {
     byId: new Map(liveLabels(lib).map((l) => [l.id, l])),
     needle: foldText(q.text.trim()),
     regions: new Set(q.regions),
+    regionOf: regionsByPlace(livePlaces(lib)),
   };
 }
 
@@ -73,8 +76,8 @@ function matchesText(place: Place, labels: readonly Label[], needle: string): bo
   return haystacks.some((h) => foldText(h).includes(needle));
 }
 
-function matchesRegion(place: Place, regions: ReadonlySet<string>): boolean {
-  return regions.size === 0 || regions.has(regionOf(place.address));
+function matchesRegion(place: Place, ctx: Context): boolean {
+  return ctx.regions.size === 0 || ctx.regions.has(ctx.regionOf.get(place.id) ?? OTHER_REGION);
 }
 
 function matchesLabels(labels: readonly Label[], q: LibraryQuery): boolean {
@@ -129,11 +132,7 @@ export function queryPlaces(lib: Library, q: LibraryQuery): Place[] {
   const ctx = contextOf(lib, q);
   const matched = livePlaces(lib).filter((p) => {
     const labels = labelsOf(p, ctx.byId);
-    return (
-      matchesText(p, labels, ctx.needle) &&
-      matchesRegion(p, ctx.regions) &&
-      matchesLabels(labels, q)
-    );
+    return matchesText(p, labels, ctx.needle) && matchesRegion(p, ctx) && matchesLabels(labels, q);
   });
   return sortPlaces(matched, q, ctx.byId);
 }
@@ -145,7 +144,7 @@ export function labelCounts(lib: Library, q: LibraryQuery): Map<string | 'unlabe
   for (const id of ctx.byId.keys()) counts.set(id, 0);
   for (const p of livePlaces(lib)) {
     const labels = labelsOf(p, ctx.byId);
-    if (!matchesText(p, labels, ctx.needle) || !matchesRegion(p, ctx.regions)) continue;
+    if (!matchesText(p, labels, ctx.needle) || !matchesRegion(p, ctx)) continue;
     if (labels.length === 0) counts.set('unlabeled', (counts.get('unlabeled') ?? 0) + 1);
     for (const l of labels) counts.set(l.id, (counts.get(l.id) ?? 0) + 1);
   }
@@ -165,7 +164,7 @@ export function regionCounts(
   for (const p of livePlaces(lib)) {
     const labels = labelsOf(p, ctx.byId);
     if (!matchesText(p, labels, ctx.needle) || !matchesLabels(labels, q)) continue;
-    const region = regionOf(p.address);
+    const region = ctx.regionOf.get(p.id) ?? OTHER_REGION;
     counts.set(region, (counts.get(region) ?? 0) + 1);
   }
   return [...counts.entries()]

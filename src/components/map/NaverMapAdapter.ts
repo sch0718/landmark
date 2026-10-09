@@ -1,12 +1,14 @@
 import { buildClusterIndex, clusterFeatures, type ClusterIndex } from './cluster';
 import { loadNaverSdk } from './load-naver-sdk';
-import type {
-  Bounds,
-  MapAdapter,
-  MapCamera,
-  MapMarker,
-  MapPadding,
-  MapPolyline,
+import {
+  DEFAULT_CLUSTER_STYLE,
+  type Bounds,
+  type ClusterStyle,
+  type MapAdapter,
+  type MapCamera,
+  type MapMarker,
+  type MapPadding,
+  type MapPolyline,
 } from './MapAdapter';
 import { createMarkerLabelElement } from './marker-label';
 
@@ -35,12 +37,16 @@ type NaverMap = {
   destroy(): void;
 };
 
+/** 선택된 마커가 다른 마커·클러스터 위에 오도록 하는 쌓임 순서. */
+const SELECTED_Z_INDEX = 1000;
+
 const maps = (): NaverMaps => (window as unknown as { naver: { maps: NaverMaps } }).naver.maps;
 
 export class NaverMapAdapter implements MapAdapter {
   private map: NaverMap | null = null;
   private markers: MapMarker[] = [];
   private cluster: ClusterIndex = buildClusterIndex([]);
+  private clusterStyle: ClusterStyle = DEFAULT_CLUSTER_STYLE;
   private markerOverlays: Overlay[] = [];
   private lineOverlays: Overlay[] = [];
   private lines: MapPolyline[] = [];
@@ -75,6 +81,11 @@ export class NaverMapAdapter implements MapAdapter {
   setMarkers(markers: MapMarker[]): void {
     this.markers = markers;
     this.cluster = buildClusterIndex(markers);
+    this.drawMarkers();
+  }
+
+  setClusterStyle(style: ClusterStyle): void {
+    this.clusterStyle = style;
     this.drawMarkers();
   }
 
@@ -182,11 +193,12 @@ export class NaverMapAdapter implements MapAdapter {
     this.markerOverlays = [];
 
     const byId = new Map(this.markers.map((mk) => [mk.id, mk]));
-    const add = (lng: number, lat: number, el: HTMLElement, onClick: () => void) => {
+    const add = (lng: number, lat: number, el: HTMLElement, onClick: () => void, zIndex = 0) => {
       const overlay = new m.Marker({
         map,
         position: new m.LatLng(lat, lng),
         icon: { content: el, anchor: { x: 0, y: 0 } },
+        zIndex,
       });
       el.addEventListener('click', onClick);
       this.markerClickCleanups.push(() => el.removeEventListener('click', onClick));
@@ -200,15 +212,20 @@ export class NaverMapAdapter implements MapAdapter {
         const mk = byId.get(f.markerId);
         if (mk) singles.push(mk);
       } else {
-        add(f.lng, f.lat, createMarkerLabelElement(String(f.count), '#455a64'), () => {
+        const { color, textColor } = this.clusterStyle;
+        add(f.lng, f.lat, createMarkerLabelElement(String(f.count), color, { textColor }), () => {
           map.setCenter(new m.LatLng(f.lat, f.lng));
           map.setZoom(this.cluster.expansionZoom(f.id));
         });
       }
     }
     for (const mk of singles) {
-      add(mk.lng, mk.lat, createMarkerLabelElement(mk.label ?? '', mk.color, mk), () =>
-        this.markerCb?.(mk.id),
+      add(
+        mk.lng,
+        mk.lat,
+        createMarkerLabelElement(mk.label ?? '', mk.color, mk),
+        () => this.markerCb?.(mk.id),
+        mk.selected ? SELECTED_Z_INDEX : 0,
       );
     }
   }

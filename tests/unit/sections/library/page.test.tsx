@@ -95,6 +95,21 @@ describe('library long text', () => {
     expect(getComputedStyle(region).fontSize).toBe('12px');
   });
 
+  it('shows the region borrowed from a nearby addressed place when the address is empty', async () => {
+    const near = {
+      ...makePlace(2, { name: '주소 없는 곳', address: '' }),
+      lng: 128.96,
+      lat: 37.78,
+    };
+    await renderLibrary(
+      withPlaces(emptyLibrary(), [makePlace(1, { name: '주소 있는 곳' }), near]),
+      { prefs: { libraryView: 'list' } },
+    );
+    const row = within(placeList()).getByRole('button', { name: /주소 없는 곳/ });
+    expect(row).toHaveTextContent('강릉');
+    expect(row).not.toHaveTextContent('기타');
+  });
+
   it('long name ellipsizes on a single line in the list row', async () => {
     await renderLibrary(longLibrary(), { prefs: { libraryView: 'list' } });
     const row = within(placeList()).getByRole('button');

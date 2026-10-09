@@ -4,6 +4,9 @@ import { placeIdByName, SEED_PLACE_COUNT, seedStorage } from './fixtures';
 const markers = (page: Page): Locator => page.locator('[data-testid^="marker-"]');
 const rows = (page: Page): Locator =>
   page.getByRole('list', { name: '장소 목록' }).getByRole('listitem');
+/** 목록·카드의 장소 버튼. 지도 마커에도 이름이 있어 목록 안으로 좁힌다. */
+const placeButton = (page: Page, name: RegExp): Locator =>
+  page.getByRole('list', { name: '장소 목록' }).getByRole('button', { name });
 const memoBox = (scope: Page | Locator): Locator => scope.getByRole('textbox', { name: '메모' });
 
 const SCREEN_DIR = 'test-results/screens';
@@ -68,12 +71,8 @@ test.describe('데스크톱 3단', { tag: '@desktop' }, () => {
 
       await Promise.all([first.reload(), second.reload()]);
       for (const page of [first, second]) {
-        await expect(page.getByRole('button', { name: /경포대/ })).toContainText(
-          '첫 번째 탭에서 쓴 메모',
-        );
-        await expect(page.getByRole('button', { name: /영금정/ })).toContainText(
-          '두 번째 탭에서 쓴 메모',
-        );
+        await expect(placeButton(page, /경포대/)).toContainText('첫 번째 탭에서 쓴 메모');
+        await expect(placeButton(page, /영금정/)).toContainText('두 번째 탭에서 쓴 메모');
       }
     } finally {
       await context.close();

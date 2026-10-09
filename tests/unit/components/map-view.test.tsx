@@ -7,7 +7,7 @@ import { buildClusterIndex, clusterFeatures } from 'src/components/map/cluster';
 import { categoryColor, dayColor } from 'src/components/map/map-colors';
 import { createMarkerLabelElement } from 'src/components/map/marker-label';
 import type { MapMarker } from 'src/components/map/MapAdapter';
-import { fitPoints, MapView } from 'src/components/map/MapView';
+import { fitPoints, focusCamera, MapView } from 'src/components/map/MapView';
 import { StrictMode } from 'react';
 import { installMapResources } from './helpers/map-resources';
 import { createTripStore, TripStoreContext } from 'src/stores/trip-store';
@@ -297,6 +297,47 @@ describe('createMarkerLabelElement', () => {
     expect(el.children).toHaveLength(0);
   });
 
+  it('textColor·borderColor를 적용한다', () => {
+    const el = createMarkerLabelElement('이름', '#112233', {
+      textColor: '#445566',
+      borderColor: '#778899',
+    });
+    expect(el.style.color).toBe('rgb(68, 85, 102)');
+    expect(el.style.border).toContain('rgb(119, 136, 153)');
+  });
+
+  it('라벨의 가운데가 장소 좌표에 오도록 자기 크기의 절반만큼 끌어 올린다', () => {
+    // 어댑터는 라벨 왼쪽 위 모서리를 좌표에 둔다. 가운데를 맞추지 않으면 이름이 좌표의 오른쪽 아래로 뻗어
+    // 상세 패널처럼 지도 오른쪽을 덮는 요소에 가려진다.
+    const el = createMarkerLabelElement('이름', '#123456');
+    expect(el.style.transform).toBe('translate(-50%, -50%)');
+  });
+
+  it('기본값은 흰 글자·흰 테두리를 유지한다', () => {
+    const el = createMarkerLabelElement('이름', '#112233');
+    expect(el.style.color).toBe('rgb(255, 255, 255)');
+    expect(el.style.border).toContain('rgb(255, 255, 255)');
+  });
+
+  it('긴 이름은 160px에서 말줄임하고 전체 이름을 title에 둔다', () => {
+    const name = '아주 아주 긴 이름의 장소'.repeat(8);
+    const el = createMarkerLabelElement(name, '#123456');
+    expect(el.style.maxWidth).toBe('160px');
+    expect(el.style.overflow).toBe('hidden');
+    expect(el.style.textOverflow).toBe('ellipsis');
+    expect(el.title).toBe(name);
+  });
+
+  it('선택된 마커는 13px 글자와 굵은 테두리를 쓴다', () => {
+    const el = createMarkerLabelElement('이름', '#123456', {
+      selected: true,
+      borderColor: '#abcdef',
+    });
+    expect(el.style.fontSize).toBe('13px');
+    expect(el.style.border).toContain('3px');
+    expect(el.style.border).toContain('rgb(171, 205, 239)');
+  });
+
   it('Fake 어댑터도 같은 라벨을 쓴다', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -353,6 +394,30 @@ describe('클러스터 계산', () => {
     expect(clusterFeatures(ci, bounds, 18).every((x) => x.kind === 'point')).toBe(true);
     const only = clusterFeatures(ci, { west: 126, south: 34, east: 127, north: 36 }, 18);
     expect(only).toHaveLength(1);
+  });
+});
+
+describe('클러스터 해제 줌', () => {
+  const bounds = { west: 124, south: 33, east: 132, north: 39 };
+  // 약 400m 떨어진 두 장소(제주).
+  const pair = [mk('p1', { lng: 126.53, lat: 33.5 }), mk('p2', { lng: 126.53, lat: 33.5036 })];
+
+  it('줌 15부터는 400m 떨어진 두 장소가 개별 점이고, 줌 13에서는 하나로 묶인다', () => {
+    const ci = buildClusterIndex(pair);
+    const z15 = clusterFeatures(ci, bounds, 15);
+    expect(z15.map((f) => f.kind)).toEqual(['point', 'point']);
+    const z13 = clusterFeatures(ci, bounds, 13);
+    expect(z13).toHaveLength(1);
+    expect(z13[0]).toMatchObject({ kind: 'cluster', count: 2 });
+  });
+
+  it('줌 15부터는 50m 떨어진 장소도 묶지 않는다', () => {
+    const ci = buildClusterIndex([
+      mk('q1', { lng: 126.53, lat: 33.5 }),
+      mk('q2', { lng: 126.53, lat: 33.50045 }),
+    ]);
+    expect(clusterFeatures(ci, bounds, 15).map((f) => f.kind)).toEqual(['point', 'point']);
+    expect(clusterFeatures(ci, bounds, 14).map((f) => f.kind)).toEqual(['cluster']);
   });
 });
 
@@ -427,16 +492,32 @@ describe('MapView 크기와 생명주기', () => {
     expect(markers).not.toHaveBeenCalled();
     expect(lines).not.toHaveBeenCalled();
     expect(fit).not.toHaveBeenCalled();
+    const camera = vi.spyOn(FakeMapAdapter.prototype, 'setCamera');
     rerender(<MapView {...changed} visible padding={padding} />);
     await screen.findByTestId('marker-b');
-    await waitFor(() => expect(fit).toHaveBeenCalledTimes(1));
-    expect(fit).toHaveBeenLastCalledWith(
-      [
-        [128.995, 37.995],
-        [129.005, 38.005],
-      ],
-      padding,
-    );
+    await waitFor(() => expect(camera).toHaveBeenLastCalledWith(focusCamera([129, 38], padding)));
+  });
+
+  describe('focusCamera', () => {
+    it('padding이 고르면 장소가 지도 중심이고 줌은 16이다', () => {
+      const even = { top: 40, right: 40, bottom: 40, left: 40 };
+      expect(focusCamera([128, 37], even)).toEqual({ center: [128, 37], zoom: 16 });
+    });
+
+    it('오른쪽 padding이 크면 중심을 오른쪽(동쪽)으로 옮겨 장소가 보이는 영역 가운데에 온다', () => {
+      // 오른쪽 400px·왼쪽 40px → 보이는 영역 가운데는 지도 중심보다 180px 왼쪽.
+      const cam = focusCamera([128, 37], { top: 40, right: 400, bottom: 40, left: 40 });
+      const degPerPx = 360 / (256 * 2 ** 16);
+      expect(cam.zoom).toBe(16);
+      expect(cam.center[0]).toBeCloseTo(128 + 180 * degPerPx, 9);
+      expect(cam.center[1]).toBeCloseTo(37, 9);
+    });
+
+    it('아래 padding이 크면 중심을 아래(남쪽)로 옮긴다', () => {
+      const cam = focusCamera([128, 37], { top: 24, right: 24, bottom: 360, left: 24 });
+      expect(cam.center[0]).toBeCloseTo(128, 9);
+      expect(cam.center[1]).toBeLessThan(37);
+    });
   });
 
   it('빈 key는 첫 데이터에 fit하고 key 재방문에는 사용자의 카메라를 복원한다', async () => {
@@ -456,22 +537,35 @@ describe('MapView 크기와 생명주기', () => {
     expect(fit).toHaveBeenCalledTimes(2);
   });
 
-  it('padding만 바뀌면 fit과 카메라 복원을 반복하지 않고 다음 새 focus에 최신 padding을 쓴다', async () => {
+  it('focus는 화면 폭과 상관없이 줌 16으로, 장소를 padding을 뺀 영역의 가운데에 둔다', async () => {
+    const padding = { top: 40, right: 400, bottom: 40, left: 40 };
+    const { rerender } = render(
+      <MapView {...props} padding={padding} focus={{ point: [128, 37], seq: 1 }} />,
+    );
+    await screen.findByTestId('marker-a');
+    const adapter = [...resources.instances][0]!;
+    await waitFor(() => expect(adapter.getCamera()).toEqual(focusCamera([128, 37], padding)));
+    rerender(<MapView {...props} padding={padding} focus={{ point: [129, 38], seq: 2 }} />);
+    await waitFor(() => expect(adapter.getCamera()).toEqual(focusCamera([129, 38], padding)));
+    expect(adapter.getCamera()!.zoom).toBe(16);
+  });
+
+  it('padding만 바뀌면 fit과 카메라 이동을 반복하지 않고 다음 새 focus에 최신 padding을 쓴다', async () => {
     const fit = vi.spyOn(FakeMapAdapter.prototype, 'fitBounds');
     const camera = vi.spyOn(FakeMapAdapter.prototype, 'setCamera');
     const padding = { top: 24, right: 24, bottom: 164, left: 24 };
     const { rerender } = render(
       <MapView {...props} padding={padding} focus={{ point: [128, 37], seq: 1 }} />,
     );
-    await waitFor(() => expect(fit).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(camera).toHaveBeenLastCalledWith(focusCamera([128, 37], padding)));
+    const fits = fit.mock.calls.length;
     const before = camera.mock.calls.length;
     const next = { ...padding, bottom: 360 };
     rerender(<MapView {...props} padding={next} focus={{ point: [128, 37], seq: 1 }} />);
-    expect(fit).toHaveBeenCalledTimes(2);
+    expect(fit).toHaveBeenCalledTimes(fits);
     expect(camera).toHaveBeenCalledTimes(before);
     rerender(<MapView {...props} padding={next} focus={{ point: [129, 38], seq: 2 }} />);
-    expect(fit).toHaveBeenCalledTimes(3);
-    expect(fit.mock.calls[2]![1]).toEqual(next);
+    expect(camera).toHaveBeenLastCalledWith(focusCamera([129, 38], next));
   });
 
   it('크기 변경은 zoom을 보존하고 같은 key를 다시 fit하지 않는다', async () => {

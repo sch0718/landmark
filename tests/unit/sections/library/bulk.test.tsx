@@ -175,21 +175,21 @@ describe('library bulk edit', () => {
     expect(toastMock.error.mock.calls[0]![0]).toContain('저장하지 못했어요');
     expect(store.get(libraryAtom).places.place00001!.deletedAt).not.toBeNull();
   });
-  it('selection is dropped when the overview collapses the list, so bulk delete cannot hit hidden places', async () => {
+  it('selection is dropped when a block filter hides the place, so bulk delete cannot hit hidden places', async () => {
     const user = userEvent.setup();
     const { store } = await renderLibrary(sampleLibrary()); // 기본 보기는 벤토
-    const overviewBlock = () =>
-      within(screen.getByRole('group', { name: '라벨 개요' })).getByRole('button', {
-        name: /맛집/,
-      });
+    const overviewBlock = (name: RegExp) =>
+      within(screen.getByRole('group', { name: '라벨 개요' })).getByRole('button', { name });
 
-    await user.click(overviewBlock());
+    await user.click(overviewBlock(/맛집/));
     await shiftClick(user, /중앙시장 닭강정/);
     expect(within(toolbar()).getByText('1곳 선택')).toBeInTheDocument();
 
-    // 같은 블록을 다시 누르면 필터가 풀리고 벤토는 목록을 접는다. 보이지 않는 선택도 함께 사라져야 한다.
-    await user.click(overviewBlock());
-    expect(screen.queryByRole('list', { name: '장소 목록' })).not.toBeInTheDocument();
+    // 다른 블록으로 바꾸면 선택한 장소가 목록에서 빠진다. 보이지 않는 선택도 함께 사라져야 한다.
+    await user.click(overviewBlock(/카페/));
+    expect(
+      within(screen.getByRole('list', { name: '장소 목록' })).getAllByRole('listitem'),
+    ).toHaveLength(1);
     expect(screen.queryByRole('toolbar', { name: '일괄 편집' })).not.toBeInTheDocument();
     expect(Object.values(store.get(libraryAtom).places).every((p) => p.deletedAt === null)).toBe(
       true,

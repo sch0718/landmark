@@ -319,10 +319,12 @@ describe('labelCounts', () => {
 describe('regionCounts', () => {
   it('sorts by count desc, then name, with 기타 last', () => {
     const at = (address: string) => place({ address });
+    // 주소를 해석할 수 없는 장소는 10km 안의 이웃에게서 지역을 빌리므로, 멀리 떨어뜨려 둔다.
+    const far = () => place({ address: 'Seoul', lng: 126.5, lat: 33.5 });
     const lib = library([
-      at('Seoul'),
-      at('Seoul'),
-      at('Seoul'),
+      far(),
+      far(),
+      far(),
       at('강원도 양양군 A'),
       at('강원도 속초시 B'),
       at('강원특별자치도 강릉시 C'),
@@ -348,6 +350,31 @@ describe('regionCounts', () => {
     expect(regionCounts(lib, q({ labelIds: ['food0001'], regions: ['강릉'] }))).toEqual([
       { region: '강릉', count: 1 },
       { region: '양양', count: 1 },
+    ]);
+  });
+});
+
+describe('inferred regions', () => {
+  const JEJU = '제주특별자치도 제주시 연동 1';
+  const lib = () =>
+    library([
+      place({ name: '주소있음', address: JEJU, lng: 126.53, lat: 33.5 }),
+      place({ name: '주소없음', address: '', lng: 126.54, lat: 33.51 }),
+      place({ name: '멀리', address: '', lng: 128.9, lat: 37.7 }),
+    ]);
+
+  it('region filter matches a place by the region borrowed from its neighbor', () => {
+    expect(names(queryPlaces(lib(), q({ regions: ['제주'], sort: 'name' })))).toEqual([
+      '주소없음',
+      '주소있음',
+    ]);
+    expect(names(queryPlaces(lib(), q({ regions: ['기타'] })))).toEqual(['멀리']);
+  });
+
+  it('regionCounts counts the inferred region', () => {
+    expect(regionCounts(lib(), q())).toEqual([
+      { region: '제주', count: 2 },
+      { region: '기타', count: 1 },
     ]);
   });
 });

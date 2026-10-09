@@ -61,6 +61,14 @@ async function ready() {
 }
 
 describe('library map', () => {
+  /** 카메라가 장소로 줌 16에 옮겨졌는가(넓은 화면의 고른 padding이라 지도 중심이 곧 장소). */
+  const expectFocusedOn = ([lng, lat]: [number, number]) => {
+    const camera = fakeAdapter().getCamera()!;
+    expect(camera.zoom).toBe(16);
+    expect(camera.center[0]).toBeCloseTo(lng, 4);
+    expect(camera.center[1]).toBeCloseTo(lat, 4);
+  };
+
   it('map shows only filtered places', async () => {
     const user = userEvent.setup();
     await renderLibrary(sampleLibrary());
@@ -92,14 +100,45 @@ describe('library map', () => {
     await waitFor(() => expect(fakeAdapter().fitCalls.length).toBeGreaterThan(before));
   });
 
-  it('paints markers with the first label color of the current theme', async () => {
+  it('paints markers with the first label colors of the current theme', async () => {
     await renderLibrary(sampleLibrary(), { prefs: { theme: 'night', mode: 'dark' } });
     await ready();
     const night = TOKENS.night.dark;
-    const dot = (n: number) => marker(n)!.firstElementChild as HTMLElement;
-    expect(dot(1).style.background).toBe(rgb(night.label.red.marker)); // 맛집
-    expect(dot(2).style.background).toBe(rgb(night.label.yellow.marker)); // 카페
-    expect(dot(4).style.background).toBe(rgb(night.text.muted)); // 라벨 없음
+    const pill = (n: number) => marker(n)!.firstElementChild as HTMLElement;
+    expect(pill(1).style.background).toBe(rgb(night.label.red.fill)); // 맛집
+    expect(pill(1).style.color).toBe(rgb(night.label.red.text));
+    expect(pill(2).style.background).toBe(rgb(night.label.yellow.fill)); // 카페
+    expect(pill(4).style.background).toBe(rgb(night.bg.surface)); // 라벨 없음
+    expect(pill(4).style.color).toBe(rgb(night.text.primary));
+  });
+
+  it('shows the place name on each marker', async () => {
+    await renderLibrary(sampleLibrary());
+    await ready();
+    expect(marker(1)).toHaveTextContent('닭강정');
+    expect(marker(2)).toHaveTextContent('안목 카페거리');
+    expect(marker(3)).toHaveTextContent('속초 횟집');
+    expect(marker(2)!.firstElementChild).toHaveAttribute('title', '안목 카페거리');
+  });
+
+  it('keeps the selected place on the map even when the filter hides it', async () => {
+    const user = userEvent.setup();
+    const { router } = await renderLibrary(sampleLibrary(), { prefs: { libraryView: 'list' } });
+    await ready();
+    // 미분류만 보는 중에 카페 장소를 연다.
+    await user.click(
+      within(screen.getByRole('group', { name: '라벨' })).getByRole('button', { name: /^미분류/ }),
+    );
+    await waitFor(() => expect(shownMarkers().sort()).toEqual([id(4), id(5)]));
+    await router.navigate(`/place/${id(2)}`);
+    await waitFor(() => expect(marker(2)).toBeInTheDocument());
+    expect(marker(2)).toHaveAttribute('aria-pressed', 'true');
+    expect(marker(2)).toHaveTextContent('안목 카페거리');
+    expect(shownMarkers().sort()).toEqual([id(2), id(4), id(5)]);
+
+    // 닫으면 다시 필터대로 돌아온다.
+    await router.navigate('/');
+    await waitFor(() => expect(shownMarkers().sort()).toEqual([id(4), id(5)]));
   });
 
   it('marker click opens detail and focuses list row', async () => {
@@ -157,7 +196,9 @@ describe('library map', () => {
       const user = userEvent.setup();
       await renderLibrary(library, { prefs: { libraryView: 'list' } });
       await ready();
-      expect(screen.queryByRole('button', { name: /^장소 20\b/ })).not.toBeInTheDocument();
+      // 지도 마커에도 이름이 있으므로 목록 안에서만 찾는다.
+      const rows = () => within(screen.getByRole('list', { name: '장소 목록' }));
+      expect(rows().queryByRole('button', { name: /^장소 20\b/ })).not.toBeInTheDocument();
       await user.click(marker(20)!);
       await waitFor(() =>
         expect(
@@ -177,21 +218,32 @@ describe('library map', () => {
     const user = userEvent.setup();
     await renderLibrary(sampleLibrary(), { prefs: { libraryView: 'list' } });
     await ready();
-    const fits = fakeAdapter().fitCalls.length;
-
     await user.click(
       within(screen.getByRole('list', { name: '장소 목록' })).getByRole('button', {
         name: /안목 카페거리/,
       }),
     );
 
-    await waitFor(() => expect(fakeAdapter().fitCalls).toHaveLength(fits + 1));
-    const [lng, lat] = [128.95, 37.77];
-    const last = fakeAdapter().fitCalls.at(-1)!;
-    expect(last[0]![0]).toBeCloseTo(lng - 0.005);
-    expect(last[1]![1]).toBeCloseTo(lat + 0.005);
+    // 화면 폭과 상관없이 줌 16으로, 장소가 (padding을 뺀) 지도 가운데에 온다.
+    await waitFor(() => expectFocusedOn([128.95, 37.77]));
     expect(marker(2)).toHaveAttribute('aria-pressed', 'true');
     expect(fakeMap()).toBeInTheDocument();
+  });
+
+  it('re-focuses the open place when the filter changes', async () => {
+    const user = userEvent.setup();
+    const { router } = await renderLibrary(sampleLibrary(), { prefs: { libraryView: 'list' } });
+    await ready();
+    await router.navigate(`/place/${id(2)}`);
+    await waitFor(() => expect(marker(2)).toHaveAttribute('aria-pressed', 'true'));
+    const before = fakeAdapter().fitCalls.length;
+    fakeAdapter().setCamera({ center: [127, 36], zoom: 9 });
+
+    await user.type(screen.getByRole('searchbox', { name: '장소 검색' }), '횟집');
+
+    // 새 필터로 맞춘 뒤 열린 장소로 다시 모은다.
+    await waitFor(() => expect(fakeAdapter().fitCalls.length).toBeGreaterThan(before));
+    await waitFor(() => expectFocusedOn([128.95, 37.77]));
   });
 
   it('opening the same place twice moves the map each time', async () => {
@@ -205,10 +257,11 @@ describe('library map', () => {
         }),
       );
     await open();
-    const first = fakeAdapter().fitCalls.length;
+    await waitFor(() => expectFocusedOn([128.95, 37.77]));
     await router.navigate('/');
+    fakeAdapter().setCamera({ center: [127, 36], zoom: 9 });
     await open();
-    await waitFor(() => expect(fakeAdapter().fitCalls.length).toBeGreaterThan(first));
+    await waitFor(() => expectFocusedOn([128.95, 37.77]));
   });
 
   it('focus requests are consumed once by the list', async () => {

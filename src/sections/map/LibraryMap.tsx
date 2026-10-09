@@ -1,11 +1,12 @@
 import Box from '@mui/material/Box';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { useCallback, useMemo, useState } from 'react';
-import { matchPath, useLocation, useNavigate } from 'react-router';
+import { useNavigate } from 'react-router';
 import type { MapPadding } from 'src/components/map/MapAdapter';
 import { MapView } from 'src/components/map/MapView';
 import { labelCounts, liveLabels, queryPlaces } from 'src/domain/library/query';
 import { paths } from 'src/routes/paths';
+import { useOpenPlaceId } from 'src/sections/library/use-open-place-id';
 import { LabelChips } from 'src/sections/library/LabelChips';
 import { useLibraryQuery } from 'src/sections/library/use-library-query';
 import { toMarkers } from 'src/sections/map/markers';
@@ -36,14 +37,24 @@ export function LibraryMap() {
   const layout = useLayout();
   const navigate = useNavigate();
   const requestListScroll = useSetAtom(focusPlaceAtom);
-  const { pathname } = useLocation();
-  const placeId = matchPath(paths.place(':id'), pathname)?.params.id ?? null;
+  const placeId = useOpenPlaceId();
+
+  const clusterStyle = useMemo(
+    () => ({ color: tokens.accent.main, textColor: tokens.accent.contrast }),
+    [tokens],
+  );
 
   const places = useMemo(() => queryPlaces(library, query), [library, query]);
-  const markers = useMemo(
-    () => toMarkers(places, library.labels, tokens, placeId),
-    [places, library.labels, tokens, placeId],
-  );
+  const markers = useMemo(() => {
+    const shown = toMarkers(places, library.labels, tokens, placeId);
+    // 필터에 가려진 장소를 열어 두었다면 그 장소만은 개별 마커로 항상 보인다.
+    const open = placeId === null ? undefined : library.places[placeId];
+    if (open === undefined || open.deletedAt !== null || places.some((p) => p.id === open.id)) {
+      return shown;
+    }
+    const [hidden] = toMarkers([open], library.labels, tokens, placeId);
+    return [...shown, hidden!];
+  }, [places, library.places, library.labels, tokens, placeId]);
 
   // 선택이 바뀌면 지도를 그 장소로 옮긴다(렌더 중 상태 갱신). `seq`를 올려 같은 장소도 다시 움직인다.
   const [seen, setSeen] = useState<string | null>(null);
@@ -55,6 +66,18 @@ export function LibraryMap() {
     const place = placeId === null ? undefined : library.places[placeId];
     if (place !== undefined && place.deletedAt === null && fromMarker !== placeId) {
       setFocus({ point: [place.lng, place.lat], seq: (focus?.seq ?? 0) + 1 });
+    }
+  }
+
+  // 필터가 바뀌면 지도는 새 필터에 맞춰지거나 그 필터의 옛 카메라로 돌아간다. 열어 둔 장소가 거기서 벗어나
+  // 안 보이지 않도록, 맞춘 뒤에 그 장소로 다시 모은다.
+  const fitKey = JSON.stringify(query);
+  const [seenKey, setSeenKey] = useState(fitKey);
+  if (seenKey !== fitKey) {
+    setSeenKey(fitKey);
+    const open = placeId === null ? undefined : library.places[placeId];
+    if (open !== undefined && open.deletedAt === null) {
+      setFocus({ point: [open.lng, open.lat], seq: (focus?.seq ?? 0) + 1 });
     }
   }
 
@@ -71,7 +94,6 @@ export function LibraryMap() {
 
   const labels = useMemo(() => liveLabels(library), [library]);
   const counts = useMemo(() => labelCounts(library, query), [library, query]);
-  const fitKey = JSON.stringify(query);
   const padding = layout === 'medium' && placeId !== null ? OVERLAID_PADDING : BASE_PADDING;
 
   return (
@@ -85,6 +107,7 @@ export function LibraryMap() {
         <MapView
           markers={markers}
           polylines={[]}
+          clusterStyle={clusterStyle}
           padding={padding}
           onMarkerClick={onMarkerClick}
           focus={focus}

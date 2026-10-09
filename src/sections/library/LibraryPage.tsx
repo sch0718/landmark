@@ -1,6 +1,6 @@
 import Box from '@mui/material/Box';
 import { useAtomValue, useSetAtom } from 'jotai';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import {
@@ -10,7 +10,6 @@ import {
   livePlaces,
   queryPlaces,
   regionCounts,
-  type LibraryQuery,
 } from 'src/domain/library/query';
 import { addLabels, deletePlaces, removeLabels, restorePlaces } from 'src/domain/library/ops';
 import { paths } from 'src/routes/paths';
@@ -18,19 +17,18 @@ import { BulkBar } from 'src/sections/library/BulkBar';
 import { EmptyState } from 'src/sections/library/EmptyState';
 import { FilterBar } from 'src/sections/library/FilterBar';
 import { useLibraryQuery } from 'src/sections/library/use-library-query';
+import { useOpenPlaceId } from 'src/sections/library/use-open-place-id';
 import { BentoView } from 'src/sections/library/views/BentoView';
 import { CardsView } from 'src/sections/library/views/CardsView';
 import { ListView } from 'src/sections/library/views/ListView';
 import { TilesView } from 'src/sections/library/views/TilesView';
 import type { LibraryView } from 'src/sections/library/ViewSwitcher';
 import { libraryAtom, useLibraryAction } from 'src/stores/library-state';
+import { focusPlaceAtom } from 'src/stores/library-ui';
 import { prefsAtom, setPrefsAtom } from 'src/stores/prefs-state';
 
 /** 삭제 직후 "되돌리기"를 보여 주는 시간. */
 export const UNDO_MS = 5000;
-
-const hasActiveFilter = (q: LibraryQuery): boolean =>
-  q.labelIds.length > 0 || q.unlabeled || q.regions.length > 0 || q.text.trim() !== '';
 
 const toggled = (set: ReadonlySet<string>, id: string): Set<string> => {
   const next = new Set(set);
@@ -40,7 +38,7 @@ const toggled = (set: ReadonlySet<string>, id: string): Set<string> => {
 
 /**
  * 보관함 목록 화면(스펙 §4.2). 위에서부터 검색·보기·정렬, 라벨·지역 칩, 보기 본문, 선택 모드의 하단 바.
- * 벤토·타일은 "라벨 개요" 보기라서 필터가 걸리면 그 아래에 장소 목록(`ListView`)을 함께 보여 준다.
+ * 벤토·타일은 "라벨 개요" 보기라서 라벨 블록 아래에 현재 조건의 장소 목록(`ListView`)을 항상 함께 보여 준다.
  */
 export function LibraryPage() {
   const library = useAtomValue(libraryAtom);
@@ -49,6 +47,8 @@ export function LibraryPage() {
   const [query, patch] = useLibraryQuery();
   const { run } = useLibraryAction();
   const navigate = useNavigate();
+  const openId = useOpenPlaceId();
+  const requestListScroll = useSetAtom(focusPlaceAtom);
   const [scrollElement, setScrollElement] = useState<HTMLElement | null>(null);
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
 
@@ -60,11 +60,8 @@ export function LibraryPage() {
   const counts = useMemo(() => labelCounts(library, query), [library, query]);
   const regions = useMemo(() => regionCounts(library, query), [library, query]);
 
-  const overview = view === 'bento' || view === 'tiles';
-  const showList = places.length > 0 && (!overview || hasActiveFilter(query));
-
-  // 화면에 보이는 장소만 선택으로 센다. 필터가 바뀌거나 목록이 접혀 사라진 선택은 버린다(렌더 중 상태 갱신).
-  const visible = new Set(showList ? places.map((p) => p.id) : []);
+  // 화면에 보이는 장소만 선택으로 센다. 필터가 바뀌어 목록에서 빠진 선택은 버린다(렌더 중 상태 갱신).
+  const visible = new Set(places.map((p) => p.id));
   if ([...selected].some((id) => !visible.has(id))) {
     setSelected(new Set([...selected].filter((id) => visible.has(id))));
   }
@@ -73,6 +70,11 @@ export function LibraryPage() {
   const attached = labels.filter((l) =>
     selectedPlaces.some((p) => p.labelIds.value.includes(l.id)),
   );
+
+  // 장소가 열리면(목록·지도·주소로) 목록이 그 행으로 스크롤한다. 이미 보이면 움직이지 않는다.
+  useEffect(() => {
+    if (openId !== null) requestListScroll((prev) => ({ id: openId, seq: (prev?.seq ?? 0) + 1 }));
+  }, [openId, requestListScroll]);
 
   const onOpen = useCallback((id: string) => void navigate(paths.place(id)), [navigate]);
   const onToggle = useCallback((id: string) => setSelected((prev) => toggled(prev, id)), []);
@@ -143,7 +145,7 @@ export function LibraryPage() {
         <Box>
           {view === 'bento' && <BentoView {...overviewProps} />}
           {view === 'tiles' && <TilesView {...overviewProps} />}
-          {showList &&
+          {places.length > 0 &&
             (view === 'cards' ? <CardsView {...listProps} /> : <ListView {...listProps} />)}
           {places.length === 0 && (
             <EmptyState
