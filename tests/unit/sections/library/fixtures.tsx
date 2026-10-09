@@ -105,10 +105,16 @@ export function withPlaces(base: Library, places: Place[]): Library {
 /** 보관함과 선호를 저장소에 심고 앱을 그린다. 기본은 넓은 화면(목록 칸이 항상 보인다). */
 export async function renderLibrary(
   library: Library,
-  options: { prefs?: Partial<Prefs>; width?: number; path?: string; ids?: string[] } = {},
+  options: {
+    prefs?: Partial<Prefs>;
+    width?: number;
+    path?: string;
+    ids?: string[];
+    storage?: Storage;
+  } = {},
 ) {
   const { prefs, width = 1280, path = '/', ids } = options;
-  const storage = createMemoryStorage();
+  const storage = options.storage ?? createMemoryStorage();
   storage.setItem(LIBRARY_KEY, JSON.stringify(library));
   if (prefs !== undefined) {
     storage.setItem(PREFS_KEY, JSON.stringify({ ...structuredClone(DEFAULT_PREFS), ...prefs }));

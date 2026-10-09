@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-libra
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { setAppRuntimeForTest } from 'src/lib/effect/runtime';
+import { createMemoryStorage } from 'src/repositories/edit-layer-repo';
 import type { Library } from 'src/schema/library';
 import { LIBRARY_KEY } from 'src/services/library-store';
 import { libraryAtom } from 'src/stores/library-state';
@@ -242,6 +243,81 @@ describe('PlaceDetail', () => {
     expect(box).toHaveValue('쓰는 중');
     await waitFor(() => expect(storedPlace(storage, P1).memo.value).toBe('쓰는 중'), {
       timeout: 3000,
+    });
+  });
+
+  describe('a memo whose save failed', () => {
+    const RETRY = '저장하지 못했어요 · 다시 시도';
+    /** 서비스가 `full`일 때 보관함 키 쓰기만 용량 초과로 실패하는 저장소. */
+    function fullableStorage() {
+      const storage = createMemoryStorage();
+      const state = { full: false };
+      const setItem = storage.setItem.bind(storage);
+      storage.setItem = (key: string, value: string) => {
+        if (state.full && key === LIBRARY_KEY) throw new DOMException('', 'QuotaExceededError');
+        setItem(key, value);
+      };
+      return { storage, state };
+    }
+    const retry = () => within(detail()).getByRole('button', { name: RETRY });
+
+    it('is kept and can be retried after navigating to another place and back', async () => {
+      const user = userEvent.setup();
+      const { storage, state } = fullableStorage();
+      const { router } = await renderLibrary(sampleLibrary(), { path: `/place/${P1}`, storage });
+      state.full = true;
+      fireEvent.change(memoBox(), { target: { value: '잃으면 안 되는 메모' } });
+
+      await act(async () => {
+        await router.navigate(`/place/${P2}`);
+      });
+      await waitFor(() => expect(toastMock.error).toHaveBeenCalled());
+      expect(memoBox()).toHaveValue('');
+
+      await act(async () => {
+        await router.navigate(`/place/${P1}`);
+      });
+      expect(memoBox()).toHaveValue('잃으면 안 되는 메모');
+      expect(await within(detail()).findByRole('button', { name: RETRY })).toBeInTheDocument();
+      expect(storedPlace(storage, P1).memo.value).toBe('');
+
+      state.full = false;
+      await user.click(retry());
+      await waitFor(() => expect(storedPlace(storage, P1).memo.value).toBe('잃으면 안 되는 메모'));
+      expect(await within(detail()).findByText('저장됨')).toBeInTheDocument();
+      expect(within(detail()).queryByRole('button', { name: RETRY })).not.toBeInTheDocument();
+    });
+
+    it('is kept when the detail remounts on a compact to wide resize', async () => {
+      const { storage, state } = fullableStorage();
+      const { setWidth } = await renderLibrary(sampleLibrary(), {
+        path: `/place/${P1}`,
+        width: 390,
+        storage,
+      });
+      state.full = true;
+      fireEvent.change(memoBox(), { target: { value: '리사이즈 전에 쓴 메모' } });
+      expect(
+        await within(detail()).findByRole('button', { name: RETRY }, { timeout: 3000 }),
+      ).toBeInTheDocument();
+
+      setWidth(1400);
+      expect(memoBox()).toHaveValue('리사이즈 전에 쓴 메모');
+      expect(await within(detail()).findByRole('button', { name: RETRY })).toBeInTheDocument();
+    });
+
+    it('is dropped once a save of that exact text succeeds', async () => {
+      const { router, storage } = await open(P1);
+      fireEvent.change(memoBox(), { target: { value: '저장되는 메모' } });
+      await act(async () => {
+        await router.navigate(`/place/${P2}`);
+      });
+      await waitFor(() => expect(storedPlace(storage, P1).memo.value).toBe('저장되는 메모'));
+      await act(async () => {
+        await router.navigate(`/place/${P1}`);
+      });
+      expect(memoBox()).toHaveValue('저장되는 메모');
+      expect(within(detail()).queryByRole('button', { name: RETRY })).not.toBeInTheDocument();
     });
   });
 });

@@ -1,7 +1,8 @@
 import Box from '@mui/material/Box';
+import { useStore } from 'jotai';
 import { useEffect, useRef, useState, type ClipboardEvent } from 'react';
 import { LIBRARY_LIMITS } from 'src/schema/library';
-import { useDraft } from 'src/stores/library-state';
+import { memoDraftsAtom, useDraft, type MemoDraft } from 'src/stores/library-state';
 
 /** 입력이 멈추고 이만큼 지나면 저장한다. */
 export const MEMO_DEBOUNCE_MS = 600;
@@ -21,7 +22,17 @@ type Props = {
  * 페이지 닫힘)는 기다리지 않고 바로 저장한다. "저장됨"은 저장이 성공한 뒤에만 보인다.
  */
 export function MemoEditor({ placeId, saved, onSave }: Props) {
-  const draft = useDraft(`memo:${placeId}`, saved);
+  const jotaiStore = useStore();
+  // 저장하지 못했거나 저장 중에 화면을 떠난 글은 컴포넌트 밖에 남아 있다. 이 장소로 돌아오면 이어받는다.
+  const [restored] = useState<MemoDraft | undefined>(() => {
+    const kept = jotaiStore.get(memoDraftsAtom)[placeId];
+    return kept !== undefined && kept.text !== saved ? kept : undefined;
+  });
+  const draft = useDraft(
+    `memo:${placeId}`,
+    saved,
+    restored && { value: restored.text, failed: restored.failed },
+  );
   const [overflow, setOverflow] = useState(false);
   // 붙여넣기 직후 브라우저가 보내는 `input`(→ `onChange`)이 방금 켠 경고를 지우지 않게 한다.
   const pasting = useRef(false);
@@ -30,11 +41,31 @@ export function MemoEditor({ placeId, saved, onSave }: Props) {
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   // 지금 저장 중인 글. 탭을 닫을 때 `visibilitychange`·`pagehide`·언마운트가 잇따라 와도 같은 글을 또 보내지 않는다.
   const inflight = useRef<string | null>(null);
+  // 남겨 둔 초안을 고친다. 컴포넌트가 사라진 뒤에 끝나는 저장도 반영해야 하므로 상태가 아니라 저장소를 쓴다.
+  const keepDraft = (next: MemoDraft | null) =>
+    jotaiStore.set(memoDraftsAtom, (all) => {
+      const rest = { ...all };
+      if (next === null) delete rest[placeId];
+      else rest[placeId] = next;
+      return rest;
+    });
   const send = (text: string) => {
     inflight.current = text;
-    return onSave(text).finally(() => {
-      if (inflight.current === text) inflight.current = null;
-    });
+    return onSave(text)
+      .then(
+        (result) => result,
+        () => ({ ok: false }),
+      )
+      .then((result) => {
+        // 더 고친 글이 있으면 그 글의 초안을 건드리지 않는다(그 글의 저장 결과는 따로 온다).
+        if (jotaiStore.get(memoDraftsAtom)[placeId]?.text === text) {
+          keepDraft(result.ok ? null : { text, failed: true });
+        }
+        return result;
+      })
+      .finally(() => {
+        if (inflight.current === text) inflight.current = null;
+      });
   };
   const flush = () => {
     clearTimeout(timer.current);
@@ -46,6 +77,17 @@ export function MemoEditor({ placeId, saved, onSave }: Props) {
   useEffect(() => {
     flushRef.current = flush;
   });
+
+  // 이어받은 글이 아직 저장 전이면 바로 저장한다. 이미 저장된 값과 같아진 남은 초안은 지운다.
+  useEffect(() => {
+    if (restored === undefined) {
+      if (jotaiStore.get(memoDraftsAtom)[placeId] !== undefined) keepDraft(null);
+    } else if (!restored.failed) {
+      flushRef.current();
+    }
+    // 처음 한 번만.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     const now = () => flushRef.current();
@@ -65,6 +107,7 @@ export function MemoEditor({ placeId, saved, onSave }: Props) {
     if (!pasting.current) setOverflow(false);
     pasting.current = false;
     draft.setValue(text);
+    keepDraft({ text, failed: false });
     clearTimeout(timer.current);
     timer.current = setTimeout(() => flushRef.current(), MEMO_DEBOUNCE_MS);
   };

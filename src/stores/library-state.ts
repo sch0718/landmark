@@ -162,6 +162,15 @@ export function useLibraryAction(): {
 
 // ---------- 초안 ----------
 
+/**
+ * 저장하지 못한(또는 아직 저장 중인) 메모 초안, 장소 id별. 메모칸이 사라져도(다른 장소로 이동·창 크기 변경으로
+ * 상세가 다시 만들어짐) 글을 잃지 않게 컴포넌트 밖에 둔다. 그 글의 저장이 성공하면 지운다.
+ */
+export type MemoDraft = { text: string; failed: boolean };
+export const memoDraftsAtom: PrimitiveAtom<Record<string, MemoDraft>> = atom<
+  Record<string, MemoDraft>
+>({});
+
 export type DraftStatus = 'idle' | 'saving' | 'saved' | 'error';
 
 type DraftState<T> = {
@@ -181,15 +190,23 @@ type DraftState<T> = {
   lastFail: number;
 };
 
-const freshDraft = <T>(key: string, saved: T, epoch: number): DraftState<T> => ({
+/** 이전에 만들다 만 초안. `failed`면 마지막 저장이 실패한 채로 시작한다. */
+export type DraftRestore<T> = { value: T; failed: boolean };
+
+const freshDraft = <T>(
+  key: string,
+  saved: T,
+  epoch: number,
+  restore?: DraftRestore<T>,
+): DraftState<T> => ({
   key,
   epoch,
-  edit: null,
+  edit: restore === undefined ? null : { value: restore.value },
   base: saved,
-  status: 'idle',
+  status: restore?.failed === true ? 'error' : 'idle',
   inflight: 0,
   lastOk: 0,
-  lastFail: 0,
+  lastFail: restore?.failed === true ? 1 : 0,
 });
 
 /** `commit` 하나가 끝난 뒤의 상태. 진행 중인 저장이 남아 있으면 계속 'saving'이다. */
@@ -211,11 +228,12 @@ function settled<T>(from: DraftState<T>, patch: Partial<DraftState<T>>): DraftSt
  * - dirty(저장 전 수정)면 `saved`가 바뀌어도(다른 탭) 화면 값을 덮어쓰지 않고 `remoteChanged`만 켠다.
  * - `status`가 'saved'가 되는 것은 `commit`의 `save`가 `ok: true`를 돌려준 뒤뿐이다.
  *   실패하면 초안을 지우지 않고 dirty·'error'로 남는다.
+ * - `restore`는 처음 만들 때만 쓴다(컴포넌트 밖에 남겨 둔 초안을 이어받는다).
  * - `key`가 바뀌면 이전 초안은 버린다. 이전 키로 돌아와도 되살아나지 않고, 이전 키의
  *   `commit` 결과는 상태에 반영하지 않는다(저장 자체는 그대로 진행된다).
  */
-export function useDraft<T>(key: string, saved: T) {
-  const [state, setState] = useState<DraftState<T>>(() => freshDraft(key, saved, 0));
+export function useDraft<T>(key: string, saved: T, restore?: DraftRestore<T>) {
+  const [state, setState] = useState<DraftState<T>>(() => freshDraft(key, saved, 0, restore));
   let current = state;
   if (state.key !== key) {
     // 렌더 중 상태 재설정: 이전 키의 초안을 `state`에서도 지운다.
