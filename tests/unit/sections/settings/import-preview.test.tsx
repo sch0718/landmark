@@ -199,6 +199,32 @@ describe('ImportPreview decisions', () => {
     expect(importButton()).toBeEnabled();
   });
 
+  it('an excluded place does not keep its own label error blocking the import', async () => {
+    const trip = tripOf();
+    trip.folders[0]!.name = LONG_NAME; // A만 쓰는 폴더
+    trip.folders.push({ id: 'f2', name: '충돌', count: 1 }); // B만 쓰는 폴더
+    trip.places['n:1']!.folderIds = ['f1'];
+    trip.places['n:1']!.naverMemos = [{ folderId: 'f1', memo: HUGE_MEMO }];
+    trip.places['n:2']!.folderIds = ['f2'];
+    const { user, storage } = await openPreview(trip);
+
+    await user.clear(nameInput());
+    await user.type(nameInput(), '충돌');
+    expect(labelItem()).toHaveTextContent('같은 이름의 라벨이 있어요');
+    expect(importButton()).toBeDisabled();
+
+    await user.click(within(memoItem()).getByRole('radio', { name: '이 장소 제외' }));
+    expect(labelItem()).not.toHaveTextContent('같은 이름의 라벨이 있어요');
+    expect(summary()).toBe('새로 추가 1 · 이미 있음 0(라벨만 합침) · 새 라벨 1 · 확인 필요 0');
+    expect(importButton()).toBeEnabled();
+
+    await user.click(importButton());
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith('1곳을 가져왔어요'));
+    const lib = stored(storage);
+    expect(Object.values(lib.labels).filter((l) => l.name.value === '충돌')).toHaveLength(1);
+    expect(Object.values(lib.labels)).toHaveLength(4);
+  });
+
   it('stale apply shows recomputed preview and keeps decisions', async () => {
     const trip = tripOf();
     trip.folders[0]!.name = LONG_NAME;

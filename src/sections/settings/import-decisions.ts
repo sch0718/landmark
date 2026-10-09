@@ -70,6 +70,12 @@ export function mergePending(
   return { items: { labels, memos }, decisions: { ...decisions, labels: drafts } };
 }
 
+/** 그 출처를 쓰는 장소가 하나 이상이고 모두 "이 장소 제외"로 결정됐다. */
+const onlyExcludedPlaces = (placeKeys: readonly string[] | undefined, decisions: Decisions) =>
+  placeKeys !== undefined &&
+  placeKeys.length > 0 &&
+  placeKeys.every((placeKey) => decisions.memos[placeKey] === 'exclude-place');
+
 const lengthOk = (name: string): boolean =>
   name !== '' && name.length <= LIBRARY_LIMITS.labelNameChars;
 
@@ -85,20 +91,21 @@ export function labelNameError(
 ): string | null {
   const draft = decisions.labels[key];
   if (draft === undefined || draft.excluded) return null;
+  const placesOf = legacyLabelPlaceKeys(source);
+  // 이 출처를 쓰는 장소가 모두 제외됐다면 가져오지 않는 라벨이라 오류도 없다.
+  if (onlyExcludedPlaces(placesOf.get(key), decisions)) return null;
   const name = draft.name.trim();
   if (!lengthOk(name)) return NAME_LENGTH_MESSAGE;
   const normalized = normalizeLabelName(name);
   if (liveLabels(library).some((l) => normalizeLabelName(l.name.value) === normalized)) {
     return NAME_TAKEN_MESSAGE;
   }
-  const placesOf = legacyLabelPlaceKeys(source);
   for (const other of legacyLabelSources(source)) {
     if (other.key === key) continue;
     const otherDraft = decisions.labels[other.key];
     if (otherDraft?.excluded === true) continue;
     // 제외한 장소만 쓰는 출처는 가져오지 않으니 이름이 겹쳐도 막지 않는다.
-    const used = placesOf.get(other.key) ?? [];
-    if (used.every((placeKey) => decisions.memos[placeKey] === 'exclude-place')) continue;
+    if (onlyExcludedPlaces(placesOf.get(other.key), decisions)) continue;
     const otherName = (otherDraft?.name ?? other.rawName).trim();
     if (lengthOk(otherName) && normalizeLabelName(otherName) === normalized) {
       return NAME_TAKEN_MESSAGE;
