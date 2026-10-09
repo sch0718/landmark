@@ -53,7 +53,7 @@ export function LibraryMap() {
       return shown;
     }
     const [hidden] = toMarkers([open], library.labels, tokens, placeId);
-    return [...shown, { ...hidden!, clusterable: false }];
+    return [...shown, hidden!];
   }, [places, library.places, library.labels, tokens, placeId]);
 
   // 선택이 바뀌면 지도를 그 장소로 옮긴다(렌더 중 상태 갱신). `seq`를 올려 같은 장소도 다시 움직인다.

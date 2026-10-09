@@ -29,7 +29,7 @@ type Props = {
   clusterStyle?: ClusterStyle;
   onMarkerClick(id: string): void;
   onBoundsChange?(b: Bounds): void;
-  /** 값이 바뀔 때마다 그 지점 근처(약 1km)로 지도를 옮긴다. */
+  /** 값이 바뀔 때마다 그 지점 근처(약 200m 상자, 줌 15~17)로 지도를 옮긴다. */
   focus?: { point: [number, number]; seq: number } | null;
   onUnavailable(reason: string): void;
   /**
@@ -40,6 +40,11 @@ type Props = {
 };
 
 const FOCUS_PAD = 0.005;
+/** 장소로 이동(focus)할 때 맞추는 상자의 반변(약 200m). 지도 폭이 달라도 이웃에 묶이지 않을 만큼 가깝게 당긴다. */
+const FOCUS_BOX = 0.002;
+/** focus 뒤 줌 범위. 15부터는 클러스터 없이 모든 장소가 개별로 보인다. */
+const FOCUS_MIN_ZOOM = 15;
+const FOCUS_MAX_ZOOM = 17;
 
 /** 흐린(후보) 마커를 뺀 마커 좌표. 모두 흐리면 전부. 점이 하나뿐이면 그 근처(약 1km)로 넓힌다. */
 export function fitPoints(markers: MapMarker[]): [number, number][] {
@@ -197,9 +202,14 @@ export function MapView(props: Props) {
     if (focus && focus.seq !== appliedFocus.current) {
       const [lng, lat] = focus.point;
       fit([
-        [lng - FOCUS_PAD, lat - FOCUS_PAD],
-        [lng + FOCUS_PAD, lat + FOCUS_PAD],
+        [lng - FOCUS_BOX, lat - FOCUS_BOX],
+        [lng + FOCUS_BOX, lat + FOCUS_BOX],
       ]);
+      const camera = adapter.getCamera();
+      if (camera) {
+        const zoom = Math.min(FOCUS_MAX_ZOOM, Math.max(FOCUS_MIN_ZOOM, camera.zoom));
+        if (zoom !== camera.zoom) adapter.setCamera({ ...camera, zoom });
+      }
       appliedFocus.current = focus.seq;
     }
   }, [ready, key, props.focus, props.markers]);

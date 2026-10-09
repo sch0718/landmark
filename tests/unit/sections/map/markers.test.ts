@@ -71,12 +71,18 @@ describe('toMarkers', () => {
     expect(markers[1]!.color).toBe(TOKENS.pastel.light.bg.surface);
   });
 
+  it('never clusters the selected marker', () => {
+    const places = [makePlace(1), makePlace(2)];
+    const markers = toMarkers(places, {}, TOKENS.pastel.light, places[0]!.id);
+    expect(markers.map((m) => m.clusterable)).toEqual([false, true]);
+  });
+
   it('carries position, clusterable and the selected flag', () => {
     const places = [at(makePlace(1), 127.1, 37.2), at(makePlace(2), 128.3, 38.4)];
     const markers = toMarkers(places, {}, TOKENS.paper.light, places[1]!.id);
     expect(markers).toEqual([
       expect.objectContaining({ id: places[0]!.id, lng: 127.1, lat: 37.2, clusterable: true }),
-      expect.objectContaining({ id: places[1]!.id, lng: 128.3, lat: 38.4, clusterable: true }),
+      expect.objectContaining({ id: places[1]!.id, lng: 128.3, lat: 38.4, clusterable: false }),
     ]);
     expect(markers.map((m) => m.selected === true)).toEqual([false, true]);
   });

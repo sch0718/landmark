@@ -397,6 +397,30 @@ describe('클러스터 계산', () => {
   });
 });
 
+describe('클러스터 해제 줌', () => {
+  const bounds = { west: 124, south: 33, east: 132, north: 39 };
+  // 약 400m 떨어진 두 장소(제주).
+  const pair = [mk('p1', { lng: 126.53, lat: 33.5 }), mk('p2', { lng: 126.53, lat: 33.5036 })];
+
+  it('줌 15부터는 400m 떨어진 두 장소가 개별 점이고, 줌 13에서는 하나로 묶인다', () => {
+    const ci = buildClusterIndex(pair);
+    const z15 = clusterFeatures(ci, bounds, 15);
+    expect(z15.map((f) => f.kind)).toEqual(['point', 'point']);
+    const z13 = clusterFeatures(ci, bounds, 13);
+    expect(z13).toHaveLength(1);
+    expect(z13[0]).toMatchObject({ kind: 'cluster', count: 2 });
+  });
+
+  it('줌 15부터는 50m 떨어진 장소도 묶지 않는다', () => {
+    const ci = buildClusterIndex([
+      mk('q1', { lng: 126.53, lat: 33.5 }),
+      mk('q2', { lng: 126.53, lat: 33.50045 }),
+    ]);
+    expect(clusterFeatures(ci, bounds, 15).map((f) => f.kind)).toEqual(['point', 'point']);
+    expect(clusterFeatures(ci, bounds, 14).map((f) => f.kind)).toEqual(['cluster']);
+  });
+});
+
 describe('MapView 크기와 생명주기', () => {
   const props = {
     markers: [mk('a')],
@@ -473,8 +497,8 @@ describe('MapView 크기와 생명주기', () => {
     await waitFor(() => expect(fit).toHaveBeenCalledTimes(1));
     expect(fit).toHaveBeenLastCalledWith(
       [
-        [128.995, 37.995],
-        [129.005, 38.005],
+        [128.998, 37.998],
+        [129.002, 38.002],
       ],
       padding,
     );
@@ -495,6 +519,25 @@ describe('MapView 크기와 생명주기', () => {
     rerender(<MapView {...props} fitKey="a" />);
     expect(adapter.getCamera()).toEqual({ center: [127, 36], zoom: 13 });
     expect(fit).toHaveBeenCalledTimes(2);
+  });
+
+  it('focus는 맞춘 결과 줌이 15 미만이면 15로, 17을 넘으면 17로 맞춘다', async () => {
+    let fitted = 13;
+    vi.spyOn(FakeMapAdapter.prototype, 'fitBounds').mockImplementation(function (
+      this: FakeMapAdapter,
+    ) {
+      this.setCamera({ center: [128, 37], zoom: fitted });
+    });
+    const { rerender } = render(<MapView {...props} focus={{ point: [128, 37], seq: 1 }} />);
+    await screen.findByTestId('marker-a');
+    const adapter = [...resources.instances][0]!;
+    await waitFor(() => expect(adapter.getCamera()!.zoom).toBe(15));
+    fitted = 19;
+    rerender(<MapView {...props} focus={{ point: [128, 37], seq: 2 }} />);
+    await waitFor(() => expect(adapter.getCamera()!.zoom).toBe(17));
+    fitted = 16;
+    rerender(<MapView {...props} focus={{ point: [128, 37], seq: 3 }} />);
+    await waitFor(() => expect(adapter.getCamera()!.zoom).toBe(16));
   });
 
   it('padding만 바뀌면 fit과 카메라 복원을 반복하지 않고 다음 새 focus에 최신 padding을 쓴다', async () => {

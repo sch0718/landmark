@@ -12,8 +12,9 @@ export type ClusterIndex = {
   expansionZoom(clusterId: number): number;
 };
 
+/** 줌 15부터는 장소를 묶지 않고 모두 개별로 보인다(`maxZoom` 14 → 15에서 해제). */
 export function buildClusterIndex(markers: MapMarker[]): ClusterIndex {
-  const index = new Supercluster<{ markerId: string }>({ radius: 60, maxZoom: 16 });
+  const index = new Supercluster<{ markerId: string }>({ radius: 60, maxZoom: 14 });
   index.load(
     markers
       .filter((m) => m.clusterable)

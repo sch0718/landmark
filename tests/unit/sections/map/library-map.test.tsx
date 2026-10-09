@@ -221,8 +221,8 @@ describe('library map', () => {
     await waitFor(() => expect(fakeAdapter().fitCalls).toHaveLength(fits + 1));
     const [lng, lat] = [128.95, 37.77];
     const last = fakeAdapter().fitCalls.at(-1)!;
-    expect(last[0]![0]).toBeCloseTo(lng - 0.005);
-    expect(last[1]![1]).toBeCloseTo(lat + 0.005);
+    expect(last[0]![0]).toBeCloseTo(lng - 0.002);
+    expect(last[1]![1]).toBeCloseTo(lat + 0.002);
     expect(marker(2)).toHaveAttribute('aria-pressed', 'true');
     expect(fakeMap()).toBeInTheDocument();
   });
