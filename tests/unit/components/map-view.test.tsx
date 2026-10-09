@@ -7,7 +7,7 @@ import { buildClusterIndex, clusterFeatures } from 'src/components/map/cluster';
 import { categoryColor, dayColor } from 'src/components/map/map-colors';
 import { createMarkerLabelElement } from 'src/components/map/marker-label';
 import type { MapMarker } from 'src/components/map/MapAdapter';
-import { fitPoints, MapView } from 'src/components/map/MapView';
+import { fitPoints, focusCamera, MapView } from 'src/components/map/MapView';
 import { StrictMode } from 'react';
 import { installMapResources } from './helpers/map-resources';
 import { createTripStore, TripStoreContext } from 'src/stores/trip-store';
@@ -492,16 +492,32 @@ describe('MapView 크기와 생명주기', () => {
     expect(markers).not.toHaveBeenCalled();
     expect(lines).not.toHaveBeenCalled();
     expect(fit).not.toHaveBeenCalled();
+    const camera = vi.spyOn(FakeMapAdapter.prototype, 'setCamera');
     rerender(<MapView {...changed} visible padding={padding} />);
     await screen.findByTestId('marker-b');
-    await waitFor(() => expect(fit).toHaveBeenCalledTimes(1));
-    expect(fit).toHaveBeenLastCalledWith(
-      [
-        [128.998, 37.998],
-        [129.002, 38.002],
-      ],
-      padding,
-    );
+    await waitFor(() => expect(camera).toHaveBeenLastCalledWith(focusCamera([129, 38], padding)));
+  });
+
+  describe('focusCamera', () => {
+    it('padding이 고르면 장소가 지도 중심이고 줌은 16이다', () => {
+      const even = { top: 40, right: 40, bottom: 40, left: 40 };
+      expect(focusCamera([128, 37], even)).toEqual({ center: [128, 37], zoom: 16 });
+    });
+
+    it('오른쪽 padding이 크면 중심을 오른쪽(동쪽)으로 옮겨 장소가 보이는 영역 가운데에 온다', () => {
+      // 오른쪽 400px·왼쪽 40px → 보이는 영역 가운데는 지도 중심보다 180px 왼쪽.
+      const cam = focusCamera([128, 37], { top: 40, right: 400, bottom: 40, left: 40 });
+      const degPerPx = 360 / (256 * 2 ** 16);
+      expect(cam.zoom).toBe(16);
+      expect(cam.center[0]).toBeCloseTo(128 + 180 * degPerPx, 9);
+      expect(cam.center[1]).toBeCloseTo(37, 9);
+    });
+
+    it('아래 padding이 크면 중심을 아래(남쪽)로 옮긴다', () => {
+      const cam = focusCamera([128, 37], { top: 24, right: 24, bottom: 360, left: 24 });
+      expect(cam.center[0]).toBeCloseTo(128, 9);
+      expect(cam.center[1]).toBeLessThan(37);
+    });
   });
 
   it('빈 key는 첫 데이터에 fit하고 key 재방문에는 사용자의 카메라를 복원한다', async () => {
@@ -521,41 +537,35 @@ describe('MapView 크기와 생명주기', () => {
     expect(fit).toHaveBeenCalledTimes(2);
   });
 
-  it('focus는 맞춘 결과 줌이 15 미만이면 15로, 17을 넘으면 17로 맞춘다', async () => {
-    let fitted = 13;
-    vi.spyOn(FakeMapAdapter.prototype, 'fitBounds').mockImplementation(function (
-      this: FakeMapAdapter,
-    ) {
-      this.setCamera({ center: [128, 37], zoom: fitted });
-    });
-    const { rerender } = render(<MapView {...props} focus={{ point: [128, 37], seq: 1 }} />);
+  it('focus는 화면 폭과 상관없이 줌 16으로, 장소를 padding을 뺀 영역의 가운데에 둔다', async () => {
+    const padding = { top: 40, right: 400, bottom: 40, left: 40 };
+    const { rerender } = render(
+      <MapView {...props} padding={padding} focus={{ point: [128, 37], seq: 1 }} />,
+    );
     await screen.findByTestId('marker-a');
     const adapter = [...resources.instances][0]!;
-    await waitFor(() => expect(adapter.getCamera()!.zoom).toBe(15));
-    fitted = 19;
-    rerender(<MapView {...props} focus={{ point: [128, 37], seq: 2 }} />);
-    await waitFor(() => expect(adapter.getCamera()!.zoom).toBe(17));
-    fitted = 16;
-    rerender(<MapView {...props} focus={{ point: [128, 37], seq: 3 }} />);
-    await waitFor(() => expect(adapter.getCamera()!.zoom).toBe(16));
+    await waitFor(() => expect(adapter.getCamera()).toEqual(focusCamera([128, 37], padding)));
+    rerender(<MapView {...props} padding={padding} focus={{ point: [129, 38], seq: 2 }} />);
+    await waitFor(() => expect(adapter.getCamera()).toEqual(focusCamera([129, 38], padding)));
+    expect(adapter.getCamera()!.zoom).toBe(16);
   });
 
-  it('padding만 바뀌면 fit과 카메라 복원을 반복하지 않고 다음 새 focus에 최신 padding을 쓴다', async () => {
+  it('padding만 바뀌면 fit과 카메라 이동을 반복하지 않고 다음 새 focus에 최신 padding을 쓴다', async () => {
     const fit = vi.spyOn(FakeMapAdapter.prototype, 'fitBounds');
     const camera = vi.spyOn(FakeMapAdapter.prototype, 'setCamera');
     const padding = { top: 24, right: 24, bottom: 164, left: 24 };
     const { rerender } = render(
       <MapView {...props} padding={padding} focus={{ point: [128, 37], seq: 1 }} />,
     );
-    await waitFor(() => expect(fit).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(camera).toHaveBeenLastCalledWith(focusCamera([128, 37], padding)));
+    const fits = fit.mock.calls.length;
     const before = camera.mock.calls.length;
     const next = { ...padding, bottom: 360 };
     rerender(<MapView {...props} padding={next} focus={{ point: [128, 37], seq: 1 }} />);
-    expect(fit).toHaveBeenCalledTimes(2);
+    expect(fit).toHaveBeenCalledTimes(fits);
     expect(camera).toHaveBeenCalledTimes(before);
     rerender(<MapView {...props} padding={next} focus={{ point: [129, 38], seq: 2 }} />);
-    expect(fit).toHaveBeenCalledTimes(3);
-    expect(fit.mock.calls[2]![1]).toEqual(next);
+    expect(camera).toHaveBeenLastCalledWith(focusCamera([129, 38], next));
   });
 
   it('크기 변경은 zoom을 보존하고 같은 key를 다시 fit하지 않는다', async () => {

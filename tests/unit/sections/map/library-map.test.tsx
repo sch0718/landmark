@@ -61,6 +61,14 @@ async function ready() {
 }
 
 describe('library map', () => {
+  /** 카메라가 장소로 줌 16에 옮겨졌는가(넓은 화면의 고른 padding이라 지도 중심이 곧 장소). */
+  const expectFocusedOn = ([lng, lat]: [number, number]) => {
+    const camera = fakeAdapter().getCamera()!;
+    expect(camera.zoom).toBe(16);
+    expect(camera.center[0]).toBeCloseTo(lng, 4);
+    expect(camera.center[1]).toBeCloseTo(lat, 4);
+  };
+
   it('map shows only filtered places', async () => {
     const user = userEvent.setup();
     await renderLibrary(sampleLibrary());
@@ -210,19 +218,14 @@ describe('library map', () => {
     const user = userEvent.setup();
     await renderLibrary(sampleLibrary(), { prefs: { libraryView: 'list' } });
     await ready();
-    const fits = fakeAdapter().fitCalls.length;
-
     await user.click(
       within(screen.getByRole('list', { name: '장소 목록' })).getByRole('button', {
         name: /안목 카페거리/,
       }),
     );
 
-    await waitFor(() => expect(fakeAdapter().fitCalls).toHaveLength(fits + 1));
-    const [lng, lat] = [128.95, 37.77];
-    const last = fakeAdapter().fitCalls.at(-1)!;
-    expect(last[0]![0]).toBeCloseTo(lng - 0.002, 4);
-    expect(last[1]![1]).toBeCloseTo(lat + 0.002, 4);
+    // 화면 폭과 상관없이 줌 16으로, 장소가 (padding을 뺀) 지도 가운데에 온다.
+    await waitFor(() => expectFocusedOn([128.95, 37.77]));
     expect(marker(2)).toHaveAttribute('aria-pressed', 'true');
     expect(fakeMap()).toBeInTheDocument();
   });
@@ -234,14 +237,13 @@ describe('library map', () => {
     await router.navigate(`/place/${id(2)}`);
     await waitFor(() => expect(marker(2)).toHaveAttribute('aria-pressed', 'true'));
     const before = fakeAdapter().fitCalls.length;
+    fakeAdapter().setCamera({ center: [127, 36], zoom: 9 });
 
     await user.type(screen.getByRole('searchbox', { name: '장소 검색' }), '횟집');
 
     // 새 필터로 맞춘 뒤 열린 장소로 다시 모은다.
-    await waitFor(() => expect(fakeAdapter().fitCalls.length).toBeGreaterThanOrEqual(before + 2));
-    const last = fakeAdapter().fitCalls.at(-1)!;
-    expect(last[0]![0]).toBeCloseTo(128.95 - 0.002, 4);
-    expect(last[1]![1]).toBeCloseTo(37.77 + 0.002, 4);
+    await waitFor(() => expect(fakeAdapter().fitCalls.length).toBeGreaterThan(before));
+    await waitFor(() => expectFocusedOn([128.95, 37.77]));
   });
 
   it('opening the same place twice moves the map each time', async () => {
@@ -255,10 +257,11 @@ describe('library map', () => {
         }),
       );
     await open();
-    const first = fakeAdapter().fitCalls.length;
+    await waitFor(() => expectFocusedOn([128.95, 37.77]));
     await router.navigate('/');
+    fakeAdapter().setCamera({ center: [127, 36], zoom: 9 });
     await open();
-    await waitFor(() => expect(fakeAdapter().fitCalls.length).toBeGreaterThan(first));
+    await waitFor(() => expectFocusedOn([128.95, 37.77]));
   });
 
   it('focus requests are consumed once by the list', async () => {
