@@ -31,7 +31,7 @@ export function MemoEditor({ placeId, saved, onSave }: Props) {
   const draft = useDraft(
     `memo:${placeId}`,
     saved,
-    restored && { value: restored.text, failed: restored.failed },
+    restored && { value: restored.text, failed: restored.failed, base: restored.base },
   );
   const [overflow, setOverflow] = useState(false);
   // 붙여넣기 직후 브라우저가 보내는 `input`(→ `onChange`)이 방금 켠 경고를 지우지 않게 한다.
@@ -58,8 +58,11 @@ export function MemoEditor({ placeId, saved, onSave }: Props) {
       )
       .then((result) => {
         // 더 고친 글이 있으면 그 글의 초안을 건드리지 않는다(그 글의 저장 결과는 따로 온다).
-        if (jotaiStore.get(memoDraftsAtom)[placeId]?.text === text) {
-          keepDraft(result.ok ? null : { text, failed: true });
+        const kept = jotaiStore.get(memoDraftsAtom)[placeId];
+        if (kept?.text === text) {
+          keepDraft(result.ok ? null : { ...kept, failed: true });
+        } else if (kept !== undefined && result.ok) {
+          keepDraft({ ...kept, base: text }); // 저장하는 사이 더 고친 글은 방금 저장한 글을 기준으로 한다.
         }
         return result;
       })
@@ -82,7 +85,8 @@ export function MemoEditor({ placeId, saved, onSave }: Props) {
   useEffect(() => {
     if (restored === undefined) {
       if (jotaiStore.get(memoDraftsAtom)[placeId] !== undefined) keepDraft(null);
-    } else if (!restored.failed) {
+    } else if (!restored.failed && restored.base === saved) {
+      // 다른 탭이 고친 메모는 말없이 덮어쓰지 않는다.
       flushRef.current();
     }
     // 처음 한 번만.
@@ -107,7 +111,11 @@ export function MemoEditor({ placeId, saved, onSave }: Props) {
     if (!pasting.current) setOverflow(false);
     pasting.current = false;
     draft.setValue(text);
-    keepDraft({ text, failed: false });
+    keepDraft({
+      text,
+      failed: false,
+      base: jotaiStore.get(memoDraftsAtom)[placeId]?.base ?? saved,
+    });
     clearTimeout(timer.current);
     timer.current = setTimeout(() => flushRef.current(), MEMO_DEBOUNCE_MS);
   };

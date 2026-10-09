@@ -306,6 +306,43 @@ describe('PlaceDetail', () => {
       expect(await within(detail()).findByRole('button', { name: RETRY })).toBeInTheDocument();
     });
 
+    it('still tells that another tab changed the memo while the draft was away', async () => {
+      const { storage, state } = fullableStorage();
+      const { router, store } = await renderLibrary(sampleLibrary(), {
+        path: `/place/${P1}`,
+        storage,
+      });
+      state.full = true;
+      fireEvent.change(memoBox(), { target: { value: '내가 쓴 초안' } });
+      await act(async () => {
+        await router.navigate(`/place/${P2}`);
+      });
+      await waitFor(() => expect(toastMock.error).toHaveBeenCalled());
+
+      // 다른 탭이 그 사이 P1의 메모를 고쳤다.
+      state.full = false;
+      const stored = JSON.parse(storage.getItem(LIBRARY_KEY)!) as Library;
+      const edited: Library = {
+        ...stored,
+        places: {
+          ...stored.places,
+          [P1]: {
+            ...stored.places[P1]!,
+            memo: { value: '다른 탭이 쓴 메모', updatedAt: '2026-10-08T03:00:00.000Z' },
+          },
+        },
+      };
+      storage.setItem(LIBRARY_KEY, JSON.stringify(edited));
+      act(() => store.set(libraryAtom, edited));
+
+      await act(async () => {
+        await router.navigate(`/place/${P1}`);
+      });
+      expect(memoBox()).toHaveValue('내가 쓴 초안');
+      expect(within(detail()).getByText('다른 탭에서 바뀌었어요')).toBeInTheDocument();
+      expect(retry()).toBeInTheDocument();
+    });
+
     it('is dropped once a save of that exact text succeeds', async () => {
       const { router, storage } = await open(P1);
       fireEvent.change(memoBox(), { target: { value: '저장되는 메모' } });

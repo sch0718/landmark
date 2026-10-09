@@ -166,7 +166,12 @@ export function useLibraryAction(): {
  * 저장하지 못한(또는 아직 저장 중인) 메모 초안, 장소 id별. 메모칸이 사라져도(다른 장소로 이동·창 크기 변경으로
  * 상세가 다시 만들어짐) 글을 잃지 않게 컴포넌트 밖에 둔다. 그 글의 저장이 성공하면 지운다.
  */
-export type MemoDraft = { text: string; failed: boolean };
+export type MemoDraft = {
+  text: string;
+  failed: boolean;
+  /** 고치기 시작할 때 기준이던 저장본. 돌아왔을 때 다른 탭 변경을 알아채는 기준. */
+  base: string;
+};
 export const memoDraftsAtom: PrimitiveAtom<Record<string, MemoDraft>> = atom<
   Record<string, MemoDraft>
 >({});
@@ -191,7 +196,7 @@ type DraftState<T> = {
 };
 
 /** 이전에 만들다 만 초안. `failed`면 마지막 저장이 실패한 채로 시작한다. */
-export type DraftRestore<T> = { value: T; failed: boolean };
+export type DraftRestore<T> = { value: T; failed: boolean; base: T };
 
 const freshDraft = <T>(
   key: string,
@@ -202,7 +207,7 @@ const freshDraft = <T>(
   key,
   epoch,
   edit: restore === undefined ? null : { value: restore.value },
-  base: saved,
+  base: restore?.base ?? saved,
   status: restore?.failed === true ? 'error' : 'idle',
   inflight: 0,
   lastOk: 0,
