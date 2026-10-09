@@ -221,10 +221,27 @@ describe('library map', () => {
     await waitFor(() => expect(fakeAdapter().fitCalls).toHaveLength(fits + 1));
     const [lng, lat] = [128.95, 37.77];
     const last = fakeAdapter().fitCalls.at(-1)!;
-    expect(last[0]![0]).toBeCloseTo(lng - 0.002);
-    expect(last[1]![1]).toBeCloseTo(lat + 0.002);
+    expect(last[0]![0]).toBeCloseTo(lng - 0.002, 4);
+    expect(last[1]![1]).toBeCloseTo(lat + 0.002, 4);
     expect(marker(2)).toHaveAttribute('aria-pressed', 'true');
     expect(fakeMap()).toBeInTheDocument();
+  });
+
+  it('re-focuses the open place when the filter changes', async () => {
+    const user = userEvent.setup();
+    const { router } = await renderLibrary(sampleLibrary(), { prefs: { libraryView: 'list' } });
+    await ready();
+    await router.navigate(`/place/${id(2)}`);
+    await waitFor(() => expect(marker(2)).toHaveAttribute('aria-pressed', 'true'));
+    const before = fakeAdapter().fitCalls.length;
+
+    await user.type(screen.getByRole('searchbox', { name: '장소 검색' }), '횟집');
+
+    // 새 필터로 맞춘 뒤 열린 장소로 다시 모은다.
+    await waitFor(() => expect(fakeAdapter().fitCalls.length).toBeGreaterThanOrEqual(before + 2));
+    const last = fakeAdapter().fitCalls.at(-1)!;
+    expect(last[0]![0]).toBeCloseTo(128.95 - 0.002, 4);
+    expect(last[1]![1]).toBeCloseTo(37.77 + 0.002, 4);
   });
 
   it('opening the same place twice moves the map each time', async () => {

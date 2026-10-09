@@ -69,6 +69,18 @@ export function LibraryMap() {
     }
   }
 
+  // 필터가 바뀌면 지도는 새 필터에 맞춰지거나 그 필터의 옛 카메라로 돌아간다. 열어 둔 장소가 거기서 벗어나
+  // 안 보이지 않도록, 맞춘 뒤에 그 장소로 다시 모은다.
+  const fitKey = JSON.stringify(query);
+  const [seenKey, setSeenKey] = useState(fitKey);
+  if (seenKey !== fitKey) {
+    setSeenKey(fitKey);
+    const open = placeId === null ? undefined : library.places[placeId];
+    if (open !== undefined && open.deletedAt === null) {
+      setFocus({ point: [open.lng, open.lat], seq: (focus?.seq ?? 0) + 1 });
+    }
+  }
+
   const [unavailable, setUnavailable] = useState<string | null>(null);
 
   const onMarkerClick = useCallback(
@@ -82,7 +94,6 @@ export function LibraryMap() {
 
   const labels = useMemo(() => liveLabels(library), [library]);
   const counts = useMemo(() => labelCounts(library, query), [library, query]);
-  const fitKey = JSON.stringify(query);
   const padding = layout === 'medium' && placeId !== null ? OVERLAID_PADDING : BASE_PADDING;
 
   return (
