@@ -159,7 +159,7 @@ describe('PlaceDetail', () => {
     await waitFor(() => expect(router.state.location.pathname).toBe('/'));
     // 뒤로 가기가 지운 장소를 다시 열지 않는다(기록을 교체했다).
     expect(router.state.historyAction).toBe('REPLACE');
-    expect(within(detail()).getByText('장소를 고르면 여기에 보여요')).toBeInTheDocument();
+    expect(await within(detail()).findByText('장소를 고르면 여기에 보여요')).toBeInTheDocument();
 
     expect(toastMock).toHaveBeenCalledTimes(1);
     const [message, options] = toastMock.mock.calls[0] as [

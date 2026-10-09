@@ -1,4 +1,4 @@
-import { act, cleanup, screen, within } from '@testing-library/react';
+import { act, cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { setAppRuntimeForTest } from 'src/lib/effect/runtime';
@@ -101,7 +101,9 @@ describe('AppShell layout', () => {
     const { router } = await renderApp({ path: PLACE });
     await userEvent.click(screen.getByRole('button', { name: '닫기' }));
     expect(router.state.location.pathname).toBe('/');
-    expect(screen.queryByRole('region', { name: '장소 상세' })).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.queryByRole('region', { name: '장소 상세' })).not.toBeInTheDocument(),
+    );
   });
 
   it('compact layout shows one slot at a time and detail as a full-screen sheet', async () => {
@@ -114,7 +116,7 @@ describe('AppShell layout', () => {
       within(screen.getByRole('navigation')).getByRole('link', { name: '지도' }),
     );
     expect(router.state.location.pathname).toBe('/map');
-    expect(screen.getByRole('region', { name: '지도' })).toBeInTheDocument();
+    expect(await screen.findByRole('region', { name: '지도' })).toBeInTheDocument();
     expect(screen.queryByRole('region', { name: '장소 목록' })).not.toBeInTheDocument();
 
     await act(async () => {
@@ -137,7 +139,9 @@ describe('AppShell layout', () => {
     expect(router.state.location.pathname).toBe('/');
     // 기록을 되감았으므로(POP) 뒤로가기가 시트를 다시 열지 않는다.
     expect(router.state.historyAction).toBe('POP');
-    expect(screen.queryByRole('region', { name: '장소 상세' })).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.queryByRole('region', { name: '장소 상세' })).not.toBeInTheDocument(),
+    );
   });
 
   it('compact: a sheet opened from the map keeps the map behind it and closes to the map', async () => {
@@ -151,7 +155,7 @@ describe('AppShell layout', () => {
     await userEvent.click(screen.getByRole('button', { name: '목록으로' }));
     expect(router.state.location.pathname).toBe('/map');
     expect(router.state.historyAction).toBe('POP');
-    expect(screen.getByRole('region', { name: '지도' })).toBeInTheDocument();
+    expect(await screen.findByRole('region', { name: '지도' })).toBeInTheDocument();
   });
 
   it('compact: a sheet entered directly replaces history instead of leaving the app', async () => {
@@ -161,7 +165,7 @@ describe('AppShell layout', () => {
     await userEvent.click(screen.getByRole('button', { name: '목록으로' }));
     expect(router.state.location.pathname).toBe('/');
     expect(router.state.historyAction).toBe('REPLACE');
-    expect(screen.getByRole('region', { name: '장소 목록' })).toBeInTheDocument();
+    expect(await screen.findByRole('region', { name: '장소 목록' })).toBeInTheDocument();
   });
 
   it('treats a trailing slash as the same path', async () => {
