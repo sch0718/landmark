@@ -60,6 +60,45 @@ async function ready() {
   await waitFor(() => expect(shownMarkers().length).toBeGreaterThan(0));
 }
 
+describe('library map with a detail overlay', () => {
+  const expectUncovered = (lng: number) => {
+    const camera = fakeAdapter().getCamera()!;
+    // 1100px 화면: 레일 64, 목록 360, 지도 676, 상세가 오른쪽 360을 덮는다.
+    const x = 338 + ((lng - camera.center[0]) * 256 * 2 ** camera.zoom) / 360;
+    expect(x).toBeGreaterThanOrEqual(40);
+    expect(x).toBeLessThanOrEqual(276);
+  };
+
+  it('keeps the selected place uncovered when a wide detail becomes an overlay', async () => {
+    const { router, setWidth } = await renderLibrary(sampleLibrary(), { width: 1280 });
+    await ready();
+    await router.navigate(`/place/${id(2)}`);
+    await waitFor(() =>
+      expect(fakeAdapter().getCamera()).toEqual({ center: [128.95, 37.77], zoom: 16 }),
+    );
+    const adapter = fakeAdapter();
+
+    setWidth(1100);
+
+    await waitFor(() => expect(screen.getByRole('button', { name: '닫기' })).toBeInTheDocument());
+    await waitFor(() => expectUncovered(128.95));
+    expect(fakeAdapter()).toBe(adapter);
+  });
+
+  it('keeps a clicked marker uncovered when its detail overlay opens', async () => {
+    const user = userEvent.setup();
+    const { router } = await renderLibrary(sampleLibrary(), { width: 1100 });
+    await ready();
+    fakeAdapter().setCamera({ center: [128.95, 37.77], zoom: 16 });
+
+    await user.click(marker(2)!);
+
+    expect(router.state.location.pathname).toBe(`/place/${id(2)}`);
+    expect(screen.getByRole('button', { name: '닫기' })).toBeInTheDocument();
+    await waitFor(() => expectUncovered(128.95));
+  });
+});
+
 describe('library map', () => {
   /** 카메라가 장소로 줌 16에 옮겨졌는가(넓은 화면의 고른 padding이라 지도 중심이 곧 장소). */
   const expectFocusedOn = ([lng, lat]: [number, number]) => {

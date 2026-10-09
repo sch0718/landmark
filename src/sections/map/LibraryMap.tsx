@@ -27,7 +27,7 @@ type MapFocus = { point: [number, number]; seq: number };
  * 보관함 지도(스펙 §4.5). 목록과 같은 필터(`useLibraryQuery`)로 거른 장소를 라벨 색 마커로 보여 준다.
  * - 마커를 누르면 그 장소의 상세로 가고, 목록은 그 행으로 스크롤한다(`focusPlaceAtom`).
  * - 목록·상세에서 장소를 고르면(경로의 `/place/:id`) 지도가 그 장소로 움직인다. 방금 지도에서 누른 장소는
- *   이미 보이는 곳이라 움직이지 않는다.
+ *   상세 오버레이가 새로 생기는 경우에만 옮긴다.
  * - 좁은 화면(`/map`)에서는 위에 라벨 필터 칩 한 줄을 둔다.
  */
 export function LibraryMap() {
@@ -38,6 +38,7 @@ export function LibraryMap() {
   const navigate = useNavigate();
   const requestListScroll = useSetAtom(focusPlaceAtom);
   const placeId = useOpenPlaceId();
+  const detailOverlaid = layout === 'medium' && placeId !== null;
 
   const clusterStyle = useMemo(
     () => ({ color: tokens.accent.main, textColor: tokens.accent.contrast }),
@@ -81,6 +82,15 @@ export function LibraryMap() {
     }
   }
 
+  const [seenOverlay, setSeenOverlay] = useState(detailOverlaid);
+  if (seenOverlay !== detailOverlaid) {
+    setSeenOverlay(detailOverlaid);
+    const open = placeId === null ? undefined : library.places[placeId];
+    if (open !== undefined && open.deletedAt === null) {
+      setFocus({ point: [open.lng, open.lat], seq: (focus?.seq ?? 0) + 1 });
+    }
+  }
+
   const [unavailable, setUnavailable] = useState<string | null>(null);
 
   const onMarkerClick = useCallback(
@@ -94,7 +104,7 @@ export function LibraryMap() {
 
   const labels = useMemo(() => liveLabels(library), [library]);
   const counts = useMemo(() => labelCounts(library, query), [library, query]);
-  const padding = layout === 'medium' && placeId !== null ? OVERLAID_PADDING : BASE_PADDING;
+  const padding = detailOverlaid ? OVERLAID_PADDING : BASE_PADDING;
 
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
