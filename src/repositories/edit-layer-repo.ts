@@ -11,7 +11,7 @@ export function storageKey(publicId: string): string {
   return `tripmap:edit:${publicId}`;
 }
 
-const PROBE_KEY = 'tripmap:probe';
+export const PROBE_KEY = 'tripmap:probe';
 
 /** 실제로 쓰고 지워 본다. 사파리 사생활 보호 모드·용량 초과 등에서는 false. */
 export function isStorageAvailable(storage: Storage | undefined): storage is Storage {

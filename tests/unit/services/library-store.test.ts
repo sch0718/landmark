@@ -279,6 +279,42 @@ describe('LibraryStore.load', () => {
     }),
   );
 
+  it.effect('keeps reading a full storage: quota on the startup probe is not "unavailable"', () =>
+    Effect.gen(function* () {
+      const storage = createMemoryStorage();
+      const library = libraryOf(...[1, 2, 3, 4, 5].map((n) => place(`place0000${n}`)));
+      const raw = seed(storage, library);
+      storage.setItem = () => {
+        throw new DOMException('', 'QuotaExceededError');
+      };
+      yield* withStore({ storage }, (s) =>
+        Effect.gen(function* () {
+          const loaded = yield* s.load;
+          expect(loaded.persistence).toBe('local');
+          expect(Object.keys(loaded.library.places)).toHaveLength(5);
+          const error = yield* Effect.flip(s.update((lib) => Effect.succeed(lib)));
+          expect(error).toBeInstanceOf(StorageQuotaExceeded);
+        }),
+      );
+      expect(storage.getItem(LIBRARY_KEY)).toBe(raw);
+    }),
+  );
+
+  it.effect('falls back to memory when reading the storage throws', () =>
+    Effect.gen(function* () {
+      const storage = createMemoryStorage();
+      seed(storage, libraryOf(place(P1)));
+      storage.setItem = () => {
+        throw new DOMException('', 'QuotaExceededError');
+      };
+      storage.getItem = () => {
+        throw new DOMException('denied', 'SecurityError');
+      };
+      const result = yield* withStore({ storage }, (s) => s.load);
+      expect(result.persistence).toBe('memory');
+    }),
+  );
+
   it.effect('falls back to memory when storage is undefined', () =>
     Effect.gen(function* () {
       const result = yield* withStore({ storage: undefined }, (s) => s.load);

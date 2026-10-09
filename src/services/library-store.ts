@@ -1,5 +1,5 @@
 import { Clock, Context, Effect, Exit, Layer, Result, Stream } from 'effect';
-import { createMemoryStorage, isStorageAvailable } from 'src/repositories/edit-layer-repo';
+import { createMemoryStorage, PROBE_KEY } from 'src/repositories/edit-layer-repo';
 import { emptyLibrary, LIBRARY_LIMITS, LibrarySchema, type Library } from 'src/schema/library';
 import { safeParse, type Issue } from 'src/schema/parse';
 import { browserStorage } from 'src/services/browser-storage';
@@ -37,6 +37,28 @@ const isQuotaError = (error: unknown): boolean =>
     error.code === 22 ||
     error.code === 1014);
 
+/**
+ * 시작할 때 저장소를 써 본다. 쓰기가 용량 초과로만 실패하고 읽기가 되면 읽을 수 있는 보관함을 가린 채
+ * 빈 메모리 저장소로 바꾸지 않는다(이후 쓰기는 `StorageQuotaExceeded`로 실패해 알려진다).
+ * 저장소에 접근하는 것 자체가 막히면 `undefined`(메모리로 대체).
+ */
+function usableStorage(storage: Storage | undefined): Storage | undefined {
+  if (storage === undefined) return undefined;
+  try {
+    storage.setItem(PROBE_KEY, '1');
+    storage.removeItem(PROBE_KEY);
+    return storage;
+  } catch (error) {
+    if (!isQuotaError(error)) return undefined;
+  }
+  try {
+    storage.getItem(LIBRARY_KEY);
+    return storage;
+  } catch {
+    return undefined;
+  }
+}
+
 type StoredRead = { ok: true; library: Library } | { ok: false; raw: string; issues: Issue[] };
 
 /** 저장소 원문을 보관함 문서로 읽는다. 쓰지 않는다. */
@@ -61,7 +83,7 @@ function readStored(storage: Storage): StoredRead {
 }
 
 function makeLibraryStore(options: LibraryStoreOptions) {
-  const local = isStorageAvailable(options.storage) ? options.storage : undefined;
+  const local = usableStorage(options.storage);
   const persistence: LoadResult['persistence'] = local === undefined ? 'memory' : 'local';
   const storage = local ?? createMemoryStorage();
   const { locks, events } = options;
