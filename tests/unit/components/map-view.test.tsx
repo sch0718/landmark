@@ -306,6 +306,13 @@ describe('createMarkerLabelElement', () => {
     expect(el.style.border).toContain('rgb(119, 136, 153)');
   });
 
+  it('라벨의 가운데가 장소 좌표에 오도록 자기 크기의 절반만큼 끌어 올린다', () => {
+    // 어댑터는 라벨 왼쪽 위 모서리를 좌표에 둔다. 가운데를 맞추지 않으면 이름이 좌표의 오른쪽 아래로 뻗어
+    // 상세 패널처럼 지도 오른쪽을 덮는 요소에 가려진다.
+    const el = createMarkerLabelElement('이름', '#123456');
+    expect(el.style.transform).toBe('translate(-50%, -50%)');
+  });
+
   it('기본값은 흰 글자·흰 테두리를 유지한다', () => {
     const el = createMarkerLabelElement('이름', '#112233');
     expect(el.style.color).toBe('rgb(255, 255, 255)');

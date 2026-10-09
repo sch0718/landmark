@@ -27,6 +27,8 @@ export function createMarkerLabelElement(
     'overflow:hidden',
     'text-overflow:ellipsis',
     'vertical-align:top',
+    // 어댑터가 왼쪽 위 모서리를 좌표에 두므로, 가운데가 좌표에 오게 자기 크기의 절반만큼 옮긴다.
+    'transform:translate(-50%, -50%)',
     `color:${opts.textColor ?? '#fff'}`,
     'border-radius:12px',
     'padding:2px 8px',
