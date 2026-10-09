@@ -3,9 +3,9 @@ import type { Label, Place } from 'src/schema/library';
 import type { Tokens } from 'src/theme/tokens';
 
 /**
- * 장소를 지도 마커로 바꾼다. 색은 대표(첫 번째 살아 있는) 라벨의 마커색이고, 라벨이 없으면 흐린 글자색이다.
- * 마커는 이름 글자 없이 점으로 그린다: 어댑터가 흰 테두리와 그림자를 둘러서 밝은 지도 위에서도 보이고,
- * 노랑처럼 흰 글자와 대비가 낮은 색도 글자 없이는 문제가 되지 않는다.
+ * 장소를 지도 마커로 바꾼다. 마커에는 장소 이름을 쓴다.
+ * 색은 대표(첫 번째 살아 있는) 라벨의 팔레트(바탕 `fill`·글자 `text`·테두리 `marker`)이고,
+ * 라벨이 없으면 표면 바탕·기본 글자·기본 테두리다. 선택된 마커는 강조색 테두리로 그린다.
  */
 export function toMarkers(
   places: Place[],
@@ -17,12 +17,17 @@ export function toMarkers(
     const first = place.labelIds.value
       .map((id) => labels[id])
       .find((label): label is Label => label !== undefined && label.deletedAt === null);
+    const palette = first === undefined ? undefined : tokens.label[first.color.value];
+    const selected = place.id === selectedId;
     return {
       id: place.id,
       lng: place.lng,
       lat: place.lat,
-      color: first === undefined ? tokens.text.muted : tokens.label[first.color.value].marker,
-      selected: place.id === selectedId,
+      label: place.name.value,
+      color: palette?.fill ?? tokens.bg.surface,
+      textColor: palette?.text ?? tokens.text.primary,
+      borderColor: selected ? tokens.accent.main : (palette?.marker ?? tokens.border),
+      selected,
       clusterable: true,
     };
   });

@@ -39,6 +39,11 @@ export function LibraryMap() {
   const { pathname } = useLocation();
   const placeId = matchPath(paths.place(':id'), pathname)?.params.id ?? null;
 
+  const clusterStyle = useMemo(
+    () => ({ color: tokens.accent.main, textColor: tokens.accent.contrast }),
+    [tokens],
+  );
+
   const places = useMemo(() => queryPlaces(library, query), [library, query]);
   const markers = useMemo(
     () => toMarkers(places, library.labels, tokens, placeId),
@@ -85,6 +90,7 @@ export function LibraryMap() {
         <MapView
           markers={markers}
           polylines={[]}
+          clusterStyle={clusterStyle}
           padding={padding}
           onMarkerClick={onMarkerClick}
           focus={focus}

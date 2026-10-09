@@ -1,5 +1,6 @@
 import type {
   Bounds,
+  ClusterStyle,
   MapAdapter,
   MapCamera,
   MapMarker,
@@ -49,6 +50,13 @@ export class FakeMapAdapter implements MapAdapter {
   setMarkers(markers: MapMarker[]): void {
     this.markers = markers;
     this.renderMarkers();
+  }
+
+  /** 이 어댑터는 클러스터를 그리지 않아 받은 값을 기록만 한다. */
+  clusterStyle: ClusterStyle | null = null;
+
+  setClusterStyle(style: ClusterStyle): void {
+    this.clusterStyle = style;
   }
 
   setPolylines(lines: MapPolyline[]): void {
@@ -133,6 +141,8 @@ export class FakeMapAdapter implements MapAdapter {
       const label = JSON.stringify([
         marker.label ?? '',
         marker.color,
+        marker.textColor,
+        marker.borderColor,
         marker.selected,
         marker.dimmed,
         marker.clusterable,

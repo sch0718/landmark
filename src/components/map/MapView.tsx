@@ -1,13 +1,15 @@
 import Box from '@mui/material/Box';
 import { useEffect, useRef, useState } from 'react';
 import { FakeMapAdapter } from './FakeMapAdapter';
-import type {
-  Bounds,
-  MapAdapter,
-  MapCamera,
-  MapMarker,
-  MapPadding,
-  MapPolyline,
+import {
+  DEFAULT_CLUSTER_STYLE,
+  type Bounds,
+  type ClusterStyle,
+  type MapAdapter,
+  type MapCamera,
+  type MapMarker,
+  type MapPadding,
+  type MapPolyline,
 } from './MapAdapter';
 import { onNaverAuthFailure } from './load-naver-sdk';
 import { NaverMapAdapter } from './NaverMapAdapter';
@@ -23,6 +25,8 @@ type Props = {
   onReadyChange?(ready: boolean): void;
   markers: MapMarker[];
   polylines: MapPolyline[];
+  /** 클러스터 마커의 색. 없으면 어댑터 기본색. */
+  clusterStyle?: ClusterStyle;
   onMarkerClick(id: string): void;
   onBoundsChange?(b: Bounds): void;
   /** 값이 바뀔 때마다 그 지점 근처(약 1km)로 지도를 옮긴다. */
@@ -151,6 +155,12 @@ export function MapView(props: Props) {
   useEffect(() => {
     latest.current.onReadyChange?.(ready);
   }, [ready]);
+  const { color: clusterColor, textColor: clusterTextColor } =
+    props.clusterStyle ?? DEFAULT_CLUSTER_STYLE;
+  useEffect(() => {
+    if (ready)
+      adapterRef.current?.setClusterStyle({ color: clusterColor, textColor: clusterTextColor });
+  }, [ready, clusterColor, clusterTextColor]);
   useEffect(() => {
     if (ready) adapterRef.current?.setMarkers(props.markers);
   }, [ready, props.markers]);

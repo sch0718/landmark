@@ -31,6 +31,7 @@ function installSdk() {
   const listeners = new Set<unknown>();
   const overlays = new Set<Overlay>();
   const labels: HTMLElement[] = [];
+  const markerOptions: Record<string, unknown>[] = [];
   class LatLng {
     x: number;
     y: number;
@@ -61,7 +62,10 @@ function installSdk() {
     constructor(opts: Record<string, unknown>) {
       overlays.add(this);
       const icon = opts.icon as { content: HTMLElement } | undefined;
-      if (icon) labels.push(icon.content);
+      if (icon) {
+        labels.push(icon.content);
+        markerOptions.push(opts);
+      }
     }
     setMap(map: unknown) {
       if (map === null) overlays.delete(this);
@@ -110,7 +114,7 @@ function installSdk() {
       },
     },
   };
-  return { map, listeners, overlays, labels, removeListener };
+  return { map, listeners, overlays, labels, markerOptions, removeListener };
 }
 
 describe('NaverMapAdapter SDK 계약', () => {
@@ -208,5 +212,44 @@ describe('NaverMapAdapter SDK 계약', () => {
     expect(sdk.map.destroy).toHaveBeenCalledTimes(1);
     expect(adapter).toMatchObject({ markerCb: null, boundsCb: null });
     expect(Object.values(resources.snapshot()).every((count) => count === 0)).toBe(true);
+  });
+  it('선택된 마커는 더 높은 zIndex로 그린다', async () => {
+    resources = installMapResources();
+    const sdk = installSdk();
+    const adapter = new NaverMapAdapter('id');
+    resources.trackNaver(adapter);
+    const pending = adapter.mount(document.createElement('div'));
+    release();
+    await pending;
+    const base = { lng: 128, lat: 37.5, color: '#000', clusterable: false };
+    adapter.setMarkers([
+      { ...base, id: 'a', label: 'a' },
+      { ...base, id: 'b', label: 'b', selected: true },
+    ]);
+    const z = (text: string) =>
+      sdk.markerOptions.findLast(
+        (o) => (o.icon as { content: HTMLElement }).content.textContent === text,
+      )!.zIndex as number;
+    expect(z('b')).toBeGreaterThan(z('a'));
+    adapter.destroy();
+  });
+
+  it('클러스터는 setClusterStyle로 받은 색을 쓴다', async () => {
+    resources = installMapResources();
+    const sdk = installSdk();
+    const adapter = new NaverMapAdapter('id');
+    resources.trackNaver(adapter);
+    const pending = adapter.mount(document.createElement('div'));
+    release();
+    await pending;
+    adapter.setClusterStyle({ color: '#102030', textColor: '#a0b0c0' });
+    adapter.setMarkers([
+      { id: 'a', lng: 128, lat: 37.5, label: 'a', color: '#000', clusterable: true },
+      { id: 'b', lng: 128.0001, lat: 37.5001, label: 'b', color: '#000', clusterable: true },
+    ]);
+    const cluster = sdk.labels.findLast((el) => el.textContent === '2')!;
+    expect(cluster.style.background).toBe('rgb(16, 32, 48)');
+    expect(cluster.style.color).toBe('rgb(160, 176, 192)');
+    adapter.destroy();
   });
 });

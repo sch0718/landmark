@@ -13,7 +13,7 @@ const blue = makeLabel('label002', '바다뷰', 'blue', 'waves', 1);
 const at = (place: Place, lng: number, lat: number): Place => ({ ...place, lng, lat });
 
 describe('toMarkers', () => {
-  it('marker color follows first label and theme tokens', () => {
+  it('marker colors follow the first label and theme tokens', () => {
     const places = [
       makePlace(1, { labelIds: [blue.id, red.id] }),
       makePlace(2, { labelIds: [red.id] }),
@@ -21,21 +21,43 @@ describe('toMarkers', () => {
     ];
     const labels = labelsOf(red, blue);
 
+    const colorsOf = (m: { color: string; textColor?: string; borderColor?: string }) => [
+      m.color,
+      m.textColor,
+      m.borderColor,
+    ];
     const light = toMarkers(places, labels, TOKENS.pastel.light, null);
-    expect(light.map((m) => m.color)).toEqual([
-      TOKENS.pastel.light.label.blue.marker,
-      TOKENS.pastel.light.label.red.marker,
-      TOKENS.pastel.light.text.muted,
+    const l = TOKENS.pastel.light;
+    expect(light.map(colorsOf)).toEqual([
+      [l.label.blue.fill, l.label.blue.text, l.label.blue.marker],
+      [l.label.red.fill, l.label.red.text, l.label.red.marker],
+      [l.bg.surface, l.text.primary, l.border],
     ]);
 
     // 같은 장소라도 테마가 바뀌면 색이 따라 바뀐다.
     const night = toMarkers(places, labels, TOKENS.night.dark, null);
-    expect(night.map((m) => m.color)).toEqual([
-      TOKENS.night.dark.label.blue.marker,
-      TOKENS.night.dark.label.red.marker,
-      TOKENS.night.dark.text.muted,
+    const n = TOKENS.night.dark;
+    expect(night.map(colorsOf)).toEqual([
+      [n.label.blue.fill, n.label.blue.text, n.label.blue.marker],
+      [n.label.red.fill, n.label.red.text, n.label.red.marker],
+      [n.bg.surface, n.text.primary, n.border],
     ]);
     expect(night[1]!.color).not.toBe(light[1]!.color);
+  });
+
+  it('labels each marker with the place name', () => {
+    const places = [makePlace(1, { name: '안목 카페거리' }), makePlace(2, { name: '속초 횟집' })];
+    const markers = toMarkers(places, {}, TOKENS.pastel.light, null);
+    expect(markers.map((m) => m.label)).toEqual(['안목 카페거리', '속초 횟집']);
+  });
+
+  it('draws the selected marker with an accent border', () => {
+    const places = [makePlace(1, { labelIds: [red.id] }), makePlace(2)];
+    const t = TOKENS.pastel.light;
+    const markers = toMarkers(places, labelsOf(red), t, places[0]!.id);
+    expect(markers[0]).toMatchObject({ selected: true, borderColor: t.accent.main });
+    expect(markers[0]!.color).toBe(t.label.red.fill);
+    expect(markers[1]).toMatchObject({ selected: false, borderColor: t.border });
   });
 
   it('skips deleted and unknown labels when choosing the color', () => {
@@ -45,8 +67,8 @@ describe('toMarkers', () => {
       makePlace(2, { labelIds: [gone.id] }),
     ];
     const markers = toMarkers(places, labelsOf(red, gone), TOKENS.pastel.light, null);
-    expect(markers[0]!.color).toBe(TOKENS.pastel.light.label.red.marker);
-    expect(markers[1]!.color).toBe(TOKENS.pastel.light.text.muted);
+    expect(markers[0]!.color).toBe(TOKENS.pastel.light.label.red.fill);
+    expect(markers[1]!.color).toBe(TOKENS.pastel.light.bg.surface);
   });
 
   it('carries position, clusterable and the selected flag', () => {

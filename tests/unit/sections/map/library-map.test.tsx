@@ -92,14 +92,25 @@ describe('library map', () => {
     await waitFor(() => expect(fakeAdapter().fitCalls.length).toBeGreaterThan(before));
   });
 
-  it('paints markers with the first label color of the current theme', async () => {
+  it('paints markers with the first label colors of the current theme', async () => {
     await renderLibrary(sampleLibrary(), { prefs: { theme: 'night', mode: 'dark' } });
     await ready();
     const night = TOKENS.night.dark;
-    const dot = (n: number) => marker(n)!.firstElementChild as HTMLElement;
-    expect(dot(1).style.background).toBe(rgb(night.label.red.marker)); // 맛집
-    expect(dot(2).style.background).toBe(rgb(night.label.yellow.marker)); // 카페
-    expect(dot(4).style.background).toBe(rgb(night.text.muted)); // 라벨 없음
+    const pill = (n: number) => marker(n)!.firstElementChild as HTMLElement;
+    expect(pill(1).style.background).toBe(rgb(night.label.red.fill)); // 맛집
+    expect(pill(1).style.color).toBe(rgb(night.label.red.text));
+    expect(pill(2).style.background).toBe(rgb(night.label.yellow.fill)); // 카페
+    expect(pill(4).style.background).toBe(rgb(night.bg.surface)); // 라벨 없음
+    expect(pill(4).style.color).toBe(rgb(night.text.primary));
+  });
+
+  it('shows the place name on each marker', async () => {
+    await renderLibrary(sampleLibrary());
+    await ready();
+    expect(marker(1)).toHaveTextContent('닭강정');
+    expect(marker(2)).toHaveTextContent('안목 카페거리');
+    expect(marker(3)).toHaveTextContent('속초 횟집');
+    expect(marker(2)!.firstElementChild).toHaveAttribute('title', '안목 카페거리');
   });
 
   it('marker click opens detail and focuses list row', async () => {
@@ -157,7 +168,9 @@ describe('library map', () => {
       const user = userEvent.setup();
       await renderLibrary(library, { prefs: { libraryView: 'list' } });
       await ready();
-      expect(screen.queryByRole('button', { name: /^장소 20\b/ })).not.toBeInTheDocument();
+      // 지도 마커에도 이름이 있으므로 목록 안에서만 찾는다.
+      const rows = () => within(screen.getByRole('list', { name: '장소 목록' }));
+      expect(rows().queryByRole('button', { name: /^장소 20\b/ })).not.toBeInTheDocument();
       await user.click(marker(20)!);
       await waitFor(() =>
         expect(

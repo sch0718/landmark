@@ -297,6 +297,40 @@ describe('createMarkerLabelElement', () => {
     expect(el.children).toHaveLength(0);
   });
 
+  it('textColor·borderColor를 적용한다', () => {
+    const el = createMarkerLabelElement('이름', '#112233', {
+      textColor: '#445566',
+      borderColor: '#778899',
+    });
+    expect(el.style.color).toBe('rgb(68, 85, 102)');
+    expect(el.style.border).toContain('rgb(119, 136, 153)');
+  });
+
+  it('기본값은 흰 글자·흰 테두리를 유지한다', () => {
+    const el = createMarkerLabelElement('이름', '#112233');
+    expect(el.style.color).toBe('rgb(255, 255, 255)');
+    expect(el.style.border).toContain('rgb(255, 255, 255)');
+  });
+
+  it('긴 이름은 160px에서 말줄임하고 전체 이름을 title에 둔다', () => {
+    const name = '아주 아주 긴 이름의 장소'.repeat(8);
+    const el = createMarkerLabelElement(name, '#123456');
+    expect(el.style.maxWidth).toBe('160px');
+    expect(el.style.overflow).toBe('hidden');
+    expect(el.style.textOverflow).toBe('ellipsis');
+    expect(el.title).toBe(name);
+  });
+
+  it('선택된 마커는 13px 글자와 굵은 테두리를 쓴다', () => {
+    const el = createMarkerLabelElement('이름', '#123456', {
+      selected: true,
+      borderColor: '#abcdef',
+    });
+    expect(el.style.fontSize).toBe('13px');
+    expect(el.style.border).toContain('3px');
+    expect(el.style.border).toContain('rgb(171, 205, 239)');
+  });
+
   it('Fake 어댑터도 같은 라벨을 쓴다', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
