@@ -1,5 +1,4 @@
 import Box from '@mui/material/Box';
-import { regionOf } from 'src/domain/library/region';
 import { LabelBadge } from 'src/sections/library/LabelBadge';
 import { ITEM_BUTTON_SX, type PlaceItemProps } from 'src/sections/library/PlaceRow';
 import { SelectMark } from 'src/sections/library/SelectMark';
@@ -20,6 +19,7 @@ const clamp = (lines: number) =>
 /** 카드 보기: 이름 바로 아래 메모(3줄, 말줄임), 그 아래 지역과 라벨 칩. */
 export function PlaceCard({
   place,
+  region,
   labels,
   selecting,
   selected,
@@ -84,7 +84,7 @@ export function PlaceCard({
             data-part="region"
             sx={{ fontSize: 12, color: 'var(--tm-text-muted)', overflowWrap: 'anywhere' }}
           >
-            {regionOf(place.address)}
+            {region}
           </Box>
           {labels.map((label) => (
             <LabelBadge key={label.id} label={label} />

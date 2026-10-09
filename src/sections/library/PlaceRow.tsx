@@ -1,5 +1,4 @@
 import Box from '@mui/material/Box';
-import { regionOf } from 'src/domain/library/region';
 import type { Label, Place } from 'src/schema/library';
 import { labelColors } from 'src/sections/library/label-style';
 import { SelectMark } from 'src/sections/library/SelectMark';
@@ -7,6 +6,8 @@ import { usePlaceGestures } from 'src/sections/library/use-place-gestures';
 
 export type PlaceItemProps = {
   place: Place;
+  /** 표시할 지역(주소가 없으면 가까운 장소에서 빌린 지역). */
+  region: string;
   /** 살아 있는 라벨. 첫 번째가 대표 라벨. */
   labels: Label[];
   /** 선택된 장소가 하나라도 있는가. */
@@ -38,7 +39,15 @@ export const ITEM_BUTTON_SX = {
 } as const;
 
 /** 목록 보기의 한 줄: 이름 · 지역 · 대표 라벨 점. 높이는 터치 대상 기준 56px. */
-export function PlaceRow({ place, labels, selecting, selected, onOpen, onToggle }: PlaceItemProps) {
+export function PlaceRow({
+  place,
+  region,
+  labels,
+  selecting,
+  selected,
+  onOpen,
+  onToggle,
+}: PlaceItemProps) {
   const gestures = usePlaceGestures({ id: place.id, selecting, onOpen, onToggle });
   const first = labels[0];
   return (
@@ -82,7 +91,7 @@ export function PlaceRow({ place, labels, selecting, selected, onOpen, onToggle 
           color: 'var(--tm-text-secondary)',
         }}
       >
-        {regionOf(place.address)}
+        {region}
       </Box>
       <Box
         component="span"
