@@ -82,10 +82,12 @@ export function LibraryMap() {
     }
   }
 
+  // 중간 폭에서 상세 오버레이가 새로 지도를 덮으면(넓은 화면에서 줄이거나 마커를 눌러 열 때) 열어 둔 장소를
+  // 가려지지 않는 쪽으로 다시 모은다. 오버레이가 사라질 때는 장소가 계속 보이므로 지도를 그대로 둔다.
   const [seenOverlay, setSeenOverlay] = useState(detailOverlaid);
   if (seenOverlay !== detailOverlaid) {
     setSeenOverlay(detailOverlaid);
-    const open = placeId === null ? undefined : library.places[placeId];
+    const open = !detailOverlaid || placeId === null ? undefined : library.places[placeId];
     if (open !== undefined && open.deletedAt === null) {
       setFocus({ point: [open.lng, open.lat], seq: (focus?.seq ?? 0) + 1 });
     }

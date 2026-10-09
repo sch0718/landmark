@@ -94,8 +94,24 @@ describe('library map with a detail overlay', () => {
     await user.click(marker(2)!);
 
     expect(router.state.location.pathname).toBe(`/place/${id(2)}`);
-    expect(screen.getByRole('button', { name: '닫기' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: '닫기' })).toBeInTheDocument();
     await waitFor(() => expectUncovered(128.95));
+  });
+
+  it('leaves the map alone when the overlay goes away', async () => {
+    const { router, setWidth } = await renderLibrary(sampleLibrary(), { width: 1100 });
+    await ready();
+    await router.navigate(`/place/${id(2)}`);
+    await waitFor(() => expectUncovered(128.95));
+    const panned = { center: [128.9, 37.7] as [number, number], zoom: 12 };
+    fakeAdapter().setCamera(panned);
+
+    setWidth(1280);
+
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: '닫기' })).not.toBeInTheDocument(),
+    );
+    expect(fakeAdapter().getCamera()).toEqual(panned);
   });
 });
 
@@ -289,15 +305,16 @@ describe('library map', () => {
     const user = userEvent.setup();
     const { router } = await renderLibrary(sampleLibrary(), { prefs: { libraryView: 'list' } });
     await ready();
-    const open = () =>
-      user.click(
-        within(screen.getByRole('list', { name: '장소 목록' })).getByRole('button', {
-          name: /안목 카페거리/,
-        }),
-      );
+    const row = () =>
+      within(screen.getByRole('list', { name: '장소 목록' })).getByRole('button', {
+        name: /안목 카페거리/,
+      });
+    const open = () => user.click(row());
     await open();
     await waitFor(() => expectFocusedOn([128.95, 37.77]));
     await router.navigate('/');
+    // 라우터 갱신은 트랜지션으로 그려진다. 닫힌 상태가 그려지기 전에 다시 누르면 두 이동이 합쳐진다.
+    await waitFor(() => expect(row()).not.toHaveAttribute('aria-current'));
     fakeAdapter().setCamera({ center: [127, 36], zoom: 9 });
     await open();
     await waitFor(() => expectFocusedOn([128.95, 37.77]));
