@@ -113,6 +113,26 @@ describe('library map', () => {
     expect(marker(2)!.firstElementChild).toHaveAttribute('title', '안목 카페거리');
   });
 
+  it('keeps the selected place on the map even when the filter hides it', async () => {
+    const user = userEvent.setup();
+    const { router } = await renderLibrary(sampleLibrary(), { prefs: { libraryView: 'list' } });
+    await ready();
+    // 미분류만 보는 중에 카페 장소를 연다.
+    await user.click(
+      within(screen.getByRole('group', { name: '라벨' })).getByRole('button', { name: /^미분류/ }),
+    );
+    await waitFor(() => expect(shownMarkers().sort()).toEqual([id(4), id(5)]));
+    await router.navigate(`/place/${id(2)}`);
+    await waitFor(() => expect(marker(2)).toBeInTheDocument());
+    expect(marker(2)).toHaveAttribute('aria-pressed', 'true');
+    expect(marker(2)).toHaveTextContent('안목 카페거리');
+    expect(shownMarkers().sort()).toEqual([id(2), id(4), id(5)]);
+
+    // 닫으면 다시 필터대로 돌아온다.
+    await router.navigate('/');
+    await waitFor(() => expect(shownMarkers().sort()).toEqual([id(4), id(5)]));
+  });
+
   it('marker click opens detail and focuses list row', async () => {
     const scrolled = vi.fn();
     stubElementMethod('scrollIntoView', scrolled);

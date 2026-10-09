@@ -45,10 +45,16 @@ export function LibraryMap() {
   );
 
   const places = useMemo(() => queryPlaces(library, query), [library, query]);
-  const markers = useMemo(
-    () => toMarkers(places, library.labels, tokens, placeId),
-    [places, library.labels, tokens, placeId],
-  );
+  const markers = useMemo(() => {
+    const shown = toMarkers(places, library.labels, tokens, placeId);
+    // 필터에 가려진 장소를 열어 두었다면 그 장소만은 개별 마커로 항상 보인다.
+    const open = placeId === null ? undefined : library.places[placeId];
+    if (open === undefined || open.deletedAt !== null || places.some((p) => p.id === open.id)) {
+      return shown;
+    }
+    const [hidden] = toMarkers([open], library.labels, tokens, placeId);
+    return [...shown, { ...hidden!, clusterable: false }];
+  }, [places, library.places, library.labels, tokens, placeId]);
 
   // 선택이 바뀌면 지도를 그 장소로 옮긴다(렌더 중 상태 갱신). `seq`를 올려 같은 장소도 다시 움직인다.
   const [seen, setSeen] = useState<string | null>(null);
