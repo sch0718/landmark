@@ -4,6 +4,7 @@ import { IdGen } from 'src/services/id-gen';
 import { LegacyTripSource } from 'src/services/legacy-trip-source';
 import { LibraryStore } from 'src/services/library-store';
 import { PrefsStore } from 'src/services/prefs-store';
+import { ShareTemplate } from 'src/services/share-template';
 
 /** 앱 서비스 목록. 서비스를 늘리면 여기에 더한다. */
 export const AppLayer = Layer.mergeAll(
@@ -11,6 +12,7 @@ export const AppLayer = Layer.mergeAll(
   PrefsStore.layer,
   IdGen.layer,
   LegacyTripSource.layer,
+  ShareTemplate.layer,
 );
 
 export type AppServices = Layer.Success<typeof AppLayer>;

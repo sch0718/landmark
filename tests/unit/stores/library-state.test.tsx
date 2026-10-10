@@ -13,6 +13,7 @@ import { IdGen } from 'src/services/id-gen';
 import { LegacyTripSource } from 'src/services/legacy-trip-source';
 import { LIBRARY_KEY, LibraryStore } from 'src/services/library-store';
 import { PrefsStore } from 'src/services/prefs-store';
+import { ShareTemplate } from 'src/services/share-template';
 import {
   libraryAtom,
   libraryLoadAtom,
@@ -99,6 +100,7 @@ function setup(
     PrefsStore.layerWith({ storage }),
     IdGen.layerSequence(options.ids ?? ['label001']),
     LegacyTripSource.layerWith({ storage, fetch: (...args) => globalThis.fetch(...args) }),
+    ShareTemplate.layer,
   );
   const runtime = ManagedRuntime.make(
     options.clock === true ? Layer.mergeAll(layers, TestClock.layer()) : layers,
