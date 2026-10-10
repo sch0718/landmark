@@ -1,7 +1,8 @@
 # trip-map 설계 — 장소를 HTML 파일 하나로 내보내기
 
 - 작성일: 2026-10-11
-- 상태: 초안 r2 (사용자 검토 대기)
+- 상태: r3 (구현 계획 작성)
+- 개정: 2026-10-11 r3 — 계획 작성 중 정리. 틀은 `public/share-viewer.html`로 빌드하고 앱이 내보낼 때 `fetch`로 받는다(생성 파일을 `?raw`로 import하면 파일이 없을 때 런타임을 import하는 모든 모듈의 변환이 실패한다). `init` 메시지는 라벨 색 이름만 보내고 지도 페이지가 파스텔 토큰을 직접 번들한다.
 - 개정: 2026-10-11 r2 — PR #21 리뷰 반영. 데이터 삽입 이스케이프 규칙을 바로잡고(§4.1), 지도를 `file://` 안의 OSM 직접 요청에서 GitHub Pages(`sch0718/landmark`)에 올린 지도 페이지를 iframe으로 띄우는 방식으로 바꿨다(§2.4, §4.5, §4.6). `file://` 문서는 Referer를 보내지 않아 OSM 공용 타일 정책(유효한 Referer 요구)을 지킬 수 없기 때문이다.
 - 관련 문서: `2026-10-08-place-library-design.md`(하위 프로젝트 1). 이 기능은 하위 프로젝트 4(공유)의 일부를 먼저 만드는 것이다. 4번의 "가져오기·병합"은 이 문서 범위가 아니다.
 
@@ -174,11 +175,11 @@ HTML 안의 데이터 블록 하나:
 | `src/share-map/index.html`, `main.ts`, `map.ts`, `styles.css` | 지도 페이지(GitHub Pages에 배포). Leaflet 지도, 마커, 타일 실패 판단, 메시지 처리 |
 | `src/share-protocol.ts` | 파일 ↔ 지도 페이지 메시지 타입과 검사 함수(양쪽이 함께 쓴다) |
 | `vite.map.config.ts` | 지도 페이지 빌드(`dist-map/`, 상대 경로 `base: './'`) |
-| `src/generated/share-viewer.html` | 빌드 결과(gitignore) |
+| `public/share-viewer.html` | 빌드 결과(gitignore). 앱 배포에 함께 실린다 |
 | `src/schema/share.ts` | `ShareDocSchema`, `ShareDoc` 타입 |
 | `src/domain/share/build-share.ts` | `buildShareDoc(library, placeIds, { title, includeMemo, now })` 순수 함수 |
 | `src/domain/share/inject.ts` | `injectShareDoc(template, doc)`, `shareFileName(title, now)` |
-| `src/services/share-template.ts` | `ShareTemplate` 서비스(`Context.Service`): `load: Effect<string, ShareTemplateError>`. 실제 레이어는 `import('src/generated/share-viewer.html?raw')`를 동적으로 부른다. 테스트는 가짜 레이어 |
+| `src/services/share-template.ts` | `ShareTemplate` 서비스(`Context.Service`): `load: Effect<string, ShareTemplateError>`. 실제 레이어는 `fetch(import.meta.env.BASE_URL + 'share-viewer.html')`로 받아 세션 동안 캐시한다(실패는 캐시하지 않는다). 테스트는 가짜 레이어 |
 | `src/sections/share-export/ExportHtmlDialog.tsx` | 내보내기 창 |
 | `src/sections/share-export/use-export-targets.ts` | 선택/보이는 목록 → 내보낼 장소 id와 대상 문구 |
 
@@ -197,7 +198,7 @@ HTML 안의 데이터 블록 하나:
 
 - `build:viewer` 스크립트: `vite build --config vite.viewer.config.ts`.
 - `dev`, `build`, `build:ci`, `test:e2e`, `test:e2e:ci`는 `build:viewer`를 먼저 실행한다.
-- 타입 검사·단위 테스트는 생성 파일이 없어도 돈다(`?raw` 모듈 타입 선언, 가짜 `ShareTemplate`).
+- 타입 검사·단위 테스트는 생성 파일이 없어도 돈다(앱은 틀을 import하지 않고 런타임에 받는다, 테스트는 가짜 `ShareTemplate`).
 - 보기 화면은 생성 HTML 하나에 JS·CSS가 모두 들어간다. 파일이 직접 하는 외부 요청은 지도 iframe(지도 페이지)과 사용자가 누른 링크뿐이다.
 - `build:map` 스크립트: `vite build --config vite.map.config.ts`. 결과 `dist-map/`(gitignore)은 §4.6으로 배포한다. `build:ci`에 포함해 CI에서 깨지지 않는지 확인한다.
 
@@ -210,7 +211,7 @@ HTML 안의 데이터 블록 하나:
 | 방향 | `kind` | 내용 |
 |---|---|---|
 | 지도 → 파일 | `ready` | 지도 페이지가 메시지를 받을 준비가 됨. 지원하는 최고 버전 `maxV` 포함 |
-| 파일 → 지도 | `init` | `places`(id·이름·경도·위도·라벨 색·라벨 유무), 지도 모양 토큰(라이트/다크 결정은 지도 페이지가 `prefers-color-scheme`로) |
+| 파일 → 지도 | `init` | `places`(id·이름·경도·위도·첫 라벨의 색 이름 또는 `null`). 색 값과 라이트/다크는 지도 페이지가 번들한 파스텔 토큰과 `prefers-color-scheme`로 정한다 |
 | 파일 → 지도 | `focus` | `placeId` 또는 `null`: 그 장소로 이동(줌 16)·강조, `null`은 강조 해제 |
 | 파일 → 지도 | `filter` | `placeIds`: 보일 장소 id 목록 |
 | 지도 → 파일 | `select` | `placeId`: 마커를 누름 |
