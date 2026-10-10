@@ -1,0 +1,38 @@
+/* 지도 페이지는 iframe을 꽉 채운다. 마커 색은 map.ts가 파스텔 토큰으로 칠한다. */
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  font-family:
+    system-ui,
+    -apple-system,
+    'Apple SD Gothic Neo',
+    'Noto Sans KR',
+    sans-serif;
+  background: #fafaf7;
+  color: #18181b;
+}
+
+#root {
+  height: 100%;
+}
+
+.direct-open {
+  margin: 0;
+  padding: 24px 16px;
+  text-align: center;
+}
+
+@media (prefers-color-scheme: dark) {
+  body {
+    background: #111113;
+    color: #f4f4f5;
+  }
+
+  .leaflet-container {
+    background: #1b1b1f;
+  }
+}
