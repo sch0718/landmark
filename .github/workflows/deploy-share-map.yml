@@ -1,0 +1,73 @@
+name: Deploy share map
+
+# 내보낸 HTML 파일이 iframe으로 띄우는 지도 페이지를 sch0718/landmark(GitHub Pages)에 배포한다.
+# 설계: docs/superpowers/specs/2026-10-11-html-share-export-design.md §4.6
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/share-map/**'
+      - 'src/share-protocol.ts'
+      - 'src/schema/label-colors.ts'
+      - 'src/theme/tokens/**'
+      - 'src/components/map/marker-label.ts'
+      - 'vite.map.config.ts'
+      - 'package.json'
+      - 'yarn.lock'
+      - '.github/workflows/deploy-share-map.yml'
+  workflow_dispatch:
+
+# 이 저장소는 읽기만 한다. landmark 푸시는 배포 키(LANDMARK_DEPLOY_KEY)로 인증한다.
+permissions:
+  contents: read
+
+# 배포가 겹치면 차례로 실행한다. 진행 중인 배포는 취소하지 않는다(landmark 푸시가 중간에 끊기지 않게).
+concurrency:
+  group: deploy-share-map
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: yarn
+
+      - name: Install
+        run: yarn install --frozen-lockfile
+
+      - name: Build (build:map)
+        run: yarn build:map
+
+      # 이 체크아웃의 ssh-key가 아래 push 인증도 맡는다.
+      - name: Check out landmark
+        uses: actions/checkout@v4
+        with:
+          repository: sch0718/landmark
+          ref: main
+          ssh-key: ${{ secrets.LANDMARK_DEPLOY_KEY }}
+          path: landmark
+
+      # .git과 README.md만 남기고 비운 뒤 새 빌드 결과를 복사한다(삭제된 파일이 남지 않게).
+      - name: Replace landmark contents with dist-map
+        run: |
+          find landmark -mindepth 1 -maxdepth 1 ! -name .git ! -name README.md -exec rm -rf {} +
+          cp -R dist-map/. landmark/
+          touch landmark/.nojekyll
+
+      - name: Commit and push
+        working-directory: landmark
+        run: |
+          git add -A
+          if git diff --cached --quiet; then
+            echo "변경 없음: 배포할 내용이 없습니다."
+            exit 0
+          fi
+          git -c user.name='trip-map deploy' -c user.email='actions@users.noreply.github.com' \
+            commit -m "deploy: trip-map ${GITHUB_SHA::7}"
+          git push origin HEAD:main
