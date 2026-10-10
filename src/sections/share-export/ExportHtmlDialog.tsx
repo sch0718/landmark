@@ -8,14 +8,16 @@ import DialogTitle from '@mui/material/DialogTitle';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import { Effect } from 'effect';
 import { useAtomValue } from 'jotai';
-import { useId, useRef, useState } from 'react';
+import { useId, useLayoutEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { downloadText } from 'src/lib/download-text';
 import { startEffect } from 'src/lib/effect/runtime';
 import type { ExportTargets } from 'src/sections/share-export/export-targets';
 import { makeShareHtml } from 'src/sections/share-export/make-share-html';
 import { SHARE_EXPORT_FAILED, ShareTemplateUnavailable } from 'src/services/errors';
+import { ShareTemplate } from 'src/services/share-template';
 import { libraryAtom } from 'src/stores/library-state';
 
 const TITLE_MAX = 60;
@@ -41,6 +43,14 @@ const isAbort = (e: unknown): boolean =>
   typeof e === 'object' && e !== null && 'name' in e && e.name === 'AbortError';
 
 /**
+ * 틀을 미리 받아 둔다. 성공은 `ShareTemplate`가 캐시하고, 실패는 버린다(누를 때 다시 받으며 안내한다).
+ * 공유 창은 사용자 동작 직후에만 열 수 있어서, 누른 뒤에 틀을 받느라 늦으면 느린 망에서 첫 공유가 실패한다.
+ */
+const prefetchTemplate = Effect.gen(function* () {
+  yield* (yield* ShareTemplate).load;
+}).pipe(Effect.ignore);
+
+/**
  * 만들기 실패를 창 안 문구로 바꾼다. 틀을 받지 못한 것(오프라인 등)은 흔한 일이라 문구만 보이고,
  * 그 밖의 실패(`ShareDocInvalid` 같은 프로그램 오류)는 같은 안내를 보이되 콘솔에 남긴다.
  */
@@ -54,6 +64,7 @@ function failureMessage(e: unknown): string {
  * 장소를 HTML 파일 하나로 내보내는 창(스펙 §3.2·§3.4). 파일로 저장하거나, 휴대폰처럼 파일 공유가
  * 되는 기기에서는 시스템 공유 창으로 보낸다. 열 때마다 제목·메모 체크·오류를 `targets` 기준으로
  * 초기화하고, 만드는 동안에는 두 버튼을 막아 두 번 저장되지 않게 한다.
+ * 열고 닫을 때마다 실행 번호를 올려, 그 전에 시작한 작업은 끝나도 저장·공유·닫기·안내를 하지 않는다.
  */
 export function ExportHtmlDialog({ open, onClose, targets }: Props) {
   const library = useAtomValue(libraryAtom);
@@ -65,6 +76,8 @@ export function ExportHtmlDialog({ open, onClose, targets }: Props) {
   const [busy, setBusy] = useState(false);
   // 상태 갱신이 그려지기 전에 들어온 두 번째 클릭도 막는다.
   const busyRef = useRef(false);
+  // 지금 열린 창의 실행 번호. 작업은 시작할 때 번호를 기억하고, 끝났을 때 번호가 바뀌었으면 아무것도 하지 않는다.
+  const runIdRef = useRef(0);
 
   // 열릴 때 초기화한다(렌더 중 상태 갱신).
   const [wasOpen, setWasOpen] = useState(open);
@@ -75,8 +88,17 @@ export function ExportHtmlDialog({ open, onClose, targets }: Props) {
       setIncludeMemo(true);
       setError(null);
       setShareable(canShareFiles());
+      setBusy(false);
     }
   }
+
+  // 열고 닫을 때: 앞 작업을 무효로 하고 작업 중 표시를 푼다. 그려진 직후(레이아웃 단계)라 앞 작업이
+  // 그 사이에 끝나 저장하는 일이 없다. 열 때는 틀을 미리 받는다.
+  useLayoutEffect(() => {
+    runIdRef.current += 1;
+    busyRef.current = false;
+    if (open) void startEffect(prefetchTemplate);
+  }, [open]);
 
   const trimmed = title.trim();
   // 서로게이트 쌍(이모지 등)을 한 글자로 센다.
@@ -87,6 +109,8 @@ export function ExportHtmlDialog({ open, onClose, targets }: Props) {
 
   const run = async (kind: 'save' | 'share') => {
     if (busyRef.current || disabled) return;
+    const runId = runIdRef.current;
+    const stale = () => runIdRef.current !== runId;
     busyRef.current = true;
     setBusy(true);
     setError(null);
@@ -97,9 +121,10 @@ export function ExportHtmlDialog({ open, onClose, targets }: Props) {
           makeShareHtml(library, targets.ids, { title: trimmed, includeMemo, now: new Date() }),
         );
       } catch (e) {
-        setError(failureMessage(e));
+        if (!stale()) setError(failureMessage(e));
         return;
       }
+      if (stale()) return;
       if (kind === 'save') {
         downloadText(made.html, made.fileName, 'text/html;charset=utf-8');
       } else {
@@ -107,15 +132,19 @@ export function ExportHtmlDialog({ open, onClose, targets }: Props) {
         try {
           await navigator.share({ files: [file], title: trimmed });
         } catch (e) {
-          if (!isAbort(e)) setError(SHARE_FAILED);
+          if (!stale() && !isAbort(e)) setError(SHARE_FAILED);
           return;
         }
+        if (stale()) return;
       }
       onClose();
       toast(DONE);
     } finally {
-      busyRef.current = false;
-      setBusy(false);
+      // 창을 다시 열었으면 작업 중 표시는 이미 새 창의 것이다(건드리지 않는다).
+      if (!stale()) {
+        busyRef.current = false;
+        setBusy(false);
+      }
     }
   };
 

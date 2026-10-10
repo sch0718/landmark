@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SHARE_DATA_PLACEHOLDER } from 'src/domain/share/inject';
@@ -271,6 +271,88 @@ describe('export html dialog', () => {
     expect(await within(d).findByRole('alert')).toHaveTextContent(SHARE_FAILED);
     expect(toastMock).not.toHaveBeenCalled();
     expect(within(d).getByRole('button', { name: '공유' })).toBeEnabled();
+  });
+
+  it('opening the dialog starts loading the template, so the click uses the cached one', async () => {
+    const user = userEvent.setup();
+    const template = vi.fn(() => TEMPLATE);
+    await renderLibrary(sampleLibrary(), { prefs: LIST, shareTemplate: template });
+    expect(template).not.toHaveBeenCalled();
+    await openFromToolbar(user);
+    await waitFor(() => expect(template).toHaveBeenCalledTimes(1));
+
+    await user.click(saveButton());
+    await waitFor(() => expect(downloadMock).toHaveBeenCalledTimes(1));
+    expect(template).toHaveBeenCalledTimes(1);
+  });
+
+  it('share after the prefetch calls navigator.share without fetching again', async () => {
+    const user = userEvent.setup();
+    const { share } = stubShare(() => Promise.resolve());
+    const template = vi.fn(() => TEMPLATE);
+    await renderLibrary(sampleLibrary(), { prefs: LIST, shareTemplate: template });
+    const d = await openFromToolbar(user);
+    await waitFor(() => expect(template).toHaveBeenCalledTimes(1));
+    await user.click(within(d).getByRole('button', { name: '공유' }));
+    await waitFor(() => expect(share).toHaveBeenCalledTimes(1));
+    expect(template).toHaveBeenCalledTimes(1);
+  });
+
+  /** 틀 받기를 붙잡아 두는 문. `open()`을 부르면 기다리던 받기가 모두 `body`로 끝난다. */
+  function gatedTemplate(body: string | Error) {
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    return {
+      template: () => gate.then(() => body),
+      open: async () => {
+        await act(async () => {
+          release();
+          await new Promise((r) => setTimeout(r, 20));
+        });
+      },
+    };
+  }
+
+  it('reopening while a save is running: the old run neither downloads nor closes the new dialog', async () => {
+    const user = userEvent.setup();
+    const gated = gatedTemplate(TEMPLATE);
+    await renderLibrary(sampleLibrary(), { prefs: LIST, shareTemplate: gated.template });
+    await openFromToolbar(user);
+    await user.click(saveButton());
+    expect(saveButton()).toBeDisabled();
+
+    await user.click(within(dialog()).getByRole('button', { name: '닫기' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await openFromToolbar(user);
+    // 새로 연 창은 작업 중이 아니다.
+    expect(saveButton()).toBeEnabled();
+
+    await gated.open();
+    expect(downloadMock).not.toHaveBeenCalled();
+    expect(toastMock).not.toHaveBeenCalled();
+    expect(dialog()).toBeInTheDocument();
+    expect(saveButton()).toBeEnabled();
+
+    await user.click(saveButton());
+    await waitFor(() => expect(downloadMock).toHaveBeenCalledTimes(1));
+    expect(toastMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('reopening while a save is running: a late failure of the old run shows no error', async () => {
+    const user = userEvent.setup();
+    const gated = gatedTemplate(new Error('offline'));
+    await renderLibrary(sampleLibrary(), { prefs: LIST, shareTemplate: gated.template });
+    await openFromToolbar(user);
+    await user.click(saveButton());
+    await user.click(within(dialog()).getByRole('button', { name: '닫기' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await openFromToolbar(user);
+
+    await gated.open();
+    expect(within(dialog()).queryByRole('alert')).not.toBeInTheDocument();
+    expect(saveButton()).toBeEnabled();
   });
 
   it('bulk bar export uses the selection', async () => {

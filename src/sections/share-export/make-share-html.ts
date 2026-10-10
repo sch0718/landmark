@@ -9,8 +9,9 @@ import { ShareTemplate } from 'src/services/share-template';
 
 /**
  * 고른 장소로 공유 파일(HTML 문자열과 파일 이름)을 만든다. `count`는 실제로 담긴 장소 수.
- * 장소가 0곳이어도 만든다(막는 것은 내보내기 창의 몫). 검증 실패는 삼키지 않고 실패로 둬
- * 최상위 `ErrorReporter`가 보고하게 한다.
+ * 장소가 0곳이어도 만든다(막는 것은 내보내기 창의 몫). 검증 실패는 삼키지 않고 `ShareDocInvalid`
+ * 실패로 돌려준다. `startEffect`는 실패를 보고하지 않으므로, 내보내기 창이 받아서 창 안에 안내 문구를
+ * 보이고 틀 실패가 아닌 것(프로그램 오류)은 `console.error`로 남긴다.
  */
 export function makeShareHtml(
   lib: Library,
