@@ -23,6 +23,8 @@ import { CardsView } from 'src/sections/library/views/CardsView';
 import { ListView } from 'src/sections/library/views/ListView';
 import { TilesView } from 'src/sections/library/views/TilesView';
 import type { LibraryView } from 'src/sections/library/ViewSwitcher';
+import { ExportHtmlDialog } from 'src/sections/share-export/ExportHtmlDialog';
+import { exportTargets } from 'src/sections/share-export/export-targets';
 import { libraryAtom, useLibraryAction } from 'src/stores/library-state';
 import { focusPlaceAtom } from 'src/stores/library-ui';
 import { prefsAtom, setPrefsAtom } from 'src/stores/prefs-state';
@@ -51,6 +53,7 @@ export function LibraryPage() {
   const requestListScroll = useSetAtom(focusPlaceAtom);
   const [scrollElement, setScrollElement] = useState<HTMLElement | null>(null);
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
+  const [exporting, setExporting] = useState(false);
 
   const view = prefs.libraryView;
   const labels = useMemo(() => liveLabels(library), [library]);
@@ -69,6 +72,11 @@ export function LibraryPage() {
   const selectedIds = selectedPlaces.map((p) => p.id);
   const attached = labels.filter((l) =>
     selectedPlaces.some((p) => p.labelIds.value.includes(l.id)),
+  );
+  // 도구줄·하단 바의 "내보내기"가 함께 쓰는 대상. 고른 것이 있으면 그것, 없으면 보이는 전부.
+  const targets = useMemo(
+    () => exportTargets(places, [...selected], query, labels),
+    [places, selected, query, labels],
   );
 
   // 장소가 열리면(목록·지도·주소로) 목록이 그 행으로 스크롤한다. 이미 보이면 움직이지 않는다.
@@ -139,6 +147,7 @@ export function LibraryPage() {
           regions={regions}
           view={view}
           onViewChange={changeView}
+          onExport={() => setExporting(true)}
         />
       </Box>
       <Box ref={setScrollElement} sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
@@ -164,9 +173,11 @@ export function LibraryPage() {
           onAdd={attach}
           onRemove={detach}
           onDelete={() => void remove()}
+          onExport={() => setExporting(true)}
           onClear={() => setSelected(new Set())}
         />
       )}
+      <ExportHtmlDialog open={exporting} onClose={() => setExporting(false)} targets={targets} />
     </Box>
   );
 }

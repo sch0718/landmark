@@ -2,7 +2,7 @@ import Box from '@mui/material/Box';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import { useState, type MouseEvent, type ReactNode } from 'react';
-import { LabelGlyph, TagsIcon, TrashIcon, XIcon } from 'src/components/icons';
+import { LabelGlyph, ShareIcon, TagsIcon, TrashIcon, XIcon } from 'src/components/icons';
 import type { Label } from 'src/schema/library';
 import { labelColors } from 'src/sections/library/label-style';
 
@@ -15,6 +15,8 @@ type Props = {
   onAdd(labelId: string): void;
   onRemove(labelId: string): void;
   onDelete(): void;
+  /** 고른 장소로 내보내기 창을 연다. */
+  onExport(): void;
   onClear(): void;
 };
 
@@ -105,8 +107,17 @@ function BarButton({
   );
 }
 
-/** 선택 모드의 하단 바: 선택 수와 라벨 붙이기·떼기·삭제. */
-export function BulkBar({ count, labels, attached, onAdd, onRemove, onDelete, onClear }: Props) {
+/** 선택 모드의 하단 바: 선택 수와 라벨 붙이기·떼기·내보내기·삭제. */
+export function BulkBar({
+  count,
+  labels,
+  attached,
+  onAdd,
+  onRemove,
+  onDelete,
+  onExport,
+  onClear,
+}: Props) {
   const [menu, setMenu] = useState<{ kind: 'add' | 'remove'; anchor: HTMLElement } | null>(null);
   return (
     <Box
@@ -141,6 +152,10 @@ export function BulkBar({ count, labels, attached, onAdd, onRemove, onDelete, on
         onClick={(event) => setMenu({ kind: 'remove', anchor: event.currentTarget })}
       >
         라벨 떼기
+      </BarButton>
+      <BarButton onClick={onExport}>
+        <ShareIcon aria-hidden="true" />
+        내보내기
       </BarButton>
       <BarButton onClick={onDelete}>
         <TrashIcon aria-hidden="true" />

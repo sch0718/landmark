@@ -53,8 +53,11 @@ export async function renderApp(
     path?: string;
     storage?: Storage;
     ids?: string[];
-    /** 공유 틀 본문(문자열) 또는 틀 받기 실패(Error). 없으면 자리 문자열이 하나뿐인 최소 틀. */
-    shareTemplate?: string | Error;
+    /**
+     * 공유 틀 본문(문자열) 또는 틀 받기 실패(Error). 없으면 자리 문자열이 하나뿐인 최소 틀.
+     * 함수면 받을 때마다 불러 결과를 바꿀 수 있다(실패 뒤 재시도 등).
+     */
+    shareTemplate?: string | Error | (() => string | Error);
   } = {},
 ) {
   const { path = '/', storage, ids = [], shareTemplate = DEFAULT_SHARE_TEMPLATE } = options;
@@ -67,8 +70,9 @@ export async function renderApp(
         LegacyTripSource.layerWith({ storage, fetch: (...args) => globalThis.fetch(...args) }),
         ShareTemplate.layerWith({
           fetch: async () => {
-            if (shareTemplate instanceof Error) throw shareTemplate;
-            return new Response(shareTemplate);
+            const body = typeof shareTemplate === 'function' ? shareTemplate() : shareTemplate;
+            if (body instanceof Error) throw body;
+            return new Response(body);
           },
           url: '/share-viewer.html',
         }),
