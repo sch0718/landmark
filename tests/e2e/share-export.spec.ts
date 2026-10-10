@@ -111,6 +111,13 @@ test.describe('HTML 내보내기 파일', () => {
     await expect(markerLabel(gangneung)).toHaveCSS('border-top-width', '3px');
     await expect(markerLabel(jeju)).toHaveCSS('border-top-width', '2px');
 
+    // 카드로 고른 뒤 다른 마커 클릭 → 그 마커로 강조가 옮겨 가고, 앞 마커는 풀린다.
+    // 지도는 강릉에 줌 16으로 가 있어 제주 마커는 화면 밖이다(DOM에는 있다). 클릭 이벤트를 직접 보낸다.
+    await markerLabel(jeju).dispatchEvent('click');
+    await expect(cardNamed(viewer, jeju)).toHaveAttribute('aria-current', 'true');
+    await expect(markerLabel(jeju)).toHaveCSS('border-top-width', '3px');
+    await expect(markerLabel(gangneung)).toHaveCSS('border-top-width', '2px');
+
     // 네이버 지도 링크.
     const href = await cards
       .first()
@@ -142,7 +149,7 @@ test.describe('HTML 내보내기 파일', () => {
     ).toBeVisible();
   });
 
-  test('틀 크기', () => {
+  test('@smoke 틀 크기', () => {
     expect(statSync(SHARE_VIEWER_FILE).size).toBeLessThanOrEqual(TEMPLATE_LIMIT);
   });
 });

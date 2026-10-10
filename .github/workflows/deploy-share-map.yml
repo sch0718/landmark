@@ -28,6 +28,8 @@ concurrency:
 
 jobs:
   deploy:
+    # 다른 브랜치에서 workflow_dispatch로 돌려도 공유 지도 페이지에 올라가지 않게 main에서만 배포한다.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -56,6 +58,8 @@ jobs:
       # .git과 README.md만 남기고 비운 뒤 새 빌드 결과를 복사한다(삭제된 파일이 남지 않게).
       - name: Replace landmark contents with dist-map
         run: |
+          # 빌드 결과가 없으면 지우기 전에 멈춘다(빈 내용으로 배포되지 않게).
+          test -f dist-map/index.html
           find landmark -mindepth 1 -maxdepth 1 ! -name .git ! -name README.md -exec rm -rf {} +
           cp -R dist-map/. landmark/
           touch landmark/.nojekyll
