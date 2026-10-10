@@ -52,9 +52,11 @@ export function applyTheme(doc: Document): void {
   doc.head.append(style);
 }
 
-/** 네이버 지도에서 장소를 여는 주소. sid가 있으면 장소 페이지, 없으면 이름+주소 검색. */
+/** 네이버 지도에서 장소를 여는 주소. sid가 있으면 장소 페이지, 없으면 이름+주소 검색. 값은 늘 인코딩한다. */
 export function naverUrl(place: SharePlace): string {
-  if (place.naverSid !== undefined) return `https://map.naver.com/p/entry/place/${place.naverSid}`;
+  if (place.naverSid !== undefined) {
+    return `https://map.naver.com/p/entry/place/${encodeURIComponent(place.naverSid)}`;
+  }
   const query = place.address === '' ? place.name : `${place.name} ${place.address}`;
   return `https://map.naver.com/p/search/${encodeURIComponent(query)}`;
 }
@@ -132,10 +134,10 @@ export function renderViewer(
     article.tabIndex = 0;
 
     article.append(el(d, 'h2', place.name));
+    // 앱과 같이 장소의 labelIds 순서로 보인다(첫 라벨이 대표 — 마커 색도 이것을 쓴다).
     const placeLabels = place.labelIds
       .map((id) => labelById.get(id))
-      .filter((l): l is ShareLabel => l !== undefined)
-      .sort((a, b) => a.order - b.order);
+      .filter((l): l is ShareLabel => l !== undefined);
     if (placeLabels.length > 0) {
       const chips = el(d, 'div', undefined, 'chips');
       for (const label of placeLabels) chips.append(labelChip(d, label));

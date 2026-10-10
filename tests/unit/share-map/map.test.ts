@@ -121,6 +121,40 @@ describe('createShareMap', () => {
     expect(map.getZoom()).toBe(16);
   });
 
+  it('마커를 누르면 그 마커를 강조하고(화면은 그대로) 앞서 강조한 마커는 푼다', () => {
+    const { handle, map, post, labelOf, iconOf } = setup();
+    handle.init([A, B, C]);
+    handle.focus('a');
+    const zoom = map.getZoom();
+    const center = map.getCenter();
+
+    iconOf('정자 빵집').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(labelOf('정자 빵집').style.borderWidth).toBe('3px');
+    expect(labelOf('서혜커피').style.borderWidth).toBe('2px');
+    const baseZ = (p: MapPlace) => Math.round(map.latLngToLayerPoint([p.lat, p.lng]).y);
+    expect(Number(iconOf('정자 빵집').style.zIndex)).toBe(baseZ(C) + 1000);
+    expect(Number(iconOf('서혜커피').style.zIndex)).toBe(baseZ(A));
+    expect(map.getZoom()).toBe(zoom);
+    expect(map.getCenter().equals(center)).toBe(true);
+    expect(post).toHaveBeenCalledWith({ kind: 'select', placeId: 'c' });
+  });
+
+  it('init: 몇 미터 떨어진 여러 곳도 줌 16을 넘지 않는다', () => {
+    const { handle, map } = setup();
+    // 위도 0.00005도 ≈ 5.5m
+    handle.init([A, { ...C, lng: A.lng, lat: A.lat + 0.00005 }]);
+    expect(map.getZoom()).toBeLessThanOrEqual(FOCUS_ZOOM);
+  });
+
+  it('init: 크기가 0일 때 받은 몇 미터 떨어진 곳도, 크기가 생긴 뒤 다시 맞출 때 줌 16을 넘지 않는다', () => {
+    const { handle, map, size } = setup({ size: { w: 0, h: 0 } });
+    handle.init([A, { ...C, lng: A.lng, lat: A.lat + 0.00005 }]);
+    size.w = 800;
+    size.h = 600;
+    window.dispatchEvent(new Event('resize'));
+    expect(map.getZoom()).toBeLessThanOrEqual(FOCUS_ZOOM);
+  });
+
   it('focus: 모르는 id는 지도를 움직이지 않는다', () => {
     const { handle, map } = setup();
     handle.init([A, B, C]);

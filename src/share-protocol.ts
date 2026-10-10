@@ -4,6 +4,11 @@ import { LABEL_COLORS, type LabelColorName } from 'src/schema/label-colors';
  * 내보낸 HTML(보기 화면)과 GitHub Pages의 지도 페이지가 iframe + postMessage로 주고받는 메시지 규약 v1.
  * 두 쪽 모두 Effect·React 없이 번들되므로 `src/schema/label-colors.ts` 말고는 import하지 않는다.
  * 규약을 바꿀 때는 필드를 더하는 방식으로만 바꾼다(이미 보낸 파일이 계속 열려야 한다).
+ *
+ * 지도 페이지는 하나의 주소로 모든 파일(옛 파일 포함)을 받는다. 그래서 지도 페이지의 `ready`는
+ * 앞으로도 늘 v1 봉투(`v: 1`)로 보내야 한다 — 이미 보낸 파일은 `v !== 1`인 메시지를 버리므로
+ * 봉투 버전을 올리면 그 파일들의 지도가 시한(10초) 뒤 실패 안내로 바뀐다. 더 새 규약을 안다는 것은
+ * `ready.maxV`로만 알리고, 파일이 그 값을 보고 새 버전을 쓸지 고른다.
  */
 
 export const SHARE_SOURCE = 'tripmap-share';

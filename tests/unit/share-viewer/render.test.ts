@@ -94,6 +94,14 @@ describe('장소 카드', () => {
     ]);
   });
 
+  it('카드의 라벨 칩은 장소의 labelIds 순서(첫 라벨이 대표)를 따른다', () => {
+    mount(makeDoc({ places: [place({ id: 'c', labelIds: ['l2', 'l1'] })] }));
+    expect([...card('c').querySelectorAll('.chip')].map((s) => s.textContent)).toEqual([
+      '빵집',
+      '카페',
+    ]);
+  });
+
   it('메모가 있을 때만 p.memo를 만든다', () => {
     mount(makeDoc());
     expect(card('a').querySelector('p.memo')!.textContent).toBe('크로플\n맛집');
@@ -133,6 +141,15 @@ describe('naverUrl', () => {
     expect(naverUrl(place({ id: 'a', naverSid: '123' }))).toBe(
       'https://map.naver.com/p/entry/place/123',
     );
+  });
+
+  it('sid는 인코딩해 고정 접두어 뒤에 붙인다(경로·질의·조각을 바꾸지 못한다)', () => {
+    const url = naverUrl(place({ id: 'a', naverSid: '../x?y=1#z' }));
+    expect(url).toBe('https://map.naver.com/p/entry/place/..%2Fx%3Fy%3D1%23z');
+    const parsed = new URL(url);
+    expect(parsed.pathname).toBe('/p/entry/place/..%2Fx%3Fy%3D1%23z');
+    expect(parsed.search).toBe('');
+    expect(parsed.hash).toBe('');
   });
 
   it('sid가 없으면 이름+주소 검색', () => {

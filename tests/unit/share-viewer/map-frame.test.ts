@@ -1,7 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ShareDoc, SharePlace } from 'src/schema/share';
 import { envelope, type FromMap, type ToMap } from 'src/share-protocol';
-import { READY_TIMEOUT_MS, connectMapFrame, toMapPlaces } from 'src/share-viewer/map-frame';
+import {
+  DEFAULT_MAP_URL,
+  READY_TIMEOUT_MS,
+  connectMapFrame,
+  shareMapUrl,
+  toMapPlaces,
+} from 'src/share-viewer/map-frame';
 
 const MAP_URL = 'https://sch0718.github.io/landmark/';
 const MAP_ORIGIN = 'https://sch0718.github.io';
@@ -57,6 +63,15 @@ describe('toMapPlaces', () => {
     for (const p of toMapPlaces(makeDoc())) {
       expect(Object.keys(p).sort()).toEqual(['color', 'id', 'lat', 'lng', 'name']);
     }
+  });
+});
+
+describe('shareMapUrl', () => {
+  it('빌드 변수가 없거나 빈 문자열이면 기본 주소, 있으면 그 값', () => {
+    expect(DEFAULT_MAP_URL).toBe('https://sch0718.github.io/landmark/');
+    expect(shareMapUrl(undefined)).toBe(DEFAULT_MAP_URL);
+    expect(shareMapUrl('')).toBe(DEFAULT_MAP_URL);
+    expect(shareMapUrl('http://localhost:5174/')).toBe('http://localhost:5174/');
   });
 });
 
@@ -136,6 +151,36 @@ describe('connectMapFrame', () => {
     expect(sent()).toEqual([
       envelope({ kind: 'init', places }),
       envelope({ kind: 'filter', placeIds: ['a', 'b'] }),
+      envelope({ kind: 'focus', placeId: 'b' }),
+    ]);
+  });
+
+  it('지도 페이지가 다시 읽혀 ready가 또 오면 init 뒤에 마지막 filter·focus를 다시 보낸다', () => {
+    const { port, receive, sent, places } = setup();
+    receive({ kind: 'ready', maxV: 1 });
+    port.filter(['a']);
+    port.focus('a');
+    const before = sent().length;
+
+    receive({ kind: 'ready', maxV: 1 });
+    expect(sent().slice(before)).toEqual([
+      envelope({ kind: 'init', places }),
+      envelope({ kind: 'filter', placeIds: ['a'] }),
+      envelope({ kind: 'focus', placeId: 'a' }),
+    ]);
+  });
+
+  it('마커로 고른 장소(select)도 다시 읽힌 지도에 focus로 되살린다(select 때는 보내지 않는다)', () => {
+    const { port, receive, sent, places } = setup();
+    receive({ kind: 'ready', maxV: 1 });
+    port.focus('a');
+    receive({ kind: 'select', placeId: 'b' });
+    const before = sent().length;
+    expect(sent().at(-1)).toEqual(envelope({ kind: 'focus', placeId: 'a' }));
+
+    receive({ kind: 'ready', maxV: 1 });
+    expect(sent().slice(before)).toEqual([
+      envelope({ kind: 'init', places }),
       envelope({ kind: 'focus', placeId: 'b' }),
     ]);
   });

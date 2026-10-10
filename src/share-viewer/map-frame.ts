@@ -7,6 +7,14 @@ import type { MapPort } from './render';
  * 받을 때는 그 iframe 창에서, 지도 주소의 출처로 온 메시지만 보고, 보낼 때도 그 출처를 지정한다.
  */
 
+/** 지도 페이지 기본 주소(GitHub Pages). */
+export const DEFAULT_MAP_URL = 'https://sch0718.github.io/landmark/';
+
+/** 빌드 변수(`VITE_SHARE_MAP_URL`)의 지도 주소. 없거나 빈 문자열이면 기본 주소(빈 값은 `new URL`이 던진다). */
+export function shareMapUrl(value: string | undefined): string {
+  return value || DEFAULT_MAP_URL;
+}
+
 /** iframe을 만든 뒤 지도 페이지의 `ready`를 기다리는 시간. */
 export const READY_TIMEOUT_MS = 10_000;
 
@@ -46,20 +54,24 @@ export function connectMapFrame(
 
   let ready = false;
   let tilesFailed = false;
-  // ready 전에 들어온 focus·filter. ready가 오면 init 뒤에 순서대로 보낸다.
-  const pending: ToMap[] = [];
+  // 종류별 마지막 focus·filter(부른 순서). ready가 올 때마다 init 뒤에 다시 보낸다:
+  // ready 전에 부른 것을 늦게 보내고, 지도 페이지가 다시 읽혀도 거른 상태·고른 장소를 되살린다.
+  const latest: ToMap[] = [];
 
   const post = (msg: ToMap) => iframe.contentWindow?.postMessage(envelope(msg), origin);
   const showMap = (show: boolean) => {
     iframe.hidden = !show;
     notice.hidden = show;
   };
-  const send = (msg: ToMap) => {
-    if (ready) return post(msg);
+  const remember = (msg: ToMap) => {
     // 지도가 끝내 안 뜨는 동안 카드를 여러 번 눌러도 쌓이지 않게, 같은 종류는 마지막 것만 남긴다.
-    const same = pending.findIndex((m) => m.kind === msg.kind);
-    if (same !== -1) pending.splice(same, 1);
-    pending.push(msg);
+    const same = latest.findIndex((m) => m.kind === msg.kind);
+    if (same !== -1) latest.splice(same, 1);
+    latest.push(msg);
+  };
+  const send = (msg: ToMap) => {
+    remember(msg);
+    if (ready) post(msg);
   };
 
   const timer = win.setTimeout(() => {
@@ -77,9 +89,11 @@ export function connectMapFrame(
         ready = true;
         if (!tilesFailed) showMap(true);
         post({ kind: 'init', places: opts.places });
-        for (const queued of pending.splice(0)) post(queued);
+        for (const replay of latest) post(replay);
         break;
       case 'select':
+        // 지도는 누른 마커를 이미 강조했다. 보내지 않고, 다시 읽힐 때 되살릴 고른 장소로만 남긴다.
+        remember({ kind: 'focus', placeId: msg.placeId });
         opts.onSelect(msg.placeId);
         break;
       case 'tiles-failed':

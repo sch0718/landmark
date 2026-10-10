@@ -1,5 +1,5 @@
 import './styles.css';
-import { connectMapFrame, toMapPlaces } from './map-frame';
+import { connectMapFrame, shareMapUrl, toMapPlaces } from './map-frame';
 import { readShareDoc } from './parse';
 import { applyTheme, renderBroken, renderViewer, type MapPort } from './render';
 
@@ -9,8 +9,6 @@ import { applyTheme, renderBroken, renderViewer, type MapPort } from './render';
  * `renderViewer`에는 `map`으로 넘겨 주는 포트를 주고, 연결한 뒤 `map`을 실제 포트로 바꾼다
  * (둘 사이는 동기 코드라 사용자 입력이 끼어들 수 없다).
  */
-
-const DEFAULT_MAP_URL = 'https://sch0718.github.io/landmark/';
 
 // 레이아웃 CSS가 `#root`를 기준으로 한다. 틀의 본문은 비워 둔다.
 const root = document.createElement('div');
@@ -30,7 +28,7 @@ if (doc === null) {
   const slot = root.querySelector<HTMLElement>('#map');
   if (slot !== null) {
     map = connectMapFrame(slot, {
-      mapUrl: import.meta.env.VITE_SHARE_MAP_URL ?? DEFAULT_MAP_URL,
+      mapUrl: shareMapUrl(import.meta.env.VITE_SHARE_MAP_URL),
       places: toMapPlaces(doc),
       onSelect: (placeId) => handle.highlight(placeId),
     });

@@ -90,8 +90,10 @@ export function createShareMap(
     if (unique.size === 1) {
       map.setView([first.lat, first.lng], FOCUS_ZOOM);
     } else {
+      // 몇 미터 떨어진 곳들끼리면 맞추기가 줌 18~19까지 들어간다. 장소로 갈 때 줌을 넘지 않게 한다.
       map.fitBounds(L.latLngBounds(initialPlaces.map((p) => [p.lat, p.lng])), {
         padding: FIT_PADDING,
+        maxZoom: FOCUS_ZOOM,
       });
     }
   };
@@ -121,7 +123,11 @@ export function createShareMap(
       selectedId = null;
       for (const place of places) {
         const marker = L.marker([place.lat, place.lng], { icon: iconFor(place, false) });
-        marker.on('click', () => post({ kind: 'select', placeId: place.id }));
+        // 누른 마커를 강조한다(화면은 옮기지 않는다). 보기 화면은 그 카드만 표시하고 focus를 보내지 않는다.
+        marker.on('click', () => {
+          setSelected(place.id);
+          post({ kind: 'select', placeId: place.id });
+        });
         marker.addTo(map);
         entries.set(place.id, { place, marker });
       }
