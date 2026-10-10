@@ -81,6 +81,24 @@ main {
   border: 0;
 }
 
+/* 지도를 못 쓰면 iframe을 감추고 지도 자리에 안내를 보인다(위의 display가 hidden 속성을 이기지 않게). */
+#map iframe[hidden],
+.map-failed[hidden] {
+  display: none;
+}
+
+.map-failed {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  margin: 0;
+  padding: 16px;
+  color: var(--tm-text-secondary);
+  font-size: 0.875rem;
+  text-align: center;
+}
+
 ul {
   flex: 1;
   margin: 0;
