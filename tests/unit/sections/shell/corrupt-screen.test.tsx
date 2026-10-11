@@ -49,7 +49,7 @@ const readBlob = (blob: Blob) =>
   });
 
 describe('CorruptScreen', () => {
-  it('downloads the backup copy as tripmap-backup-<ISO>.json', async () => {
+  it('downloads the backup copy as landmark-backup-<ISO>.json', async () => {
     localStorage.setItem(BACKUP_KEY, RAW);
     localStorage.setItem(LIBRARY_KEY, 'LIBRARY와 다른 내용');
     render(
@@ -62,7 +62,7 @@ describe('CorruptScreen', () => {
     await userEvent.click(screen.getByRole('button', { name: '백업 파일 받기' }));
 
     expect(downloads).toHaveLength(1);
-    expect(downloads[0]!.name).toMatch(/^tripmap-backup-\d{4}-\d{2}-\d{2}T[\d:.]+Z\.json$/);
+    expect(downloads[0]!.name).toMatch(/^landmark-backup-\d{4}-\d{2}-\d{2}T[\d:.]+Z\.json$/);
     expect(await readBlob(blobs[0]!)).toBe(RAW);
   });
 

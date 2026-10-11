@@ -212,7 +212,7 @@ export function renderViewer(
 
   main.append(mapSlot, list);
   root.append(main);
-  root.append(el(d, 'footer', 'trip-map에서 만든 파일'));
+  root.append(el(d, 'footer', '랜드마크에서 만든 파일'));
 
   return {
     highlight(placeId: string) {

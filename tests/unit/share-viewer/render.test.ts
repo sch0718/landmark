@@ -74,7 +74,7 @@ describe('머리글', () => {
 
   it('바닥글·지도 자리', () => {
     mount(makeDoc());
-    expect(root.querySelector('footer')!.textContent).toBe('trip-map에서 만든 파일');
+    expect(root.querySelector('footer')!.textContent).toBe('랜드마크에서 만든 파일');
     expect(root.querySelector('div#map')).not.toBeNull();
   });
 });

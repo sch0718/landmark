@@ -83,6 +83,6 @@ jobs:
             echo "변경 없음: 배포할 내용이 없습니다."
             exit 0
           fi
-          git -c user.name='trip-map deploy' -c user.email='actions@users.noreply.github.com' \
+          git -c user.name='landmark deploy' -c user.email='actions@users.noreply.github.com' \
             commit -m "deploy: ${GITHUB_SHA::7}"
           git push origin HEAD:gh-pages

@@ -56,7 +56,7 @@ export function CorruptScreen({
       return;
     }
     setMessage(null);
-    downloadText(text, `tripmap-backup-${new Date().toISOString()}.json`, 'application/json');
+    downloadText(text, `landmark-backup-${new Date().toISOString()}.json`, 'application/json');
   };
 
   const startOver = async () => {

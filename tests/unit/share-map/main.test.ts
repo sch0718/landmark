@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { envelope, type MapPlace, type ToMap } from 'src/share-protocol';
 import { startShareMap } from 'src/share-map/main';
 
-const NOTICE = 'trip-map에서 내보낸 파일 안에서 쓰는 지도예요';
+const NOTICE = '랜드마크에서 내보낸 파일 안에서 쓰는 지도예요';
 
 const PLACES: MapPlace[] = [
   { id: 'a', name: '서혜커피', lng: 127.11, lat: 37.37, color: 'orange' },

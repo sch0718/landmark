@@ -37,7 +37,7 @@ export function injectShareDoc(template: string, doc: ShareDoc): string {
 const UNSAFE_IN_FILE_NAME = /[\\/:*?"<>|\u0000-\u001f\s]+/g;
 
 const MAX_TITLE_CODE_POINTS = 40;
-const FALLBACK_NAME = 'trip-map';
+const FALLBACK_NAME = 'landmark';
 
 function pad(n: number, width: number): string {
   return String(n).padStart(width, '0');
@@ -45,7 +45,7 @@ function pad(n: number, width: number): string {
 
 /**
  * 내려받는 파일 이름. `<제목>-YYYYMMDD.html` (날짜는 로컬 기준).
- * 파일 이름에 못 쓰는 문자·공백은 `-`로 바꾸고, 제목이 비면 `trip-map`을 쓴다.
+ * 파일 이름에 못 쓰는 문자·공백은 `-`로 바꾸고, 제목이 비면 `landmark`를 쓴다.
  */
 export function shareFileName(title: string, now: Date): string {
   const cleaned = title

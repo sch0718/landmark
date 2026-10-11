@@ -96,8 +96,8 @@ describe('shareFileName', () => {
     expect(shareFileName('a/b:c*?"<>|d', NOW)).toBe('a-b-c-d-20261011.html');
   });
 
-  it('falls back to trip-map for blank titles', () => {
-    expect(shareFileName('   ', NOW)).toBe('trip-map-20261011.html');
+  it('falls back to landmark for blank titles', () => {
+    expect(shareFileName('   ', NOW)).toBe('landmark-20261011.html');
   });
 
   it('trims leading and trailing hyphens and dots', () => {

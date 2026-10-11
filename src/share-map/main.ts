@@ -15,7 +15,7 @@ import { createShareMap, type ShareMapOptions } from './map';
  * `ready` 뒤 바로 `tiles-failed`("지도를 쓸 수 없음")를 보낸다.
  */
 
-const DIRECT_OPEN = 'trip-map에서 내보낸 파일 안에서 쓰는 지도예요';
+const DIRECT_OPEN = '랜드마크에서 내보낸 파일 안에서 쓰는 지도예요';
 
 export function startShareMap(win: Window, root: HTMLElement): void {
   if (win.parent === win) {
