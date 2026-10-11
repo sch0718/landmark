@@ -2,6 +2,7 @@
 
 - 작성일: 2026-10-11
 - 상태: r4 (구현 중 변경)
+- 개정: 2026-10-11 r5 — 저장소 이전. trip-map 코드 전체를 `sch0718/landmark`로 옮기고(`main`), 지도 페이지는 같은 저장소의 `gh-pages` 브랜치에서 배포한다. 배포 키 대신 `GITHUB_TOKEN`을 쓴다. 기존 landmark 내용은 `archive/java-gradle-2025`, `archive/map-pages-2026-10` 브랜치로 보관했다(§4.6).
 - 개정: 2026-10-11 r4 — 사용자 승인으로 지도 페이지를 OSM(Leaflet)에서 네이버 지도 JS v3로 바꿨다(§1.3, §2.4, §4.2, §4.4, §4.5, §4.6, §6). 지도 페이지는 `https://sch0718.github.io/landmark/` 웹 페이지라 네이버 도메인 인증을 받을 수 있고, 앱의 `MapAdapter`·마커를 그대로 써 앱과 같은 모양이 된다. 메시지 v1은 그대로이고 `tiles-failed`는 이름을 두고 뜻만 "지도를 쓸 수 없음"으로 넓혔다.
 - 개정: 2026-10-11 r3 — 계획 작성 중 정리. 틀은 `public/share-viewer.html`로 빌드하고 앱이 내보낼 때 `fetch`로 받는다(생성 파일을 `?raw`로 import하면 파일이 없을 때 런타임을 import하는 모든 모듈의 변환이 실패한다). `init` 메시지는 라벨 색 이름만 보내고 지도 페이지가 파스텔 토큰을 직접 번들한다.
 - 개정: 2026-10-11 r2 — PR #21 리뷰 반영. 데이터 삽입 이스케이프 규칙을 바로잡고(§4.1), 지도를 `file://` 안의 OSM 직접 요청에서 GitHub Pages(`sch0718/landmark`)에 올린 지도 페이지를 iframe으로 띄우는 방식으로 바꿨다(§2.4, §4.5, §4.6). `file://` 문서는 Referer를 보내지 않아 OSM 공용 타일 정책(유효한 Referer 요구)을 지킬 수 없기 때문이다.
@@ -231,14 +232,14 @@ HTML 안의 데이터 블록 하나:
 - 지도 페이지를 iframe 없이 직접 열면 "trip-map에서 내보낸 파일 안에서 쓰는 지도예요" 안내만 보인다.
 - **하위 호환**: 이미 보낸 파일이 계속 열려야 하므로 지도 페이지는 v1 메시지를 계속 받는다. 바꿀 때는 필드를 더하는 방식으로만 바꾸고, 깨지는 변경은 `v`를 올리고 옛 버전도 함께 처리한다.
 
-### 4.6 지도 페이지 배포 (`sch0718/landmark`)
+### 4.6 지도 페이지 배포 (`sch0718/landmark`, r5)
 
-- `landmark`의 기존 Java 코드는 `backup/java-gradle-2025` 브랜치로 보존했다(2026-10-11, 커밋 `18ad6f0`).
-- `landmark`의 `main`은 지도 페이지 빌드 결과(`index.html`, `assets/`), `.nojekyll`, 용도를 적은 `README.md`만 둔다. GitHub Pages는 `main`의 루트에서 배포한다.
-- 자동 배포: trip-map의 GitHub Actions 워크플로(`deploy-share-map.yml`)가 `main`에 `src/share-map/**`, `src/share-protocol.ts`, `src/schema/label-colors.ts`, `src/theme/tokens/**`, `src/components/map/**`, `src/sections/map/markers.ts`, `vite.map.config.ts`, `package.json`, `yarn.lock`이 바뀌어 들어올 때 `build:map`을 돌리고 `dist-map/`을 `landmark`의 `main`에 커밋·푸시한다. 수동 실행(`workflow_dispatch`)도 둔다(`main`에서만 배포).
-- r4 변수: 저장소 변수(Actions Variables) `NAVER_MAP_CLIENT_ID`를 빌드 단계의 `VITE_NAVER_MAP_CLIENT_ID`로 넘긴다. 비어 있으면 빌드 전에 실패한다(늘 실패 안내만 뜨는 페이지가 배포되지 않게). 클라이언트 ID는 공개 값이라 Secret이 아니어도 된다. NCP 콘솔의 Web 서비스 URL에 `https://sch0718.github.io`를 등록해야 인증된다.
-- 인증: `landmark`에 쓰기 권한 배포 키(공개 키)를 등록하고, 개인 키는 trip-map 저장소 Secret `LANDMARK_DEPLOY_KEY`에 둔다.
-- 처음 한 번 하는 일(구현 단계에서): `landmark` `main`을 README만 있는 상태로 바꾸기, Pages 켜기, 배포 키 만들기·등록, 첫 배포 후 지도 페이지 주소 확인.
+- 앱 코드 전체가 `sch0718/landmark`의 `main`에 있다(2026-10-11 trip-map에서 이전, trip-map은 보관(Archive)).
+- 지도 페이지 빌드 결과(`index.html`, `assets/`), `.nojekyll`, 용도를 적은 `README.md`는 같은 저장소의 `gh-pages` 브랜치에 둔다. GitHub Pages는 `gh-pages`의 루트에서 배포한다. 주소는 그대로 `https://sch0718.github.io/landmark/`다.
+- 기존 landmark 내용 보관: Java 코드 `archive/java-gradle-2025`(`18ad6f0`), 이전 직전의 지도 페이지 배포본 `archive/map-pages-2026-10`(`11937e6`).
+- 자동 배포: GitHub Actions 워크플로(`deploy-share-map.yml`)가 `main`에 `src/share-map/**`, `src/share-protocol.ts`, `src/schema/label-colors.ts`, `src/theme/tokens/**`, `src/components/map/**`, `src/sections/map/markers.ts`, `vite.map.config.ts`, `package.json`, `yarn.lock`이 바뀌어 들어올 때 `build:map`을 돌리고 `dist-map/`을 `gh-pages`에 커밋·푸시한다. 수동 실행(`workflow_dispatch`)도 둔다(`main`에서만 배포).
+- 변수: 저장소 변수(Actions Variables) `NAVER_MAP_CLIENT_ID`를 빌드 단계의 `VITE_NAVER_MAP_CLIENT_ID`로 넘긴다. 비어 있으면 빌드 전에 실패한다. 클라이언트 ID는 공개 값이다. NCP 콘솔의 Web 서비스 URL에 `https://sch0718.github.io`를 등록해야 인증된다.
+- 인증: 같은 저장소라 워크플로의 `GITHUB_TOKEN`(`contents: write`)으로 푸시한다. 배포 키는 쓰지 않는다.
 - 지도 페이지가 바뀌어 배포되면 이미 보낸 파일도 새 지도 페이지를 쓴다(§4.5 하위 호환).
 
 ## 5. 카페 데이터 넣기 (준비 작업, 앱 코드 아님)

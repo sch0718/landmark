@@ -1,6 +1,7 @@
 name: Deploy share map
 
-# 내보낸 HTML 파일이 iframe으로 띄우는 지도 페이지를 sch0718/landmark(GitHub Pages)에 배포한다.
+# 내보낸 HTML 파일이 iframe으로 띄우는 지도 페이지를 이 저장소의 gh-pages 브랜치(GitHub Pages,
+# https://sch0718.github.io/landmark/)에 배포한다.
 # 설계: docs/superpowers/specs/2026-10-11-html-share-export-design.md §4.6
 on:
   push:
@@ -19,11 +20,11 @@ on:
       - '.github/workflows/deploy-share-map.yml'
   workflow_dispatch:
 
-# 이 저장소는 읽기만 한다. landmark 푸시는 배포 키(LANDMARK_DEPLOY_KEY)로 인증한다.
+# gh-pages 브랜치에 푸시하므로 쓰기 권한이 필요하다(GITHUB_TOKEN).
 permissions:
-  contents: read
+  contents: write
 
-# 배포가 겹치면 차례로 실행한다. 진행 중인 배포는 취소하지 않는다(landmark 푸시가 중간에 끊기지 않게).
+# 배포가 겹치면 차례로 실행한다. 진행 중인 배포는 취소하지 않는다(gh-pages 푸시가 중간에 끊기지 않게).
 concurrency:
   group: deploy-share-map
   cancel-in-progress: false
@@ -58,26 +59,24 @@ jobs:
           fi
           yarn build:map
 
-      # 이 체크아웃의 ssh-key가 아래 push 인증도 맡는다.
-      - name: Check out landmark
+      # 같은 저장소의 gh-pages를 따로 받는다. 이 체크아웃의 GITHUB_TOKEN이 아래 push 인증도 맡는다.
+      - name: Check out gh-pages
         uses: actions/checkout@v4
         with:
-          repository: sch0718/landmark
-          ref: main
-          ssh-key: ${{ secrets.LANDMARK_DEPLOY_KEY }}
-          path: landmark
+          ref: gh-pages
+          path: pages
 
       # .git과 README.md만 남기고 비운 뒤 새 빌드 결과를 복사한다(삭제된 파일이 남지 않게).
-      - name: Replace landmark contents with dist-map
+      - name: Replace gh-pages contents with dist-map
         run: |
           # 빌드 결과가 없으면 지우기 전에 멈춘다(빈 내용으로 배포되지 않게).
           test -f dist-map/index.html
-          find landmark -mindepth 1 -maxdepth 1 ! -name .git ! -name README.md -exec rm -rf {} +
-          cp -R dist-map/. landmark/
-          touch landmark/.nojekyll
+          find pages -mindepth 1 -maxdepth 1 ! -name .git ! -name README.md -exec rm -rf {} +
+          cp -R dist-map/. pages/
+          touch pages/.nojekyll
 
       - name: Commit and push
-        working-directory: landmark
+        working-directory: pages
         run: |
           git add -A
           if git diff --cached --quiet; then
@@ -85,5 +84,5 @@ jobs:
             exit 0
           fi
           git -c user.name='trip-map deploy' -c user.email='actions@users.noreply.github.com' \
-            commit -m "deploy: trip-map ${GITHUB_SHA::7}"
-          git push origin HEAD:main
+            commit -m "deploy: ${GITHUB_SHA::7}"
+          git push origin HEAD:gh-pages
