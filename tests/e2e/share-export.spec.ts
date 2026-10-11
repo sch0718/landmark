@@ -6,7 +6,9 @@ import { SHARE_MAP_URL, SHARE_VIEWER_FILE, seedStorage } from './fixtures';
 /**
  * 내보낸 HTML 파일을 `file://`로 열어 확인한다(spec §6.2–§6.3).
  * 지도 페이지는 `playwright.config.ts`가 `dist-map/`을 `SHARE_MAP_URL`로 띄우고, 틀은 global setup이
- * 그 주소로 빌드한다. OSM 타일은 가로채 1×1 PNG를 돌려준다(실제 타일 서버에 요청하지 않는다).
+ * 그 주소로 빌드한다. 지도 페이지는 `VITE_MAP_ADAPTER=fake`로 빌드한 것이라(`yarn build:map:e2e`)
+ * 네이버 인증 없이 DOM 가짜 지도(`FakeMapAdapter`)에 마커 버튼(`data-testid="marker-<id>"`)을 그린다.
+ * 강조된 마커는 `aria-pressed="true"`다.
  */
 
 const MAP_FAILED = '지도를 불러오지 못했어요. 목록과 네이버 지도 링크는 그대로 쓸 수 있어요';
@@ -16,11 +18,6 @@ const TEMPLATE_LIMIT = 51_200;
 const SEA_COUNT = 9;
 /** 그중 "카페" 라벨도 붙은 곳: 강릉(안목)과 제주(애월)라 처음 맞춘 지도에서 마커가 겹치지 않는다. */
 const SEA_CAFES = ['안목해변 커피거리', '애월 카페거리'];
-
-const PNG_1X1 = Buffer.from(
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
-  'base64',
-);
 
 /** 보관함에서 "바다"로 거른 뒤 내보내기 → 파일 저장. 받은 파일을 `.html` 이름으로 옮겨 그 경로를 준다. */
 async function exportSeaPlaces(page: Page, testInfo: TestInfo): Promise<string> {
@@ -61,12 +58,6 @@ test.describe('HTML 내보내기 파일', () => {
     const file = await exportSeaPlaces(page, testInfo);
     const context = page.context();
 
-    const referers: string[] = [];
-    await context.route('https://tile.openstreetmap.org/**', async (route) => {
-      referers.push((await route.request().headerValue('referer')) ?? '');
-      await route.fulfill({ status: 200, contentType: 'image/png', body: PNG_1X1 });
-    });
-
     const viewer = await context.newPage();
     // 파일 문서(메인 프레임)가 직접 부르는 요청만 모은다. iframe 안의 지도 페이지 요청은 따로다.
     const fileRequests: string[] = [];
@@ -84,10 +75,11 @@ test.describe('HTML 내보내기 파일', () => {
     const iframe = viewer.locator('iframe[title="지도"]');
     await expect(iframe).toBeVisible();
     const map = iframe.contentFrame();
-    const markers = map.locator('.leaflet-marker-icon');
+    await expect(map.getByTestId('fake-map')).toBeVisible();
+    const markers = map.locator('[data-testid^="marker-"]');
     await expect(markers).toHaveCount(SEA_COUNT);
-    const markerLabel = (name: string): Locator =>
-      map.locator('.leaflet-marker-icon', { hasText: name }).locator('span');
+    const markerNamed = (name: string): Locator =>
+      map.locator('[data-testid^="marker-"]', { hasText: name });
 
     // 라벨 칩 하나 → 카드와 마커가 함께 준다.
     const chips = viewer.getByRole('group', { name: '라벨' });
@@ -101,22 +93,22 @@ test.describe('HTML 내보내기 파일', () => {
 
     // 마커 클릭 → 그 카드가 현재 카드.
     const [gangneung, jeju] = SEA_CAFES as [string, string];
-    await markerLabel(jeju).click();
+    await markerNamed(jeju).click();
     await expect(cardNamed(viewer, jeju)).toHaveAttribute('aria-current', 'true');
+    await expect(markerNamed(jeju)).toHaveAttribute('aria-pressed', 'true');
 
-    // 다른 카드 클릭 → 그 마커가 강조(3px 테두리), 앞 카드는 현재 카드가 아니다.
+    // 다른 카드 클릭 → 그 마커가 강조, 앞 카드는 현재 카드가 아니고 앞 마커도 풀린다.
     await cardNamed(viewer, gangneung).getByRole('heading').click();
     await expect(cardNamed(viewer, gangneung)).toHaveAttribute('aria-current', 'true');
     await expect(cardNamed(viewer, jeju)).not.toHaveAttribute('aria-current', 'true');
-    await expect(markerLabel(gangneung)).toHaveCSS('border-top-width', '3px');
-    await expect(markerLabel(jeju)).toHaveCSS('border-top-width', '2px');
+    await expect(markerNamed(gangneung)).toHaveAttribute('aria-pressed', 'true');
+    await expect(markerNamed(jeju)).not.toHaveAttribute('aria-pressed', 'true');
 
     // 카드로 고른 뒤 다른 마커 클릭 → 그 마커로 강조가 옮겨 가고, 앞 마커는 풀린다.
-    // 지도는 강릉에 줌 16으로 가 있어 제주 마커는 화면 밖이다(DOM에는 있다). 클릭 이벤트를 직접 보낸다.
-    await markerLabel(jeju).dispatchEvent('click');
+    await markerNamed(jeju).click();
     await expect(cardNamed(viewer, jeju)).toHaveAttribute('aria-current', 'true');
-    await expect(markerLabel(jeju)).toHaveCSS('border-top-width', '3px');
-    await expect(markerLabel(gangneung)).toHaveCSS('border-top-width', '2px');
+    await expect(markerNamed(jeju)).toHaveAttribute('aria-pressed', 'true');
+    await expect(markerNamed(gangneung)).not.toHaveAttribute('aria-pressed', 'true');
 
     // 네이버 지도 링크.
     const href = await cards
@@ -124,10 +116,6 @@ test.describe('HTML 내보내기 파일', () => {
       .getByRole('link', { name: '네이버 지도에서 보기' })
       .getAttribute('href');
     expect(href).toMatch(/^https:\/\/map\.naver\.com\/p\//);
-
-    // 타일 요청에는 지도 페이지 출처가 Referer로 붙는다(OSM 이용 정책).
-    await expect.poll(() => referers.length).toBeGreaterThan(0);
-    for (const referer of referers) expect(referer.startsWith(SHARE_MAP_URL)).toBe(true);
 
     // 파일은 외부 스크립트를 직접 불러오지 않는다(JS는 틀 안에 들어 있다).
     const scripts = fileRequests.filter((url) => /\.js($|[?#])/.test(new URL(url).pathname));

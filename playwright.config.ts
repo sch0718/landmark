@@ -8,7 +8,8 @@ const isCI = !!process.env.CI;
 /**
  * E2E(스펙 §8). 지도는 `VITE_MAP_ADAPTER=fake`로 DOM 어댑터를 쓰고, 옛 여행 가져오기용 데이터는
  * global setup이 `tests/fixtures/trips/e2e.json`을 `public/data/`로 복사한다.
- * 내보내기 시험용으로 지도 페이지(`yarn build:map` 결과)를 5174에서 `vite preview`로 띄운다.
+ * 내보내기 시험용으로 지도 페이지를 5174에서 `vite preview`로 띄운다. 지도 페이지는 `test:e2e` 스크립트가
+ * `yarn build:map:e2e`(`VITE_MAP_ADAPTER=fake`)로 먼저 빌드해 네이버 인증 없이 DOM 가짜 지도를 쓴다.
  * 프로젝트: desktop(Chromium 1280×800) · iphone(WebKit 390×844) · galaxy(Chromium 360×780, 터치).
  */
 export default defineConfig({
