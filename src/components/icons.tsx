@@ -26,6 +26,7 @@ import ListIcon from '~icons/lucide/list';
 import SunIcon from '~icons/lucide/sun';
 import MoonIcon from '~icons/lucide/moon';
 import MonitorIcon from '~icons/lucide/monitor';
+import ShareIcon from '~icons/lucide/share-2';
 
 // 라벨 아이콘 허용 목록(`LABEL_ICONS`). 번들러가 정적으로 찾도록 하나씩 import한다.
 import UtensilsGlyph from '~icons/lucide/utensils';
@@ -90,6 +91,7 @@ export {
   SunIcon,
   MoonIcon,
   MonitorIcon,
+  ShareIcon,
 };
 
 type IconComponent = ComponentType<SVGProps<SVGSVGElement>>;

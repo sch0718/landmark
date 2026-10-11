@@ -3,12 +3,14 @@ import { Layer, ManagedRuntime } from 'effect';
 import { createStore, Provider } from 'jotai';
 import { RouterProvider, createMemoryRouter } from 'react-router';
 import { vi } from 'vitest';
+import { SHARE_DATA_PLACEHOLDER } from 'src/domain/share/inject';
 import { setAppRuntimeForTest } from 'src/lib/effect/runtime';
 import { routes } from 'src/routes/router';
 import { IdGen } from 'src/services/id-gen';
 import { LegacyTripSource } from 'src/services/legacy-trip-source';
 import { LibraryStore } from 'src/services/library-store';
 import { PrefsStore } from 'src/services/prefs-store';
+import { ShareTemplate } from 'src/services/share-template';
 import { ThemeRoot } from 'src/theme/ThemeRoot';
 
 /**
@@ -42,11 +44,23 @@ export function mockViewport(initial: number): { setWidth: (width: number) => vo
   };
 }
 
+/** 테스트 기본 공유 틀: 데이터 자리 문자열이 정확히 하나. */
+const DEFAULT_SHARE_TEMPLATE = `<!doctype html><script type="application/json" id="tripmap-share">${SHARE_DATA_PLACEHOLDER}</script>`;
+
 /** 실제 라우트 표를 메모리 라우터로 그린다. 저장소는 `storage`(없으면 메모리 모드). */
 export async function renderApp(
-  options: { path?: string; storage?: Storage; ids?: string[] } = {},
+  options: {
+    path?: string;
+    storage?: Storage;
+    ids?: string[];
+    /**
+     * 공유 틀 본문(문자열) 또는 틀 받기 실패(Error). 없으면 자리 문자열이 하나뿐인 최소 틀.
+     * 함수면 받을 때마다 불러 결과를 바꿀 수 있다(실패 뒤 재시도 등). Promise를 돌려주면 그때까지 기다린다.
+     */
+    shareTemplate?: string | Error | (() => string | Error | Promise<string | Error>);
+  } = {},
 ) {
-  const { path = '/', storage, ids = [] } = options;
+  const { path = '/', storage, ids = [], shareTemplate = DEFAULT_SHARE_TEMPLATE } = options;
   setAppRuntimeForTest(
     ManagedRuntime.make(
       Layer.mergeAll(
@@ -54,6 +68,16 @@ export async function renderApp(
         PrefsStore.layerWith({ storage }),
         IdGen.layerSequence(ids),
         LegacyTripSource.layerWith({ storage, fetch: (...args) => globalThis.fetch(...args) }),
+        ShareTemplate.layerWith({
+          fetch: async () => {
+            const body = await (typeof shareTemplate === 'function'
+              ? shareTemplate()
+              : shareTemplate);
+            if (body instanceof Error) throw body;
+            return new Response(body);
+          },
+          url: '/share-viewer.html',
+        }),
       ),
     ),
   );

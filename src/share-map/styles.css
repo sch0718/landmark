@@ -1,0 +1,42 @@
+/* 지도 페이지는 iframe을 꽉 채운다. 마커 색은 map.ts가 파스텔 토큰으로 칠한다(지도·로고는 네이버 SDK가 그린다). */
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  font-family:
+    system-ui,
+    -apple-system,
+    'Apple SD Gothic Neo',
+    'Noto Sans KR',
+    sans-serif;
+  background: #fafaf7;
+  color: #18181b;
+}
+
+#root {
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* 지도 SDK가 붙는 요소. SDK가 px 크기를 인라인으로 써도 #root 측정은 그대로다(map.ts). */
+.share-map-canvas {
+  position: absolute;
+  inset: 0;
+}
+
+.direct-open {
+  margin: 0;
+  padding: 24px 16px;
+  text-align: center;
+}
+
+@media (prefers-color-scheme: dark) {
+  body {
+    background: #111113;
+    color: #f4f4f5;
+  }
+}

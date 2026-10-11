@@ -17,8 +17,11 @@
   },
   "include": [
     "vite.config.ts",
+    "vite.viewer.config.ts",
+    "vite.map.config.ts",
     "vitest.config.ts",
     "playwright.config.ts",
-    "build/compile-react-svg-icon.ts"
+    "build/compile-react-svg-icon.ts",
+    "build/inline-assets.ts"
   ]
 }

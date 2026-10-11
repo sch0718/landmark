@@ -10,6 +10,7 @@ import { IdGen } from 'src/services/id-gen';
 import { LegacyTripSource } from 'src/services/legacy-trip-source';
 import { LibraryStore } from 'src/services/library-store';
 import { PREFS_KEY, PrefsStore } from 'src/services/prefs-store';
+import { ShareTemplate } from 'src/services/share-template';
 import { libraryAtom } from 'src/stores/library-state';
 import { prefsAtom } from 'src/stores/prefs-state';
 import { L_FOOD, sampleLibrary } from './fixtures';
@@ -23,6 +24,7 @@ function setup() {
         PrefsStore.layerWith({ storage }),
         IdGen.layerSequence([]),
         LegacyTripSource.layerWith({ storage, fetch: (...args) => globalThis.fetch(...args) }),
+        ShareTemplate.layer,
       ),
     ),
   );

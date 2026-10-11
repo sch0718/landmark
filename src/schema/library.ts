@@ -1,5 +1,9 @@
 import { Schema } from 'effect';
 import { IsoDateTime, Lat, Lng, PlaceKey, PublicId } from 'src/schema/common';
+import { LABEL_COLORS } from 'src/schema/label-colors';
+
+// 기존 import 경로가 그대로 동작하도록 다시 내보낸다.
+export { LABEL_COLORS };
 
 export const LIBRARY_LIMITS = {
   memoChars: 10_000,
@@ -7,17 +11,6 @@ export const LIBRARY_LIMITS = {
   /** 직렬화한 JSON의 `String.length` 상한. */
   libraryChars: 4_000_000,
 } as const;
-
-export const LABEL_COLORS = [
-  'red',
-  'orange',
-  'yellow',
-  'green',
-  'teal',
-  'blue',
-  'purple',
-  'pink',
-] as const;
 
 export const LABEL_ICONS = [
   'utensils',

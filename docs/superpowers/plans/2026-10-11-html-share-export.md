@@ -329,6 +329,7 @@
   ```
 - `load`: 응답이 ok가 아니거나, 네트워크 오류, 본문에 자리 문자열이 정확히 1개가 아니면 `ShareTemplateUnavailable`. 성공한 본문은 레이어 안에서 캐시(같은 세션 재사용), 실패는 캐시하지 않음(다시 시도 가능).
 - `makeShareHtml`: `buildShareDoc` → `ShareDocSchema` 검증(실패 시 `ShareDocInvalid`, `ErrorReporter`가 보고하도록 실패로 둔다) → `load` → `injectShareDoc` → `shareFileName`.
+- (나중 변경, Task 13) `makeShareHtml`은 지웠다. 지금 API는 틀 문자열을 받는 동기 함수 `renderShareHtml(template, lib, placeIds, opts): Result<ShareHtml, ShareDocInvalid>`이고, 틀은 내보내기 창이 `ShareTemplate.load`로 미리 받는다.
 
 - [ ] **Step 1: 실패하는 테스트**(`@effect/vitest`의 `it.effect` 패턴, 기존 `tests/unit/services/*` 참고):
   - `load` 성공 → 본문; 두 번째 `load`는 `fetch` 1번만 호출

@@ -9,6 +9,7 @@ import { IdGen } from 'src/services/id-gen';
 import { LegacyTripSource } from 'src/services/legacy-trip-source';
 import { LibraryStore } from 'src/services/library-store';
 import { PREFS_KEY, PrefsStore } from 'src/services/prefs-store';
+import { ShareTemplate } from 'src/services/share-template';
 import { prefsAtom, setPrefsAtom } from 'src/stores/prefs-state';
 import { cssVarsOf } from 'src/theme/create-app-theme';
 import { ThemeRoot } from 'src/theme/ThemeRoot';
@@ -51,6 +52,7 @@ function setup(saved?: Partial<Prefs>) {
         PrefsStore.layerWith({ storage }),
         IdGen.layerSequence([]),
         LegacyTripSource.layerWith({ storage, fetch: (...args) => globalThis.fetch(...args) }),
+        ShareTemplate.layer,
       ),
     ),
   );

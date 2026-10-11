@@ -1,7 +1,8 @@
 # trip-map 설계 — 장소를 HTML 파일 하나로 내보내기
 
 - 작성일: 2026-10-11
-- 상태: r3 (구현 계획 작성)
+- 상태: r4 (구현 중 변경)
+- 개정: 2026-10-11 r4 — 사용자 승인으로 지도 페이지를 OSM(Leaflet)에서 네이버 지도 JS v3로 바꿨다(§1.3, §2.4, §4.2, §4.4, §4.5, §4.6, §6). 지도 페이지는 `https://sch0718.github.io/landmark/` 웹 페이지라 네이버 도메인 인증을 받을 수 있고, 앱의 `MapAdapter`·마커를 그대로 써 앱과 같은 모양이 된다. 메시지 v1은 그대로이고 `tiles-failed`는 이름을 두고 뜻만 "지도를 쓸 수 없음"으로 넓혔다.
 - 개정: 2026-10-11 r3 — 계획 작성 중 정리. 틀은 `public/share-viewer.html`로 빌드하고 앱이 내보낼 때 `fetch`로 받는다(생성 파일을 `?raw`로 import하면 파일이 없을 때 런타임을 import하는 모든 모듈의 변환이 실패한다). `init` 메시지는 라벨 색 이름만 보내고 지도 페이지가 파스텔 토큰을 직접 번들한다.
 - 개정: 2026-10-11 r2 — PR #21 리뷰 반영. 데이터 삽입 이스케이프 규칙을 바로잡고(§4.1), 지도를 `file://` 안의 OSM 직접 요청에서 GitHub Pages(`sch0718/landmark`)에 올린 지도 페이지를 iframe으로 띄우는 방식으로 바꿨다(§2.4, §4.5, §4.6). `file://` 문서는 Referer를 보내지 않아 OSM 공용 타일 정책(유효한 Referer 요구)을 지킬 수 없기 때문이다.
 - 관련 문서: `2026-10-08-place-library-design.md`(하위 프로젝트 1). 이 기능은 하위 프로젝트 4(공유)의 일부를 먼저 만드는 것이다. 4번의 "가져오기·병합"은 이 문서 범위가 아니다.
@@ -17,7 +18,7 @@
 | 항목 | 결정 |
 |---|---|
 | 받는 사람이 하는 일 | **보기만**(A). 앱으로 가져오기(B)는 나중에 |
-| 지도 | **OpenStreetMap 지도 + 카드마다 네이버 지도 링크**(C). 지도는 GitHub Pages에 올린 지도 페이지를 파일 안 iframe으로 띄운다(r2, D) |
+| 지도 | **지도 + 카드마다 네이버 지도 링크**(C). 지도는 GitHub Pages에 올린 지도 페이지를 파일 안 iframe으로 띄운다(r2, D). 지도 페이지의 지도는 네이버 지도(r4, 처음에는 OpenStreetMap) |
 | 지도 페이지 위치 | **공개 저장소 `sch0718/landmark`를 지도용으로 쓴다.** 기존 Java 코드는 `backup/java-gradle-2025` 브랜치로 옮겼다(2026-10-11) |
 | 내보낼 범위 | **선택한 장소가 있으면 그것만, 없으면 지금 보이는 목록**(C). 누르기 전에 "N곳" 확인 |
 | 카페 데이터 넣기 | **기존 "옛 여행 가져오기"로 넣는다**(A). 앱 코드 변경 없음 |
@@ -26,15 +27,15 @@
 ### 1.3 전제
 
 - 받는 사람은 앱 설치·로그인 없이 메신저 등으로 받은 파일을 휴대폰·PC에서 바로 연다.
-- 네이버 지도 JS는 등록한 도메인에서만 인증되므로 `file://`로 연 파일에서는 쓸 수 없다. 그래서 지도는 OpenStreetMap(Leaflet)이다.
-- OSM 공용 타일 서버(`tile.openstreetmap.org`)는 웹 페이지의 요청에 유효한 Referer를 요구하고, 식별되지 않거나 꾸민 요청은 예고 없이 막을 수 있다([타일 이용 정책 §3.1·§3.4](https://operations.osmfoundation.org/policies/tiles/)). `file://` 문서는 Referer를 보내지 않고, 페이지 스크립트는 Referer를 바꿀 수 없다. 그래서 타일을 요청하는 문서를 실제 웹 페이지(`https://sch0718.github.io/landmark/`)로 두고, 내보낸 파일은 그 페이지를 iframe으로 띄운다. 브라우저가 그 페이지 주소를 Referer로 스스로 붙인다.
+- 지도 SDK·타일은 요청한 문서의 주소(Referer)로 쓰임새를 확인한다. `file://` 문서는 Referer를 보내지 않고 페이지 스크립트는 Referer를 바꿀 수 없으므로, 지도를 그리는 문서를 실제 웹 페이지(`https://sch0718.github.io/landmark/`)로 두고 내보낸 파일은 그 페이지를 iframe으로 띄운다(r2). 브라우저가 그 페이지 주소를 Referer로 스스로 붙인다.
+- r4: 네이버 지도 JS v3는 등록한 도메인에서만 인증되어 `file://` 파일 안에서는 쓸 수 없지만, 지도 페이지는 웹 페이지라 인증을 받을 수 있다(NCP 콘솔 Maps 애플리케이션의 Web 서비스 URL에 `https://sch0718.github.io`를 등록한다). 사용자가 OSM보다 네이버·카카오 지도 모양을 선호해 네이버로 정했다(2026-10-11). 앱과 같은 어댑터·마커를 쓰므로 받는 사람도 앱과 같은 지도를 본다. r2~r3의 OSM(Leaflet) 방식은 이로써 바뀌었다.
 
 ### 1.4 성공 기준
 
 1. 보관함에서 라벨로 거르거나 장소를 골라 "내보내기"를 누르면 HTML 파일 하나가 저장된다(휴대폰에서는 공유 창으로 바로 보낼 수 있다).
 2. 그 파일을 휴대폰·PC 브라우저에서 열면 목록과 지도가 보이고, 카드에서 네이버 지도로 넘어갈 수 있다. 파일 자체는 외부 스크립트를 불러오지 않는다(지도는 iframe 안의 지도 페이지가 그린다).
 3. 인터넷이 없거나 지도 페이지가 응답하지 않으면 지도 영역에 안내가 나오고, 목록과 링크는 그대로 쓸 수 있다.
-6. 지도 타일 요청은 OSM 타일 정책을 지킨다(지도 페이지의 실제 주소가 Referer로 붙고, 출처 표시가 보인다).
+6. 지도는 지도 페이지의 실제 주소로 네이버 도메인 인증을 받고, 네이버 로고·저작권 표시가 보인다(r4).
 4. 장소 이름·메모에 어떤 문자열이 있어도 파일 안에서 스크립트로 실행되지 않는다.
 5. 정자역 카페 5곳으로 만든 실제 파일을 사용자에게 전달한다.
 
@@ -65,14 +66,15 @@
 지도 영역은 지도 페이지(§4.5)를 띄운 iframe이다. 파일과 지도 페이지는 `postMessage`로만 주고받는다.
 
 - 처음 열 때 모든 장소가 보이게 맞춘다(장소가 1곳이면 그 장소에 줌 16).
-- 마커: 장소 이름이 적힌 라벨 색 알약(앱 마커와 같은 모양, Leaflet `divIcon`). 라벨이 없으면 표면색. 강조된 마커는 테두리를 굵게 하고 맨 위로 올린다.
+- 지도: 네이버 지도 JS v3(r4). 앱의 `MapAdapter`(`NaverMapAdapter`)를 그대로 쓴다.
+- 마커: 장소 이름이 적힌 라벨 색 알약(앱 마커와 같은 `placeMarker`). 색은 라벨 팔레트(바탕 `fill`·글자 `text`·테두리 `marker`), 라벨이 없으면 표면 바탕·기본 글자·기본 테두리. 강조된 마커는 테두리를 강조색으로 굵게 하고 맨 위로 올린다.
+- 클러스터: 앱과 같다(줌 14 이하에서 가까운 장소를 강조색 숫자 마커로 묶고, 15부터 모두 이름으로 보인다). 강조된 마커는 묶지 않는다(r4).
 - 마커를 누르면 해당 카드를 강조하고 목록에서 그 카드로 스크롤한다.
 - 라벨 칩으로 거르면 지도에도 걸러진 장소만 보인다(다시 맞추지는 않는다).
-- 클러스터 없음.
-- 지도 타일: `https://tile.openstreetmap.org/{z}/{x}/{y}.png`, 오른쪽 아래 출처 표시 `© OpenStreetMap contributors`(링크 `https://www.openstreetmap.org/copyright`).
+- 출처 표시: 네이버 SDK가 로고·저작권을 직접 그린다(지도 페이지가 따로 넣지 않는다).
 - 지도를 못 쓰는 경우 지도 영역에 "지도를 불러오지 못했어요. 목록과 네이버 지도 링크는 그대로 쓸 수 있어요"를 보인다(iframe을 감추고 파일 쪽에서 표시). 판단 기준:
   - iframe을 만든 뒤 10초 안에 지도 페이지의 `ready`가 오지 않음(오프라인, 지도 페이지 장애·주소 변경).
-  - 지도 페이지가 `tiles-failed`를 보냄: 처음 맞춘 화면의 타일이 하나도 로드되지 않고 `tileerror`만 난 경우(첫 `tileload`가 오면 보내지 않는다).
+  - 지도 페이지가 `tiles-failed`(r4: "지도를 쓸 수 없음")를 보냄: 네이버 SDK 로드 실패(스크립트 오류·10초 시한), 인증 실패(`navermap_authFailure`, 도메인 미등록 등), 빌드에 클라이언트 ID가 없음. 한 번만 보낸다.
 
 ### 2.5 모양
 
@@ -86,7 +88,7 @@
 
 ### 2.7 넣지 않는 것
 
-검색, 편집, 경로·이동시간, 앱으로 가져오기, 클러스터, 웹폰트.
+검색, 편집, 경로·이동시간, 앱으로 가져오기, 웹폰트.
 
 ## 3. 앱에서 내보내는 흐름
 
@@ -172,7 +174,9 @@ HTML 안의 데이터 블록 하나:
 | `src/share-viewer/map-frame.ts` | 지도 iframe 만들기, 메시지 보내기·받기(§4.5), 10초 `ready` 시한, 실패 안내 |
 | `src/share-viewer/styles.css` | 레이아웃·토큰 CSS 변수 |
 | `vite.viewer.config.ts` | 보기 화면 빌드. 직접 짠 작은 플러그인이 JS·CSS를 HTML 안에 넣어 파일 하나로 만든다. 지도 페이지 주소는 빌드 변수 `VITE_SHARE_MAP_URL`(기본 `https://sch0718.github.io/landmark/`) |
-| `src/share-map/index.html`, `main.ts`, `map.ts`, `styles.css` | 지도 페이지(GitHub Pages에 배포). Leaflet 지도, 마커, 타일 실패 판단, 메시지 처리 |
+| `src/share-map/index.html`, `main.ts`, `map.ts`, `styles.css` | 지도 페이지(GitHub Pages에 배포). `main.ts`가 빌드 변수로 어댑터를 고르고(`NaverMapAdapter`, `VITE_MAP_ADAPTER=fake`면 `FakeMapAdapter`) 메시지를 처리한다. `map.ts`(`createShareMap(container, post, { adapter, dark, onAuthFailure })`)가 마커·카메라·크기·실패 판단을 맡는다(r4) |
+| `src/components/map/camera.ts` | `focusCamera`·`fitPoints`·`FOCUS_ZOOM`(16). 앱 `MapView`와 지도 페이지가 함께 쓰는 React 없는 순수 함수(r4) |
+| `src/sections/map/markers.ts` | `placeMarker`(장소 하나의 마커)·`toMarkers`. 타입만 import해 지도 페이지도 쓴다(r4) |
 | `src/share-protocol.ts` | 파일 ↔ 지도 페이지 메시지 타입과 검사 함수(양쪽이 함께 쓴다) |
 | `vite.map.config.ts` | 지도 페이지 빌드(`dist-map/`, 상대 경로 `base: './'`) |
 | `public/share-viewer.html` | 빌드 결과(gitignore). 앱 배포에 함께 실린다 |
@@ -184,7 +188,7 @@ HTML 안의 데이터 블록 하나:
 | `src/sections/share-export/use-export-targets.ts` | 선택/보이는 목록 → 내보낼 장소 id와 대상 문구 |
 
 - 기존 `src/sections/share`(옛 여행 공유, 4번 참고용)와는 분리한다.
-- 새 의존성: `leaflet`(1.9.4, 정확히 고정), `@types/leaflet`(dev). Leaflet은 지도 페이지에만 들어가고 내보낸 파일에는 들어가지 않는다.
+- 새 의존성 없음(r4). 지도 페이지는 앱의 지도 어댑터와 그 의존(`supercluster`)을 쓴다. r2~r3의 `leaflet`·`@types/leaflet`은 뺐다. 지도 페이지 번들에는 React·MUI·Effect가 들어가지 않는다.
 
 ### 4.3 파일 이름 규칙
 
@@ -201,6 +205,8 @@ HTML 안의 데이터 블록 하나:
 - 타입 검사·단위 테스트는 생성 파일이 없어도 돈다(앱은 틀을 import하지 않고 런타임에 받는다, 테스트는 가짜 `ShareTemplate`).
 - 보기 화면은 생성 HTML 하나에 JS·CSS가 모두 들어간다. 파일이 직접 하는 외부 요청은 지도 iframe(지도 페이지)과 사용자가 누른 링크뿐이다.
 - `build:map` 스크립트: `vite build --config vite.map.config.ts`. 결과 `dist-map/`(gitignore)은 §4.6으로 배포한다. `build:ci`에 포함해 CI에서 깨지지 않는지 확인한다.
+- r4 빌드 변수(앱과 같은 이름): `VITE_NAVER_MAP_CLIENT_ID`(네이버 클라이언트 ID, 공개 값). `vite.map.config.ts`는 저장소 루트의 `.env*`를 읽는다(`envDir`). `VITE_MAP_ADAPTER=fake`면 DOM 가짜 지도로 빌드한다. ID가 비어 있고 fake도 아니면 지도 페이지는 시작하자마자 `ready` 뒤 `tiles-failed`를 보낸다.
+- `build:map:e2e` 스크립트: `VITE_MAP_ADAPTER=fake`로 `build:map`과 같은 빌드. `test:e2e`, `test:e2e:ci`가 먼저 실행한다(네이버 인증 없이 돈다). e2e 뒤 `dist-map/`을 실제 어댑터로 다시 빌드하지 않는다(배포는 CI가 새로 빌드한다).
 
 ### 4.5 지도 페이지와 메시지 규약
 
@@ -215,13 +221,13 @@ HTML 안의 데이터 블록 하나:
 | 파일 → 지도 | `focus` | `placeId` 또는 `null`: 그 장소로 이동(줌 16)·강조, `null`은 강조 해제 |
 | 파일 → 지도 | `filter` | `placeIds`: 보일 장소 id 목록 |
 | 지도 → 파일 | `select` | `placeId`: 마커를 누름 |
-| 지도 → 파일 | `tiles-failed` | 처음 화면 타일이 전부 실패함 |
+| 지도 → 파일 | `tiles-failed` | 지도를 쓸 수 없음(r4: 네이버 SDK 로드 실패·시한, 인증 실패, 클라이언트 ID 없음). 이름은 v1 그대로 둔다(이미 보낸 파일이 이 메시지로 안내를 띄운다) |
 
-- 지도 페이지에는 메모·주소·네이버 ID를 보내지 않는다. 마커에 필요한 것만 보낸다. 메시지는 받는 사람의 브라우저 안에서만 오가고 어떤 서버로도 가지 않는다. 다만 파일을 열면 GitHub Pages(지도 페이지)와 OSM 타일 서버가 받는 사람의 IP와 보는 지도 범위를 알 수 있다.
+- 지도 페이지에는 메모·주소·네이버 ID를 보내지 않는다. 마커에 필요한 것만 보낸다. 메시지는 받는 사람의 브라우저 안에서만 오가고 어떤 서버로도 가지 않는다. 다만 파일을 열면 GitHub Pages(지도 페이지)와 네이버 지도 서버가 받는 사람의 IP와 보는 지도 범위를 알 수 있다.
 - **파일 쪽 검사**: `event.source === iframe.contentWindow`이고 `event.origin`이 지도 페이지 주소의 출처(`new URL(VITE_SHARE_MAP_URL).origin`)와 같은 메시지만 받는다. 보낼 때 `targetOrigin`도 그 출처로 지정한다.
 - **지도 페이지 쪽 검사**: `event.source === window.parent`인 메시지만 받는다. 파일은 `file://`이라 출처가 `"null"`이므로 출처로는 거르지 않고, 내용을 `share-protocol`의 검사 함수로 확인한다(모양이 틀리면 무시). 보낼 때 `targetOrigin`은 `'*'`이다(받는 쪽 출처가 `"null"`이라 지정할 수 없다). 지도 페이지가 보내는 내용은 장소 id와 상태뿐이라 다른 곳에 새도 문제가 없다.
 - 지도 페이지도 데이터를 DOM 텍스트로만 넣는다(마커 이름은 `textContent`).
-- 지도 페이지는 Referer를 막는 `Referrer-Policy`를 두지 않는다(브라우저 기본 `strict-origin-when-cross-origin`으로 `https://sch0718.github.io/`가 붙는다).
+- 지도 페이지는 Referer를 막는 `Referrer-Policy`를 두지 않는다(브라우저 기본 `strict-origin-when-cross-origin`으로 `https://sch0718.github.io/`가 붙는다). 네이버 도메인 인증이 이 Referer를 쓴다(r4).
 - 지도 페이지를 iframe 없이 직접 열면 "trip-map에서 내보낸 파일 안에서 쓰는 지도예요" 안내만 보인다.
 - **하위 호환**: 이미 보낸 파일이 계속 열려야 하므로 지도 페이지는 v1 메시지를 계속 받는다. 바꿀 때는 필드를 더하는 방식으로만 바꾸고, 깨지는 변경은 `v`를 올리고 옛 버전도 함께 처리한다.
 
@@ -229,7 +235,8 @@ HTML 안의 데이터 블록 하나:
 
 - `landmark`의 기존 Java 코드는 `backup/java-gradle-2025` 브랜치로 보존했다(2026-10-11, 커밋 `18ad6f0`).
 - `landmark`의 `main`은 지도 페이지 빌드 결과(`index.html`, `assets/`), `.nojekyll`, 용도를 적은 `README.md`만 둔다. GitHub Pages는 `main`의 루트에서 배포한다.
-- 자동 배포: trip-map의 GitHub Actions 워크플로(`deploy-share-map.yml`)가 `main`에 `src/share-map/**`, `src/share-protocol.ts`, `src/theme/tokens/**`, `vite.map.config.ts`가 바뀌어 들어올 때 `build:map`을 돌리고 `dist-map/`을 `landmark`의 `main`에 커밋·푸시한다. 수동 실행(`workflow_dispatch`)도 둔다.
+- 자동 배포: trip-map의 GitHub Actions 워크플로(`deploy-share-map.yml`)가 `main`에 `src/share-map/**`, `src/share-protocol.ts`, `src/schema/label-colors.ts`, `src/theme/tokens/**`, `src/components/map/**`, `src/sections/map/markers.ts`, `vite.map.config.ts`, `package.json`, `yarn.lock`이 바뀌어 들어올 때 `build:map`을 돌리고 `dist-map/`을 `landmark`의 `main`에 커밋·푸시한다. 수동 실행(`workflow_dispatch`)도 둔다(`main`에서만 배포).
+- r4 변수: 저장소 변수(Actions Variables) `NAVER_MAP_CLIENT_ID`를 빌드 단계의 `VITE_NAVER_MAP_CLIENT_ID`로 넘긴다. 비어 있으면 빌드 전에 실패한다(늘 실패 안내만 뜨는 페이지가 배포되지 않게). 클라이언트 ID는 공개 값이라 Secret이 아니어도 된다. NCP 콘솔의 Web 서비스 URL에 `https://sch0718.github.io`를 등록해야 인증된다.
 - 인증: `landmark`에 쓰기 권한 배포 키(공개 키)를 등록하고, 개인 키는 trip-map 저장소 Secret `LANDMARK_DEPLOY_KEY`에 둔다.
 - 처음 한 번 하는 일(구현 단계에서): `landmark` `main`을 README만 있는 상태로 바꾸기, Pages 켜기, 배포 키 만들기·등록, 첫 배포 후 지도 페이지 주소 확인.
 - 지도 페이지가 바뀌어 배포되면 이미 보낸 파일도 새 지도 페이지를 쓴다(§4.5 하위 호환).
@@ -254,14 +261,15 @@ HTML 안의 데이터 블록 하나:
 - 보기 화면 `render`(jsdom, 지도 iframe 모듈은 가짜): 카드·라벨 칩, 라벨 1개면 칩 줄 없음, 라벨 거르기(→ `filter` 메시지), 네이버 링크(sid 유무), 카드 클릭 → `focus` 메시지, `select` 메시지 → 카드 강조·스크롤, 깨진 데이터 안내, 메모 `pre-wrap`·HTML 미해석.
 - 보기 화면 `map-frame`: `ready` → `init` 전송(메모·주소 없음), 10초 안에 `ready` 없으면 안내(가짜 타이머), `tiles-failed` → 안내, 다른 출처·다른 `source` 창의 메시지 무시, `targetOrigin`이 지도 페이지 출처.
 - `share-protocol` 검사 함수: 정상 메시지, 모르는 `kind`, `v` 불일치, 필드 타입 오류.
-- 지도 페이지(jsdom + Leaflet): `init`으로 마커 생성, `focus`·`filter` 처리, 마커 클릭 → `select` 전송, 부모가 아닌 창의 메시지 무시, 타일 실패만 나면 `tiles-failed`, 첫 `tileload` 뒤에는 보내지 않음(Leaflet 이벤트를 직접 발생시켜 확인), 직접 열었을 때 안내.
+- 지도 페이지 `map`(jsdom + 카메라가 움직이는 가짜 어댑터 주입, r4): `init` → 마커 수·이름 글자 그대로·라벨 팔레트/표면 색·강조색 클러스터, 1곳/같은 좌표 → 줌 16, 맞춘 줌이 16을 넘으면 16, `focus` → 줌 16·`selected`·묶지 않음, `focus(null)` → 강조 해제, `filter` → 마커 수(다시 맞추지 않음), 마커 클릭 → 강조 이동·카메라 그대로·`select`, 크기 0에서 `init` 뒤 크기가 생기면 다시 맞춤(focus가 있으면 하지 않음), 붙기 전에 온 메시지는 붙은 뒤 반영, 붙은 뒤 카메라를 옮기고 마커를 그림, `mount` 거부 → `tiles-failed` 한 번, 인증 실패 콜백 → `tiles-failed` 한 번.
+- 지도 페이지 `main`: 직접 열었을 때 안내, `ready` 전송, 부모가 아닌 창·모양이 틀린 메시지 무시, 클라이언트 ID 없고 fake 아님 → `ready` 뒤 `tiles-failed`.
 - `ExportHtmlDialog`: 대상 문구(선택/보이는 목록/라벨·검색 표기), 제목 기본값, 0곳 비활성, 틀 로드 실패 안내와 다시 시도, 공유 버튼 표시 여부(`canShare` 스텁), 공유 취소 무시, 저장 시 다운로드 호출과 파일 이름.
 
 ### 6.2 E2E (Playwright)
 
-- 지도 페이지를 로컬 서버(`vite preview --config vite.map.config.ts`)로 띄우고, 보기 화면은 `VITE_SHARE_MAP_URL`을 그 주소로 해서 빌드한다.
-- 앱에 샘플 보관함을 넣고 라벨로 거른 뒤 내보내기 → 다운로드 파일을 받아 `file://`로 연다. 지도 타일 요청은 가로채 빈 이미지를 돌려주고, 그 요청에 Referer(지도 페이지 출처)가 붙었는지 확인한다.
-- 확인: 카드 수, iframe 안 마커 수, 마커 클릭 → 카드 강조, 카드 클릭 → 마커 강조, 라벨 거르기 → 마커 수, 네이버 링크 `href`, 파일이 직접 불러오는 외부 스크립트 없음.
+- 지도 페이지를 `VITE_MAP_ADAPTER=fake`로 빌드해(`build:map:e2e`, r4) 로컬 서버(`vite preview --config vite.map.config.ts`)로 띄우고, 보기 화면은 `VITE_SHARE_MAP_URL`을 그 주소로 해서 빌드한다. 가짜 지도의 마커는 `data-testid="marker-<id>"` 버튼이고 강조되면 `aria-pressed="true"`다.
+- 앱에 샘플 보관함을 넣고 라벨로 거른 뒤 내보내기 → 다운로드 파일을 받아 `file://`로 연다. (r4: OSM 타일 Referer 확인은 뺐다. 네이버 인증은 §6.4 배포 확인에서 본다.)
+- 확인: 카드 수, iframe 안 마커 수, 마커 클릭 → 카드 강조, 카드 클릭 → 마커 강조, 강조된 카드에서 다른 마커 클릭 → 강조 이동, 라벨 거르기 → 마커 수, 네이버 링크 `href`, 파일이 직접 불러오는 외부 스크립트 없음.
 - 지도 페이지 서버를 띄우지 않은 채 열면 10초 뒤 안내가 나오고 목록은 그대로인지 확인.
 - 휴대폰 크기(375×812)에서도 같은 확인.
 
@@ -271,7 +279,7 @@ HTML 안의 데이터 블록 하나:
 
 ### 6.4 배포 확인
 
-- 첫 배포 뒤 `https://sch0718.github.io/landmark/`를 직접 열어 안내 문구가 나오는지, 실제 내보낸 파일에서 지도가 뜨는지 확인한다.
+- 첫 배포 뒤 `https://sch0718.github.io/landmark/`를 직접 열어 안내 문구가 나오는지, 실제 내보낸 파일에서 지도가 뜨는지 확인한다. r4: 네이버 인증이 통과해 네이버 지도·로고가 보이는지(인증 실패면 지도 영역에 실패 안내) 확인한다.
 
 ### 6.5 직접 확인
 
@@ -280,4 +288,4 @@ HTML 안의 데이터 블록 하나:
 ## 7. 범위 밖 (나중에)
 
 - 받는 사람의 앱으로 가져오기(B) — 파일 안 `ShareDoc`을 그대로 읽어 4번에서 병합과 함께 만든다.
-- 파일 안에서 편집(C), 경로·이동시간 표시, 검색, 클러스터.
+- 파일 안에서 편집(C), 경로·이동시간 표시, 검색.

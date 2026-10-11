@@ -111,15 +111,17 @@ export async function renderLibrary(
     path?: string;
     ids?: string[];
     storage?: Storage;
+    /** `renderApp`의 `shareTemplate`를 그대로 넘긴다. */
+    shareTemplate?: NonNullable<Parameters<typeof renderApp>[0]>['shareTemplate'];
   } = {},
 ) {
-  const { prefs, width = 1280, path = '/', ids } = options;
+  const { prefs, width = 1280, path = '/', ids, shareTemplate } = options;
   const storage = options.storage ?? createMemoryStorage();
   storage.setItem(LIBRARY_KEY, JSON.stringify(library));
   if (prefs !== undefined) {
     storage.setItem(PREFS_KEY, JSON.stringify({ ...structuredClone(DEFAULT_PREFS), ...prefs }));
   }
   const viewport = mockViewport(width);
-  const rendered = await renderApp({ path, storage, ids });
+  const rendered = await renderApp({ path, storage, ids, shareTemplate });
   return { ...rendered, storage, setWidth: viewport.setWidth };
 }

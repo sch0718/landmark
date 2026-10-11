@@ -1,0 +1,89 @@
+name: Deploy share map
+
+# 내보낸 HTML 파일이 iframe으로 띄우는 지도 페이지를 sch0718/landmark(GitHub Pages)에 배포한다.
+# 설계: docs/superpowers/specs/2026-10-11-html-share-export-design.md §4.6
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/share-map/**'
+      - 'src/share-protocol.ts'
+      - 'src/schema/label-colors.ts'
+      - 'src/theme/tokens/**'
+      # 지도 페이지가 앱의 지도 어댑터(네이버·가짜)·카메라 계산·마커 만들기를 그대로 쓴다.
+      - 'src/components/map/**'
+      - 'src/sections/map/markers.ts'
+      - 'vite.map.config.ts'
+      - 'package.json'
+      - 'yarn.lock'
+      - '.github/workflows/deploy-share-map.yml'
+  workflow_dispatch:
+
+# 이 저장소는 읽기만 한다. landmark 푸시는 배포 키(LANDMARK_DEPLOY_KEY)로 인증한다.
+permissions:
+  contents: read
+
+# 배포가 겹치면 차례로 실행한다. 진행 중인 배포는 취소하지 않는다(landmark 푸시가 중간에 끊기지 않게).
+concurrency:
+  group: deploy-share-map
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    # 다른 브랜치에서 workflow_dispatch로 돌려도 공유 지도 페이지에 올라가지 않게 main에서만 배포한다.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: yarn
+
+      - name: Install
+        run: yarn install --frozen-lockfile
+
+      # 지도는 네이버 지도 JS v3다. 클라이언트 ID는 저장소 변수 NAVER_MAP_CLIENT_ID(공개 값, NCP 콘솔에
+      # Web 서비스 URL https://sch0718.github.io 등록)에서 받는다. 비어 있으면 늘 실패 안내만 뜨는 페이지가
+      # 배포되므로 빌드 전에 멈춘다.
+      - name: Build (build:map)
+        env:
+          VITE_NAVER_MAP_CLIENT_ID: ${{ vars.NAVER_MAP_CLIENT_ID }}
+        run: |
+          if [ -z "$VITE_NAVER_MAP_CLIENT_ID" ]; then
+            echo "::error::저장소 변수 NAVER_MAP_CLIENT_ID가 비어 있습니다(Settings → Secrets and variables → Actions → Variables)."
+            exit 1
+          fi
+          yarn build:map
+
+      # 이 체크아웃의 ssh-key가 아래 push 인증도 맡는다.
+      - name: Check out landmark
+        uses: actions/checkout@v4
+        with:
+          repository: sch0718/landmark
+          ref: main
+          ssh-key: ${{ secrets.LANDMARK_DEPLOY_KEY }}
+          path: landmark
+
+      # .git과 README.md만 남기고 비운 뒤 새 빌드 결과를 복사한다(삭제된 파일이 남지 않게).
+      - name: Replace landmark contents with dist-map
+        run: |
+          # 빌드 결과가 없으면 지우기 전에 멈춘다(빈 내용으로 배포되지 않게).
+          test -f dist-map/index.html
+          find landmark -mindepth 1 -maxdepth 1 ! -name .git ! -name README.md -exec rm -rf {} +
+          cp -R dist-map/. landmark/
+          touch landmark/.nojekyll
+
+      - name: Commit and push
+        working-directory: landmark
+        run: |
+          git add -A
+          if git diff --cached --quiet; then
+            echo "변경 없음: 배포할 내용이 없습니다."
+            exit 0
+          fi
+          git -c user.name='trip-map deploy' -c user.email='actions@users.noreply.github.com' \
+            commit -m "deploy: trip-map ${GITHUB_SHA::7}"
+          git push origin HEAD:main

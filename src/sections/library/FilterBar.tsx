@@ -1,6 +1,6 @@
 import Box from '@mui/material/Box';
 import InputBase from '@mui/material/InputBase';
-import { SearchIcon } from 'src/components/icons';
+import { SearchIcon, ShareIcon } from 'src/components/icons';
 import type { LibraryQuery } from 'src/domain/library/query';
 import type { Label } from 'src/schema/library';
 import { LabelChips } from 'src/sections/library/LabelChips';
@@ -21,10 +21,21 @@ type Props = {
   regions: ReadonlyArray<{ region: string; count: number }>;
   view: LibraryView;
   onViewChange(view: LibraryView): void;
+  /** 내보내기 창을 연다. 0곳이어도 누를 수 있다(창에서 이유를 보여 준다). */
+  onExport(): void;
 };
 
-/** 검색·정렬·보기 방식과 라벨·지역 칩. */
-export function FilterBar({ query, onChange, labels, counts, regions, view, onViewChange }: Props) {
+/** 검색·정렬·보기 방식·내보내기와 라벨·지역 칩. */
+export function FilterBar({
+  query,
+  onChange,
+  labels,
+  counts,
+  regions,
+  view,
+  onViewChange,
+  onExport,
+}: Props) {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, pt: 1.5, pb: 0.5 }}>
       <Box sx={{ px: 2 }}>
@@ -57,7 +68,31 @@ export function FilterBar({ query, onChange, labels, counts, regions, view, onVi
 
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 1 }}>
         <ViewSwitcher value={view} onChange={onViewChange} />
-        <SortMenu value={query.sort} onChange={(sort) => onChange({ sort })} />
+        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+          <SortMenu value={query.sort} onChange={(sort) => onChange({ sort })} />
+          <Box
+            component="button"
+            type="button"
+            aria-label="내보내기"
+            title="내보내기"
+            onClick={onExport}
+            sx={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 44,
+              height: 44,
+              border: 0,
+              borderRadius: 'var(--tm-radius-md)',
+              background: 'transparent',
+              color: 'var(--tm-text-secondary)',
+              cursor: 'pointer',
+              '&:focus-visible': { outline: '2px solid var(--tm-accent-main)', outlineOffset: -2 },
+            }}
+          >
+            <ShareIcon aria-hidden="true" width={18} height={18} />
+          </Box>
+        </Box>
       </Box>
 
       <LabelChips query={query} onChange={onChange} labels={labels} counts={counts} />

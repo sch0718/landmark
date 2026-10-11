@@ -69,3 +69,26 @@ export class LabelNameTaken extends Schema.TaggedError<LabelNameTaken>()('LabelN
     return '같은 이름의 라벨이 있어요';
   }
 }
+
+/** 내보내기 파일을 만들지 못했을 때 화면에 보이는 안내. */
+export const SHARE_EXPORT_FAILED =
+  '내보내기 파일을 만들지 못했어요. 인터넷 연결을 확인하고 다시 시도해 주세요';
+
+/** 공유 HTML 틀을 받지 못했거나 틀이 올바르지 않다. `reason`은 진단용이고 화면에는 안내 문구만 보인다. */
+export class ShareTemplateUnavailable extends Schema.TaggedError<ShareTemplateUnavailable>()(
+  'ShareTemplateUnavailable',
+  { reason: Schema.String },
+) {
+  get userMessage(): string {
+    return SHARE_EXPORT_FAILED;
+  }
+}
+
+/** 만든 공유 데이터가 스키마 검증에 실패했다(프로그램 오류). 사용자에게는 같은 안내를 보인다. */
+export class ShareDocInvalid extends Schema.TaggedError<ShareDocInvalid>()('ShareDocInvalid', {
+  message: Schema.String,
+}) {
+  get userMessage(): string {
+    return SHARE_EXPORT_FAILED;
+  }
+}

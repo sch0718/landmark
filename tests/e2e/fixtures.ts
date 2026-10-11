@@ -11,6 +11,16 @@ export const E2E_DATA_FILE = fileURLToPath(
   new URL(`../../public/data/${E2E_PUBLIC_ID}.json`, import.meta.url),
 );
 
+/**
+ * 내보낸 HTML 파일이 iframe으로 띄우는 지도 페이지 주소(e2e). `playwright.config.ts`가 `dist-map/`을
+ * 이 포트로 내주고, global setup이 보기 화면 틀을 이 주소로 빌드한다(끝 `/`까지 같아야 Referer 확인이 맞다).
+ */
+export const SHARE_MAP_URL = 'http://localhost:5174/';
+/** 보기 화면 틀 빌드 결과(앱이 내보낼 때 받아 가는 파일). */
+export const SHARE_VIEWER_FILE = fileURLToPath(
+  new URL('../../public/share-viewer.html', import.meta.url),
+);
+
 const SEED_FILE = fileURLToPath(new URL('../fixtures/library/seed.json', import.meta.url));
 
 export const LIBRARY_KEY = 'tripmap:library:v2';
