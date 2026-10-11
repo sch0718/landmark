@@ -123,6 +123,42 @@ describe('PlaceLookup.lookupLink', () => {
     }),
   );
 
+  it.effect('FORBIDDEN_ORIGIN은 코드를 보존하고 콘솔에 원인을 한 번 경고한다', () =>
+    Effect.gen(function* () {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const error = yield* Effect.flip(
+        lookupLink(
+          vi.fn(async () =>
+            json({ error: { code: 'FORBIDDEN_ORIGIN', message: '허용하지 않는 요청 출처' } }, 403),
+          ),
+          'https://x.test',
+        ),
+      );
+      expect(error.code).toBe('FORBIDDEN_ORIGIN');
+      expect(error.userMessage).toBe(
+        '지금은 장소 정보를 가져오지 못했어요. 잠시 뒤 다시 해 주세요',
+      );
+      expect(warn).toHaveBeenCalledTimes(1);
+      const args = warn.mock.calls[0]!;
+      expect(args[0]).toContain('src/server/http.ts');
+      expect(args).toContain('FORBIDDEN_ORIGIN');
+      expect(args).toContain('허용하지 않는 요청 출처');
+    }),
+  );
+
+  it.effect('FORBIDDEN_ORIGIN이 아닌 서버 오류는 경고하지 않는다', () =>
+    Effect.gen(function* () {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      yield* Effect.flip(
+        lookupLink(
+          vi.fn(async () => json(errorBody('NOT_FOUND'), 404)),
+          'https://x.test',
+        ),
+      );
+      expect(warn).not.toHaveBeenCalled();
+    }),
+  );
+
   it.effect('알 수 없는 reason은 버린다', () =>
     Effect.gen(function* () {
       const error = yield* Effect.flip(

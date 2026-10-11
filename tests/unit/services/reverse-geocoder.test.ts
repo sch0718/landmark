@@ -4,7 +4,7 @@ import { Effect, Fiber } from 'effect';
 import { TestClock } from 'effect/testing';
 import { formatReverseGeocode, ReverseGeocoder } from 'src/services/reverse-geocoder';
 
-// (37.5494047, 126.9833092)를 geocoder 하위 모듈로 조회한 실제 응답 모양(v2).
+// (37.5494047, 126.9833092)를 geocoder 하위 모듈로 조회했을 때의, 문서화된 v2 응답 모양.
 const ROAD_AND_JIBUN = {
   v2: {
     status: { code: 0, name: 'ok', message: 'done' },

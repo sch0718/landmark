@@ -3,6 +3,8 @@ import type { ApiErrorCode } from 'src/server/http';
 import type { FolderRef, FolderResult, ResolvedPlace } from 'src/server/resolve';
 import { isApiErrorCode, PlaceLookupError } from 'src/services/errors';
 
+const FORBIDDEN_ORIGIN_WARNING =
+  '장소 조회 서버가 요청 출처를 거부했어요(허용 출처는 src/server/http.ts에서 설정)';
 const OFFLINE_WARNING = '장소 조회 서버에 연결하지 못했어요(로컬이면 yarn dev:full)';
 
 type Json = Record<string, unknown>;
@@ -61,7 +63,17 @@ export class PlaceLookup extends Context.Service<
         return yield* offline(`JSON이 아닌 응답(HTTP ${response.status})`);
       }
       const apiError = readApiError(body);
-      if (apiError !== null) return yield* toLookupError(apiError);
+      if (apiError !== null) {
+        // 개발 설정 오류이므로 화면 문구와 별개로 콘솔에 원인을 남긴다(스펙 §5).
+        if (apiError.code === 'FORBIDDEN_ORIGIN') {
+          const serverMessage =
+            isObject(body) && isObject(body.error) ? body.error.message : undefined;
+          yield* Effect.sync(() => {
+            console.warn(FORBIDDEN_ORIGIN_WARNING, apiError.code, serverMessage);
+          });
+        }
+        return yield* toLookupError(apiError);
+      }
       if (response.status === 404) return yield* offline('error 본문이 없는 404');
       if (!response.ok) {
         return yield* new PlaceLookupError({ code: 'UPSTREAM_ERROR' });
