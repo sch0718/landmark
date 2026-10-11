@@ -129,7 +129,11 @@ export function createShareMap(
     // (실제 네이버 지도, 2026-10-11: 넓은 배치에서 줌 16으로 맞춘 뒤 좁아지면 장소가 화면 밖으로 나갔다).
     const untouched = sameCamera(adapter.getCamera(), fittedCamera);
     const resized = syncSize();
-    if (refitPending ? hasSize() : resized && untouched) fitAll();
+    if (refitPending ? hasSize() : resized && untouched) {
+      // 붙을 때·init과 같은 순서: 카메라를 옮긴 뒤 그린다(네이버는 그린 순간 보이는 범위의 마커만 그린다).
+      fitAll();
+      render();
+    }
   };
 
   let unsubscribeAuth = () => {};

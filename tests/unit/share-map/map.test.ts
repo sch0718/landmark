@@ -478,11 +478,58 @@ describe('createShareMap', () => {
     it('1곳이면 크기가 바뀐 뒤에도 그 지점 줌 16으로 다시 맞춘다', async () => {
       const { handle, adapter, size, camera } = await setup();
       handle.init([A]);
+      // 어댑터 resize는 가운데·줌을 그대로 두므로 화면만으로는 다시 맞췄는지 알 수 없다. 카메라 호출 수로 본다.
+      const setCamera = vi.spyOn(adapter, 'setCamera');
       size.w = 375;
       size.h = 323;
       window.dispatchEvent(new Event('resize'));
       expect(adapter.fitCalls).toHaveLength(0);
+      expect(setCamera).toHaveBeenCalledTimes(1);
+      expect(setCamera).toHaveBeenLastCalledWith({ center: [A.lng, A.lat], zoom: 16 });
       expect(camera()).toEqual({ center: [A.lng, A.lat], zoom: 16 });
+
+      // 크기가 그대로면 다시 맞추지 않는다.
+      window.dispatchEvent(new Event('resize'));
+      expect(setCamera).toHaveBeenCalledTimes(1);
+    });
+
+    it('resize로 다시 맞출 때도 카메라를 먼저 옮기고 마커를 다시 그린다(크기 변경·크기 0에서 생김 둘 다)', async () => {
+      for (const from of [
+        { w: 439, h: 793 },
+        { w: 0, h: 0 },
+      ]) {
+        for (const places of [[A, B, C], [A]]) {
+          const label = `${from.w}x${from.h} ${places.length}곳`;
+          const adapter = new CameraFake();
+          const order: string[] = [];
+          const fit = adapter.fitBounds.bind(adapter);
+          const setCamera = adapter.setCamera.bind(adapter);
+          const setMarkers = adapter.setMarkers.bind(adapter);
+          adapter.fitBounds = (points, padding) => {
+            order.push('camera');
+            fit(points, padding);
+          };
+          adapter.setCamera = (next) => {
+            order.push('camera');
+            setCamera(next);
+          };
+          adapter.setMarkers = (markers) => {
+            order.push('markers');
+            setMarkers(markers);
+          };
+          const { handle, size } = await setup({ adapter, size: { ...from } });
+          handle.init(places);
+          order.length = 0;
+
+          size.w = 375;
+          size.h = 323;
+          window.dispatchEvent(new Event('resize'));
+          expect(order, label).toContain('camera');
+          expect(order, label).toContain('markers');
+          expect(order.lastIndexOf('camera'), label).toBeLessThan(order.lastIndexOf('markers'));
+          document.body.replaceChildren();
+        }
+      }
     });
 
     it('처음부터 크기가 있으면 resize가 화면을 되돌리지 않는다', async () => {
