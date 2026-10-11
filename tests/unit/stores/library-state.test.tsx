@@ -4,6 +4,7 @@ import { TestClock } from 'effect/testing';
 import { createStore, Provider } from 'jotai';
 import { StrictMode, Suspense, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { importFolder } from 'src/domain/library/add-place';
 import { createLabel, setPlaceMemo, type OpCtx } from 'src/domain/library/ops';
 import { forkEffect, setAppRuntimeForTest } from 'src/lib/effect/runtime';
 import { createMemoryStorage } from 'src/repositories/edit-layer-repo';
@@ -234,6 +235,28 @@ describe('useLibraryAction', () => {
     });
     expect(outcome).toEqual({ ok: true, createdId: 'label001' });
     expect(s.store.get(libraryAtom).labels['label001']?.name.value).toBe('카페');
+  });
+
+  it('passes the summary from OpResult through', async () => {
+    const s = setup({ ids: ['label001', 'place00001'] });
+    const { result } = await renderAction(s);
+    let outcome: Awaited<ReturnType<typeof result.current.run>> | undefined;
+    await act(async () => {
+      outcome = await result.current.run((lib, ctx) =>
+        importFolder(
+          lib,
+          [{ sid: '1', name: '콤포트', address: '강원 속초시', lng: 128.59, lat: 38.2, memo: '' }],
+          { newLabelName: '속초' },
+          ctx,
+        ),
+      );
+    });
+    expect(outcome).toEqual({
+      ok: true,
+      createdId: 'label001',
+      summary: { created: 1, merged: 0, restored: 0 },
+    });
+    expect(s.store.get(libraryAtom).places['place00001']?.name.value).toBe('콤포트');
   });
 
   it('action updates atom only after store succeeds', async () => {

@@ -3,7 +3,7 @@ import { isEqual } from 'es-toolkit';
 import { atom, useAtomValue, useSetAtom, useStore, type PrimitiveAtom } from 'jotai';
 import { useHydrateAtoms } from 'jotai/utils';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import type { OpCtx, OpError, OpResult } from 'src/domain/library/ops';
+import type { OpCtx, OpError, OpResult, OpSummary } from 'src/domain/library/ops';
 import { effectAtom } from 'src/lib/effect/atom';
 import { forkEffect, startEffect } from 'src/lib/effect/runtime';
 import { emptyLibrary, type Library } from 'src/schema/library';
@@ -74,7 +74,8 @@ export function useLibrarySync(): LoadResult {
 
 // ---------- 변경 ----------
 
-export type LibraryActionResult = { ok: true; createdId?: string } | { ok: false; error: unknown };
+export type LibraryActionResult =
+  { ok: true; createdId?: string; summary?: OpSummary } | { ok: false; error: unknown };
 
 type LibraryOp = (lib: Library, ctx: OpCtx) => Library | OpResult;
 
@@ -92,6 +93,7 @@ const applyOp = Effect.fn('보관함/변경')(function* (op: LibraryOp) {
   const store = yield* LibraryStore;
   const ids = yield* IdGen;
   let createdId: string | undefined;
+  let summary: OpSummary | undefined;
   const lib = yield* store.update((current) =>
     Effect.gen(function* () {
       const now = new Date(yield* Clock.currentTimeMillis).toISOString();
@@ -99,18 +101,21 @@ const applyOp = Effect.fn('보관함/변경')(function* (op: LibraryOp) {
       if (!isOpResult(out)) return out;
       if (!out.ok) return yield* Effect.fail(new OpRejected(out.error));
       createdId = out.createdId;
+      summary = out.summary;
       return out.lib;
     }),
   );
-  return { lib, createdId };
+  return { lib, createdId, summary };
 });
 
-type Applied = { ok: true; lib: Library; createdId?: string } | { ok: false; error: unknown };
+type Applied =
+  | { ok: true; lib: Library; createdId?: string; summary?: OpSummary }
+  | { ok: false; error: unknown };
 
 /** 오류를 결과로 바꾼다. 연산이 거절한 경우(OpError)는 호출한 쪽이 보여 주므로 보고하지 않는다. */
 const settle = (op: LibraryOp): Effect.Effect<Applied, never, LibraryStore | IdGen> =>
   applyOp(op).pipe(
-    Effect.map(({ lib, createdId }): Applied => ({ ok: true, lib, createdId })),
+    Effect.map(({ lib, createdId, summary }): Applied => ({ ok: true, lib, createdId, summary })),
     Effect.catchCause((cause) => {
       const error = Cause.squash(cause);
       if (error instanceof OpRejected)
@@ -151,9 +156,12 @@ export function useLibraryAction(): {
       const applied = await startEffect(settle(op));
       if (!applied.ok) return applied;
       await reflectSaved(jotaiStore, before, applied.lib);
-      return applied.createdId === undefined
-        ? { ok: true }
-        : { ok: true, createdId: applied.createdId };
+      // 없는 값은 키째 빼서 `{ ok: true }` 모양을 유지한다.
+      return {
+        ok: true,
+        ...(applied.createdId === undefined ? {} : { createdId: applied.createdId }),
+        ...(applied.summary === undefined ? {} : { summary: applied.summary }),
+      };
     },
     [jotaiStore],
   );
