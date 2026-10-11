@@ -104,7 +104,7 @@ Cloudflare 미리보기 배포에 시험 함수를 올려 확인했다(서울 �
 ### 3.3 도메인 연산 (`src/domain/library/ops.ts`에 추가)
 
 - `addPlace(lib, candidate, { labelIds, memo }, ctx)` → `{ lib, placeId, outcome: 'created' | 'merged' | 'restored' }`
-- `importFolder(lib, items, { labelId } | { newLabelName }, ctx)` → `{ lib, created, merged, restored, labelId }`
+- `importFolder(lib, items, { labelId } | { newLabelName }, ctx)` → 성공 시 라벨 id와 `{ created, merged, restored }`(잠금 안 최신본 기준으로 연산이 직접 센 값). 화면의 결과 토스트는 이 값을 쓴다(되살린 것은 새로 넣은 수에 더한다).
 
 후보(`PlaceCandidate`): `{ source: PlaceSource, name, address, lng, lat, category: string | null }`.
 
@@ -134,10 +134,10 @@ Cloudflare 미리보기 배포에 시험 함수를 올려 확인했다(서울 �
 
 | 함수 | 입력 | 성공 응답 |
 |---|---|---|
-| `GET /api/place` | `url` | 장소: `{ kind: 'place', provider: 'naver'\|'kakao'\|'google', providerId, name, address, lng, lat, category }` (구글은 `address: ''`) / 폴더: `{ kind: 'folder', shareId }` |
+| `GET /api/place` | `url` | 장소: `{ kind: 'place', provider: 'naver'\|'kakao'\|'google', providerId, name, address, lng, lat, category }` (구글은 `address: ''`, 구글만 `providerId`가 `null`일 수 있음) / 폴더: `{ kind: 'folder', shareId }` |
 | `GET /api/naver-folder` | `share` | `{ folderName, places: [{ sid, name, address, lng, lat, memo }] }` |
 
-실패: HTTP 4xx/5xx + `{ error: { code, message } }`. `code`는 `UNSUPPORTED_LINK`(400), `NOT_FOUND`(404), `UPSTREAM_ERROR`(502), `TIMEOUT`(504), `TOO_MANY_PLACES`(413, 폴더 1,000곳 초과), `FORBIDDEN_ORIGIN`(403).
+실패: HTTP 4xx/5xx + `{ error: { code, message, reason?, placeName? } }`(`reason: 'no-location'`일 때만 `placeName`). `code`는 `UNSUPPORTED_LINK`(400), `NOT_FOUND`(404), `UPSTREAM_ERROR`(502), `TIMEOUT`(504), `TOO_MANY_PLACES`(413, 폴더 1,000곳 초과), `FORBIDDEN_ORIGIN`(403).
 
 ### 4.2 링크 해석
 
@@ -147,7 +147,7 @@ Cloudflare 미리보기 배포에 시험 함수를 올려 확인했다(서울 �
 | `map.naver.com/p/entry/place/<id>`, `map.naver.com/p/search/*/place/<id>`, `m.place.naver.com/<종류>/<id>`, `pcmap.place.naver.com/<종류>/<id>` | 네이버 장소 조회 |
 | `map.naver.com/p/favorite/sharedPlace/folder/<shareId>` | 폴더 |
 | `kko.to/*`, `place.map.kakao.com/<id>`, `applink.map.kakao.com/place?id=<id>`, `map.kakao.com/?itemId=<id>` | 카카오 panel3 조회 |
-| `maps.app.goo.gl/*`, `goo.gl/maps/*`, `www.google.com/maps/place/*`, `maps.google.com/*` | 주소에서 이름(`/place/<이름>/`), 장소 ID(`!1s0x…:0x…`), 좌표: `!3d<위도>!4d<경도>` 또는 `@<위도>,<경도>`가 있으면 그것, 없으면 `!20s<Plus Code>`를 Open Location Code 규칙으로 계산. 둘 다 없으면 `NOT_FOUND`(위치 없음 사유) |
+| `maps.app.goo.gl/*`, `goo.gl/maps/*`, `www.google.com/maps/place/*`, `maps.google.com/*` | 주소에서 이름(`/place/<이름>/`), 장소 ID(`!1s0x…:0x…`), 좌표: `!3d<위도>!4d<경도>` 또는 `@<위도>,<경도>`가 있으면 그것, 없으면 `!20s<Plus Code>`를 Open Location Code 규칙으로 계산. 둘 다 없으면 `NOT_FOUND`(사유 `no-location`과 링크의 장소 이름 `placeName`을 함께 돌려줘 앱이 이름을 채워 핀 모드로 간다). 장소 ID(`!1s…`)가 없고 좌표만 있으면 `providerId: null`로 돌려주고, 앱은 출처를 직접 찍은 핀(`pin`)으로 저장한다(중복 판단 없음) |
 
 - 쿼리·해시의 부가 옵션은 무시한다. 이동은 `redirect: 'manual'`로 최대 3번까지 따라가고, 매번 허용 목록 검사를 다시 한다.
 - 구글 짧은 링크는 브라우저가 아닌 User-Agent로 요청한다(브라우저 UA는 302 대신 HTML을 준다).
@@ -157,7 +157,7 @@ Cloudflare 미리보기 배포에 시험 함수를 올려 확인했다(서울 �
 
 - **접속 대상 고정**: §4.2 표의 호스트와 조회 API 호스트(`map.naver.com`, `pages.map.naver.com`, `place-api.map.kakao.com`)만 접속한다. 허용 밖이면 `UNSUPPORTED_LINK`.
 - **요청 출처 확인**: `Origin`(없으면 `Referer`)이 `https://landmark-c5f.pages.dev`, `https://*.landmark-c5f.pages.dev`, `http://localhost:5173`, `http://localhost:8788` 중 하나가 아니면 `FORBIDDEN_ORIGIN`. 브라우저 밖 악용을 완전히 막지는 못한다.
-- **캐시**: Cloudflare Cache API에 장소 결과 1일, 폴더 10분. 키는 정규화한 입력(원 링크가 아니라 해석된 서비스·ID).
+- **캐시**: Cloudflare Cache API에 장소 결과 1일, 폴더 10분. 키는 입력에서만 만들어 조회·저장에 같은 키를 쓴다: 네트워크 없이 ID를 알 수 있는 링크(네이버 웹 주소·카카오 장소 주소)는 서비스·ID, 짧은 링크·구글은 쿼리·해시를 뺀 링크, 폴더는 공유 ID. 오류는 캐시하지 않는다.
 
 ### 4.4 앱 쪽
 

@@ -95,7 +95,8 @@
   export type FolderItem = { sid: string; name: string; address: string; lng: number; lat: number; memo: string };
   export type FolderPlan = { create: FolderItem[]; merge: { item: FolderItem; placeId: string }[] };
   export function planFolderImport(lib: Library, items: FolderItem[]): FolderPlan;
-  export function importFolder(lib: Library, items: FolderItem[], label: { labelId: string } | { newLabelName: string }, ctx: OpCtx): OpResult; // createdId = 쓴 라벨 id
+  export function importFolder(lib: Library, items: FolderItem[], label: { labelId: string } | { newLabelName: string }, ctx: OpCtx): OpResult; // createdId = 쓴 라벨 id, summary = { created, merged, restored } — 잠금 안 최신본 기준으로 연산이 직접 센다
+  // ops.ts의 OpResult 성공형에 `summary?: { created: number; merged: number; restored: number }`를 더하고, stores/library-state.ts의 LibraryActionResult 성공형도 `summary`를 그대로 넘긴다
   ```
 - 규칙(스펙 §3.4·§3.5): 새로 만들기 / 같은 출처의 살아 있는 장소면 라벨 합치기 + (링크일 때만) 메모 덧붙이기 / 지운 장소면 되살리고 같은 규칙. 메모 덧붙이기는 `기존 + '\n' + 새 메모`, 10,000자 넘으면 `truncateMemo`. 폴더 라벨: 정규형이 같은 살아 있는 라벨 재사용, 없으면 새 라벨(이름 30자 넘으면 `LabelNameInvalid`), 색은 살아 있는 라벨이 쓰지 않은 첫 `LABEL_COLORS`(다 쓰였으면 `order` 기준 다음 색). 폴더 메모는 새 장소에만 넣는다.
 
@@ -109,7 +110,7 @@
   - 카카오·구글 출처도 같은 규칙, 직접 핀(`legacy` 없음)은 항상 새로 만듦
   - 없는 라벨 id → `{ ok: false, error: { _tag: 'NotFound' } }`
   - `planFolderImport`: 기존 `sid`는 `merge`, 나머지 `create`
-  - `importFolder`: 새 라벨 생성(색 규칙), 같은 이름(대소문자·공백만 다름) 라벨 재사용, 기존 장소 라벨만 추가·메모 불변, 새 장소 메모 = 폴더 메모(10,000자 자름), 결과가 `LibrarySchema` 검증 통과, 31자 이름 → `LabelNameInvalid`
+  - `importFolder`: `summary`가 실제 연산 결과와 같음(새 2·합침 1·되살림 1 섞인 입력), 새 라벨 생성(색 규칙), 같은 이름(대소문자·공백만 다름) 라벨 재사용, 기존 장소 라벨만 추가·메모 불변, 새 장소 메모 = 폴더 메모(10,000자 자름), 결과가 `LibrarySchema` 검증 통과, 31자 이름 → `LabelNameInvalid`
 - [ ] **Step 2:** FAIL 확인 → **Step 3:** 구현 → **Step 4:** PASS + `yarn typecheck`
 - [ ] **Step 5:** 커밋 `feat(library): 링크·폴더로 장소를 넣는 도메인 연산`
 
@@ -148,7 +149,7 @@
   - 스펙의 구글 장소 주소 → `name: '이재모피자 본점'`, `googleId: '0x1520f8eed52456f1:0x129df2a4704f8520'`, `plusCode: '8Q7F422J+R6X'`, `lat/lng: null` (Review Focus 2)
   - `!3d35.1!4d129.0`이 있는 구글 주소 → 좌표 그대로
   - `https://evil.example.com/map.naver.com/p/entry/place/1`, `javascript:…`, `ftp://naver.me/x`, 빈 문자열 → unsupported
-- [ ] **Step 2: 실패하는 테스트 (plus-code)**: Open Location Code 공식 테스트 예(`8FVC9G8F+6X` → 위도 47.365562, 경도 8.524813 근처, 오차 1e-5 이내), `8Q7F422J+R6X` → 부산 서면 근처(위도 35.15~35.16, 경도 129.05~129.07), 짧은 코드(`9G8F+6X`)·잘못된 문자 → null
+- [ ] **Step 2: 실패하는 테스트 (plus-code)**: 공식 구현(google/open-location-code `decode`의 셀 중심)과 같은 값 — `8FVC9G8F+6X` → (47.3655625, 8.5249375), `8Q7F422J+R6X` → (35.1021125, 129.030609375)(부산 중구 이재모피자 본점), 둘 다 오차 1e-9 이내, 짧은 코드(`9G8F+6X`)·잘못된 문자 → null
 - [ ] **Step 3:** FAIL → **Step 4:** 구현(OLC 디코드는 공식 알고리즘: 20진 알파벳 `23456789CFGHJMPQRVWX`, 쌍 자리 해상도 20,1,.05,.0025,.000125 후 그리드 자리 4×5 세분) → **Step 5:** PASS
 - [ ] **Step 6:** 커밋 `feat(server): 지도 링크 분류와 Plus Code 해석`
 
@@ -168,20 +169,20 @@
   ```ts
   // http.ts
   export type ApiErrorCode = 'UNSUPPORTED_LINK' | 'NOT_FOUND' | 'FORBIDDEN_ORIGIN' | 'TOO_MANY_PLACES' | 'UPSTREAM_ERROR' | 'TIMEOUT';
-  export class ApiError extends Error { constructor(readonly code: ApiErrorCode, message: string, readonly reason?: 'no-location'); }
+  export class ApiError extends Error { constructor(readonly code: ApiErrorCode, message: string, readonly detail?: { reason: 'no-location'; placeName: string }); }
   export const STATUS: Record<ApiErrorCode, number>;
   export function isAllowedOrigin(origin: string | null): boolean;
   export function jsonResponse(body: unknown, init?: ResponseInit): Response;
-  export function errorResponse(e: unknown): Response; // ApiError → 해당 상태, 그 밖 → UPSTREAM_ERROR(502)
+  export function errorResponse(e: unknown): Response; // ApiError → 해당 상태, 본문 { error: { code, message, reason?, placeName? } }, 그 밖 → UPSTREAM_ERROR(502)
   // resolve.ts
-  export type ResolvedPlace = { kind: 'place'; provider: 'naver' | 'kakao' | 'google'; providerId: string; name: string; address: string; lng: number; lat: number; category: string | null };
+  export type ResolvedPlace = { kind: 'place'; provider: 'naver' | 'kakao' | 'google'; providerId: string | null; name: string; address: string; lng: number; lat: number; category: string | null }; // providerId가 null인 것은 구글뿐(장소 ID 없이 좌표만 있는 링크)
   export type FolderRef = { kind: 'folder'; shareId: string };
   export type FolderResult = { folderName: string; places: { sid: string; name: string; address: string; lng: number; lat: number; memo: string }[] };
   export type Deps = { fetch: typeof fetch; timeoutMs?: number };
   export function resolveLink(raw: string, deps: Deps): Promise<ResolvedPlace | FolderRef>;
   export function resolveFolder(shareId: string, deps: Deps): Promise<FolderResult>;
   ```
-- 규칙: 이동은 `redirect: 'manual'`, 응답 `Location`을 절대 주소로 풀어 `classifyLink` 다시, 최대 3번, 넘거나 허용 밖이면 `UNSUPPORTED_LINK`. 구글 짧은 링크는 `User-Agent: 'landmark-link-resolver'`. 네이버·카카오 조회 헤더는 스펙 §1.3 값. 요청마다 `AbortController` 8초 → `TIMEOUT`. 조회 404·데이터 없음 → `NOT_FOUND`; 구글 좌표·Plus Code 모두 없음 → `NOT_FOUND` + `reason: 'no-location'`. 폴더: 좌표가 유한하지 않거나 `available === false`인 북마크는 뺀다(Review Focus 3), 1,000곳 초과 → `TOO_MANY_PLACES`. 출처 패턴은 Global Constraints의 네 가지(와일드카드는 서브도메인 한 단계만).
+- 규칙: 이동은 `redirect: 'manual'`, 응답 `Location`을 절대 주소로 풀어 `classifyLink` 다시, 최대 3번, 넘거나 허용 밖이면 `UNSUPPORTED_LINK`. 구글 짧은 링크는 `User-Agent: 'landmark-link-resolver'`. 네이버·카카오 조회 헤더는 스펙 §1.3 값. 요청마다 `AbortController` 8초 → `TIMEOUT`. 조회 404·데이터 없음 → `NOT_FOUND`; 구글 좌표·Plus Code 모두 없음 → `NOT_FOUND` + `detail: { reason: 'no-location', placeName: <링크의 장소 이름> }`(이름도 없으면 `detail` 없이 `NOT_FOUND`). 폴더: 좌표가 유한하지 않거나 `available === false`인 북마크는 뺀다(Review Focus 3), 1,000곳 초과 → `TOO_MANY_PLACES`. 출처 패턴은 Global Constraints의 네 가지(와일드카드는 서브도메인 한 단계만).
 
 - [ ] **Step 1: 녹화**: 위 fixture를 `curl`로 받아 저장(개인정보 없는 공개 장소만, 카카오 응답은 `summary`만 남김).
 - [ ] **Step 2: 실패하는 테스트** — 가짜 `fetch`가 URL별 fixture를 돌려준다:
@@ -191,7 +192,8 @@
   - 조회 404 → `NOT_FOUND`; fetch가 끝나지 않음(가짜 타이머로 8초) → `TIMEOUT`; 조회 500 → `UPSTREAM_ERROR`
   - 1,001곳 폴더 → `TOO_MANY_PLACES`
   - `isAllowedOrigin`: 네 패턴 통과, `https://a.b.landmark-c5f.pages.dev`·`https://landmark-c5f.pages.dev.evil.com`·`null` 거부
-  - `errorResponse`: 코드별 상태, 본문 `{ error: { code, message } }`(+ `reason`)
+  - `errorResponse`: 코드별 상태, 본문 `{ error: { code, message } }`, `no-location`이면 `reason: 'no-location'`·`placeName` 포함
+  - 좌표·Plus Code 없는 구글 주소 → `NOT_FOUND`, `detail.placeName === '이재모피자 본점'`
 - [ ] **Step 3:** FAIL → **Step 4:** 구현 → **Step 5:** PASS, `pipeline` 기존 테스트도 PASS
 - [ ] **Step 6:** 커밋 `feat(server): 장소 링크 해석과 공유 폴더 조회`
 
@@ -206,9 +208,9 @@
 
 **Interfaces:**
 - Consumes: `resolveLink`·`resolveFolder`·`isAllowedOrigin`·`jsonResponse`·`errorResponse`(Task 4)
-- Produces: `export const onRequestGet = (ctx: { request: Request; waitUntil(p: Promise<unknown>): void }) => Promise<Response>` 두 파일. 순서: 출처 검사(`Origin`, 없으면 `Referer`의 출처) → 입력 검사(`url`/`share` 없음 → `UNSUPPORTED_LINK`) → 캐시 조회(`caches.default`, 키 `https://cache.landmark/place/<provider>/<id>` 또는 `…/folder/<shareId>` — 장소는 해석 뒤 키를 만들어 저장, 조회 전에는 원 링크 정규화 키로도 찾기) → 해석 → `Cache-Control: max-age=86400`(장소)·`600`(폴더)로 캐시 저장(`waitUntil`) → 응답. `caches`가 없으면(테스트·로컬) 캐시를 건너뛴다.
+- Produces: `export const onRequestGet = (ctx: { request: Request; waitUntil(p: Promise<unknown>): void }) => Promise<Response>` 두 파일. 순서: 출처 검사(`Origin`, 없으면 `Referer`의 출처) → 입력 검사(`url`/`share` 없음 → `UNSUPPORTED_LINK`) → 캐시 조회(`caches.default`) → 해석 → `Cache-Control: max-age=86400`(장소)·`600`(폴더)로 캐시 저장(`waitUntil`) → 응답. 캐시 키는 **입력 하나에서만** 만든다(조회·저장 같은 키): `export function cacheKey(kind: 'place' | 'folder', input: string): string` — 장소는 `classifyLink(input)`이 네트워크 없이 ID를 주면 `https://cache.landmark/place/<naver|kakao>/<id>`, 그 밖(짧은 링크·구글)은 쿼리·해시를 뺀 `https://cache.landmark/link/<호스트><경로>`; 폴더는 `https://cache.landmark/folder/<shareId>`. 오류 응답은 캐시하지 않는다. `caches`가 없으면(테스트·로컬) 캐시를 건너뛴다.
 
-- [ ] **Step 1: 실패하는 테스트**: 가짜 `fetch`·`Request`로 `onRequestGet` 호출 — 허용 출처 + 네이버 링크 → 200 `ResolvedPlace`; 출처 없음/다름 → 403 `FORBIDDEN_ORIGIN`; `url` 없음 → 400; 폴더 함수 200·413; `caches` 없는 환경에서 오류 없이 동작
+- [ ] **Step 1: 실패하는 테스트**: `cacheKey` — 네이버 웹 주소 두 개(쿼리만 다름) → 같은 키, `naver.me/Fk73Vab5` → `https://cache.landmark/link/naver.me/Fk73Vab5`, 카카오 `applink…?id=16990385` → `…/place/kakao/16990385`; 가짜 `fetch`·`Request`로 `onRequestGet` 호출 — 허용 출처 + 네이버 링크 → 200 `ResolvedPlace`; 출처 없음/다름 → 403 `FORBIDDEN_ORIGIN`; `url` 없음 → 400; 폴더 함수 200·413; `caches` 없는 환경에서 오류 없이 동작
 - [ ] **Step 2:** FAIL → **Step 3:** 구현 → **Step 4:** PASS, `yarn typecheck`·`yarn lint`·`yarn build`
 - [ ] **Step 5:** 로컬 확인: `yarn dev:full`로 띄우고 `curl -H 'Origin: http://localhost:8788' 'http://localhost:8788/api/place?url=https%3A%2F%2Fnaver.me%2FFk73Vab5'` → 200 JSON(이름 포함). 서버 종료.
 - [ ] **Step 6:** 커밋 `feat(server): 장소 조회 Pages Functions와 로컬 개발 명령`
@@ -226,7 +228,7 @@
 - Consumes: 서버 응답 모양(Task 4 `ResolvedPlace`·`FolderRef`·`FolderResult` — 타입은 `src/server/resolve.ts`에서 `import type`)
 - Produces:
   ```ts
-  export class PlaceLookupError extends Schema.TaggedError<...>()('PlaceLookupError', { code: Schema.Literals([...ApiErrorCode, 'OFFLINE']), reason: Schema.optional(Schema.Literal('no-location')) }) { get userMessage(): string } // 스펙 §5 문구
+  export class PlaceLookupError extends Schema.TaggedError<...>()('PlaceLookupError', { code: Schema.Literals([...ApiErrorCode, 'OFFLINE']), reason: Schema.optional(Schema.Literal('no-location')), placeName: Schema.optional(Schema.String) }) { get userMessage(): string } // 스펙 §5 문구. Error의 name과 겹치지 않게 placeName
   export class PlaceLookup extends Context.Service<PlaceLookup, { lookupLink(url: string): Effect<ResolvedPlace | FolderRef, PlaceLookupError>; lookupFolder(shareId: string): Effect<FolderResult, PlaceLookupError> }>()('tripmap/PlaceLookup') { static layerWith(o: { fetch: typeof fetch; base?: string }); static readonly layer; }
   export class ReverseGeocoder extends Context.Service<ReverseGeocoder, { reverse(lng: number, lat: number): Effect<string | null> }>()('tripmap/ReverseGeocoder') { static layerWith(o: { reverse: (lng: number, lat: number) => Promise<string | null> }); static readonly layer; }
   ```
@@ -257,7 +259,7 @@
   export function extractUrl(text: string): string | null; // 첫 http(s) 링크, 끝의 구두점·괄호 제거
   ```
 - `AddPlaceHost`: `compact`는 아래 시트(MUI `Drawer anchor="bottom"`, 폴더 미리보기는 높이 90vh), 그 밖은 오른쪽 칸(`DETAIL_WIDTH`) — 지도를 가리지 않게 기존 상세 칸 자리를 쓴다(상세가 열려 있으면 추가 흐름이 우선).
-- `LinkInputPanel`: 입력 → `extractUrl` → `lookupLink`. 결과가 장소면 `{ step: 'candidate' }`(구글 `address === ''`이면 `ReverseGeocoder.reverse`로 채움), 폴더면 `{ step: 'folder' }`. 오류 시 문구 + 버튼(스펙 §5: `UPSTREAM_ERROR`·`TIMEOUT`은 `다시 시도`·`지도에서 핀으로 추가`, `no-location`은 바로 핀 모드로 이름 채움, `OFFLINE`은 `다시 시도`). 조회 중 버튼 비활성, 실행 번호 ref로 닫힌 뒤 결과 무시.
+- `LinkInputPanel`: 입력 → `extractUrl` → `lookupLink`. 결과가 장소면 `{ step: 'candidate' }`(구글 `address === ''`이면 `ReverseGeocoder.reverse`로 채움; `providerId === null`이면 출처를 `{ kind: 'pin' }`으로 만들어 중복 판단 없이 추가 — 카드의 출처 표시는 `구글`), 폴더면 `{ step: 'folder' }`. 오류 시 문구 + 버튼(스펙 §5: `UPSTREAM_ERROR`·`TIMEOUT`은 `다시 시도`·`지도에서 핀으로 추가`, `no-location`은 바로 핀 모드로 `placeName`을 이름에 채움(없으면 빈 이름), `OFFLINE`은 `다시 시도`). 조회 중 버튼 비활성, 실행 번호 ref로 닫힌 뒤 결과 무시.
 - `CandidateCard`: 출처 표시(`네이버`·`카카오`·`구글`), 이름·주소(입력칸, 고칠 수 있음)·분류, `LabelPicker`(새 라벨 만들기 포함), 메모, `findExisting`이 살아 있는 장소를 찾으면 안내 + `라벨 더하기`. 추가 → `run((lib, ctx) => addPlace(...))` → 성공 시 `navigate(paths.place(id))`, 토스트 `추가했어요`, 흐름 닫기. 저장 중 버튼 비활성.
 
 - [ ] **Step 1: 실패하는 테스트 (extract-url)**: `'[네이버 지도]\n콤포트\nhttps://naver.me/Fk73Vab5'` → `https://naver.me/Fk73Vab5` (Review Focus 1); `'(https://kko.to/MWuG8x8eN4).'` → 괄호·마침표 제거; 링크 없음 → null
@@ -279,11 +281,11 @@
 **Files:**
 - Create: `src/sections/add-place/FolderPreview.tsx`
 - Modify: `src/sections/add-place/AddPlaceHost.tsx`
-- Test: `tests/unit/sections/add-place/folder-preview.test.tsx`
+- Test: `tests/unit/sections/add-place/folder-preview.test.tsx`(다른 탭이 미리보기 뒤에 같은 장소를 먼저 넣은 경우: 저장소에 직접 장소를 넣은 뒤 가져오기 → 토스트 개수가 그 장소를 합친 것으로 셈)
 
 **Interfaces:**
 - Consumes: `lookupFolder`(Task 6), `planFolderImport`·`importFolder`·`FolderItem`(Task 2), `liveLabels`(`query.ts`)
-- Produces: `FolderPreview({ shareId })` — 머리글(`<폴더 이름> · <N>곳`), 라벨 이름 입력(기본 폴더 이름) + 기존 라벨 선택(선택하면 입력 대신 그 라벨), 30자 초과 안내, 목록(체크박스, 이름·주소, `이미 있음`), 전체 선택/해제, `<선택 수>곳 가져오기`(0이면 비활성). 가져오기 → `run((lib, ctx) => importFolder(lib, 선택한 항목, label, ctx))` → 토스트(Global Constraints 문구, 개수는 실행 직전 `planFolderImport` 기준), 흐름 닫기, 그 라벨로 목록 필터(`useLibraryQuery`의 `labelIds`를 그 라벨 하나로).
+- Produces: `FolderPreview({ shareId })` — 머리글(`<폴더 이름> · <N>곳`), 라벨 이름 입력(기본 폴더 이름) + 기존 라벨 선택(선택하면 입력 대신 그 라벨), 30자 초과 안내, 목록(체크박스, 이름·주소, `이미 있음`), 전체 선택/해제, `<선택 수>곳 가져오기`(0이면 비활성). 가져오기 → `run((lib, ctx) => importFolder(lib, 선택한 항목, label, ctx))` → 토스트(Global Constraints 문구, 개수는 `run` 결과의 `summary` — 잠금 안 최신본 기준. 되살린 것은 새로 넣은 수에 더한다. `planFolderImport`는 미리보기의 `이미 있음` 표시에만 쓴다), 흐름 닫기, 그 라벨로 목록 필터(`useLibraryQuery`의 `labelIds`를 그 라벨 하나로).
 
 - [ ] **Step 1: 실패하는 테스트**: 가짜 폴더(3곳, 1곳은 이미 있음) → 머리글·`이미 있음`; 하나 해제 후 가져오기 → 새 1·합친 1, 토스트 `1곳을 새로 넣고, 1곳은 라벨만 더했어요`; 모두 새것이면 `3곳을 새로 넣었어요`, 모두 이미 있으면 `3곳은 라벨만 더했어요`; 라벨 이름 31자 → 안내·버튼 비활성; 기존 라벨 선택 시 새 라벨 생기지 않음; 전체 해제 → 버튼 비활성; `TOO_MANY_PLACES` → 문구; 가져온 뒤 목록이 그 라벨로 걸러짐
 - [ ] **Step 2:** FAIL → **Step 3:** 구현 → **Step 4:** PASS
