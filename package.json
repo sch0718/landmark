@@ -9,6 +9,7 @@
   },
   "scripts": {
     "dev": "yarn build:viewer && vite",
+    "dev:full": "yarn build:viewer && wrangler pages dev --proxy 5173 -- vite --port 5173 --strictPort",
     "build": "yarn build:viewer && tsc -b && vite build",
     "build:viewer": "vite build --config vite.viewer.config.ts",
     "build:map": "vite build --config vite.map.config.ts",
@@ -85,6 +86,7 @@
     "typescript-eslint": "^8.71.0",
     "unplugin-icons": "^24.0.0",
     "vite": "^8.3.2",
-    "vitest": "^5.0.3"
+    "vitest": "^5.0.3",
+    "wrangler": "4.142.0"
   }
 }
