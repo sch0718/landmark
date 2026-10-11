@@ -10,7 +10,9 @@ on:
       - 'src/share-protocol.ts'
       - 'src/schema/label-colors.ts'
       - 'src/theme/tokens/**'
-      - 'src/components/map/marker-label.ts'
+      # 지도 페이지가 앱의 지도 어댑터(네이버·가짜)·카메라 계산·마커 만들기를 그대로 쓴다.
+      - 'src/components/map/**'
+      - 'src/sections/map/markers.ts'
       - 'vite.map.config.ts'
       - 'package.json'
       - 'yarn.lock'
@@ -43,8 +45,18 @@ jobs:
       - name: Install
         run: yarn install --frozen-lockfile
 
+      # 지도는 네이버 지도 JS v3다. 클라이언트 ID는 저장소 변수 NAVER_MAP_CLIENT_ID(공개 값, NCP 콘솔에
+      # Web 서비스 URL https://sch0718.github.io 등록)에서 받는다. 비어 있으면 늘 실패 안내만 뜨는 페이지가
+      # 배포되므로 빌드 전에 멈춘다.
       - name: Build (build:map)
-        run: yarn build:map
+        env:
+          VITE_NAVER_MAP_CLIENT_ID: ${{ vars.NAVER_MAP_CLIENT_ID }}
+        run: |
+          if [ -z "$VITE_NAVER_MAP_CLIENT_ID" ]; then
+            echo "::error::저장소 변수 NAVER_MAP_CLIENT_ID가 비어 있습니다(Settings → Secrets and variables → Actions → Variables)."
+            exit 1
+          fi
+          yarn build:map
 
       # 이 체크아웃의 ssh-key가 아래 push 인증도 맡는다.
       - name: Check out landmark
