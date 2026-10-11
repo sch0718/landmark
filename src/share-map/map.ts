@@ -162,9 +162,10 @@ export function createShareMap(
       places = next;
       visible = null;
       selectedId = null;
-      render();
+      // 붙은 뒤에도 카메라를 먼저 옮기고 그린다(붙을 때와 같은 순서, 위 mount 처리의 주석 참고).
       if (mounted) fitAll();
       else pendingCamera = 'fit';
+      render();
     },
     focus(placeId) {
       const place = placeId === null ? undefined : places.find((p) => p.id === placeId);

@@ -314,32 +314,44 @@ describe('createShareMap', () => {
     expect(adapter.fitCalls).toHaveLength(1);
   });
 
-  it('붙은 뒤에는 카메라를 먼저 옮기고 마커를 그린다(네이버는 첫 맞추기 뒤 idle이 오지 않아 그린 순간의 범위만 보인다)', async () => {
-    for (const places of [[A, B, C], [A]]) {
-      const adapter = new DeferredFake();
-      const order: string[] = [];
-      const fit = adapter.fitBounds.bind(adapter);
-      const setCamera = adapter.setCamera.bind(adapter);
-      const setMarkers = adapter.setMarkers.bind(adapter);
-      adapter.fitBounds = (points, padding) => {
-        order.push('camera');
-        fit(points, padding);
-      };
-      adapter.setCamera = (camera) => {
-        order.push('camera');
-        setCamera(camera);
-      };
-      adapter.setMarkers = (markers) => {
-        order.push('markers');
-        setMarkers(markers);
-      };
-      const { handle } = await setup({ adapter });
-      handle.init(places);
-      adapter.finish();
-      await settle();
-      expect(order.at(-1)).toBe('markers');
-      expect(order).toContain('camera');
-      document.body.replaceChildren();
+  it('카메라를 먼저 옮기고 마커를 그린다: 붙기 전에 받은 init도, 붙은 뒤에 받은 init도(네이버는 첫 맞추기 뒤 idle이 오지 않아 그린 순간의 범위만 보인다)', async () => {
+    for (const timing of ['붙기 전', '붙은 뒤'] as const) {
+      for (const places of [[A, B, C], [A]]) {
+        const adapter = new DeferredFake();
+        const order: string[] = [];
+        const fit = adapter.fitBounds.bind(adapter);
+        const setCamera = adapter.setCamera.bind(adapter);
+        const setMarkers = adapter.setMarkers.bind(adapter);
+        adapter.fitBounds = (points, padding) => {
+          order.push('camera');
+          fit(points, padding);
+        };
+        adapter.setCamera = (camera) => {
+          order.push('camera');
+          setCamera(camera);
+        };
+        adapter.setMarkers = (markers) => {
+          order.push('markers');
+          setMarkers(markers);
+        };
+        const { handle } = await setup({ adapter });
+        if (timing === '붙은 뒤') {
+          adapter.finish();
+          await settle();
+          order.length = 0;
+          handle.init(places);
+        } else {
+          handle.init(places);
+          adapter.finish();
+          await settle();
+        }
+        expect(order, `${timing} ${places.length}곳`).toContain('camera');
+        expect(order, `${timing} ${places.length}곳`).toContain('markers');
+        expect(order.lastIndexOf('camera'), `${timing} ${places.length}곳`).toBeLessThan(
+          order.lastIndexOf('markers'),
+        );
+        document.body.replaceChildren();
+      }
     }
   });
 
