@@ -27,19 +27,33 @@ const json = (body: string, status = 200) => ({
   body,
 });
 
-/** `/api/place`·`/api/naver-folder`를 녹화 응답으로 대신한다. 실제 네트워크는 타지 않는다. */
+/** 앱이 `/api`로 보낸 질의 값(`url=`·`share=`)을 요청 순서대로 모은 것. */
+type ApiCalls = { place: string[]; folder: string[] };
+
+/**
+ * `/api/place`·`/api/naver-folder`를 녹화 응답으로 대신한다. 실제 네트워크는 타지 않는다.
+ * 앱이 보낸 질의 값을 모아 돌려주니, 호출한 쪽이 흐름이 끝난 뒤 `expect`로 확인한다.
+ */
 async function mockApi(
   page: Page,
   replies: { place?: { body: string; status?: number }; folder?: string },
-): Promise<void> {
+): Promise<ApiCalls> {
+  const calls: ApiCalls = { place: [], folder: [] };
   if (replies.place !== undefined) {
     const { body, status } = replies.place;
-    await page.route('**/api/place?**', (route) => route.fulfill(json(body, status)));
+    await page.route('**/api/place?**', (route) => {
+      calls.place.push(new URL(route.request().url()).searchParams.get('url') ?? '');
+      return route.fulfill(json(body, status));
+    });
   }
   if (replies.folder !== undefined) {
     const body = replies.folder;
-    await page.route('**/api/naver-folder?**', (route) => route.fulfill(json(body)));
+    await page.route('**/api/naver-folder?**', (route) => {
+      calls.folder.push(new URL(route.request().url()).searchParams.get('share') ?? '');
+      return route.fulfill(json(body));
+    });
   }
+  return calls;
 }
 
 /** 빈 보관함으로 시작한다. */
@@ -85,7 +99,7 @@ async function showLibraryTab(page: Page, detail: Locator): Promise<void> {
 
 test.describe('장소 추가', () => {
   test('@smoke 링크로 장소를 추가하면 목록과 지도에 나타난다', async ({ page }) => {
-    await mockApi(page, { place: { body: PLACE_NAVER } });
+    const calls = await mockApi(page, { place: { body: PLACE_NAVER } });
     await openEmptyLibrary(page);
     await expect(rows(page)).toHaveCount(0);
 
@@ -94,6 +108,8 @@ test.describe('장소 추가', () => {
 
     // 확인 카드: 이름·주소가 채워지고, 좁은 화면에서는 후보 핀을 보이려고 지도(/map)로 옮긴다.
     await expect(page.getByRole('heading', { name: '콤포트' })).toBeVisible();
+    // 붙여 넣은 공유 문구에서 링크만 뽑아 조회했다.
+    expect(calls.place).toEqual(['https://naver.me/Fk73Vab5']);
     await expect(page.getByRole('textbox', { name: '주소' })).toHaveValue(
       '서울 용산구 후암동 358-144',
     );
@@ -136,7 +152,7 @@ test.describe('장소 추가', () => {
   });
 
   test('폴더를 가져오면 그 라벨로 걸러진 장소가 보인다', async ({ page }) => {
-    await mockApi(page, { place: { body: PLACE_FOLDER }, folder: NAVER_FOLDER });
+    const calls = await mockApi(page, { place: { body: PLACE_FOLDER }, folder: NAVER_FOLDER });
     await openEmptyLibrary(page);
 
     await openFrom(page, /네이버 폴더 가져오기/);
@@ -146,6 +162,10 @@ test.describe('장소 추가', () => {
     await expect(page.getByRole('heading', { name: `${FOLDER_NAME} · 3곳` })).toBeVisible();
     await expect(page.getByRole('textbox', { name: '붙일 라벨 이름' })).toHaveValue(FOLDER_NAME);
     await page.getByRole('button', { name: '3곳 가져오기', exact: true }).click();
+    expect(calls.place).toEqual([FOLDER_LINK]);
+    // 개발 서버의 StrictMode는 효과를 두 번 돌려 같은 조회가 두 번 갈 수 있다. 모두 같은 공유 ID여야 한다.
+    expect(calls.folder.length).toBeGreaterThan(0);
+    expect([...new Set(calls.folder)]).toEqual(['fb65e7f93f8a4144a4ded594d604a7aa']);
 
     // 가져온 뒤에는 그 라벨로 걸러진 목록이 보인다.
     await expect(page.getByText('3곳을 새로 넣었어요')).toBeVisible();
@@ -171,7 +191,7 @@ test.describe('장소 추가', () => {
 
     await page.getByRole('button', { name: '여기에 추가', exact: true }).click();
 
-    // 가짜 지도에는 주소 변환이 없어 직접 입력 안내가 뜬다.
+    // 위에서 네이버 지도 SDK 요청을 막았으므로 주소 변환이 null을 돌려줘 직접 입력 안내가 뜬다.
     await expect(page.getByText('주소를 찾지 못했어요. 직접 입력해 주세요')).toBeVisible();
     const add = page.getByRole('button', { name: '추가', exact: true });
     await expect(add).toBeDisabled();
@@ -189,7 +209,7 @@ test.describe('장소 추가', () => {
   });
 
   test('지원하지 않는 링크는 안내한다', async ({ page }) => {
-    await mockApi(page, { place: { body: PLACE_UNSUPPORTED, status: 400 } });
+    const calls = await mockApi(page, { place: { body: PLACE_UNSUPPORTED, status: 400 } });
     await openEmptyLibrary(page);
 
     await openFrom(page, /링크 붙여넣기/);
@@ -203,6 +223,7 @@ test.describe('장소 추가', () => {
       'https://example.com/not-a-map',
     );
     await expect(page.getByRole('button', { name: '다시 시도' })).toHaveCount(0);
+    expect(calls.place).toEqual(['https://example.com/not-a-map']);
     await page.getByRole('button', { name: '취소', exact: true }).click();
     await expect(rows(page)).toHaveCount(0);
   });
