@@ -1,5 +1,5 @@
 import { act, render } from '@testing-library/react';
-import { Layer, ManagedRuntime } from 'effect';
+import { Effect, Layer, ManagedRuntime } from 'effect';
 import { createStore, Provider } from 'jotai';
 import { RouterProvider, createMemoryRouter } from 'react-router';
 import { vi } from 'vitest';
@@ -8,8 +8,11 @@ import { setAppRuntimeForTest } from 'src/lib/effect/runtime';
 import { routes } from 'src/routes/router';
 import { IdGen } from 'src/services/id-gen';
 import { LegacyTripSource } from 'src/services/legacy-trip-source';
+import { PlaceLookupError } from 'src/services/errors';
 import { LibraryStore } from 'src/services/library-store';
+import { PlaceLookup } from 'src/services/place-lookup';
 import { PrefsStore } from 'src/services/prefs-store';
+import { ReverseGeocoder } from 'src/services/reverse-geocoder';
 import { ShareTemplate } from 'src/services/share-template';
 import { ThemeRoot } from 'src/theme/ThemeRoot';
 
@@ -47,6 +50,21 @@ export function mockViewport(initial: number): { setWidth: (width: number) => vo
 /** 테스트 기본 공유 틀: 데이터 자리 문자열이 정확히 하나. */
 const DEFAULT_SHARE_TEMPLATE = `<!doctype html><script type="application/json" id="tripmap-share">${SHARE_DATA_PLACEHOLDER}</script>`;
 
+/** 테스트 기본 장소 조회: 서버 없이 연결 실패(`OFFLINE`)만 돌려준다. 콘솔 경고도 내지 않는다. */
+const OFFLINE_PLACE_LOOKUP = Layer.succeed(
+  PlaceLookup,
+  PlaceLookup.of({
+    lookupLink: () => Effect.fail(new PlaceLookupError({ code: 'OFFLINE' })),
+    lookupFolder: () => Effect.fail(new PlaceLookupError({ code: 'OFFLINE' })),
+  }),
+);
+
+/** 테스트 기본 주소 변환: 늘 "주소를 못 찾음"(null). */
+const NULL_REVERSE_GEOCODER = Layer.succeed(
+  ReverseGeocoder,
+  ReverseGeocoder.of({ reverse: () => Effect.succeed(null) }),
+);
+
 /** 실제 라우트 표를 메모리 라우터로 그린다. 저장소는 `storage`(없으면 메모리 모드). */
 export async function renderApp(
   options: {
@@ -58,9 +76,20 @@ export async function renderApp(
      * 함수면 받을 때마다 불러 결과를 바꿀 수 있다(실패 뒤 재시도 등). Promise를 돌려주면 그때까지 기다린다.
      */
     shareTemplate?: string | Error | (() => string | Error | Promise<string | Error>);
+    /** 장소 조회 가짜 레이어. 없으면 늘 `OFFLINE`으로 실패한다. */
+    placeLookup?: Layer.Layer<PlaceLookup>;
+    /** 주소 변환 가짜 레이어. 없으면 늘 null을 돌려준다. */
+    reverseGeocoder?: Layer.Layer<ReverseGeocoder>;
   } = {},
 ) {
-  const { path = '/', storage, ids = [], shareTemplate = DEFAULT_SHARE_TEMPLATE } = options;
+  const {
+    path = '/',
+    storage,
+    ids = [],
+    shareTemplate = DEFAULT_SHARE_TEMPLATE,
+    placeLookup = OFFLINE_PLACE_LOOKUP,
+    reverseGeocoder = NULL_REVERSE_GEOCODER,
+  } = options;
   setAppRuntimeForTest(
     ManagedRuntime.make(
       Layer.mergeAll(
@@ -78,6 +107,8 @@ export async function renderApp(
           },
           url: '/share-viewer.html',
         }),
+        placeLookup,
+        reverseGeocoder,
       ),
     ),
   );

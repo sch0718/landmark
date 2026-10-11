@@ -9,7 +9,9 @@ import { QUERY_PERSIST_DELAY_MS, useLibraryQuery } from 'src/sections/library/us
 import { IdGen } from 'src/services/id-gen';
 import { LegacyTripSource } from 'src/services/legacy-trip-source';
 import { LibraryStore } from 'src/services/library-store';
+import { PlaceLookup } from 'src/services/place-lookup';
 import { PREFS_KEY, PrefsStore } from 'src/services/prefs-store';
+import { ReverseGeocoder } from 'src/services/reverse-geocoder';
 import { ShareTemplate } from 'src/services/share-template';
 import { libraryAtom } from 'src/stores/library-state';
 import { prefsAtom } from 'src/stores/prefs-state';
@@ -25,6 +27,8 @@ function setup() {
         IdGen.layerSequence([]),
         LegacyTripSource.layerWith({ storage, fetch: (...args) => globalThis.fetch(...args) }),
         ShareTemplate.layer,
+        PlaceLookup.layer,
+        ReverseGeocoder.layer,
       ),
     ),
   );

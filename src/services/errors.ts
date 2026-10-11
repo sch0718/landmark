@@ -1,4 +1,5 @@
 import { Schema } from 'effect';
+import type { ApiErrorCode } from 'src/server/http';
 import { MutableArray } from 'src/schema/mutable';
 
 // 스펙 §6.3. 화면에 보일 문구는 `userMessage`에 둔다(토스트·화면 공통).
@@ -90,5 +91,58 @@ export class ShareDocInvalid extends Schema.TaggedError<ShareDocInvalid>()('Shar
 }) {
   get userMessage(): string {
     return SHARE_EXPORT_FAILED;
+  }
+}
+
+const API_ERROR_CODES = [
+  'UNSUPPORTED_LINK',
+  'NOT_FOUND',
+  'FORBIDDEN_ORIGIN',
+  'TOO_MANY_PLACES',
+  'UPSTREAM_ERROR',
+  'TIMEOUT',
+] as const satisfies readonly ApiErrorCode[];
+// 서버 코드가 늘면 여기서 컴파일 오류가 난다(위 목록에 더하고 `userMessage`도 고친다).
+const _allCodesListed: [Exclude<ApiErrorCode, (typeof API_ERROR_CODES)[number]>] extends [never]
+  ? true
+  : never = true;
+void _allCodesListed;
+
+/** 서버 오류 코드와 앱 쪽 연결 실패(`OFFLINE`). */
+export const PLACE_LOOKUP_ERROR_CODES = [...API_ERROR_CODES, 'OFFLINE'] as const;
+export type PlaceLookupErrorCode = (typeof PLACE_LOOKUP_ERROR_CODES)[number];
+
+/** 서버가 준 오류 코드가 맞는지. */
+export const isApiErrorCode = (value: unknown): value is ApiErrorCode =>
+  (API_ERROR_CODES as readonly unknown[]).includes(value);
+
+const UNAVAILABLE_MESSAGE = '지금은 장소 정보를 가져오지 못했어요. 잠시 뒤 다시 해 주세요';
+
+/**
+ * 링크·폴더 조회 실패(스펙 §5). `reason: 'no-location'`은 구글 링크에 위치가 없을 때만 오고,
+ * 이때 `placeName`에 장소 이름이 온다(`name`은 Error.name과 겹쳐서 쓰지 않는다).
+ */
+export class PlaceLookupError extends Schema.TaggedError<PlaceLookupError>()('PlaceLookupError', {
+  code: Schema.Literals(PLACE_LOOKUP_ERROR_CODES),
+  reason: Schema.optionalKey(Schema.Literal('no-location')),
+  placeName: Schema.optionalKey(Schema.String),
+}) {
+  get userMessage(): string {
+    switch (this.code) {
+      case 'UNSUPPORTED_LINK':
+        return '네이버·카카오·구글 지도의 장소 링크만 넣을 수 있어요';
+      case 'NOT_FOUND':
+        return this.reason === 'no-location'
+          ? '위치를 알 수 없는 링크예요. 지도에서 위치를 맞춰 주세요'
+          : '장소를 찾지 못했어요. 링크를 다시 확인해 주세요';
+      case 'TOO_MANY_PLACES':
+        return '장소가 너무 많은 폴더예요(최대 1,000곳)';
+      case 'OFFLINE':
+        return '인터넷 연결을 확인하고 다시 시도해 주세요';
+      case 'FORBIDDEN_ORIGIN':
+      case 'UPSTREAM_ERROR':
+      case 'TIMEOUT':
+        return UNAVAILABLE_MESSAGE;
+    }
   }
 }

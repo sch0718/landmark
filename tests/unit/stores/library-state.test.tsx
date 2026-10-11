@@ -13,7 +13,9 @@ import { StorageQuotaExceeded } from 'src/services/errors';
 import { IdGen } from 'src/services/id-gen';
 import { LegacyTripSource } from 'src/services/legacy-trip-source';
 import { LIBRARY_KEY, LibraryStore } from 'src/services/library-store';
+import { PlaceLookup } from 'src/services/place-lookup';
 import { PrefsStore } from 'src/services/prefs-store';
+import { ReverseGeocoder } from 'src/services/reverse-geocoder';
 import { ShareTemplate } from 'src/services/share-template';
 import {
   libraryAtom,
@@ -102,6 +104,8 @@ function setup(
     IdGen.layerSequence(options.ids ?? ['label001']),
     LegacyTripSource.layerWith({ storage, fetch: (...args) => globalThis.fetch(...args) }),
     ShareTemplate.layer,
+    PlaceLookup.layer,
+    ReverseGeocoder.layer,
   );
   const runtime = ManagedRuntime.make(
     options.clock === true ? Layer.mergeAll(layers, TestClock.layer()) : layers,

@@ -8,7 +8,9 @@ import { DEFAULT_PREFS, type Prefs } from 'src/schema/prefs';
 import { IdGen } from 'src/services/id-gen';
 import { LegacyTripSource } from 'src/services/legacy-trip-source';
 import { LibraryStore } from 'src/services/library-store';
+import { PlaceLookup } from 'src/services/place-lookup';
 import { PREFS_KEY, PrefsStore } from 'src/services/prefs-store';
+import { ReverseGeocoder } from 'src/services/reverse-geocoder';
 import { ShareTemplate } from 'src/services/share-template';
 import { prefsAtom, setPrefsAtom } from 'src/stores/prefs-state';
 import { cssVarsOf } from 'src/theme/create-app-theme';
@@ -53,6 +55,8 @@ function setup(saved?: Partial<Prefs>) {
         IdGen.layerSequence([]),
         LegacyTripSource.layerWith({ storage, fetch: (...args) => globalThis.fetch(...args) }),
         ShareTemplate.layer,
+        PlaceLookup.layer,
+        ReverseGeocoder.layer,
       ),
     ),
   );
