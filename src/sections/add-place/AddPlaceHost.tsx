@@ -4,22 +4,34 @@ import IconButton from '@mui/material/IconButton';
 import { useAtom } from 'jotai';
 import { XIcon } from 'src/components/icons';
 import { CandidateCard } from 'src/sections/add-place/CandidateCard';
+import { FolderPreview } from 'src/sections/add-place/FolderPreview';
 import { LinkInputPanel } from 'src/sections/add-place/LinkInputPanel';
 import { ADD_LABEL } from 'src/sections/shell/nav-items';
 import { DETAIL_WIDTH } from 'src/sections/shell/pane-widths';
 import { useLayout } from 'src/sections/shell/use-layout';
 import { addFlowAtom, showsAddPanel, type AddFlow } from 'src/stores/add-place';
 
-/** 단계마다(링크 창은 안내 종류까지) 내용을 새로 만든다. */
-const stepKey = (flow: AddFlow): string => (flow.step === 'link' ? `link-${flow.hint}` : flow.step);
+/** 단계마다(링크 창은 안내 종류, 폴더는 공유 ID까지) 내용을 새로 만든다. */
+const stepKey = (flow: AddFlow): string => {
+  switch (flow.step) {
+    case 'link':
+      return `link-${flow.hint}`;
+    case 'folder':
+      return `folder-${flow.shareId}`;
+    default:
+      return flow.step;
+  }
+};
 
-/** 단계별 칸 내용. 폴더 미리보기·핀 입력 카드는 이후 단계에서 채운다. */
+/** 단계별 칸 내용. 핀 입력 카드는 이후 단계에서 채운다. */
 function StepContent({ flow }: { flow: AddFlow }) {
   switch (flow.step) {
     case 'link':
       return <LinkInputPanel hint={flow.hint} />;
     case 'candidate':
       return <CandidateCard candidate={flow.candidate} />;
+    case 'folder':
+      return <FolderPreview shareId={flow.shareId} />;
     default:
       return null;
   }
@@ -50,6 +62,8 @@ export function AddPlaceHost({ floating = false }: { floating?: boolean }) {
               maxWidth: 480,
               width: '100%',
               maxHeight: '90vh',
+              // 폴더 미리보기는 긴 목록이라 늘 90vh로 열어 목록 칸이 흔들리지 않게 한다.
+              ...(flow.step === 'folder' ? { height: '90vh' } : {}),
               mx: 'auto',
               borderRadius: 'var(--tm-radius-xl) var(--tm-radius-xl) 0 0',
               bgcolor: 'var(--tm-bg-surface)',

@@ -1,0 +1,433 @@
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { Effect, Layer } from 'effect';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { setAppRuntimeForTest } from 'src/lib/effect/runtime';
+import type { Library } from 'src/schema/library';
+import type { FolderResult } from 'src/server/resolve';
+import { PlaceLookupError } from 'src/services/errors';
+import { LIBRARY_KEY } from 'src/services/library-store';
+import { PlaceLookup } from 'src/services/place-lookup';
+import { addFlowAtom } from 'src/stores/add-place';
+import { libraryAtom } from 'src/stores/library-state';
+import { L_FOOD, makePlace, renderLibrary, sampleLibrary, withPlaces } from '../library/fixtures';
+
+const toastMock = vi.hoisted(() => {
+  const error = vi.fn();
+  return Object.assign(vi.fn(), { error });
+});
+vi.mock('sonner', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('sonner')>()),
+  toast: toastMock,
+}));
+vi.mock('src/theme/fonts', () => ({ loadDisplayFont: vi.fn(() => Promise.resolve()) }));
+
+afterEach(() => {
+  cleanup();
+  toastMock.mockClear();
+  toastMock.error.mockClear();
+  setAppRuntimeForTest(null);
+  vi.unstubAllGlobals();
+});
+
+const SHARE_ID = 'abc123';
+const IDS = ['newlab01', 'newplace01', 'newplace02', 'newplace03'];
+
+type FolderPlace = FolderResult['places'][number];
+const folderPlace = (n: number, over: Partial<FolderPlace> = {}): FolderPlace => ({
+  sid: `900${n}`,
+  name: `폴더 장소 ${n}`,
+  address: `강원특별자치도 속초시 해맞이로 ${n}`,
+  lng: 128.5 + n / 100,
+  lat: 38.2,
+  memo: '',
+  ...over,
+});
+
+/** 3곳 중 1곳(9001)은 보관함의 `저장된 장소`(sid 9001)와 같다. */
+const threePlaces = (): FolderResult => ({
+  folderName: '속초 맛집',
+  places: [folderPlace(1), folderPlace(2), folderPlace(3, { memo: '웨이팅 많음' })],
+});
+
+type Reply = FolderResult | PlaceLookupError;
+
+/** 가짜 폴더 조회. `reply`가 Promise를 돌려주면 그때까지 "찾는 중"이다. */
+function fakeFolderLookup(reply: () => Reply | Promise<Reply>) {
+  const calls: string[] = [];
+  const layer = Layer.succeed(
+    PlaceLookup,
+    PlaceLookup.of({
+      lookupLink: () => Effect.fail(new PlaceLookupError({ code: 'OFFLINE' })),
+      lookupFolder: (shareId) =>
+        Effect.promise(async () => {
+          calls.push(shareId);
+          return reply();
+        }).pipe(
+          Effect.flatMap((r) =>
+            r instanceof PlaceLookupError ? Effect.fail(r) : Effect.succeed(r),
+          ),
+        ),
+    }),
+  );
+  return { layer, calls };
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((r) => (resolve = r));
+  return { promise, resolve };
+}
+
+const panel = () => screen.getByRole('region', { name: '장소 추가' });
+const queryPanel = () => screen.queryByRole('region', { name: '장소 추가' });
+const importButton = (count: number) =>
+  within(panel()).getByRole('button', { name: `${count}곳 가져오기` });
+const row = (name: string) => within(panel()).getByRole('checkbox', { name: new RegExp(name) });
+
+const LIST = { libraryView: 'list' as const };
+
+/** 라이브러리를 그리고 폴더 단계로 연다. */
+async function openFolder(
+  reply: () => Reply | Promise<Reply> = threePlaces,
+  options: { library?: Library; ids?: string[]; width?: number } = {},
+) {
+  const user = userEvent.setup();
+  const lookup = fakeFolderLookup(reply);
+  const library =
+    options.library ??
+    withPlaces(sampleLibrary(), [makePlace(6, { name: '저장된 장소', sid: '9001' })]);
+  const rendered = await renderLibrary(library, {
+    ids: options.ids ?? IDS,
+    placeLookup: lookup.layer,
+    prefs: LIST,
+    ...(options.width === undefined ? {} : { width: options.width }),
+  });
+  act(() => rendered.store.set(addFlowAtom, { step: 'folder', shareId: SHARE_ID }));
+  return { user, lookup, ...rendered };
+}
+
+const shownNames = () =>
+  within(screen.getByRole('list', { name: '장소 목록' }))
+    .getAllByRole('button')
+    .map((button) => button.textContent ?? '');
+
+describe('폴더 미리보기', () => {
+  it('폴더를 찾는 동안 안내하고, 머리글·목록·이미 있음 표시를 보인다', async () => {
+    const pending = deferred<Reply>();
+    const { lookup } = await openFolder(() => pending.promise);
+    expect(within(panel()).getByText('장소를 찾는 중…')).toBeInTheDocument();
+    await act(async () => pending.resolve(threePlaces()));
+
+    expect(lookup.calls).toEqual([SHARE_ID]);
+    expect(
+      await within(panel()).findByRole('heading', { name: '속초 맛집 · 3곳' }),
+    ).toBeInTheDocument();
+    // 모두 체크된 채 시작한다.
+    for (const n of [1, 2, 3]) expect(row(`폴더 장소 ${n}`)).toBeChecked();
+    expect(within(panel()).getByText('강원특별자치도 속초시 해맞이로 2')).toBeInTheDocument();
+    // 이미 있는 장소(f1)에만 표시가 붙는다.
+    expect(within(panel()).getAllByText('이미 있음')).toHaveLength(1);
+    expect(within(row('폴더 장소 1').closest('label')!).getByText('이미 있음')).toBeInTheDocument();
+    expect(importButton(3)).toBeEnabled();
+    // 기본 라벨 이름은 폴더 이름이다.
+    expect(within(panel()).getByRole('textbox', { name: '붙일 라벨 이름' })).toHaveValue(
+      '속초 맛집',
+    );
+  });
+
+  it('하나를 해제하고 가져오면 새 1곳·합친 1곳으로 센다', async () => {
+    const { user, store } = await openFolder(undefined, { ids: IDS });
+    await within(panel()).findByRole('heading', { name: '속초 맛집 · 3곳' });
+    await user.click(row('폴더 장소 3'));
+    expect(importButton(2)).toBeEnabled();
+    await user.click(importButton(2));
+
+    await waitFor(() => expect(store.get(addFlowAtom)).toEqual({ step: 'closed' }));
+    expect(toastMock).toHaveBeenCalledTimes(1);
+    expect(toastMock).toHaveBeenCalledWith('1곳을 새로 넣고, 1곳은 라벨만 더했어요');
+    const lib = store.get(libraryAtom);
+    // 폴더 이름의 새 라벨이 생기고, 새 장소와 이미 있던 장소에 붙는다.
+    expect(lib.labels.newlab01!.name.value).toBe('속초 맛집');
+    expect(lib.places.newplace01!.name.value).toBe('폴더 장소 2');
+    expect(lib.places.newplace01!.labelIds.value).toEqual(['newlab01']);
+    expect(lib.places.place00006!.labelIds.value).toEqual(['newlab01']);
+    // 해제한 장소는 들어오지 않는다.
+    expect(Object.values(lib.places).some((p) => p.name.value === '폴더 장소 3')).toBe(false);
+    expect(queryPanel()).not.toBeInTheDocument();
+  });
+
+  it('모두 새것이면 새로 넣었다는 문장만 쓴다', async () => {
+    const { user } = await openFolder(undefined, { library: sampleLibrary() });
+    await within(panel()).findByRole('heading', { name: '속초 맛집 · 3곳' });
+    expect(within(panel()).queryByText('이미 있음')).not.toBeInTheDocument();
+    await user.click(importButton(3));
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith('3곳을 새로 넣었어요'));
+  });
+
+  it('모두 이미 있으면 라벨만 더했다는 문장만 쓴다', async () => {
+    const library = withPlaces(sampleLibrary(), [
+      makePlace(11, { sid: '9001' }),
+      makePlace(12, { sid: '9002' }),
+      makePlace(13, { sid: '9003' }),
+    ]);
+    const { user } = await openFolder(undefined, { library });
+    await within(panel()).findByRole('heading', { name: '속초 맛집 · 3곳' });
+    expect(within(panel()).getAllByText('이미 있음')).toHaveLength(3);
+    await user.click(importButton(3));
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith('3곳은 라벨만 더했어요'));
+  });
+
+  it('지운 장소를 되살린 것은 새로 넣은 수에 더한다', async () => {
+    const library = withPlaces(sampleLibrary(), [
+      makePlace(11, { sid: '9001', deletedAt: '2026-10-09T00:00:00.000Z' }),
+    ]);
+    const { user, store } = await openFolder(undefined, { library });
+    await within(panel()).findByRole('heading', { name: '속초 맛집 · 3곳' });
+    // 지운 장소는 화면에 없으므로 이미 있음으로 보이지 않는다.
+    expect(within(panel()).queryByText('이미 있음')).not.toBeInTheDocument();
+    await user.click(importButton(3));
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith('3곳을 새로 넣었어요'));
+    expect(store.get(libraryAtom).places.place00011!.deletedAt).toBeNull();
+  });
+
+  it('다른 탭이 미리보기 뒤에 같은 장소를 먼저 넣었으면 합친 것으로 센다', async () => {
+    const { user, store, storage } = await openFolder(undefined, {
+      library: sampleLibrary(),
+      ids: IDS,
+    });
+    await within(panel()).findByRole('heading', { name: '속초 맛집 · 3곳' });
+    expect(within(panel()).queryByText('이미 있음')).not.toBeInTheDocument();
+
+    // 다른 탭이 f2를 저장소에 직접 넣는다(이 탭의 화면 상태는 그대로다).
+    const stored = JSON.parse(storage.getItem(LIBRARY_KEY)!) as Library;
+    const other = makePlace(20, { name: '다른 탭 장소', sid: '9002' });
+    storage.setItem(
+      LIBRARY_KEY,
+      JSON.stringify({ ...stored, places: { ...stored.places, [other.id]: other } }),
+    );
+    expect(within(panel()).queryByText('이미 있음')).not.toBeInTheDocument();
+
+    await user.click(importButton(3));
+    await waitFor(() =>
+      expect(toastMock).toHaveBeenCalledWith('2곳을 새로 넣고, 1곳은 라벨만 더했어요'),
+    );
+    const lib = store.get(libraryAtom);
+    expect(lib.places[other.id]!.labelIds.value).toEqual(['newlab01']);
+    expect(Object.values(lib.places).filter((p) => p.name.value === '폴더 장소 2')).toHaveLength(0);
+  });
+
+  it('라벨 이름이 31자면 안내하고 가져오기를 막는다', async () => {
+    const { user } = await openFolder();
+    await within(panel()).findByRole('heading', { name: '속초 맛집 · 3곳' });
+    const name = within(panel()).getByRole('textbox', { name: '붙일 라벨 이름' });
+    await user.clear(name);
+    await user.type(name, '가'.repeat(31));
+    expect(within(panel()).getByText('라벨 이름은 30자까지예요')).toBeInTheDocument();
+    expect(importButton(3)).toBeDisabled();
+
+    await user.type(name, '{Backspace}');
+    expect(within(panel()).queryByText('라벨 이름은 30자까지예요')).not.toBeInTheDocument();
+    expect(importButton(3)).toBeEnabled();
+  });
+
+  it('이름을 비우면 가져오기를 막는다', async () => {
+    const { user } = await openFolder();
+    await within(panel()).findByRole('heading', { name: '속초 맛집 · 3곳' });
+    await user.clear(within(panel()).getByRole('textbox', { name: '붙일 라벨 이름' }));
+    expect(importButton(3)).toBeDisabled();
+  });
+
+  it('기존 라벨을 고르면 입력 대신 그 라벨로 가져오고 새 라벨은 생기지 않는다', async () => {
+    const { user, store } = await openFolder(undefined, { ids: ['newplace01', 'newplace02'] });
+    await within(panel()).findByRole('heading', { name: '속초 맛집 · 3곳' });
+    const food = within(panel()).getByRole('button', { name: '맛집' });
+    await user.click(food);
+    expect(food).toHaveAttribute('aria-pressed', 'true');
+    expect(within(panel()).getByRole('textbox', { name: '붙일 라벨 이름' })).toBeDisabled();
+
+    await user.click(importButton(3));
+    await waitFor(() => expect(store.get(addFlowAtom)).toEqual({ step: 'closed' }));
+    const lib = store.get(libraryAtom);
+    expect(Object.keys(lib.labels).sort()).toEqual(['label001', 'label002', 'label003']);
+    expect(lib.places.newplace01!.labelIds.value).toEqual([L_FOOD]);
+    // 이미 있던 장소는 가진 라벨에 맛집이 더해진다.
+    expect(lib.places.place00006!.labelIds.value).toEqual([L_FOOD]);
+  });
+
+  it('고른 라벨을 다시 누르면 이름 입력으로 돌아간다', async () => {
+    const { user } = await openFolder();
+    await within(panel()).findByRole('heading', { name: '속초 맛집 · 3곳' });
+    const food = within(panel()).getByRole('button', { name: '맛집' });
+    await user.click(food);
+    await user.click(food);
+    expect(food).toHaveAttribute('aria-pressed', 'false');
+    expect(within(panel()).getByRole('textbox', { name: '붙일 라벨 이름' })).toBeEnabled();
+  });
+
+  it('31자 이름을 적어 둬도 기존 라벨을 고르면 막지 않는다', async () => {
+    const { user } = await openFolder();
+    await within(panel()).findByRole('heading', { name: '속초 맛집 · 3곳' });
+    const name = within(panel()).getByRole('textbox', { name: '붙일 라벨 이름' });
+    await user.clear(name);
+    await user.type(name, '가'.repeat(31));
+    await user.click(within(panel()).getByRole('button', { name: '카페' }));
+    expect(within(panel()).queryByText('라벨 이름은 30자까지예요')).not.toBeInTheDocument();
+    expect(importButton(3)).toBeEnabled();
+  });
+
+  it('전체 해제하면 가져오기가 비활성이고, 전체 선택하면 다시 켜진다', async () => {
+    const { user } = await openFolder();
+    await within(panel()).findByRole('heading', { name: '속초 맛집 · 3곳' });
+    await user.click(within(panel()).getByRole('button', { name: '전체 해제' }));
+    for (const n of [1, 2, 3]) expect(row(`폴더 장소 ${n}`)).not.toBeChecked();
+    expect(importButton(0)).toBeDisabled();
+
+    await user.click(within(panel()).getByRole('button', { name: '전체 선택' }));
+    for (const n of [1, 2, 3]) expect(row(`폴더 장소 ${n}`)).toBeChecked();
+    expect(importButton(3)).toBeEnabled();
+  });
+
+  it('가져온 뒤 목록이 그 라벨로 걸러진다', async () => {
+    const { user } = await openFolder();
+    await within(panel()).findByRole('heading', { name: '속초 맛집 · 3곳' });
+    expect(shownNames()).toHaveLength(6);
+    await user.click(importButton(3));
+    await waitFor(() => expect(queryPanel()).not.toBeInTheDocument());
+    await waitFor(() => expect(shownNames()).toHaveLength(3));
+    expect(shownNames().some((text) => text.includes('폴더 장소 2'))).toBe(true);
+    expect(
+      within(screen.getByRole('group', { name: '라벨' })).getByRole('button', {
+        name: /^속초 맛집/,
+      }),
+    ).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('기존 라벨로 가져오면 그 라벨 하나로만 거른다', async () => {
+    const { user } = await openFolder(undefined, { ids: ['newplace01', 'newplace02'] });
+    await within(panel()).findByRole('heading', { name: '속초 맛집 · 3곳' });
+    await user.click(within(panel()).getByRole('button', { name: '카페' }));
+    await user.click(importButton(3));
+    await waitFor(() => expect(queryPanel()).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(
+        within(screen.getByRole('group', { name: '라벨' })).getByRole('button', { name: /^카페/ }),
+      ).toHaveAttribute('aria-pressed', 'true'),
+    );
+    expect(
+      within(screen.getByRole('group', { name: '라벨' })).getByRole('button', { name: /^맛집/ }),
+    ).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('가져오기를 빠르게 두 번 눌러도 한 번만 넣고, 저장 중에는 취소도 막는다', async () => {
+    const { store } = await openFolder(undefined, { library: sampleLibrary() });
+    await within(panel()).findByRole('heading', { name: '속초 맛집 · 3곳' });
+    const button = importButton(3);
+    fireEvent.click(button);
+    expect(button).toBeDisabled();
+    expect(within(panel()).getByRole('button', { name: '취소' })).toBeDisabled();
+    fireEvent.click(button);
+    await waitFor(() => expect(store.get(addFlowAtom)).toEqual({ step: 'closed' }));
+    expect(toastMock).toHaveBeenCalledTimes(1);
+    expect(Object.keys(store.get(libraryAtom).places)).toHaveLength(8);
+  });
+
+  it('취소하면 아무것도 넣지 않고 닫는다', async () => {
+    const { user, store } = await openFolder();
+    await within(panel()).findByRole('heading', { name: '속초 맛집 · 3곳' });
+    await user.click(within(panel()).getByRole('button', { name: '취소' }));
+    expect(store.get(addFlowAtom)).toEqual({ step: 'closed' });
+    expect(Object.keys(store.get(libraryAtom).places)).toHaveLength(6);
+    expect(toastMock).not.toHaveBeenCalled();
+  });
+
+  it('저장 중에 흐름이 닫히면 늦은 결과로 토스트·필터를 바꾸지 않는다', async () => {
+    const { store } = await openFolder(undefined, { library: sampleLibrary() });
+    await within(panel()).findByRole('heading', { name: '속초 맛집 · 3곳' });
+    const button = importButton(3);
+    // 저장이 끝나기 전에 바깥에서(예: 칸의 닫기 버튼) 흐름을 닫는다.
+    fireEvent.click(button);
+    act(() => store.set(addFlowAtom, { step: 'closed' }));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+    expect(toastMock).not.toHaveBeenCalled();
+    expect(store.get(addFlowAtom)).toEqual({ step: 'closed' });
+    expect(shownNames()).toHaveLength(8);
+  });
+});
+
+describe('폴더 조회 오류', () => {
+  it('TOO_MANY_PLACES는 문구만 보이고 다시 시도는 주지 않는다', async () => {
+    await openFolder(() => new PlaceLookupError({ code: 'TOO_MANY_PLACES' }));
+    expect(
+      await within(panel()).findByText('장소가 너무 많은 폴더예요(최대 1,000곳)'),
+    ).toBeInTheDocument();
+    expect(within(panel()).queryByRole('button', { name: '다시 시도' })).not.toBeInTheDocument();
+    expect(within(panel()).getByRole('button', { name: '취소' })).toBeEnabled();
+  });
+
+  it('NOT_FOUND는 문구만 보인다', async () => {
+    await openFolder(() => new PlaceLookupError({ code: 'NOT_FOUND' }));
+    expect(
+      await within(panel()).findByText('장소를 찾지 못했어요. 링크를 다시 확인해 주세요'),
+    ).toBeInTheDocument();
+    expect(within(panel()).queryByRole('button', { name: '다시 시도' })).not.toBeInTheDocument();
+  });
+
+  it('UPSTREAM_ERROR는 다시 시도를 주고, 누르면 다시 조회해 미리보기를 보인다', async () => {
+    let n = 0;
+    const { user, lookup } = await openFolder(() =>
+      ++n === 1 ? new PlaceLookupError({ code: 'UPSTREAM_ERROR' }) : threePlaces(),
+    );
+    expect(
+      await within(panel()).findByText(
+        '지금은 장소 정보를 가져오지 못했어요. 잠시 뒤 다시 해 주세요',
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(panel()).queryByRole('button', { name: '지도에서 핀으로 추가' }),
+    ).not.toBeInTheDocument();
+    await user.click(within(panel()).getByRole('button', { name: '다시 시도' }));
+    expect(
+      await within(panel()).findByRole('heading', { name: '속초 맛집 · 3곳' }),
+    ).toBeInTheDocument();
+    expect(lookup.calls).toEqual([SHARE_ID, SHARE_ID]);
+  });
+
+  it('OFFLINE도 다시 시도를 준다', async () => {
+    await openFolder(() => new PlaceLookupError({ code: 'OFFLINE' }));
+    expect(
+      await within(panel()).findByText('인터넷 연결을 확인하고 다시 시도해 주세요'),
+    ).toBeInTheDocument();
+    expect(within(panel()).getByRole('button', { name: '다시 시도' })).toBeEnabled();
+  });
+
+  it('찾는 중에 닫으면 늦게 온 결과를 무시한다', async () => {
+    const pending = deferred<Reply>();
+    const { user, store } = await openFolder(() => pending.promise);
+    await user.click(within(panel()).getByRole('button', { name: '취소' }));
+    expect(store.get(addFlowAtom)).toEqual({ step: 'closed' });
+    await act(async () => pending.resolve(threePlaces()));
+    expect(queryPanel()).not.toBeInTheDocument();
+    expect(store.get(addFlowAtom)).toEqual({ step: 'closed' });
+  });
+});
+
+describe('폴더 미리보기 자리', () => {
+  it('좁은 화면에서는 아래 시트로 열고 높이는 90vh다', async () => {
+    await openFolder(undefined, { width: 390 });
+    const sheet = await screen.findByRole('dialog', { name: '장소 추가' });
+    expect(
+      await within(sheet).findByRole('heading', { name: '속초 맛집 · 3곳' }),
+    ).toBeInTheDocument();
+    expect(queryPanel()).not.toBeInTheDocument();
+    // jsdom은 vh를 화면 높이로 풀어 보여 준다.
+    expect(sheet).toHaveStyle({ height: `${window.innerHeight * 0.9}px` });
+  });
+
+  it('넓은 화면에서는 오른쪽 칸에 열린다', async () => {
+    await openFolder();
+    expect(await within(panel()).findByRole('heading', { name: '속초 맛집 · 3곳' })).toBeVisible();
+  });
+});
