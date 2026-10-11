@@ -2,10 +2,14 @@ import Box from '@mui/material/Box';
 import Drawer from '@mui/material/Drawer';
 import IconButton from '@mui/material/IconButton';
 import { useAtom } from 'jotai';
+import { useEffect, useRef } from 'react';
+import { useLocation, useNavigate } from 'react-router';
 import { XIcon } from 'src/components/icons';
+import { paths } from 'src/routes/paths';
 import { CandidateCard } from 'src/sections/add-place/CandidateCard';
 import { FolderPreview } from 'src/sections/add-place/FolderPreview';
 import { LinkInputPanel } from 'src/sections/add-place/LinkInputPanel';
+import { PinCard } from 'src/sections/add-place/PinCard';
 import { ADD_LABEL } from 'src/sections/shell/nav-items';
 import { DETAIL_WIDTH } from 'src/sections/shell/pane-widths';
 import { useLayout } from 'src/sections/shell/use-layout';
@@ -18,12 +22,14 @@ const stepKey = (flow: AddFlow): string => {
       return `link-${flow.hint}`;
     case 'folder':
       return `folder-${flow.shareId}`;
+    case 'pin-card':
+      return `pin-card-${flow.lng},${flow.lat}`;
     default:
       return flow.step;
   }
 };
 
-/** 단계별 칸 내용. 핀 입력 카드는 이후 단계에서 채운다. */
+/** 단계별 칸 내용. 핀 모드(`pin`)는 칸이 아니라 지도 위 오버레이다(`PinModeOverlay`). */
 function StepContent({ flow }: { flow: AddFlow }) {
   switch (flow.step) {
     case 'link':
@@ -32,9 +38,41 @@ function StepContent({ flow }: { flow: AddFlow }) {
       return <CandidateCard candidate={flow.candidate} />;
     case 'folder':
       return <FolderPreview shareId={flow.shareId} />;
+    case 'pin-card':
+      return <PinCard name={flow.name} lng={flow.lng} lat={flow.lat} />;
     default:
       return null;
   }
+}
+
+/**
+ * 지도가 있어야 하는 단계에서 지도가 안 보이면 지도가 보이는 경로로 옮긴다. 셸(`AppShell`)이 부른다.
+ * - 핀 모드(`pin`)는 늘, 확인 카드(`candidate`)는 좁은 화면에서만(후보 핀을 보이려고, 스펙 §2.2) 지도가 필요하다.
+ *   좁은 화면은 지도 탭(`/map`)으로, 그 밖은 지도가 있는 보관함(`/`)으로 간다.
+ * - 핀 모드 중에 경로가 바뀌어(뒤로 가기·다른 메뉴) 지도가 사라지면 핀 모드를 끝낸다(스펙 §2.4).
+ * `mapShown`은 지금 경로·폭에서 지도가 가려지지 않고 보이는가다.
+ */
+export function useAddFlowRoute(mapShown: boolean) {
+  const [flow, setFlow] = useAtom(addFlowAtom);
+  const layout = useLayout();
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const compact = layout === 'compact';
+  const step = flow.step;
+  const needsMap = step === 'pin' || (compact && step === 'candidate');
+  const prev = useRef({ step, pathname });
+  useEffect(() => {
+    const before = prev.current;
+    prev.current = { step, pathname };
+    if (!needsMap || mapShown) return;
+    if (before.step === step && before.pathname !== pathname) {
+      // 같은 단계에서 경로만 바뀌어 지도를 떠났다.
+      if (step === 'pin') setFlow({ step: 'closed' });
+      return;
+    }
+    // 단계에 막 들어왔거나(폭이 바뀌어) 지도가 안 보이게 됐다.
+    void navigate(compact ? paths.map : paths.library);
+  }, [step, pathname, needsMap, mapShown, compact, navigate, setFlow]);
 }
 
 /**

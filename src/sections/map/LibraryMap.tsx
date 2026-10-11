@@ -6,6 +6,7 @@ import type { MapPadding } from 'src/components/map/MapAdapter';
 import { MapView } from 'src/components/map/MapView';
 import { labelCounts, liveLabels, queryPlaces } from 'src/domain/library/query';
 import { paths } from 'src/routes/paths';
+import { PinModeOverlay } from 'src/sections/add-place/PinModeOverlay';
 import { useOpenPlaceId } from 'src/sections/library/use-open-place-id';
 import { LabelChips } from 'src/sections/library/LabelChips';
 import { useLibraryQuery } from 'src/sections/library/use-library-query';
@@ -24,7 +25,7 @@ const OVERLAID_PADDING: MapPadding = { ...BASE_PADDING, right: DETAIL_WIDTH + ED
 
 type MapFocus = { point: [number, number]; seq: number };
 
-/** 확인 카드의 후보를 보이는 임시 마커 id. 장소 id(10자 영숫자)와 겹치지 않는다. */
+/** 확인 카드의 후보·핀 입력 카드의 위치를 보이는 임시 마커 id. 장소 id(10자 영숫자)와 겹치지 않는다. */
 const CANDIDATE_MARKER_ID = 'candidate';
 
 /**
@@ -34,6 +35,8 @@ const CANDIDATE_MARKER_ID = 'candidate';
  *   상세 오버레이가 새로 생기는 경우에만 옮긴다.
  * - 좁은 화면(`/map`)에서는 위에 라벨 필터 칩 한 줄을 둔다.
  * - 링크로 찾은 후보의 확인 카드가 열려 있으면 그 좌표로 옮기고 임시 마커를 보인다(스펙 §2.2).
+ * - 핀 모드면 가운데 조준점 오버레이를 덮고 지도 중심을 넘긴다. 시작 좌표가 있으면 그리로 옮기고, 마커를
+ *   눌러도 상세로 가지 않는다. 핀 입력 카드가 열리면 고른 위치에 임시 마커를 둔다(스펙 §2.4).
  */
 export function LibraryMap() {
   const library = useAtomValue(libraryAtom);
@@ -45,8 +48,19 @@ export function LibraryMap() {
   const placeId = useOpenPlaceId();
   const flow = useAtomValue(addFlowAtom);
   const candidate = flow.step === 'candidate' ? flow.candidate : null;
-  // 중간 폭에서는 상세 칸이나 추가 칸이 지도 오른쪽을 덮는다.
-  const detailOverlaid = layout === 'medium' && (placeId !== null || showsAddPanel(flow));
+  const pinning = flow.step === 'pin';
+  const pinStart = flow.step === 'pin' ? flow.start : null;
+  // 임시 마커 자리: 확인 카드의 후보나 핀 입력 카드의 위치.
+  const tempPoint = useMemo(() => {
+    if (flow.step === 'candidate') return flow.candidate;
+    if (flow.step === 'pin-card') return { lng: flow.lng, lat: flow.lat, name: flow.name };
+    return null;
+  }, [flow]);
+  // 중간 폭에서는 상세 칸이나 추가 칸이 지도 오른쪽을 덮는다. 핀 모드에는 셸이 상세를 내려 지도 전체를 쓴다.
+  const detailOverlaid =
+    layout === 'medium' && !pinning && (placeId !== null || showsAddPanel(flow));
+  // 지금 지도 중심(핀 모드의 조준점 자리). 지도가 영역 변경을 알릴 때마다 갱신된다.
+  const [center, setCenter] = useState<[number, number] | null>(null);
 
   const clusterStyle = useMemo(
     () => ({ color: tokens.accent.main, textColor: tokens.accent.contrast }),
@@ -65,26 +79,26 @@ export function LibraryMap() {
     return [...shown, hidden!];
   }, [places, library.places, library.labels, tokens, placeId]);
 
-  // 후보 임시 마커: 선택된 장소처럼 강조색 테두리로 그리고 클러스터에 넣지 않는다.
+  // 임시 마커: 선택된 장소처럼 강조색 테두리로 그리고 클러스터에 넣지 않는다.
   const shownMarkers = useMemo(
     () =>
-      candidate === null
+      tempPoint === null
         ? markers
         : [
             ...markers,
             placeMarker(
               {
                 id: CANDIDATE_MARKER_ID,
-                lng: candidate.lng,
-                lat: candidate.lat,
-                name: candidate.name,
+                lng: tempPoint.lng,
+                lat: tempPoint.lat,
+                name: tempPoint.name,
               },
               undefined,
               tokens,
               true,
             ),
           ],
-    [markers, candidate, tokens],
+    [markers, tempPoint, tokens],
   );
 
   // 선택이 바뀌면 지도를 그 장소로 옮긴다(렌더 중 상태 갱신). `seq`를 올려 같은 장소도 다시 움직인다.
@@ -113,12 +127,15 @@ export function LibraryMap() {
   }
 
   // 중간 폭에서 상세 오버레이가 새로 지도를 덮으면(넓은 화면에서 줄이거나 마커를 눌러 열 때) 열어 둔 장소를
-  // 가려지지 않는 쪽으로 다시 모은다. 오버레이가 사라질 때는 장소가 계속 보이므로 지도를 그대로 둔다.
+  // 가려지지 않는 쪽으로 다시 모은다. 임시 마커가 있으면(핀 모드에서 입력 카드로 넘어갈 때) 그 위치를 모은다.
+  // 오버레이가 사라질 때는 장소가 계속 보이므로 지도를 그대로 둔다.
   const [seenOverlay, setSeenOverlay] = useState(detailOverlaid);
   if (seenOverlay !== detailOverlaid) {
     setSeenOverlay(detailOverlaid);
     const open = !detailOverlaid || placeId === null ? undefined : library.places[placeId];
-    if (open !== undefined && open.deletedAt === null) {
+    if (detailOverlaid && tempPoint !== null) {
+      setFocus({ point: [tempPoint.lng, tempPoint.lat], seq: (focus?.seq ?? 0) + 1 });
+    } else if (open !== undefined && open.deletedAt === null) {
       setFocus({ point: [open.lng, open.lat], seq: (focus?.seq ?? 0) + 1 });
     }
   }
@@ -132,16 +149,24 @@ export function LibraryMap() {
     }
   }
 
+  // 핀 모드가 시작 좌표와 함께 열리면 그리로 옮긴다(렌더 중 상태 갱신).
+  const [seenStart, setSeenStart] = useState<typeof pinStart>(null);
+  if (seenStart !== pinStart) {
+    setSeenStart(pinStart);
+    if (pinStart !== null) setFocus({ point: pinStart, seq: (focus?.seq ?? 0) + 1 });
+  }
+
   const [unavailable, setUnavailable] = useState<string | null>(null);
 
   const onMarkerClick = useCallback(
     (id: string) => {
       if (id === CANDIDATE_MARKER_ID) return; // 아직 보관함에 없는 후보다.
+      if (pinning) return; // 핀 모드에서는 위치만 고른다.
       setFromMarker(id);
       requestListScroll((prev) => ({ id, seq: (prev?.seq ?? 0) + 1 }));
       void navigate(paths.place(id));
     },
-    [navigate, requestListScroll],
+    [navigate, requestListScroll, pinning],
   );
 
   const labels = useMemo(() => liveLabels(library), [library]);
@@ -165,6 +190,7 @@ export function LibraryMap() {
           focus={focus}
           fitKey={fitKey}
           onUnavailable={setUnavailable}
+          onCenterChange={setCenter}
         />
         {unavailable !== null && (
           <Box
@@ -184,6 +210,7 @@ export function LibraryMap() {
             {unavailable}
           </Box>
         )}
+        {pinning && <PinModeOverlay center={unavailable === null ? center : null} />}
       </Box>
     </Box>
   );

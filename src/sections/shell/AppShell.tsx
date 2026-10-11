@@ -6,7 +6,7 @@ import { useState, type ReactNode } from 'react';
 import { matchPath, Outlet, useLocation, useNavigate } from 'react-router';
 import { ChevronLeftIcon, XIcon } from 'src/components/icons';
 import { paths } from 'src/routes/paths';
-import { AddPlaceHost } from 'src/sections/add-place/AddPlaceHost';
+import { AddPlaceHost, useAddFlowRoute } from 'src/sections/add-place/AddPlaceHost';
 import { AddSheet } from 'src/sections/shell/AddSheet';
 import { BottomTabs } from 'src/sections/shell/BottomTabs';
 import { NavRail } from 'src/sections/shell/NavRail';
@@ -116,7 +116,10 @@ export function AppShell() {
   const navigate = useNavigate();
   const [addOpen, setAddOpen] = useState(false);
   // 추가 흐름의 칸은 상세 칸 자리를 쓴다(상세가 열려 있어도 추가 흐름이 우선).
-  const adding = showsAddPanel(useAtomValue(addFlowAtom));
+  const flow = useAtomValue(addFlowAtom);
+  const adding = showsAddPanel(flow);
+  // 핀 모드는 지도 전체를 쓴다. 중간 폭에서 지도를 덮는 상세 오버레이를 그동안 내린다.
+  const pinning = flow.step === 'pin';
 
   // 끝의 `/`가 있어도(`/map/`) 같은 경로로 본다.
   const placeId = matchPath(paths.place(':id'), pathname)?.params.id ?? null;
@@ -128,6 +131,8 @@ export function AppShell() {
   const viewOrigin = isMap ? 'map' : 'list';
   if (placeId === null && isLibraryView && origin !== viewOrigin) setOrigin(viewOrigin); // 렌더 중 상태 갱신
   const sheetOnMap = placeId !== null && origin === 'map';
+  // 좁은 화면은 지도 탭에서만 지도가 가리지 않고 보인다(장소 시트는 지도를 덮는다).
+  useAddFlowRoute(layout === 'compact' ? isMap : isLibraryView);
 
   const closeDetail = () => {
     // 좁은 화면은 시트를 연 기록을 되감아 모바일 뒤로가기와 어긋나지 않게 한다. 앱 안에서 연
@@ -167,7 +172,7 @@ export function AppShell() {
         {adding ? (
           <AddPlaceHost floating={!wide} />
         ) : (
-          (wide || placeId !== null) && (
+          (wide || (placeId !== null && !pinning)) && (
             <DetailPane
               mode={wide ? 'column' : 'overlay'}
               placeId={placeId}

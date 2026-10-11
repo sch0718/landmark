@@ -30,6 +30,8 @@ type Props = {
   clusterStyle?: ClusterStyle;
   onMarkerClick(id: string): void;
   onBoundsChange?(b: Bounds): void;
+  /** 카메라가 바뀔 때마다(영역 변경 알림과 같은 때) 지도 중심 좌표(경도, 위도)를 알린다. */
+  onCenterChange?(center: [number, number]): void;
   /** 값이 바뀔 때마다 그 지점으로 지도를 옮긴다(줌 16, padding을 뺀 영역의 가운데). */
   focus?: { point: [number, number]; seq: number } | null;
   onUnavailable(reason: string): void;
@@ -110,7 +112,11 @@ export function MapView(props: Props) {
       }
     }
     adapter.onMarkerClick((id) => latest.current.onMarkerClick(id));
-    adapter.onBoundsChange((b) => latest.current.onBoundsChange?.(b));
+    adapter.onBoundsChange((b) => {
+      latest.current.onBoundsChange?.(b);
+      const camera = adapter.getCamera();
+      if (camera) latest.current.onCenterChange?.(camera.center);
+    });
     adapter.mount(host).then(
       () => {
         if (cancelled) {

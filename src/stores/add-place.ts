@@ -22,7 +22,13 @@ export const addFlowAtom: PrimitiveAtom<AddFlow> = atom<AddFlow>({ step: 'closed
 /**
  * 추가 칸(넓은 화면의 오른쪽 칸·좁은 화면의 아래 시트)을 쓰는 단계인가.
  * 셸은 이 단계 동안 상세 자리에 추가 칸을 놓고, 지도는 그만큼 가려지는 것으로 본다.
+ * 핀 모드(`pin`)는 칸을 쓰지 않는 지도 위 오버레이라서 여기에 들지 않는다(지도를 가리지 않는다).
  */
 export function showsAddPanel(flow: AddFlow): boolean {
-  return flow.step === 'link' || flow.step === 'candidate' || flow.step === 'folder';
+  return (
+    flow.step === 'link' ||
+    flow.step === 'candidate' ||
+    flow.step === 'folder' ||
+    flow.step === 'pin-card'
+  );
 }

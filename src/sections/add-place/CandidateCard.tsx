@@ -2,7 +2,7 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import { useAtomValue, useSetAtom, useStore } from 'jotai';
-import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { addPlace, findExisting, type PlaceCandidate } from 'src/domain/library/add-place';
@@ -14,7 +14,8 @@ import { LabelPicker } from 'src/sections/place/LabelPicker';
 import { addFlowAtom } from 'src/stores/add-place';
 import { libraryAtom, useLibraryAction, type LibraryActionResult } from 'src/stores/library-state';
 
-const FIELD_SX = {
+/** 카드의 한 줄 입력칸(핀 입력 카드와 같이 쓴다). */
+export const CARD_FIELD_SX = {
   boxSizing: 'border-box',
   display: 'block',
   width: '100%',
@@ -40,7 +41,8 @@ const PROVIDER_LABEL: Record<PlaceSource['kind'], string> = {
   pin: '구글',
 };
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+/** 카드의 제목 붙은 칸(핀 입력 카드와 같이 쓴다). */
+export function CardSection({ title, children }: { title: string; children: ReactNode }) {
   return (
     <Box component="section" aria-label={title} sx={{ mt: 2 }}>
       <Box
@@ -58,27 +60,15 @@ const isNameTaken = (error: unknown): boolean =>
   typeof error === 'object' && error !== null && '_tag' in error && error._tag === 'LabelNameTaken';
 
 /**
- * 링크로 찾은 장소의 확인 카드(스펙 §2.2·§3.4). 주소는 추가 전 여기서만 고칠 수 있다.
- * 같은 출처의 살아 있는 장소가 있으면 새로 만들지 않고 고른 라벨(과 메모)만 더한다.
- * 지운 장소는 `addPlace`가 되살리므로 보통의 `추가`로 다룬다.
+ * 카드의 라벨 고르기(핀 입력 카드와 같이 쓴다). `labelIds`는 고른 그대로, `shownIds`는 그사이 지워진
+ * 라벨을 뺀 것이다. 저장할 때는 최신본 기준으로 다시 걸러야 한다.
  */
-export function CandidateCard({ candidate }: { candidate: PlaceCandidate }) {
+export function useCardLabels() {
   const library = useAtomValue(libraryAtom);
   const jotaiStore = useStore();
-  const setFlow = useSetAtom(addFlowAtom);
   const { run } = useLibraryAction();
-  const navigate = useNavigate();
   const labels = useMemo(() => liveLabels(library), [library]);
-
-  const [address, setAddress] = useState(candidate.address);
   const [labelIds, setLabelIds] = useState<string[]>([]);
-  const [memo, setMemo] = useState('');
-  const [saving, setSaving] = useState(false);
-  // 같은 이벤트 루프 안의 두 번째 클릭은 아직 `saving`을 못 본다.
-  const savingRef = useRef(false);
-
-  const existing = findExisting(library, candidate.source);
-  const merging = existing !== undefined && existing.deletedAt === null;
   // 고른 라벨 중 그사이 지워진 것은 보이지 않게 뺀다.
   const shownIds = labelIds.filter((id) => labels.some((label) => label.id === id));
 
@@ -109,6 +99,44 @@ export function CandidateCard({ candidate }: { candidate: PlaceCandidate }) {
     return result;
   };
 
+  return { labels, labelIds, shownIds, toggle, createAndSelect };
+}
+
+/** 마운트돼 있는 동안 `true`. 저장하는 사이 칸이 닫혔는지 볼 때 쓴다. */
+export function useAliveRef() {
+  const aliveRef = useRef(true);
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => {
+      aliveRef.current = false;
+    };
+  }, []);
+  return aliveRef;
+}
+
+/**
+ * 링크로 찾은 장소의 확인 카드(스펙 §2.2·§3.4). 주소는 추가 전 여기서만 고칠 수 있다.
+ * 같은 출처의 살아 있는 장소가 있으면 새로 만들지 않고 고른 라벨(과 메모)만 더한다.
+ * 지운 장소는 `addPlace`가 되살리므로 보통의 `추가`로 다룬다.
+ */
+export function CandidateCard({ candidate }: { candidate: PlaceCandidate }) {
+  const library = useAtomValue(libraryAtom);
+  const setFlow = useSetAtom(addFlowAtom);
+  const { run } = useLibraryAction();
+  const navigate = useNavigate();
+  const { labels, labelIds, shownIds, toggle, createAndSelect } = useCardLabels();
+
+  const [address, setAddress] = useState(candidate.address);
+  const [memo, setMemo] = useState('');
+  const [saving, setSaving] = useState(false);
+  // 같은 이벤트 루프 안의 두 번째 클릭은 아직 `saving`을 못 본다.
+  const savingRef = useRef(false);
+  // 저장하는 사이 칸이 닫혔다면(칸의 닫기 버튼·시트 바깥 누르기) 늦은 결과로 흐름·경로를 건드리지 않는다.
+  const aliveRef = useAliveRef();
+
+  const existing = findExisting(library, candidate.source);
+  const merging = existing !== undefined && existing.deletedAt === null;
+
   const save = async () => {
     if (savingRef.current) return;
     savingRef.current = true;
@@ -130,9 +158,11 @@ export function CandidateCard({ candidate }: { candidate: PlaceCandidate }) {
     // 저장소 오류는 앱 오류 보고자(ErrorReporter)가 `userMessage`로 토스트를 띄운다. 라벨 id를 최신본 기준으로
     // 다시 거르므로 연산 거절(OpRejected)은 생기지 않는다. 어느 쪽이든 카드와 입력은 그대로 둔다.
     if (!result.ok) return;
+    // 칸이 닫힌 뒤에도 저장은 이미 반영됐으므로 알린다. 흐름 닫기·이동은 새 흐름을 닫을 수 있어 하지 않는다.
+    toast('추가했어요');
+    if (!aliveRef.current) return;
     setFlow({ step: 'closed' });
     void navigate(paths.place(result.createdId!));
-    toast('추가했어요');
   };
 
   return (
@@ -179,7 +209,7 @@ export function CandidateCard({ candidate }: { candidate: PlaceCandidate }) {
           {candidate.category}
         </Box>
       )}
-      <Section title="주소">
+      <CardSection title="주소">
         <Box
           component="input"
           type="text"
@@ -187,7 +217,7 @@ export function CandidateCard({ candidate }: { candidate: PlaceCandidate }) {
           autoComplete="off"
           value={address}
           onChange={(event) => setAddress(event.target.value)}
-          sx={FIELD_SX}
+          sx={CARD_FIELD_SX}
         />
         {/* 주소 변환이 못 찾았을 때, 사용자가 주소를 쓰기 전까지만 보인다. */}
         {candidate.address === '' && address.trim() === '' && (
@@ -198,16 +228,16 @@ export function CandidateCard({ candidate }: { candidate: PlaceCandidate }) {
             주소를 찾지 못했어요. 직접 입력해 주세요
           </Box>
         )}
-      </Section>
-      <Section title="라벨">
+      </CardSection>
+      <CardSection title="라벨">
         <LabelPicker
           labels={labels}
           attachedIds={shownIds}
           onToggle={toggle}
           onCreate={createAndSelect}
         />
-      </Section>
-      <Section title="메모">
+      </CardSection>
+      <CardSection title="메모">
         <Box
           component="textarea"
           aria-label="메모"
@@ -216,9 +246,9 @@ export function CandidateCard({ candidate }: { candidate: PlaceCandidate }) {
           placeholder="이 장소에 대한 메모"
           value={memo}
           onChange={(event) => setMemo(event.target.value)}
-          sx={{ ...FIELD_SX, minHeight: 96, py: 1.25, lineHeight: 1.6, resize: 'vertical' }}
+          sx={{ ...CARD_FIELD_SX, minHeight: 96, py: 1.25, lineHeight: 1.6, resize: 'vertical' }}
         />
-      </Section>
+      </CardSection>
       <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mt: 2.5 }}>
         <Button
           disabled={saving}

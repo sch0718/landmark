@@ -511,6 +511,22 @@ describe('확인 카드', () => {
     expect(toastMock).toHaveBeenCalledTimes(1);
   });
 
+  it('저장 중에 칸을 닫고 새 흐름을 열면, 늦게 끝난 저장은 알리기만 하고 새 흐름을 닫지 않는다', async () => {
+    const { store, router } = await openCard();
+    const add = await within(panel()).findByRole('button', { name: '추가' });
+    fireEvent.click(add);
+    // 저장이 끝나기 전에 칸의 닫기 버튼으로 닫고 새 흐름을 연다.
+    fireEvent.click(within(panel()).getByRole('button', { name: '닫기' }));
+    act(() => store.set(addFlowAtom, { step: 'link', hint: 'folder' }));
+    await waitFor(() => expect(placeCount(store.get(libraryAtom))).toBe(6));
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith('추가했어요'));
+    expect(store.get(addFlowAtom)).toEqual({ step: 'link', hint: 'folder' });
+    expect(router.state.location.pathname).toBe('/');
+    expect(
+      within(panel()).getByText('네이버 공유 폴더 링크를 붙여 넣어 주세요'),
+    ).toBeInTheDocument();
+  });
+
   it('카드의 취소는 저장하지 않고 닫는다', async () => {
     const { user, store } = await openCard();
     await within(panel()).findByRole('heading', { name: '콤포트' });
