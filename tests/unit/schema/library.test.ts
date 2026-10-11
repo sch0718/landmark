@@ -1,3 +1,4 @@
+import { Schema } from 'effect';
 import { describe, expect, it } from 'vitest';
 import {
   emptyLibrary,
@@ -81,6 +82,46 @@ describe('LibrarySchema', () => {
     const a = place({ source: { kind: 'naver', sid: '12345' } });
     const b = place({ source: { kind: 'naver', sid: '12345' } });
     expect(messages(lib([a, b]))).toContain('네이버 장소가 중복됩니다: 12345');
+    const dead = { ...b, deletedAt: T };
+    expect(safeParse(LibrarySchema, lib([a, dead])).success).toBe(true);
+  });
+
+  it('accepts kakao and google sources and round-trips them through encode', () => {
+    const kakao = place({ source: { kind: 'kakao', kakaoId: '8047571' } });
+    const google = place({
+      source: { kind: 'google', googleId: '0x35629cbc2ee1e3cb:0x1a2b3c4d5e6f7a8b' },
+    });
+    const input = lib([kakao, google]);
+    const decoded = safeParse(LibrarySchema, input);
+    expect(decoded.success).toBe(true);
+    if (decoded.success) {
+      const encoded = Schema.encodeSync(LibrarySchema)(decoded.data);
+      expect(encoded).toEqual(input);
+    }
+  });
+
+  it('rejects malformed kakaoId and googleId', () => {
+    const bad = (p: Place) =>
+      safeParse(LibrarySchema, { ...(lib() as object), places: { [p.id]: p } });
+    expect(bad(place({ source: { kind: 'kakao', kakaoId: 'abc' } })).success).toBe(false);
+    expect(bad(place({ source: { kind: 'kakao', kakaoId: '' } })).success).toBe(false);
+    expect(bad(place({ source: { kind: 'google', googleId: '123' } })).success).toBe(false);
+    expect(bad(place({ source: { kind: 'google', googleId: '0xABC:0xDEF' } })).success).toBe(false);
+  });
+
+  it('rejects duplicate live kakaoId', () => {
+    const a = place({ source: { kind: 'kakao', kakaoId: '8047571' } });
+    const b = place({ source: { kind: 'kakao', kakaoId: '8047571' } });
+    expect(messages(lib([a, b]))).toContain('카카오 장소가 중복됩니다: 8047571');
+    const dead = { ...b, deletedAt: T };
+    expect(safeParse(LibrarySchema, lib([a, dead])).success).toBe(true);
+  });
+
+  it('rejects duplicate live googleId', () => {
+    const googleId = '0x35629cbc2ee1e3cb:0x1a2b3c4d5e6f7a8b';
+    const a = place({ source: { kind: 'google', googleId } });
+    const b = place({ source: { kind: 'google', googleId } });
+    expect(messages(lib([a, b]))).toContain(`구글 장소가 중복됩니다: ${googleId}`);
     const dead = { ...b, deletedAt: T };
     expect(safeParse(LibrarySchema, lib([a, dead])).success).toBe(true);
   });
