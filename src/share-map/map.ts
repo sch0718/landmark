@@ -1,5 +1,5 @@
 import { FOCUS_ZOOM, focusCamera } from 'src/components/map/camera';
-import type { MapAdapter, MapPadding } from 'src/components/map/MapAdapter';
+import type { MapAdapter, MapCamera, MapPadding } from 'src/components/map/MapAdapter';
 import { placeMarker } from 'src/sections/map/markers';
 import type { FromMap, MapPlace } from 'src/share-protocol';
 import { pastel } from 'src/theme/tokens/pastel';
@@ -15,6 +15,16 @@ export { FOCUS_ZOOM };
 
 const FIT_PADDING: MapPadding = { top: 40, right: 40, bottom: 40, left: 40 };
 const NO_PADDING: MapPadding = { top: 0, right: 0, bottom: 0, left: 0 };
+
+/** 같은 화면인지(실제 SDK가 돌려주는 좌표의 소수점 끝 흔들림은 무시한다, 1e-7도 ≈ 1cm). */
+function sameCamera(a: MapCamera | null, b: MapCamera | null): boolean {
+  if (a === null || b === null) return false;
+  return (
+    Math.abs(a.center[0] - b.center[0]) < 1e-7 &&
+    Math.abs(a.center[1] - b.center[1]) < 1e-7 &&
+    Math.abs(a.zoom - b.zoom) < 1e-6
+  );
+}
 
 export type ShareMap = {
   init(places: MapPlace[]): void;
@@ -53,6 +63,9 @@ export function createShareMap(
   let pendingCamera: 'fit' | MapPlace | null = null;
   // 숨긴 iframe(display:none)에서 맞추면 컨테이너가 0x0이라 틀린다. 크기가 생기면 한 번 다시 맞춘다.
   let refitPending = false;
+  // 처음 맞추기로 만든 화면. iframe 크기가 바뀌어도(넓은↔좁은 배치, 화면 회전) 지도가 이 화면 그대로면
+  // 사용자가 손대지 않은 것이니 새 크기로 다시 맞춘다. focus로 장소에 가면 null(고른 화면이 우선).
+  let fittedCamera: MapCamera | null = null;
   let lastSize = '';
 
   const hasSize = () => container.clientWidth > 0 && container.clientHeight > 0;
@@ -77,38 +90,46 @@ export function createShareMap(
     refitPending = !hasSize();
     const points = places.map((place): [number, number] => [place.lng, place.lat]);
     const first = points[0];
+    fittedCamera = null;
     if (first === undefined) return;
     const unique = new Set(points.map(([lng, lat]) => `${lng},${lat}`));
     if (unique.size === 1) {
       adapter.setCamera(focusCamera(first, NO_PADDING));
-      return;
+    } else {
+      adapter.fitBounds(points, FIT_PADDING);
+      // 몇 미터 떨어진 곳들끼리면 맞추기가 줌 18~19까지 들어간다. 장소로 갈 때 줌을 넘지 않게 한다.
+      const fitted = adapter.getCamera();
+      if (fitted !== null && fitted.zoom > FOCUS_ZOOM) {
+        adapter.setCamera({ center: fitted.center, zoom: FOCUS_ZOOM });
+      }
     }
-    adapter.fitBounds(points, FIT_PADDING);
-    // 몇 미터 떨어진 곳들끼리면 맞추기가 줌 18~19까지 들어간다. 장소로 갈 때 줌을 넘지 않게 한다.
-    const fitted = adapter.getCamera();
-    if (fitted !== null && fitted.zoom > FOCUS_ZOOM) {
-      adapter.setCamera({ center: fitted.center, zoom: FOCUS_ZOOM });
-    }
+    fittedCamera = adapter.getCamera();
   };
 
   const goTo = (place: MapPlace) => {
     // 사용자가 고른 화면이 우선이다. 크기가 생겨도 처음 맞추기로 되돌리지 않는다.
     refitPending = false;
+    fittedCamera = null;
     adapter.setCamera(focusCamera([place.lng, place.lat], NO_PADDING));
   };
 
+  /** 컨테이너 크기를 지도에 알린다. 크기가 바뀌어 알렸으면 true. */
   const syncSize = () => {
     const width = container.clientWidth;
     const height = container.clientHeight;
-    if (width <= 0 || height <= 0 || `${width}:${height}` === lastSize) return;
+    if (width <= 0 || height <= 0 || `${width}:${height}` === lastSize) return false;
     lastSize = `${width}:${height}`;
     adapter.resize(width, height);
+    return true;
   };
 
   const onResize = () => {
     if (!mounted) return;
-    syncSize();
-    if (refitPending && hasSize()) fitAll();
+    // 크기를 바꾸기 전에 본다. 어댑터 resize는 가운데·줌을 그대로 두므로 맞춘 화면은 그 크기에서만 맞다
+    // (실제 네이버 지도, 2026-10-11: 넓은 배치에서 줌 16으로 맞춘 뒤 좁아지면 장소가 화면 밖으로 나갔다).
+    const untouched = sameCamera(adapter.getCamera(), fittedCamera);
+    const resized = syncSize();
+    if (refitPending ? hasSize() : resized && untouched) fitAll();
   };
 
   let unsubscribeAuth = () => {};

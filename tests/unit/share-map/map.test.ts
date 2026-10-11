@@ -416,6 +416,75 @@ describe('createShareMap', () => {
       expect(camera()).toEqual({ center: [C.lng, C.lat], zoom: 16 });
     });
 
+    // 실제 네이버 지도(2026-10-11): 넓은 배치(지도 439x793)에서 줌 16으로 맞춘 뒤 좁은 배치(375x323)로
+    // 바뀌면, 어댑터 resize가 가운데·줌을 그대로 두어 장소가 화면 밖으로 나갔다. 크기가 바뀐 뒤 다시 맞춘다.
+    it('처음 맞춘 뒤 크기가 바뀌면(사용자가 화면을 옮기지 않았으면) 지도 크기를 먼저 바꾸고 다시 맞춘다', async () => {
+      const adapter = new CameraFake();
+      const order: string[] = [];
+      const resize = adapter.resize.bind(adapter);
+      const fit = adapter.fitBounds.bind(adapter);
+      adapter.resize = (w, h) => {
+        order.push(`resize ${w}x${h}`);
+        resize(w, h);
+      };
+      adapter.fitBounds = (points, padding) => {
+        // 맞추기 줌은 지도 크기를 따른다(넓으면 16, 좁으면 15).
+        adapter.fitZoom = (adapter.resizeCalls.at(-1)?.[1] ?? 0) > 500 ? 16 : 15;
+        order.push(`fit ${adapter.fitZoom}`);
+        fit(points, padding);
+      };
+      const { handle, size, camera } = await setup({ adapter, size: { w: 439, h: 793 } });
+      handle.init([A, B, C]);
+      expect(camera()?.zoom).toBe(16);
+
+      size.w = 375;
+      size.h = 323;
+      window.dispatchEvent(new Event('resize'));
+      expect(order).toEqual(['resize 439x793', 'fit 16', 'resize 375x323', 'fit 15']);
+      expect(camera()?.zoom).toBe(15);
+
+      // 다시 넓어져도 맞춘다. 크기가 그대로인 resize는 다시 맞추지 않는다.
+      size.w = 800;
+      size.h = 600;
+      window.dispatchEvent(new Event('resize'));
+      window.dispatchEvent(new Event('resize'));
+      expect(adapter.fitCalls).toHaveLength(3);
+      expect(camera()?.zoom).toBe(16);
+    });
+
+    it('처음 맞춘 뒤 사용자가 화면을 옮겼으면 크기가 바뀌어도 다시 맞추지 않는다', async () => {
+      const { handle, adapter, size, camera } = await setup();
+      handle.init([A, B, C]);
+      adapter.setCamera({ center: [127, 37], zoom: 5 });
+      size.w = 375;
+      size.h = 323;
+      window.dispatchEvent(new Event('resize'));
+      expect(adapter.resizeCalls.at(-1)).toEqual([375, 323]);
+      expect(adapter.fitCalls).toHaveLength(1);
+      expect(camera()).toEqual({ center: [127, 37], zoom: 5 });
+    });
+
+    it('focus로 장소에 간 뒤에는 크기가 바뀌어도 다시 맞추지 않는다', async () => {
+      const { handle, adapter, size, camera } = await setup();
+      handle.init([A, B, C]);
+      handle.focus('c');
+      size.w = 375;
+      size.h = 323;
+      window.dispatchEvent(new Event('resize'));
+      expect(adapter.fitCalls).toHaveLength(1);
+      expect(camera()).toEqual({ center: [C.lng, C.lat], zoom: 16 });
+    });
+
+    it('1곳이면 크기가 바뀐 뒤에도 그 지점 줌 16으로 다시 맞춘다', async () => {
+      const { handle, adapter, size, camera } = await setup();
+      handle.init([A]);
+      size.w = 375;
+      size.h = 323;
+      window.dispatchEvent(new Event('resize'));
+      expect(adapter.fitCalls).toHaveLength(0);
+      expect(camera()).toEqual({ center: [A.lng, A.lat], zoom: 16 });
+    });
+
     it('처음부터 크기가 있으면 resize가 화면을 되돌리지 않는다', async () => {
       const { handle, adapter, camera } = await setup();
       handle.init([A, B, C]);
