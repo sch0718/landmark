@@ -452,16 +452,50 @@ describe('createShareMap', () => {
       expect(camera()?.zoom).toBe(16);
     });
 
-    it('처음 맞춘 뒤 사용자가 화면을 옮겼으면 크기가 바뀌어도 다시 맞추지 않는다', async () => {
-      const { handle, adapter, size, camera } = await setup();
+    it('처음 맞춘 뒤 사용자가 지도를 만졌으면(끌기·휠·키·터치) 크기가 바뀌어도 다시 맞추지 않는다', async () => {
+      for (const input of ['pointerdown', 'wheel', 'keydown', 'touchstart'] as const) {
+        const { el, handle, adapter, size, camera } = await setup();
+        handle.init([A, B, C]);
+        const map = el.querySelector<HTMLElement>('[data-testid="fake-map"]');
+        // 실제로는 지도 SDK가 입력을 받아 화면을 옮긴다. 가짜 지도에서는 입력 뒤 카메라를 직접 옮긴다.
+        map?.dispatchEvent(new Event(input, { bubbles: true }));
+        adapter.setCamera({ center: [127, 37], zoom: 5 });
+        size.w = 375;
+        size.h = 323;
+        window.dispatchEvent(new Event('resize'));
+        expect(adapter.resizeCalls.at(-1), input).toEqual([375, 323]);
+        expect(adapter.fitCalls, input).toHaveLength(1);
+        expect(camera(), input).toEqual({ center: [127, 37], zoom: 5 });
+        document.body.replaceChildren();
+      }
+    });
+
+    // 카메라가 맞춘 값과 같은지로 "사용자가 옮겼는지"를 가리면, 지도 SDK가 맞춘 뒤 스스로 가운데를 조금 고치는 경우
+    // (실제 네이버 getCenter는 크기·줌에 따라 1e-6도 안팎으로 반올림이 달라진다, 2026-10-11 확인) 사용자가 손대지
+    // 않았는데도 다시 맞추지 않는다. 사용자 입력이 없었으면 카메라가 달라져 있어도 다시 맞춘다.
+    it('사용자 입력 없이 지도가 맞춘 화면을 스스로 조금 고쳤어도, 크기가 바뀌면 다시 맞춘다', async () => {
+      const { handle, adapter, size, camera } = await setup({ size: { w: 439, h: 793 } });
       handle.init([A, B, C]);
-      adapter.setCamera({ center: [127, 37], zoom: 5 });
+      const fitted = camera();
+      if (fitted === null) throw new Error('카메라 없음');
+      adapter.setCamera({ center: [fitted.center[0], fitted.center[1] + 1e-6], zoom: fitted.zoom });
       size.w = 375;
       size.h = 323;
       window.dispatchEvent(new Event('resize'));
-      expect(adapter.resizeCalls.at(-1)).toEqual([375, 323]);
-      expect(adapter.fitCalls).toHaveLength(1);
-      expect(camera()).toEqual({ center: [127, 37], zoom: 5 });
+      expect(adapter.fitCalls).toHaveLength(2);
+    });
+
+    it('init을 다시 받으면 앞서 만진 기록을 지우고, 그 뒤 크기가 바뀌면 다시 맞춘다', async () => {
+      const { el, handle, adapter, size } = await setup();
+      handle.init([A, B, C]);
+      el.querySelector('[data-testid="fake-map"]')?.dispatchEvent(
+        new Event('pointerdown', { bubbles: true }),
+      );
+      handle.init([A, B]);
+      size.w = 375;
+      size.h = 323;
+      window.dispatchEvent(new Event('resize'));
+      expect(adapter.fitCalls).toHaveLength(3);
     });
 
     it('focus로 장소에 간 뒤에는 크기가 바뀌어도 다시 맞추지 않는다', async () => {

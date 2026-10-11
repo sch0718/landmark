@@ -1,5 +1,5 @@
 import { FOCUS_ZOOM, focusCamera } from 'src/components/map/camera';
-import type { MapAdapter, MapCamera, MapPadding } from 'src/components/map/MapAdapter';
+import type { MapAdapter, MapPadding } from 'src/components/map/MapAdapter';
 import { placeMarker } from 'src/sections/map/markers';
 import type { FromMap, MapPlace } from 'src/share-protocol';
 import { pastel } from 'src/theme/tokens/pastel';
@@ -16,15 +16,8 @@ export { FOCUS_ZOOM };
 const FIT_PADDING: MapPadding = { top: 40, right: 40, bottom: 40, left: 40 };
 const NO_PADDING: MapPadding = { top: 0, right: 0, bottom: 0, left: 0 };
 
-/** 같은 화면인지(실제 SDK가 돌려주는 좌표의 소수점 끝 흔들림은 무시한다, 1e-7도 ≈ 1cm). */
-function sameCamera(a: MapCamera | null, b: MapCamera | null): boolean {
-  if (a === null || b === null) return false;
-  return (
-    Math.abs(a.center[0] - b.center[0]) < 1e-7 &&
-    Math.abs(a.center[1] - b.center[1]) < 1e-7 &&
-    Math.abs(a.zoom - b.zoom) < 1e-6
-  );
-}
+/** 사용자가 지도를 직접 만지는 입력(끌기·휠 줌·줌 버튼·키보드·터치). 하나라도 오면 처음 맞추기를 다시 하지 않는다. */
+const USER_INPUTS = ['pointerdown', 'wheel', 'keydown', 'touchstart'] as const;
 
 export type ShareMap = {
   init(places: MapPlace[]): void;
@@ -63,9 +56,10 @@ export function createShareMap(
   let pendingCamera: 'fit' | MapPlace | null = null;
   // 숨긴 iframe(display:none)에서 맞추면 컨테이너가 0x0이라 틀린다. 크기가 생기면 한 번 다시 맞춘다.
   let refitPending = false;
-  // 처음 맞추기로 만든 화면. iframe 크기가 바뀌어도(넓은↔좁은 배치, 화면 회전) 지도가 이 화면 그대로면
-  // 사용자가 손대지 않은 것이니 새 크기로 다시 맞춘다. focus로 장소에 가면 null(고른 화면이 우선).
-  let fittedCamera: MapCamera | null = null;
+  // 처음 맞추기 화면을 유지하는 중인지. iframe 크기가 바뀌면(넓은↔좁은 배치, 화면 회전) 새 크기로 다시 맞춘다.
+  // 사용자가 지도를 만지거나 focus로 장소에 가면 false(그 화면이 우선). 카메라 값 비교로 가리지 않는다:
+  // 네이버 getCenter는 크기·줌에 따라 반올림이 1e-6도 안팎으로 달라져 손대지 않아도 "옮김"으로 보일 수 있다.
+  let autoFit = false;
   let lastSize = '';
 
   const hasSize = () => container.clientWidth > 0 && container.clientHeight > 0;
@@ -90,7 +84,7 @@ export function createShareMap(
     refitPending = !hasSize();
     const points = places.map((place): [number, number] => [place.lng, place.lat]);
     const first = points[0];
-    fittedCamera = null;
+    autoFit = first !== undefined;
     if (first === undefined) return;
     const unique = new Set(points.map(([lng, lat]) => `${lng},${lat}`));
     if (unique.size === 1) {
@@ -103,13 +97,12 @@ export function createShareMap(
         adapter.setCamera({ center: fitted.center, zoom: FOCUS_ZOOM });
       }
     }
-    fittedCamera = adapter.getCamera();
   };
 
   const goTo = (place: MapPlace) => {
     // 사용자가 고른 화면이 우선이다. 크기가 생겨도 처음 맞추기로 되돌리지 않는다.
     refitPending = false;
-    fittedCamera = null;
+    autoFit = false;
     adapter.setCamera(focusCamera([place.lng, place.lat], NO_PADDING));
   };
 
@@ -125,11 +118,10 @@ export function createShareMap(
 
   const onResize = () => {
     if (!mounted) return;
-    // 크기를 바꾸기 전에 본다. 어댑터 resize는 가운데·줌을 그대로 두므로 맞춘 화면은 그 크기에서만 맞다
+    // 어댑터 resize는 가운데·줌을 그대로 두므로 맞춘 화면은 그 크기에서만 맞다
     // (실제 네이버 지도, 2026-10-11: 넓은 배치에서 줌 16으로 맞춘 뒤 좁아지면 장소가 화면 밖으로 나갔다).
-    const untouched = sameCamera(adapter.getCamera(), fittedCamera);
     const resized = syncSize();
-    if (refitPending ? hasSize() : resized && untouched) {
+    if (refitPending ? hasSize() : resized && autoFit) {
       // 붙을 때·init과 같은 순서: 카메라를 옮긴 뒤 그린다(네이버는 그린 순간 보이는 범위의 마커만 그린다).
       fitAll();
       render();
@@ -150,6 +142,17 @@ export function createShareMap(
     unsubscribeAuth = opts.onAuthFailure(fail);
     // 이미 실패한 상태면 구독 중에 바로 불린다. 그때는 받은 해제 함수로 정리한다.
     if (failed) unsubscribeAuth();
+  }
+
+  // 캡처 단계에서 듣는다: 지도 SDK가 입력 전파를 막아도 먼저 받는다.
+  for (const input of USER_INPUTS) {
+    canvas.addEventListener(
+      input,
+      () => {
+        autoFit = false;
+      },
+      { capture: true, passive: true },
+    );
   }
 
   adapter.setClusterStyle({ color: tokens.accent.main, textColor: tokens.accent.contrast });
