@@ -223,9 +223,15 @@ describe('export html dialog', () => {
 
   it('share button only when files can be shared', async () => {
     const user = userEvent.setup();
-    await renderLibrary(sampleLibrary(), { prefs: LIST });
+    const template = vi.fn(() => TEMPLATE);
+    await renderLibrary(sampleLibrary(), { prefs: LIST, shareTemplate: template });
     const d = await openFromToolbar(user);
-    expect(within(d).queryByRole('button', { name: '공유' })).not.toBeInTheDocument();
+    // 틀이 준비된 뒤에도(라벨이 `공유`로 바뀔 때) `공유 준비 중…`이든 `공유`든 버튼이 없다.
+    await waitFor(() => expect(template).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    expect(within(d).queryByRole('button', { name: /^공유/ })).not.toBeInTheDocument();
   });
 
   it('share sends the html file with the title, then toasts and closes', async () => {
