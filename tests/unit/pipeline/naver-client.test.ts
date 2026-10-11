@@ -5,6 +5,7 @@ import {
   fetchCarRoute,
   fetchFolder,
   fetchPlaceSummary,
+  TooManyPlacesError,
   type HttpDeps,
 } from '../../../pipeline/naver-client';
 
@@ -147,6 +148,32 @@ describe('fetchFolder', () => {
       [`${FOLDER_BASE}?start=0&limit=500`]: { body: '{"folder":{"name":"f"}}' },
     });
     await expect(fetchFolder(SHARE_ID, deps)).rejects.toThrow(/bookmarkList/);
+  });
+
+  describe('maxCount', () => {
+    const pages = {
+      [`${FOLDER_BASE}?start=0&limit=20`]: { body: fixture('bookmarks-page1.json') },
+      [`${FOLDER_BASE}?start=20&limit=20`]: { body: fixture('bookmarks-page2.json') },
+    };
+
+    it('장소 수가 maxCount와 같으면 그대로 돌려준다', async () => {
+      const { deps } = makeDeps(pages);
+      const folder = await fetchFolder(SHARE_ID, deps, 20, 31);
+      expect(folder.bookmarks).toHaveLength(31);
+    });
+
+    it('maxCount를 넘으면 TooManyPlacesError, 다음 페이지는 요청하지 않는다', async () => {
+      const { deps, seen } = makeDeps(pages);
+      const error = await fetchFolder(SHARE_ID, deps, 20, 10).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(TooManyPlacesError);
+      expect(error).toMatchObject({ shareId: SHARE_ID, maxCount: 10 });
+      expect(seen).toHaveLength(1);
+    });
+
+    it('기본은 제한 없음', async () => {
+      const { deps } = makeDeps(pages);
+      expect((await fetchFolder(SHARE_ID, deps, 20)).bookmarks).toHaveLength(31);
+    });
   });
 });
 

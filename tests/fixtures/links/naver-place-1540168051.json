@@ -1,0 +1,75 @@
+{
+  "data": {
+    "placeDetail": {
+      "id": "1540168051",
+      "name": "콤포트",
+      "businessType": "place",
+      "opinet": null,
+      "coordinate": {
+        "longitude": 126.9833092,
+        "latitude": 37.5494047
+      },
+      "panorama": {
+        "street": {
+          "id": "FeO/MqJhOsRHvEIcLFvhbA==",
+          "lat": "37.5493712",
+          "lon": "126.9831541",
+          "fov": "80",
+          "tilt": "26.72",
+          "pan": "76.00"
+        }
+      },
+      "labels": {
+        "booking": false,
+        "delivery": false,
+        "nPay": false,
+        "nPayPromotion": false,
+        "talktalk": false,
+        "order": false
+      },
+      "category": {
+        "category": "전시,행사대행",
+        "categoryCodeList": ["225111", "225129", "225316", "225950"]
+      },
+      "address": {
+        "address": "서울 용산구 후암동 358-144",
+        "roadAddress": null,
+        "formattedAddress": "서울 용산구 후암동"
+      },
+      "businessHours": {
+        "description": "매주 월요일 휴무"
+      },
+      "reprPrice": null,
+      "visitorReviews": {
+        "score": null,
+        "displayText": "방문자 리뷰 234"
+      },
+      "blogReviews": {
+        "total": 618
+      },
+      "images": {
+        "images": [
+          {
+            "origin": "https://ldb-phinf.pstatic.net/20220616_60/1655305738552lJJVl_JPEG/001.jpg",
+            "originalUrl": "https://ldb-phinf.pstatic.net/20220616_60/1655305738552lJJVl_JPEG/001.jpg"
+          },
+          {
+            "origin": "https://ldb-phinf.pstatic.net/20220616_29/1655305738232jPJPo_JPEG/002.JPG",
+            "originalUrl": "https://ldb-phinf.pstatic.net/20220616_29/1655305738232jPJPo_JPEG/002.JPG"
+          },
+          {
+            "origin": "https://ldb-phinf.pstatic.net/20220616_176/1655305738691DdvMU_JPEG/003.jpg",
+            "originalUrl": "https://ldb-phinf.pstatic.net/20220616_176/1655305738691DdvMU_JPEG/003.jpg"
+          },
+          {
+            "origin": "https://ldb-phinf.pstatic.net/20220616_213/1655305738409YDge6_JPEG/004.jpg",
+            "originalUrl": "https://ldb-phinf.pstatic.net/20220616_213/1655305738409YDge6_JPEG/004.jpg"
+          }
+        ]
+      },
+      "naverBookingMenu": null,
+      "beautyStyles": null,
+      "immersiveVideo3D": null
+    }
+  }
+}

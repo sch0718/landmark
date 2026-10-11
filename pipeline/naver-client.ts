@@ -56,10 +56,24 @@ function toBookmark(raw: Raw): Bookmark {
   };
 }
 
+export const FOLDER_PAGE_SIZE = 500;
+
+/** 폴더 장소 수가 `maxCount`를 넘었다. 남은 페이지는 요청하지 않는다. */
+export class TooManyPlacesError extends Error {
+  constructor(
+    readonly shareId: string,
+    readonly maxCount: number,
+  ) {
+    super(`네이버 폴더 장소가 ${maxCount}곳을 넘음 (shareId=${shareId})`);
+    this.name = 'TooManyPlacesError';
+  }
+}
+
 export async function fetchFolder(
   shareId: string,
   deps: HttpDeps,
-  pageSize = 500,
+  pageSize = FOLDER_PAGE_SIZE,
+  maxCount = Number.POSITIVE_INFINITY,
 ): Promise<FetchedFolder> {
   const base = `https://pages.map.naver.com/save-pages/api/maps-bookmark/v3/shares/${shareId}/bookmarks`;
   const referer = `https://pages.map.naver.com/save-pages/detail-list/${shareId}`;
@@ -76,6 +90,7 @@ export async function fetchFolder(
     }
     if (start === 0) name = String((body.folder as Raw | undefined)?.name ?? '');
     bookmarks.push(...list.map((b) => toBookmark(b as Raw)));
+    if (bookmarks.length > maxCount) throw new TooManyPlacesError(shareId, maxCount);
     if (list.length < pageSize) break;
   }
   return { shareId, name, bookmarks };

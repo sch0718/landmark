@@ -1,0 +1,23 @@
+{
+  "data": {
+    "placeDetail": {
+      "id": "9999999999999",
+      "name": null,
+      "businessType": null,
+      "opinet": null,
+      "coordinate": null,
+      "panorama": null,
+      "labels": null,
+      "category": null,
+      "address": null,
+      "businessHours": null,
+      "reprPrice": null,
+      "visitorReviews": null,
+      "blogReviews": null,
+      "images": null,
+      "naverBookingMenu": null,
+      "beautyStyles": null,
+      "immersiveVideo3D": null
+    }
+  }
+}
