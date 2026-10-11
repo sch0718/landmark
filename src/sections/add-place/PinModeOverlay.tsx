@@ -17,9 +17,18 @@ export function PinModeOverlay({ center }: { center: [number, number] | null }) 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing) return;
-      // 대화상자·시트가 열려 있으면 Esc는 그쪽 몫이다.
       const target = event.target;
-      if (target instanceof Element && target.closest('.MuiModal-root, [role="dialog"]')) return;
+      if (target instanceof Element) {
+        // 대화상자·시트가 열려 있으면 Esc는 그쪽 몫이다.
+        if (target.closest('.MuiModal-root, [role="dialog"]')) return;
+        // 입력칸(목록 검색 등)의 Esc는 그 칸의 몫이다(지우기·조합 취소).
+        if (
+          target.closest(
+            'input, textarea, select, [contenteditable]:not([contenteditable="false"])',
+          )
+        )
+          return;
+      }
       setFlow((current) => (current.step === 'pin' ? { step: 'closed' } : current));
     };
     window.addEventListener('keydown', onKeyDown);

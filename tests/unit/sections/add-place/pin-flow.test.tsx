@@ -165,6 +165,38 @@ describe('핀 모드', () => {
     expect(crosshair()).toBeInTheDocument();
   });
 
+  it('입력칸(목록 검색)에서 누른 Esc는 핀 모드를 끝내지 않는다', async () => {
+    const { user, store } = await enterPinMode();
+    await user.click(screen.getByRole('searchbox', { name: '장소 검색' }));
+    await user.keyboard('{Escape}');
+    expect(store.get(addFlowAtom)).toEqual({ step: 'pin', name: '', start: null });
+    expect(crosshair()).toBeInTheDocument();
+  });
+
+  it.each([
+    ['넓은 화면', 1280],
+    ['중간 폭', 1100],
+  ])('%s에서 뒤로 가면(지도는 그대로 보여도) 핀 모드를 끝낸다', async (_, width) => {
+    const user = userEvent.setup();
+    const { router, store } = await renderLibrary(sampleLibrary(), { width });
+    await mapReady();
+    await act(() => router.navigate('/place/place00001'));
+    await openFrom(user, '지도에서 핀 찍기');
+    expect(crosshair()).toBeInTheDocument();
+    await act(() => router.navigate(-1));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/'));
+    expect(store.get(addFlowAtom)).toEqual({ step: 'closed' });
+    expect(crosshair()).not.toBeInTheDocument();
+  });
+
+  it('중간 폭에서 핀 모드 중 다른 장소로 가면 핀 모드를 끝내고 상세 오버레이를 다시 보인다', async () => {
+    const { router, store } = await enterPinMode({ width: 1100, path: '/place/place00001' });
+    expect(screen.queryByRole('region', { name: '장소 상세' })).not.toBeInTheDocument();
+    await act(() => router.navigate('/place/place00002'));
+    await waitFor(() => expect(store.get(addFlowAtom)).toEqual({ step: 'closed' }));
+    expect(screen.getByRole('region', { name: '장소 상세' })).toBeInTheDocument();
+  });
+
   it('시작 좌표가 있으면 지도를 그 좌표로 옮기고, 그대로 여기에 추가하면 그 좌표다', async () => {
     const user = userEvent.setup();
     const { store } = await renderLibrary(sampleLibrary(), {

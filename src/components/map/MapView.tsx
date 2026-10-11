@@ -198,7 +198,14 @@ export function MapView(props: Props) {
   return (
     <Box
       ref={frameRef}
-      sx={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden' }}
+      // 지도 SDK가 안쪽에 쓰는 z-index가 지도 밖(위에 덮는 오버레이 등)과 겨루지 않게 쌓임 맥락을 가둔다.
+      sx={{
+        position: 'relative',
+        width: '100%',
+        height: '100%',
+        overflow: 'hidden',
+        isolation: 'isolate',
+      }}
       data-testid="map-host"
     >
       <Box ref={canvasRef} sx={{ position: 'absolute', inset: 0 }} data-testid="map-canvas" />

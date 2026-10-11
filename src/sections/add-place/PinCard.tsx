@@ -15,7 +15,7 @@ import {
   CardSection,
   useAliveRef,
   useCardLabels,
-} from 'src/sections/add-place/CandidateCard';
+} from 'src/sections/add-place/card-parts';
 import { LabelPicker } from 'src/sections/place/LabelPicker';
 import { ReverseGeocoder } from 'src/services/reverse-geocoder';
 import { addFlowAtom } from 'src/stores/add-place';
