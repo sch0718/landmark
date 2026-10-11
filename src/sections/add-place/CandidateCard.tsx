@@ -127,7 +127,8 @@ export function CandidateCard({ candidate }: { candidate: PlaceCandidate }) {
     );
     savingRef.current = false;
     setSaving(false);
-    // 저장소 오류는 `run`이 토스트로 알린다. 카드와 입력은 그대로 둔다.
+    // 저장소 오류는 앱 오류 보고자(ErrorReporter)가 `userMessage`로 토스트를 띄운다. 라벨 id를 최신본 기준으로
+    // 다시 거르므로 연산 거절(OpRejected)은 생기지 않는다. 어느 쪽이든 카드와 입력은 그대로 둔다.
     if (!result.ok) return;
     setFlow({ step: 'closed' });
     void navigate(paths.place(result.createdId!));
@@ -188,7 +189,8 @@ export function CandidateCard({ candidate }: { candidate: PlaceCandidate }) {
           onChange={(event) => setAddress(event.target.value)}
           sx={FIELD_SX}
         />
-        {candidate.address === '' && (
+        {/* 주소 변환이 못 찾았을 때, 사용자가 주소를 쓰기 전까지만 보인다. */}
+        {candidate.address === '' && address.trim() === '' && (
           <Box
             component="p"
             sx={{ m: 0, mt: 0.5, fontSize: 12, color: 'var(--tm-text-secondary)' }}
@@ -218,7 +220,11 @@ export function CandidateCard({ candidate }: { candidate: PlaceCandidate }) {
         />
       </Section>
       <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mt: 2.5 }}>
-        <Button onClick={() => setFlow({ step: 'closed' })} sx={{ minHeight: 44 }}>
+        <Button
+          disabled={saving}
+          onClick={() => setFlow({ step: 'closed' })}
+          sx={{ minHeight: 44 }}
+        >
           취소
         </Button>
         <Button

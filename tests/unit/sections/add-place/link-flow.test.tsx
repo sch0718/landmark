@@ -240,20 +240,12 @@ describe('링크 입력', () => {
 describe('조회 오류', () => {
   const failWith = (error: PlaceLookupError) => () => error;
 
-  it('UNSUPPORTED_LINK·NOT_FOUND는 문구만 보이고 입력을 유지한다', async () => {
-    const { user } = await openCard(failWith(new PlaceLookupError({ code: 'UNSUPPORTED_LINK' })));
-    expect(
-      await within(panel()).findByText('네이버·카카오·구글 지도의 장소 링크만 넣을 수 있어요'),
-    ).toBeInTheDocument();
-    expect(within(panel()).getByRole('textbox', { name: '링크' })).toHaveValue(SHARE_TEXT);
-    expect(within(panel()).queryByRole('button', { name: '다시 시도' })).not.toBeInTheDocument();
-    void user;
-    cleanup();
-
-    await openCard(failWith(new PlaceLookupError({ code: 'NOT_FOUND' })));
-    expect(
-      await within(panel()).findByText('장소를 찾지 못했어요. 링크를 다시 확인해 주세요'),
-    ).toBeInTheDocument();
+  it.each([
+    ['UNSUPPORTED_LINK', '네이버·카카오·구글 지도의 장소 링크만 넣을 수 있어요'],
+    ['NOT_FOUND', '장소를 찾지 못했어요. 링크를 다시 확인해 주세요'],
+  ] as const)('%s는 문구만 보이고 입력을 유지한다', async (code, message) => {
+    await openCard(failWith(new PlaceLookupError({ code })));
+    expect(await within(panel()).findByText(message)).toBeInTheDocument();
     expect(within(panel()).getByRole('textbox', { name: '링크' })).toHaveValue(SHARE_TEXT);
     expect(within(panel()).queryByRole('button', { name: '다시 시도' })).not.toBeInTheDocument();
   });
@@ -463,6 +455,13 @@ describe('확인 카드', () => {
     expect(address).toHaveValue('');
     expect(within(card).getByText('주소를 찾지 못했어요. 직접 입력해 주세요')).toBeInTheDocument();
     await user.type(address, '직접 쓴 주소');
+    // 주소를 쓰면 안내가 사라지고, 다시 비우면 돌아온다.
+    expect(
+      within(card).queryByText('주소를 찾지 못했어요. 직접 입력해 주세요'),
+    ).not.toBeInTheDocument();
+    await user.clear(address);
+    expect(within(card).getByText('주소를 찾지 못했어요. 직접 입력해 주세요')).toBeInTheDocument();
+    await user.type(address, '직접 쓴 주소');
     await user.click(within(card).getByRole('button', { name: '추가' }));
     await waitFor(() =>
       expect(store.get(libraryAtom).places[NEW_ID]?.address).toBe('직접 쓴 주소'),
@@ -503,6 +502,9 @@ describe('확인 카드', () => {
     const add = await within(panel()).findByRole('button', { name: '추가' });
     // 저장이 끝나기 전에 같은 작업 안에서 두 번 누른다.
     fireEvent.click(add);
+    // 저장이 끝나기 전에는 추가·취소 모두 막혀 있다.
+    expect(add).toBeDisabled();
+    expect(within(panel()).getByRole('button', { name: '취소' })).toBeDisabled();
     fireEvent.click(add);
     await waitFor(() => expect(store.get(addFlowAtom)).toEqual({ step: 'closed' }));
     expect(placeCount(store.get(libraryAtom))).toBe(6);
