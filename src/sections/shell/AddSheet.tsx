@@ -1,18 +1,41 @@
 import Box from '@mui/material/Box';
 import Drawer from '@mui/material/Drawer';
 import Typography from '@mui/material/Typography';
+import { useSetAtom } from 'jotai';
 import type { ComponentType, SVGProps } from 'react';
 import { FolderInputIcon, LinkIcon, MapPinIcon } from 'src/components/icons';
 import { ADD_LABEL } from 'src/sections/shell/nav-items';
+import { addFlowAtom, type AddFlow } from 'src/stores/add-place';
 
-const OPTIONS: readonly { label: string; Icon: ComponentType<SVGProps<SVGSVGElement>> }[] = [
-  { label: '링크 붙여넣기', Icon: LinkIcon },
-  { label: '지도에서 핀 찍기', Icon: MapPinIcon },
-  { label: '네이버 폴더 가져오기', Icon: FolderInputIcon },
+const OPTIONS: readonly {
+  label: string;
+  description: string;
+  Icon: ComponentType<SVGProps<SVGSVGElement>>;
+  flow: AddFlow;
+}[] = [
+  {
+    label: '링크 붙여넣기',
+    description: '네이버·카카오·구글 지도의 장소 링크',
+    Icon: LinkIcon,
+    flow: { step: 'link', hint: 'place' },
+  },
+  {
+    label: '지도에서 핀 찍기',
+    description: '지도를 움직여 위치를 고르기',
+    Icon: MapPinIcon,
+    flow: { step: 'pin', name: '', start: null },
+  },
+  {
+    label: '네이버 폴더 가져오기',
+    description: '네이버 공유 폴더의 장소를 한꺼번에',
+    Icon: FolderInputIcon,
+    flow: { step: 'link', hint: 'folder' },
+  },
 ];
 
-/** ＋ 버튼이 여는 추가 시트. 이 단계에서는 세 항목 모두 "곧 제공돼요" 상태로 비활성이다. */
+/** ＋ 버튼이 여는 추가 시트(스펙 §2.1). 항목을 고르면 추가 흐름을 시작하고 시트를 닫는다. */
 export function AddSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const setFlow = useSetAtom(addFlowAtom);
   return (
     <Drawer
       anchor="bottom"
@@ -50,12 +73,15 @@ export function AddSheet({ open, onClose }: { open: boolean; onClose: () => void
         {ADD_LABEL}
       </Typography>
       <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0 }}>
-        {OPTIONS.map(({ label, Icon }) => (
+        {OPTIONS.map(({ label, description, Icon, flow }) => (
           <li key={label}>
             <Box
               component="button"
               type="button"
-              disabled
+              onClick={() => {
+                setFlow(flow);
+                onClose();
+              }}
               sx={{
                 width: '100%',
                 minHeight: 56,
@@ -67,8 +93,11 @@ export function AddSheet({ open, onClose }: { open: boolean; onClose: () => void
                 background: 'transparent',
                 textAlign: 'left',
                 font: 'inherit',
-                color: 'var(--tm-text-muted)',
-                cursor: 'not-allowed',
+                color: 'var(--tm-text-primary)',
+                cursor: 'pointer',
+                borderRadius: 'var(--tm-radius-md)',
+                '&:hover': { bgcolor: 'var(--tm-bg-raised)' },
+                '&:focus-visible': { outline: '2px solid var(--tm-accent-main)', outlineOffset: 2 },
               }}
             >
               <Box
@@ -89,8 +118,12 @@ export function AddSheet({ open, onClose }: { open: boolean; onClose: () => void
                 <Typography component="span" sx={{ display: 'block', fontWeight: 700 }}>
                   {label}
                 </Typography>
-                <Typography component="span" variant="body2" sx={{ display: 'block' }}>
-                  곧 제공돼요
+                <Typography
+                  component="span"
+                  variant="body2"
+                  sx={{ display: 'block', color: 'var(--tm-text-secondary)' }}
+                >
+                  {description}
                 </Typography>
               </Box>
             </Box>

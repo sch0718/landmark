@@ -9,9 +9,10 @@ import { paths } from 'src/routes/paths';
 import { useOpenPlaceId } from 'src/sections/library/use-open-place-id';
 import { LabelChips } from 'src/sections/library/LabelChips';
 import { useLibraryQuery } from 'src/sections/library/use-library-query';
-import { toMarkers } from 'src/sections/map/markers';
+import { placeMarker, toMarkers } from 'src/sections/map/markers';
 import { DETAIL_WIDTH } from 'src/sections/shell/pane-widths';
 import { useLayout } from 'src/sections/shell/use-layout';
+import { addFlowAtom, showsAddPanel } from 'src/stores/add-place';
 import { libraryAtom } from 'src/stores/library-state';
 import { focusPlaceAtom } from 'src/stores/library-ui';
 import { useThemeTokens } from 'src/theme/use-theme';
@@ -23,12 +24,16 @@ const OVERLAID_PADDING: MapPadding = { ...BASE_PADDING, right: DETAIL_WIDTH + ED
 
 type MapFocus = { point: [number, number]; seq: number };
 
+/** 확인 카드의 후보를 보이는 임시 마커 id. 장소 id(10자 영숫자)와 겹치지 않는다. */
+const CANDIDATE_MARKER_ID = 'candidate';
+
 /**
  * 보관함 지도(스펙 §4.5). 목록과 같은 필터(`useLibraryQuery`)로 거른 장소를 라벨 색 마커로 보여 준다.
  * - 마커를 누르면 그 장소의 상세로 가고, 목록은 그 행으로 스크롤한다(`focusPlaceAtom`).
  * - 목록·상세에서 장소를 고르면(경로의 `/place/:id`) 지도가 그 장소로 움직인다. 방금 지도에서 누른 장소는
  *   상세 오버레이가 새로 생기는 경우에만 옮긴다.
  * - 좁은 화면(`/map`)에서는 위에 라벨 필터 칩 한 줄을 둔다.
+ * - 링크로 찾은 후보의 확인 카드가 열려 있으면 그 좌표로 옮기고 임시 마커를 보인다(스펙 §2.2).
  */
 export function LibraryMap() {
   const library = useAtomValue(libraryAtom);
@@ -38,7 +43,10 @@ export function LibraryMap() {
   const navigate = useNavigate();
   const requestListScroll = useSetAtom(focusPlaceAtom);
   const placeId = useOpenPlaceId();
-  const detailOverlaid = layout === 'medium' && placeId !== null;
+  const flow = useAtomValue(addFlowAtom);
+  const candidate = flow.step === 'candidate' ? flow.candidate : null;
+  // 중간 폭에서는 상세 칸이나 추가 칸이 지도 오른쪽을 덮는다.
+  const detailOverlaid = layout === 'medium' && (placeId !== null || showsAddPanel(flow));
 
   const clusterStyle = useMemo(
     () => ({ color: tokens.accent.main, textColor: tokens.accent.contrast }),
@@ -56,6 +64,28 @@ export function LibraryMap() {
     const [hidden] = toMarkers([open], library.labels, tokens, placeId);
     return [...shown, hidden!];
   }, [places, library.places, library.labels, tokens, placeId]);
+
+  // 후보 임시 마커: 선택된 장소처럼 강조색 테두리로 그리고 클러스터에 넣지 않는다.
+  const shownMarkers = useMemo(
+    () =>
+      candidate === null
+        ? markers
+        : [
+            ...markers,
+            placeMarker(
+              {
+                id: CANDIDATE_MARKER_ID,
+                lng: candidate.lng,
+                lat: candidate.lat,
+                name: candidate.name,
+              },
+              undefined,
+              tokens,
+              true,
+            ),
+          ],
+    [markers, candidate, tokens],
+  );
 
   // 선택이 바뀌면 지도를 그 장소로 옮긴다(렌더 중 상태 갱신). `seq`를 올려 같은 장소도 다시 움직인다.
   const [seen, setSeen] = useState<string | null>(null);
@@ -93,10 +123,20 @@ export function LibraryMap() {
     }
   }
 
+  // 후보가 새로 열리면 그 좌표로 옮긴다(렌더 중 상태 갱신).
+  const [seenCandidate, setSeenCandidate] = useState<typeof candidate>(null);
+  if (seenCandidate !== candidate) {
+    setSeenCandidate(candidate);
+    if (candidate !== null) {
+      setFocus({ point: [candidate.lng, candidate.lat], seq: (focus?.seq ?? 0) + 1 });
+    }
+  }
+
   const [unavailable, setUnavailable] = useState<string | null>(null);
 
   const onMarkerClick = useCallback(
     (id: string) => {
+      if (id === CANDIDATE_MARKER_ID) return; // 아직 보관함에 없는 후보다.
       setFromMarker(id);
       requestListScroll((prev) => ({ id, seq: (prev?.seq ?? 0) + 1 }));
       void navigate(paths.place(id));
@@ -117,7 +157,7 @@ export function LibraryMap() {
       )}
       <Box sx={{ position: 'relative', flex: 1, minHeight: 0, bgcolor: 'var(--tm-bg-raised)' }}>
         <MapView
-          markers={markers}
+          markers={shownMarkers}
           polylines={[]}
           clusterStyle={clusterStyle}
           padding={padding}

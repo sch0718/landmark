@@ -227,7 +227,7 @@ describe('AppShell layout', () => {
 });
 
 describe('AddSheet', () => {
-  it('add sheet lists three disabled options with 곧 제공돼요', async () => {
+  it('add sheet lists three enabled options', async () => {
     mockViewport(390);
     await renderApp();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
@@ -235,12 +235,13 @@ describe('AddSheet', () => {
 
     const sheet = await screen.findByRole('dialog');
     const options = within(sheet).getAllByRole('button');
-    expect(options.map((option) => option.textContent)).toEqual([
-      '링크 붙여넣기곧 제공돼요',
-      '지도에서 핀 찍기곧 제공돼요',
-      '네이버 폴더 가져오기곧 제공돼요',
+    expect(options.map((option) => option.querySelector('span')?.textContent)).toEqual([
+      '링크 붙여넣기',
+      '지도에서 핀 찍기',
+      '네이버 폴더 가져오기',
     ]);
-    for (const option of options) expect(option).toBeDisabled();
+    for (const option of options) expect(option).toBeEnabled();
+    expect(sheet).not.toHaveTextContent('곧 제공돼요');
   });
 
   it('opens from the rail on wide screens too', async () => {

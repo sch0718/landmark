@@ -113,15 +113,34 @@ export async function renderLibrary(
     storage?: Storage;
     /** `renderApp`의 `shareTemplate`를 그대로 넘긴다. */
     shareTemplate?: NonNullable<Parameters<typeof renderApp>[0]>['shareTemplate'];
+    /** `renderApp`의 `placeLookup`을 그대로 넘긴다. */
+    placeLookup?: NonNullable<Parameters<typeof renderApp>[0]>['placeLookup'];
+    /** `renderApp`의 `reverseGeocoder`를 그대로 넘긴다. */
+    reverseGeocoder?: NonNullable<Parameters<typeof renderApp>[0]>['reverseGeocoder'];
   } = {},
 ) {
-  const { prefs, width = 1280, path = '/', ids, shareTemplate } = options;
+  const {
+    prefs,
+    width = 1280,
+    path = '/',
+    ids,
+    shareTemplate,
+    placeLookup,
+    reverseGeocoder,
+  } = options;
   const storage = options.storage ?? createMemoryStorage();
   storage.setItem(LIBRARY_KEY, JSON.stringify(library));
   if (prefs !== undefined) {
     storage.setItem(PREFS_KEY, JSON.stringify({ ...structuredClone(DEFAULT_PREFS), ...prefs }));
   }
   const viewport = mockViewport(width);
-  const rendered = await renderApp({ path, storage, ids, shareTemplate });
+  const rendered = await renderApp({
+    path,
+    storage,
+    ids,
+    shareTemplate,
+    placeLookup,
+    reverseGeocoder,
+  });
   return { ...rendered, storage, setWidth: viewport.setWidth };
 }

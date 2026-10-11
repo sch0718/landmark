@@ -1,10 +1,12 @@
 import Box from '@mui/material/Box';
 import IconButton from '@mui/material/IconButton';
 import type { SxProps, Theme } from '@mui/material/styles';
+import { useAtomValue } from 'jotai';
 import { useState, type ReactNode } from 'react';
 import { matchPath, Outlet, useLocation, useNavigate } from 'react-router';
 import { ChevronLeftIcon, XIcon } from 'src/components/icons';
 import { paths } from 'src/routes/paths';
+import { AddPlaceHost } from 'src/sections/add-place/AddPlaceHost';
 import { AddSheet } from 'src/sections/shell/AddSheet';
 import { BottomTabs } from 'src/sections/shell/BottomTabs';
 import { NavRail } from 'src/sections/shell/NavRail';
@@ -12,6 +14,7 @@ import { DETAIL_WIDTH, LIST_WIDTH } from 'src/sections/shell/pane-widths';
 import { DetailSlot, ListSlot, MapSlot } from 'src/sections/shell/ShellSlots';
 import { StorageBanner } from 'src/sections/shell/StorageBanner';
 import { useLayout } from 'src/sections/shell/use-layout';
+import { addFlowAtom, showsAddPanel } from 'src/stores/add-place';
 
 /** 슬롯 하나. 랜드마크(`aria-label`)와 스크롤을 맡는다. */
 function Pane({
@@ -112,6 +115,8 @@ export function AppShell() {
   const { pathname } = location;
   const navigate = useNavigate();
   const [addOpen, setAddOpen] = useState(false);
+  // 추가 흐름의 칸은 상세 칸 자리를 쓴다(상세가 열려 있어도 추가 흐름이 우선).
+  const adding = showsAddPanel(useAtomValue(addFlowAtom));
 
   // 끝의 `/`가 있어도(`/map/`) 같은 경로로 본다.
   const placeId = matchPath(paths.place(':id'), pathname)?.params.id ?? null;
@@ -138,8 +143,11 @@ export function AppShell() {
   let body: ReactNode;
   if (!isLibraryView) {
     body = (
-      <Box component="main" sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-        <Outlet />
+      <Box sx={{ flex: 1, minHeight: 0, display: 'flex', position: 'relative' }}>
+        <Box component="main" sx={{ flex: 1, minWidth: 0, minHeight: 0, overflow: 'auto' }}>
+          <Outlet />
+        </Box>
+        {layout !== 'compact' && <AddPlaceHost floating />}
       </Box>
     );
   } else if (layout !== 'compact') {
@@ -156,8 +164,16 @@ export function AppShell() {
         <Pane label="지도" sx={MAP_PANE_SX}>
           <MapSlot />
         </Pane>
-        {(wide || placeId !== null) && (
-          <DetailPane mode={wide ? 'column' : 'overlay'} placeId={placeId} onClose={closeDetail} />
+        {adding ? (
+          <AddPlaceHost floating={!wide} />
+        ) : (
+          (wide || placeId !== null) && (
+            <DetailPane
+              mode={wide ? 'column' : 'overlay'}
+              placeId={placeId}
+              onClose={closeDetail}
+            />
+          )
         )}
       </Box>
     );
@@ -194,6 +210,7 @@ export function AppShell() {
         {layout === 'compact' && <BottomTabs onAdd={() => setAddOpen(true)} />}
       </Box>
       <AddSheet open={addOpen} onClose={() => setAddOpen(false)} />
+      {layout === 'compact' && <AddPlaceHost />}
     </Box>
   );
 }
