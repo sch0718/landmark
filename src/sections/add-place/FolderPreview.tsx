@@ -194,7 +194,7 @@ function FolderList({ folderName, places }: { folderName: string; places: Folder
   const nameTooLong = labelId === null && trimmed.length > LIBRARY_LIMITS.labelNameChars;
   const nameValid = labelId !== null || (trimmed.length > 0 && !nameTooLong);
   const count = selected.size;
-  const allSelected = count === places.length;
+  const allSelected = count > 0 && count === places.length;
   const canImport = count > 0 && nameValid && !saving;
 
   const toggle = (sid: string) =>
@@ -209,16 +209,31 @@ function FolderList({ folderName, places }: { folderName: string; places: Folder
     savingRef.current = true;
     setSaving(true);
     const items = places.filter((place) => selected.has(place.sid));
-    const label = labelId === null ? { newLabelName: name } : { labelId };
-    const result = await run((lib, ctx) => importFolder(lib, items, label, ctx));
+    // 고른 라벨의 이름(렌더 시점). 그사이 다른 탭이 그 라벨을 지웠다면 같은 이름으로 다시 쓰거나 만든다.
+    const pickedName = labelId === null ? null : labels.find((l) => l.id === labelId)!.name.value;
+    const result = await run((lib, ctx) =>
+      importFolder(
+        lib,
+        items,
+        labelId !== null && lib.labels[labelId]?.deletedAt === null
+          ? { labelId }
+          : { newLabelName: pickedName ?? name },
+        ctx,
+      ),
+    );
+    // 칸이 닫힌 뒤에도 가져오기는 이미 저장소에 반영됐으므로 결과는 알린다.
+    if (result.ok) {
+      const message = result.summary === undefined ? null : resultMessage(result.summary);
+      if (message !== null) toast(message);
+    }
+    // 칸이 닫혔다면 잠금 해제·필터·흐름 닫기는 건드리지 않는다(새 흐름을 닫을 수 있다).
     if (!aliveRef.current) return;
     savingRef.current = false;
     setSaving(false);
-    // 저장소 오류는 앱 오류 보고자(ErrorReporter)가 토스트로 알린다. 어느 쪽이든 미리보기와 선택은 그대로 둔다.
+    // 저장소 오류는 앱 오류 보고자(ErrorReporter)가 알리지만 연산 거절(OpRejected)은 보고되지 않는다.
+    // 라벨은 위에서 최신본 기준으로 다시 정하므로 거절은 드물고, 그때는 안내 문구 없이
+    // 미리보기와 선택을 그대로 두고 버튼만 다시 켠다.
     if (!result.ok) return;
-    const message = result.summary === undefined ? null : resultMessage(result.summary);
-    if (message !== null) toast(message);
-    // 가져온 라벨 하나로 목록을 건다(미분류 보기는 끈다).
     patchQuery({ labelIds: [result.createdId!], unlabeled: false });
     setFlow({ step: 'closed' });
   };
@@ -286,6 +301,11 @@ function FolderList({ folderName, places }: { folderName: string; places: Folder
             {allSelected ? '전체 해제' : '전체 선택'}
           </Button>
         </Box>
+        {places.length === 0 && (
+          <Typography variant="body2" sx={{ mt: 1, color: 'var(--tm-text-secondary)' }}>
+            가져올 장소가 없는 폴더예요
+          </Typography>
+        )}
         <Box
           component="ul"
           aria-label="가져올 장소"

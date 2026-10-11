@@ -341,19 +341,63 @@ describe('폴더 미리보기', () => {
     expect(toastMock).not.toHaveBeenCalled();
   });
 
-  it('저장 중에 흐름이 닫히면 늦은 결과로 토스트·필터를 바꾸지 않는다', async () => {
+  it('저장 중에 흐름이 닫혀도 결과 토스트는 띄우되 흐름·필터는 건드리지 않는다', async () => {
     const { store } = await openFolder(undefined, { library: sampleLibrary() });
     await within(panel()).findByRole('heading', { name: '속초 맛집 · 3곳' });
-    const button = importButton(3);
     // 저장이 끝나기 전에 바깥에서(예: 칸의 닫기 버튼) 흐름을 닫는다.
-    fireEvent.click(button);
+    fireEvent.click(importButton(3));
     act(() => store.set(addFlowAtom, { step: 'closed' }));
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    });
-    expect(toastMock).not.toHaveBeenCalled();
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith('3곳을 새로 넣었어요'));
+    expect(toastMock).toHaveBeenCalledTimes(1);
     expect(store.get(addFlowAtom)).toEqual({ step: 'closed' });
+    // 가져온 것은 들어왔지만 목록은 라벨로 걸러지지 않았다.
+    expect(Object.keys(store.get(libraryAtom).places)).toHaveLength(8);
     expect(shownNames()).toHaveLength(8);
+    expect(
+      within(screen.getByRole('group', { name: '라벨' })).getByRole('button', {
+        name: /^속초 맛집/,
+      }),
+    ).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('고른 기존 라벨을 다른 탭이 그사이 지웠으면 같은 이름의 라벨로 가져온다', async () => {
+    const { user, store, storage } = await openFolder(undefined, { library: sampleLibrary() });
+    await within(panel()).findByRole('heading', { name: '속초 맛집 · 3곳' });
+    await user.click(within(panel()).getByRole('button', { name: '맛집' }));
+
+    // 다른 탭이 `맛집` 라벨을 지운다(장소에서도 떼어진다). 이 탭의 화면 상태는 그대로다.
+    const stored = JSON.parse(storage.getItem(LIBRARY_KEY)!) as Library;
+    storage.setItem(
+      LIBRARY_KEY,
+      JSON.stringify({
+        ...stored,
+        labels: {
+          ...stored.labels,
+          [L_FOOD]: { ...stored.labels[L_FOOD]!, deletedAt: '2026-10-12T00:00:00.000Z' },
+        },
+        places: Object.fromEntries(
+          Object.entries(stored.places).map(([id, place]) => [
+            id,
+            {
+              ...place,
+              labelIds: {
+                ...place.labelIds,
+                value: place.labelIds.value.filter((labelId) => labelId !== L_FOOD),
+              },
+            },
+          ]),
+        ),
+      }),
+    );
+
+    await user.click(importButton(3));
+    await waitFor(() => expect(store.get(addFlowAtom)).toEqual({ step: 'closed' }));
+    expect(toastMock).toHaveBeenCalledWith('3곳을 새로 넣었어요');
+    const lib = store.get(libraryAtom);
+    const made = lib.labels.newlab01!;
+    expect(made.name.value).toBe('맛집');
+    expect(made.deletedAt).toBeNull();
+    expect(lib.places.newplace01!.labelIds.value).toEqual(['newlab01']);
   });
 });
 
@@ -411,6 +455,16 @@ describe('폴더 조회 오류', () => {
     await act(async () => pending.resolve(threePlaces()));
     expect(queryPanel()).not.toBeInTheDocument();
     expect(store.get(addFlowAtom)).toEqual({ step: 'closed' });
+  });
+});
+
+describe('빈 폴더', () => {
+  it('안내를 보이고 전체 선택은 선택 상태가 아니며 가져오기는 막힌다', async () => {
+    await openFolder(() => ({ folderName: '빈 폴더', places: [] }));
+    expect(await within(panel()).findByRole('heading', { name: '빈 폴더 · 0곳' })).toBeVisible();
+    expect(within(panel()).getByText('가져올 장소가 없는 폴더예요')).toBeInTheDocument();
+    expect(within(panel()).getByRole('button', { name: '전체 선택' })).toBeInTheDocument();
+    expect(importButton(0)).toBeDisabled();
   });
 });
 
