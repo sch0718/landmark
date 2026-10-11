@@ -52,6 +52,8 @@ afterEach(() => {
 
 const dialog = () => screen.getByRole('dialog', { name: '내보내기' });
 const saveButton = () => within(dialog()).getByRole('button', { name: '파일 저장' });
+/** 틀이 준비돼 라벨이 `공유`로 돌아온 공유 버튼. */
+const readyShareButton = () => within(dialog()).findByRole('button', { name: '공유' });
 const titleInput = () => within(dialog()).getByRole('textbox', { name: '제목' });
 const row = (name: RegExp) =>
   within(screen.getByRole('list', { name: '장소 목록' })).getByRole('button', { name });
@@ -145,7 +147,7 @@ describe('export html dialog', () => {
     expect(within(d).getByText('지금 보이는 0곳을 내보냅니다 (검색: 없는말)')).toBeInTheDocument();
     expect(within(d).getByText('내보낼 장소가 없어요')).toBeInTheDocument();
     expect(saveButton()).toBeDisabled();
-    expect(within(d).getByRole('button', { name: '공유' })).toBeDisabled();
+    expect(await readyShareButton()).toBeDisabled();
   });
 
   it('label filter names the label and becomes the default title', async () => {
@@ -199,10 +201,8 @@ describe('export html dialog', () => {
 
   it('reopening resets title, memo checkbox and error', async () => {
     const user = userEvent.setup();
-    await renderLibrary(sampleLibrary(), {
-      prefs: LIST,
-      shareTemplate: new Error('offline'),
-    });
+    let body: string | Error = new Error('offline');
+    await renderLibrary(sampleLibrary(), { prefs: LIST, shareTemplate: () => body });
     await openFromToolbar(user);
     await user.clear(titleInput());
     await user.type(titleInput(), '바꾼 제목');
@@ -213,6 +213,8 @@ describe('export html dialog', () => {
     await user.click(within(dialog()).getByRole('button', { name: '닫기' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
 
+    // 다시 열 때는 틀을 받을 수 있다(미리 받기 실패 문구가 다시 뜨지 않게).
+    body = TEMPLATE;
     const d = await openFromToolbar(user);
     expect(titleInput()).toHaveValue('장소 5곳');
     expect(within(d).getByRole('checkbox', { name: '메모 포함' })).toBeChecked();
@@ -230,9 +232,9 @@ describe('export html dialog', () => {
     const user = userEvent.setup();
     const { canShare, share } = stubShare(() => Promise.resolve());
     await renderLibrary(sampleLibrary(), { prefs: LIST });
-    const d = await openFromToolbar(user);
+    await openFromToolbar(user);
     expect(canShare).toHaveBeenCalled();
-    await user.click(within(d).getByRole('button', { name: '공유' }));
+    await user.click(await readyShareButton());
 
     await waitFor(() => expect(share).toHaveBeenCalledTimes(1));
     const data = share.mock.calls[0]![0];
@@ -251,7 +253,7 @@ describe('export html dialog', () => {
     const { share } = stubShare(() => Promise.reject(new DOMException('취소', 'AbortError')));
     await renderLibrary(sampleLibrary(), { prefs: LIST });
     const d = await openFromToolbar(user);
-    const button = within(d).getByRole('button', { name: '공유' });
+    const button = await readyShareButton();
     await user.click(button);
 
     await waitFor(() => expect(share).toHaveBeenCalledTimes(1));
@@ -266,7 +268,7 @@ describe('export html dialog', () => {
     stubShare(() => Promise.reject(new Error('NotAllowedError')));
     await renderLibrary(sampleLibrary(), { prefs: LIST });
     const d = await openFromToolbar(user);
-    await user.click(within(d).getByRole('button', { name: '공유' }));
+    await user.click(await readyShareButton());
 
     expect(await within(d).findByRole('alert')).toHaveTextContent(SHARE_FAILED);
     expect(toastMock).not.toHaveBeenCalled();
@@ -286,16 +288,21 @@ describe('export html dialog', () => {
     expect(template).toHaveBeenCalledTimes(1);
   });
 
-  it('share after the prefetch calls navigator.share without fetching again', async () => {
+  it('share after the prefetch calls navigator.share right in the click, without fetching', async () => {
     const user = userEvent.setup();
     const { share } = stubShare(() => Promise.resolve());
     const template = vi.fn(() => TEMPLATE);
     await renderLibrary(sampleLibrary(), { prefs: LIST, shareTemplate: template });
-    const d = await openFromToolbar(user);
-    await waitFor(() => expect(template).toHaveBeenCalledTimes(1));
-    await user.click(within(d).getByRole('button', { name: '공유' }));
-    await waitFor(() => expect(share).toHaveBeenCalledTimes(1));
+    await openFromToolbar(user);
+    const button = await readyShareButton();
+    expect(button).toBeEnabled();
     expect(template).toHaveBeenCalledTimes(1);
+
+    // 클릭 처리 안에서 바로 불린다(네트워크도, 그 밖의 비동기 대기도 없다).
+    fireEvent.click(button);
+    expect(share).toHaveBeenCalledTimes(1);
+    expect(template).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith('파일을 만들었어요'));
   });
 
   /** 틀 받기를 붙잡아 두는 문. `open()`을 부르면 기다리던 받기가 모두 `body`로 끝난다. */
@@ -314,6 +321,82 @@ describe('export html dialog', () => {
       },
     };
   }
+
+  it('share reads 공유 준비 중… and stays disabled until the template arrives', async () => {
+    const user = userEvent.setup();
+    const { share } = stubShare(() => Promise.resolve());
+    const gated = gatedTemplate(TEMPLATE);
+    await renderLibrary(sampleLibrary(), { prefs: LIST, shareTemplate: gated.template });
+    const d = await openFromToolbar(user);
+    const pending = within(d).getByRole('button', { name: '공유 준비 중…' });
+    expect(pending).toBeDisabled();
+    expect(within(d).queryByRole('button', { name: '공유' })).not.toBeInTheDocument();
+    // 파일 저장은 막지 않는다(누르면 그 틀을 같이 기다린다).
+    expect(saveButton()).toBeEnabled();
+    fireEvent.click(pending);
+    expect(share).not.toHaveBeenCalled();
+
+    await gated.open();
+    expect(within(d).getByRole('button', { name: '공유' })).toBeEnabled();
+    expect(within(d).queryByRole('button', { name: '공유 준비 중…' })).not.toBeInTheDocument();
+  });
+
+  it('prefetch failure shows the template message and keeps share disabled; save retries', async () => {
+    const user = userEvent.setup();
+    stubShare(() => Promise.resolve());
+    let body: string | Error = new Error('offline');
+    const template = vi.fn(() => body);
+    await renderLibrary(sampleLibrary(), { prefs: LIST, shareTemplate: template });
+    const d = await openFromToolbar(user);
+
+    expect(await within(d).findByRole('alert')).toHaveTextContent(TEMPLATE_FAILED);
+    expect(within(d).getByRole('button', { name: '공유 준비 중…' })).toBeDisabled();
+    expect(saveButton()).toBeEnabled();
+    expect(template).toHaveBeenCalledTimes(1);
+
+    body = TEMPLATE;
+    await user.click(saveButton());
+    await waitFor(() => expect(downloadMock).toHaveBeenCalledTimes(1));
+    expect(template).toHaveBeenCalledTimes(2);
+    expect(toastMock).toHaveBeenCalledWith('파일을 만들었어요');
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
+  it('a save retry that succeeds also makes share ready', async () => {
+    const user = userEvent.setup();
+    stubShare(() => Promise.resolve());
+    let body: string | Error = new Error('offline');
+    const template = vi.fn(() => body);
+    await renderLibrary(sampleLibrary(), { prefs: LIST, shareTemplate: template });
+    await openFromToolbar(user);
+    await within(dialog()).findByRole('alert');
+
+    body = TEMPLATE;
+    await user.click(saveButton());
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(template).toHaveBeenCalledTimes(2);
+    // 다시 연 창은 저장 때 받은 틀로 바로 공유할 수 있다(새로 받지 않는다).
+    await openFromToolbar(user);
+    expect(await readyShareButton()).toBeEnabled();
+    expect(template).toHaveBeenCalledTimes(2);
+    expect(within(dialog()).queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('a fast double click while the template is still loading saves only once', async () => {
+    const user = userEvent.setup();
+    const gated = gatedTemplate(TEMPLATE);
+    await renderLibrary(sampleLibrary(), { prefs: LIST, shareTemplate: gated.template });
+    await openFromToolbar(user);
+    const button = saveButton();
+    fireEvent.click(button);
+    fireEvent.click(button);
+    expect(button).toBeDisabled();
+
+    await gated.open();
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith('파일을 만들었어요'));
+    expect(downloadMock).toHaveBeenCalledTimes(1);
+    expect(toastMock).toHaveBeenCalledTimes(1);
+  });
 
   it('reopening while a save is running: the old run neither downloads nor closes the new dialog', async () => {
     const user = userEvent.setup();
@@ -340,18 +423,30 @@ describe('export html dialog', () => {
     expect(toastMock).toHaveBeenCalledTimes(1);
   });
 
-  it('reopening while a save is running: a late failure of the old run shows no error', async () => {
+  it('reopening while a share is running: a late failure of the old run shows no error', async () => {
     const user = userEvent.setup();
-    const gated = gatedTemplate(new Error('offline'));
-    await renderLibrary(sampleLibrary(), { prefs: LIST, shareTemplate: gated.template });
+    let reject: (e: unknown) => void = () => {};
+    const { share } = stubShare(
+      () =>
+        new Promise<void>((_resolve, rej) => {
+          reject = rej;
+        }),
+    );
+    await renderLibrary(sampleLibrary(), { prefs: LIST });
     await openFromToolbar(user);
-    await user.click(saveButton());
+    await user.click(await readyShareButton());
+    expect(share).toHaveBeenCalledTimes(1);
     await user.click(within(dialog()).getByRole('button', { name: '닫기' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     await openFromToolbar(user);
+    expect(await readyShareButton()).toBeEnabled();
 
-    await gated.open();
+    await act(async () => {
+      reject(new Error('NotAllowedError'));
+      await new Promise((r) => setTimeout(r, 20));
+    });
     expect(within(dialog()).queryByRole('alert')).not.toBeInTheDocument();
+    expect(within(dialog()).getByRole('button', { name: '공유' })).toBeEnabled();
     expect(saveButton()).toBeEnabled();
   });
 

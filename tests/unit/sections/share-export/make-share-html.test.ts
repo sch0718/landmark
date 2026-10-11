@@ -1,8 +1,8 @@
-import { describe, expect, vi } from 'vitest';
+import { describe, expect, it as test, vi } from 'vitest';
 import { it } from '@effect/vitest';
-import { Effect } from 'effect';
+import { Effect, Result } from 'effect';
 import { SHARE_DATA_PLACEHOLDER } from 'src/domain/share/inject';
-import { makeShareHtml } from 'src/sections/share-export/make-share-html';
+import { makeShareHtml, renderShareHtml } from 'src/sections/share-export/make-share-html';
 import { ShareDocInvalid, ShareTemplateUnavailable } from 'src/services/errors';
 import { ShareTemplate } from 'src/services/share-template';
 import { sampleLibrary } from '../library/fixtures';
@@ -87,4 +87,26 @@ describe('makeShareHtml', () => {
       );
     }),
   );
+});
+
+describe('renderShareHtml', () => {
+  test('builds the file from a template string synchronously, without the service', () => {
+    const result = renderShareHtml(TEMPLATE, sampleLibrary(), [id(1), id(2)], opts);
+    expect(Result.isSuccess(result)).toBe(true);
+    const made = Result.getOrThrow(result);
+    expect(made.fileName).toBe('정자역-카페-20261011.html');
+    expect(made.count).toBe(2);
+    expect(made.html).not.toContain(SHARE_DATA_PLACEHOLDER);
+  });
+
+  test('returns ShareDocInvalid as a failure when the doc breaks the schema', () => {
+    const lib = sampleLibrary();
+    const broken = {
+      ...lib,
+      places: { ...lib.places, [id(1)]: { ...lib.places[id(1)]!, lng: 999 } },
+    };
+    const result = renderShareHtml(TEMPLATE, broken, [id(1)], opts);
+    expect(Result.isFailure(result)).toBe(true);
+    if (Result.isFailure(result)) expect(result.failure).toBeInstanceOf(ShareDocInvalid);
+  });
 });

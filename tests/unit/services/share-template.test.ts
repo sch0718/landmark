@@ -85,4 +85,53 @@ describe('ShareTemplate', () => {
       expect(fetchFn).toHaveBeenCalledTimes(2);
     }),
   );
+
+  it.effect('two loads while one is in flight share a single fetch and its result', () =>
+    Effect.gen(function* () {
+      const fetchFn = vi.fn(
+        () => new Promise<Response>((resolve) => setTimeout(() => resolve(textResponse(GOOD)), 10)),
+      );
+      const program = Effect.gen(function* () {
+        const t = yield* ShareTemplate;
+        return yield* Effect.all([t.load, t.load], { concurrency: 'unbounded' });
+      }).pipe(
+        Effect.provide(ShareTemplate.layerWith({ fetch: fetchFn as typeof fetch, url: URL })),
+      );
+      const [first, second] = yield* program;
+      expect(first).toBe(GOOD);
+      expect(second).toBe(GOOD);
+      expect(fetchFn).toHaveBeenCalledTimes(1);
+    }),
+  );
+
+  it.effect(
+    'a shared in-flight failure fails both loads once, and the next load fetches again',
+    () =>
+      Effect.gen(function* () {
+        let calls = 0;
+        const fetchFn = vi.fn(() => {
+          calls += 1;
+          return calls === 1
+            ? new Promise<Response>((resolve) =>
+                setTimeout(() => resolve(textResponse('x', 503)), 10),
+              )
+            : Promise.resolve(textResponse(GOOD));
+        });
+        const program = Effect.gen(function* () {
+          const t = yield* ShareTemplate;
+          const failed = yield* Effect.all([t.load.pipe(Effect.flip), t.load.pipe(Effect.flip)], {
+            concurrency: 'unbounded',
+          });
+          const ok = yield* t.load;
+          return [failed, ok] as const;
+        }).pipe(
+          Effect.provide(ShareTemplate.layerWith({ fetch: fetchFn as typeof fetch, url: URL })),
+        );
+        const [[a, b], ok] = yield* program;
+        expect(a).toBeInstanceOf(ShareTemplateUnavailable);
+        expect(b).toBe(a);
+        expect(ok).toBe(GOOD);
+        expect(fetchFn).toHaveBeenCalledTimes(2);
+      }),
+  );
 });
