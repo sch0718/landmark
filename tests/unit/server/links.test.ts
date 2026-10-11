@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ALLOWED_HOSTS, classifyLink } from 'src/server/links';
+import { ALLOWED_HOSTS, classifyLink, isAllowedUrl } from 'src/server/links';
 
 const GOOGLE_PLACE =
   'https://www.google.com/maps/place/%EC%9D%B4%EC%9E%AC%EB%AA%A8%ED%94%BC%EC%9E%90+%EB%B3%B8%EC%A0%90/data=!4m2!3m1!1s0x1520f8eed52456f1:0x129df2a4704f8520!4m7!3m6!1s0x1520f8eed52456f1:0x129df2a4704f8520!8m2!20s8Q7F422J+R6X?entry=tts';
@@ -196,6 +196,42 @@ describe('classifyLink', () => {
       });
     });
 
+    it.each([
+      'https://map.naver.com:8443/p/entry/place/1',
+      'https://naver.me:444/x',
+      'https://user:pw@naver.me/x',
+      'https://user@naver.me/x',
+      'https://map.naver.com@evil.com/p/entry/place/1',
+    ])('포트·사용자 정보가 붙으면 %s → unsupported', (raw) => {
+      expect(classifyLink(raw)).toEqual({ kind: 'unsupported' });
+    });
+
+    it('기본 포트는 URL이 지우므로 허용된다', () => {
+      expect(classifyLink('http://naver.me:80/x')).toEqual({
+        kind: 'redirect',
+        url: 'http://naver.me/x',
+      });
+      expect(classifyLink('https://naver.me:443/x')).toEqual({
+        kind: 'redirect',
+        url: 'https://naver.me/x',
+      });
+    });
+
+    it('대문자 스킴·호스트는 소문자로 바뀌어 허용된다', () => {
+      expect(classifyLink('HTTPS://NAVER.ME/x')).toEqual({
+        kind: 'redirect',
+        url: 'https://naver.me/x',
+      });
+    });
+
+    it.each([
+      'https://maps.google.com/',
+      'https://maps.google.com/maps',
+      'https://www.google.com/maps/place/',
+    ])('이름도 위치 단서도 없는 구글 주소 %s → unsupported', (raw) => {
+      expect(classifyLink(raw)).toEqual({ kind: 'unsupported' });
+    });
+
     it('앞뒤 공백은 무시한다', () => {
       expect(classifyLink('  https://naver.me/Fk73Vab5\n')).toEqual({
         kind: 'redirect',
@@ -207,6 +243,33 @@ describe('classifyLink', () => {
       expect(classifyLink('https://map.naver.com/p/')).toEqual({ kind: 'unsupported' });
       expect(classifyLink('https://pages.map.naver.com/x')).toEqual({ kind: 'unsupported' });
     });
+  });
+});
+
+describe('isAllowedUrl', () => {
+  it.each([
+    'https://naver.me/x',
+    'http://map.naver.com/p/entry/place/1',
+    'https://place-api.map.kakao.com/places/panel3/1',
+    'https://pages.map.naver.com/save-pages/api/x',
+    'HTTPS://NAVER.ME/x',
+    'http://naver.me:80/x',
+  ])('%s → 허용', (raw) => {
+    expect(isAllowedUrl(new URL(raw))).toBe(true);
+  });
+
+  it.each([
+    'ftp://naver.me/x',
+    'javascript:alert(1)',
+    'https://naver.me:8443/x',
+    'https://user:pw@naver.me/x',
+    'https://user@naver.me/x',
+    'https://map.naver.com.evil.com/x',
+    'https://evil.com/map.naver.com',
+    'https://map.naver.com@evil.com/',
+    'https://sub.naver.me/x',
+  ])('%s → 거부', (raw) => {
+    expect(isAllowedUrl(new URL(raw))).toBe(false);
   });
 });
 

@@ -43,6 +43,13 @@ const NAVER_PLACE_HOST_PATH = /^\/[^/]+\/(\d+)(?:\/|$)/;
 const KAKAO_PLACE_PATH = /^\/(\d+)\/?$/;
 const DIGITS = /^\d+$/;
 
+// 서버가 접속해도 되는 주소인가: http(s), 허용 목록의 정확한 호스트, 기본 포트(URL이 80·443은 지운다), 사용자 정보 없음.
+export function isAllowedUrl(url: URL): boolean {
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') return false;
+  if (url.port !== '' || url.username !== '' || url.password !== '') return false;
+  return ALLOWED_HOSTS.includes(url.hostname);
+}
+
 function parseHttpUrl(raw: string): URL | null {
   let url: URL;
   try {
@@ -50,9 +57,7 @@ function parseHttpUrl(raw: string): URL | null {
   } catch {
     return null;
   }
-  if (url.protocol !== 'https:' && url.protocol !== 'http:') return null;
-  if (!ALLOWED_HOSTS.includes(url.hostname)) return null;
-  return url;
+  return isAllowedUrl(url) ? url : null;
 }
 
 export function classifyLink(raw: string): LinkKind {
@@ -141,6 +146,9 @@ function classifyGooglePlace(pathname: string): LinkKind {
     decodedPlusCode !== null && /^[0-9A-Za-z]+\+[0-9A-Za-z]*$/.test(decodedPlusCode)
       ? decodedPlusCode
       : null;
+
+  // 이름도 위치 단서도 없으면 구글 장소 링크가 아니다(예: maps.google.com 첫 화면).
+  if (name === '' && googleId === null && lat === null && plusCode === null) return UNSUPPORTED;
 
   return { kind: 'google-place', name, googleId, lat, lng, plusCode };
 }
