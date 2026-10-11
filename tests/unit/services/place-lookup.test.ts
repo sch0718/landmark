@@ -189,6 +189,22 @@ describe('PlaceLookup.lookupLink', () => {
     }),
   );
 
+  it.effect('JSON이 아닌 5xx(Cloudflare 오류 HTML)는 UPSTREAM_ERROR이고 경고를 남기지 않는다', () =>
+    Effect.gen(function* () {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      for (const status of [500, 502, 503]) {
+        const error = yield* Effect.flip(
+          lookupLink(
+            vi.fn(async () => new Response('<html>error</html>', { status })),
+            'https://naver.me/x',
+          ),
+        );
+        expect(error.code).toBe('UPSTREAM_ERROR');
+      }
+      expect(warn).not.toHaveBeenCalled();
+    }),
+  );
+
   it.effect('error 본문 없는 404는 OFFLINE이고 경고를 한 번 남긴다', () =>
     Effect.gen(function* () {
       const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});

@@ -2,8 +2,10 @@ import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-libra
 import userEvent from '@testing-library/user-event';
 import { Effect, Layer } from 'effect';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { DEFAULT_QUERY } from 'src/domain/library/query';
 import { setAppRuntimeForTest } from 'src/lib/effect/runtime';
 import type { Library } from 'src/schema/library';
+import type { Prefs } from 'src/schema/prefs';
 import type { FolderResult } from 'src/server/resolve';
 import { PlaceLookupError } from 'src/services/errors';
 import { LIBRARY_KEY } from 'src/services/library-store';
@@ -90,7 +92,7 @@ const LIST = { libraryView: 'list' as const };
 /** 라이브러리를 그리고 폴더 단계로 연다. */
 async function openFolder(
   reply: () => Reply | Promise<Reply> = threePlaces,
-  options: { library?: Library; ids?: string[]; width?: number } = {},
+  options: { library?: Library; ids?: string[]; width?: number; prefs?: Partial<Prefs> } = {},
 ) {
   const user = userEvent.setup();
   const lookup = fakeFolderLookup(reply);
@@ -100,7 +102,7 @@ async function openFolder(
   const rendered = await renderLibrary(library, {
     ids: options.ids ?? IDS,
     placeLookup: lookup.layer,
-    prefs: LIST,
+    prefs: { ...LIST, ...options.prefs },
     ...(options.width === undefined ? {} : { width: options.width }),
   });
   act(() => rendered.store.set(addFlowAtom, { step: 'folder', shareId: SHARE_ID }));
@@ -288,14 +290,19 @@ describe('폴더 미리보기', () => {
     expect(importButton(3)).toBeEnabled();
   });
 
-  it('가져온 뒤 목록이 그 라벨로 걸러진다', async () => {
-    const { user } = await openFolder();
+  it('가져온 뒤 목록이 그 라벨로 걸러지고, 검색어·지역 필터는 비워진다', async () => {
+    const { user } = await openFolder(undefined, {
+      prefs: { query: { ...DEFAULT_QUERY, text: '저장된', regions: ['없는 지역'] } },
+    });
     await within(panel()).findByRole('heading', { name: '속초 맛집 · 3곳' });
-    expect(shownNames()).toHaveLength(6);
+    // 검색어·지역이 걸린 상태에서는 가져올 장소들이 보이지 않는다.
+    expect(screen.getByRole('searchbox')).toHaveValue('저장된');
+    expect(screen.queryByRole('list', { name: '장소 목록' })).not.toBeInTheDocument();
     await user.click(importButton(3));
     await waitFor(() => expect(queryPanel()).not.toBeInTheDocument());
     await waitFor(() => expect(shownNames()).toHaveLength(3));
     expect(shownNames().some((text) => text.includes('폴더 장소 2'))).toBe(true);
+    expect(screen.getByRole('searchbox')).toHaveValue('');
     expect(
       within(screen.getByRole('group', { name: '라벨' })).getByRole('button', {
         name: /^속초 맛집/,

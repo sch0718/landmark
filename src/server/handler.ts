@@ -40,6 +40,17 @@ function defaultCache(): Cache | undefined {
   return (globalThis as { caches?: { default?: Cache } }).caches?.default;
 }
 
+// 브라우저에는 공유 캐시 지시(`max-age`)를 주지 않는다. 엣지(Cache API)에 둘 사본에만 붙인다.
+function toBrowserResponse(response: Response): Response {
+  const headers = new Headers(response.headers);
+  headers.set('Cache-Control', 'private, no-store');
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 export async function handleGet(
   ctx: FunctionContext,
   options: GetHandlerOptions,
@@ -56,18 +67,18 @@ export async function handleGet(
     const key = cache ? options.cacheKey(input) : null;
     if (cache && key !== null) {
       const hit = await cache.match(key).catch(() => undefined);
-      if (hit) return hit;
+      if (hit) return toBrowserResponse(hit);
     }
 
     const result = await options.resolve(input);
-    const response = jsonResponse(result, {
+    const stored = jsonResponse(result, {
       headers: { 'Cache-Control': `max-age=${options.maxAgeSeconds}` },
     });
     if (cache && key !== null) {
       // 저장 실패는 응답에 영향을 주지 않는다.
-      ctx.waitUntil(cache.put(key, response.clone()).catch(() => undefined));
+      ctx.waitUntil(cache.put(key, stored.clone()).catch(() => undefined));
     }
-    return response;
+    return toBrowserResponse(stored);
   } catch (e) {
     // 오류 응답은 캐시하지 않는다.
     return errorResponse(e);

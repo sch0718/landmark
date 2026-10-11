@@ -234,7 +234,8 @@ function FolderList({ folderName, places }: { folderName: string; places: Folder
     // 라벨은 위에서 최신본 기준으로 다시 정하므로 거절은 드물고, 그때는 안내 문구 없이
     // 미리보기와 선택을 그대로 두고 버튼만 다시 켠다.
     if (!result.ok) return;
-    patchQuery({ labelIds: [result.createdId!], unlabeled: false });
+    // 방금 가져온 장소가 모두 보이도록 검색어·지역 필터도 비운다.
+    patchQuery({ labelIds: [result.createdId!], unlabeled: false, text: '', regions: [] });
     setFlow({ step: 'closed' });
   };
 

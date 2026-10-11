@@ -49,6 +49,7 @@ export function LibraryMap() {
   const flow = useAtomValue(addFlowAtom);
   const candidate = flow.step === 'candidate' ? flow.candidate : null;
   const pinning = flow.step === 'pin';
+  // `start`는 스펙 §2.4.4용으로 남겨 둔 값이다. 아직 채우는 호출이 없어 지금은 항상 null이다.
   const pinStart = flow.step === 'pin' ? flow.start : null;
   // 임시 마커 자리: 확인 카드의 후보나 핀 입력 카드의 위치.
   const tempPoint = useMemo(() => {

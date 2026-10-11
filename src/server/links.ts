@@ -60,6 +60,11 @@ function parseHttpUrl(raw: string): URL | null {
   return isAllowedUrl(url) ? url : null;
 }
 
+// 짧은 링크는 쿼리·해시를 떼고 바깥에 보낸다(추적 값 전달 방지, 캐시 키와 같은 기준).
+function shortLinkUrl(url: URL): string {
+  return url.origin + url.pathname;
+}
+
 export function classifyLink(raw: string): LinkKind {
   const url = parseHttpUrl(raw);
   if (!url) return UNSUPPORTED;
@@ -69,9 +74,11 @@ export function classifyLink(raw: string): LinkKind {
     case 'naver.me':
     case 'kko.to':
     case 'maps.app.goo.gl':
-      return { kind: 'redirect', url: url.href };
+      return { kind: 'redirect', url: shortLinkUrl(url) };
     case 'goo.gl':
-      return pathname.startsWith('/maps/') ? { kind: 'redirect', url: url.href } : UNSUPPORTED;
+      return pathname.startsWith('/maps/')
+        ? { kind: 'redirect', url: shortLinkUrl(url) }
+        : UNSUPPORTED;
     case 'map.naver.com':
       return classifyNaverMap(pathname);
     case 'm.place.naver.com':
@@ -128,7 +135,8 @@ function classifyGooglePlace(pathname: string): LinkKind {
   // 이름의 '+'는 공백이다. 퍼센트 인코딩을 풀기 전에 바꿔야 `%2B`(진짜 +)가 남는다.
   const name = decodeSafely(nameSegment.replace(/\+/g, ' ')).trim();
 
-  const googleId = /!1s(0x[0-9a-f]+:0x[0-9a-f]+)/i.exec(pathname)?.[1] ?? null;
+  // 스키마가 소문자만 받으므로 대문자 ID는 소문자로 바꾼다.
+  const googleId = /!1s(0x[0-9a-f]+:0x[0-9a-f]+)/i.exec(pathname)?.[1]?.toLowerCase() ?? null;
 
   const exact = /!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/.exec(pathname);
   const view = /@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/.exec(pathname);

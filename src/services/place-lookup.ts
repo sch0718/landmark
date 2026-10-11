@@ -60,6 +60,8 @@ export class PlaceLookup extends Context.Service<
       try {
         body = JSON.parse(text);
       } catch {
+        // 서버 함수가 있는 환경의 5xx(예: Cloudflare 오류 HTML 페이지)는 서버 문제이지 서버 함수 부재가 아니다.
+        if (response.status >= 500) return yield* new PlaceLookupError({ code: 'UPSTREAM_ERROR' });
         return yield* offline(`JSON이 아닌 응답(HTTP ${response.status})`);
       }
       const apiError = readApiError(body);

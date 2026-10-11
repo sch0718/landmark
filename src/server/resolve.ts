@@ -40,6 +40,8 @@ const BROWSER_USER_AGENT =
 const GOOGLE_SHORT_LINK_USER_AGENT = 'landmark-link-resolver';
 const GOOGLE_SHORT_LINK_HOSTS: readonly string[] = ['maps.app.goo.gl', 'goo.gl'];
 const SHARE_ID = /^[0-9a-zA-Z]+$/;
+// 장소 북마크의 sid는 숫자다. 주소 북마크는 숫자가 아닌 sid를 가져 장소로 넣을 수 없다.
+const SID_DIGITS = /^\d+$/;
 
 const unsupported = () =>
   new ApiError('UNSUPPORTED_LINK', '네이버·카카오·구글 지도 장소 링크가 아님');
@@ -62,7 +64,8 @@ function makeRequester(deps: Deps): Requester {
   const timeoutMs = deps.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   return async (url, init, options = {}) => {
     const target = new URL(url);
-    if (!isAllowedUrl(target)) throw unsupported();
+    // 바깥 요청은 https만 보낸다. 사용자가 붙여 넣은 http 주소는 호출하는 쪽이 https로 올려서 넘긴다.
+    if (!isAllowedUrl(target) || target.protocol !== 'https:') throw unsupported();
 
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -126,6 +129,8 @@ async function followRedirects(raw: string, request: Requester): Promise<LinkKin
   for (let hops = 0; link.kind === 'redirect'; hops += 1) {
     if (hops === MAX_REDIRECTS) throw unsupported();
     const current = new URL(link.url);
+    // 처음 링크는 사용자가 붙여 넣은 값이라 http일 수 있다. 요청은 https로 올려 보낸다.
+    current.protocol = 'https:';
     const userAgent = GOOGLE_SHORT_LINK_HOSTS.includes(current.hostname)
       ? GOOGLE_SHORT_LINK_USER_AGENT
       : BROWSER_USER_AGENT;
@@ -146,7 +151,8 @@ async function followRedirects(raw: string, request: Requester): Promise<LinkKin
     } catch {
       throw unsupported();
     }
-    if (!isAllowedUrl(next)) throw unsupported();
+    // 이동 대상이 http면 허용 밖 이동과 같게 거절한다(https에서 http로 내려가지 않는다).
+    if (!isAllowedUrl(next) || next.protocol !== 'https:') throw unsupported();
     link = classifyLink(next.href);
   }
   return link;
@@ -284,7 +290,7 @@ export async function resolveFolder(shareId: string, deps: Deps): Promise<Folder
     return {
       folderName: folder.name,
       places: folder.bookmarks
-        .filter((b) => b.available && isCoordinate(b.px, b.py))
+        .filter((b) => b.available && isCoordinate(b.px, b.py) && SID_DIGITS.test(b.sid))
         .map((b) => ({
           sid: b.sid,
           name: b.name,

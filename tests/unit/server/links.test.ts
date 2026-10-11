@@ -15,6 +15,21 @@ describe('classifyLink', () => {
       expect(classifyLink(url)).toEqual({ kind: 'redirect', url });
     });
 
+    it('쿼리·해시는 바깥에 보내지 않도록 뗀다', () => {
+      expect(classifyLink('https://naver.me/Fk73Vab5?utm=1#frag')).toEqual({
+        kind: 'redirect',
+        url: 'https://naver.me/Fk73Vab5',
+      });
+      expect(classifyLink('https://maps.app.goo.gl/Ss?g_st=ic#x')).toEqual({
+        kind: 'redirect',
+        url: 'https://maps.app.goo.gl/Ss',
+      });
+      expect(classifyLink('https://goo.gl/maps/abc123?x=1')).toEqual({
+        kind: 'redirect',
+        url: 'https://goo.gl/maps/abc123',
+      });
+    });
+
     it('goo.gl은 /maps/ 경로만 이동 링크다', () => {
       expect(classifyLink('https://goo.gl/other')).toEqual({ kind: 'unsupported' });
     });
@@ -101,6 +116,13 @@ describe('classifyLink', () => {
         lng: null,
         plusCode: '8Q7F422J+R6X',
       });
+    });
+
+    it('대문자 장소 ID는 소문자로 바꾼다(스키마가 소문자만 받는다)', () => {
+      const link = classifyLink(
+        'https://www.google.com/maps/place/Cafe/data=!4m2!3m1!1s0xABC123:0xDEF456!3d35.1!4d129.0',
+      );
+      expect(link).toMatchObject({ kind: 'google-place', googleId: '0xabc123:0xdef456' });
     });
 
     it('!3d!4d 좌표를 그대로 쓴다', () => {

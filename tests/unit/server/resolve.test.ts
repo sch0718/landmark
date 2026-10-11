@@ -300,6 +300,35 @@ describe('resolveLink — 이동 따라가기', () => {
     expect(calls.map((c) => c.url)).toEqual(['https://naver.me/x', 'https://kko.to/y']);
   });
 
+  it('http로 붙여 넣은 짧은 링크는 https로 올려 요청한다', async () => {
+    const { deps, calls } = makeDeps({
+      'https://naver.me/x': redirect('https://map.naver.com/p/entry/place/1958911015'),
+      [`${NAVER_SUMMARY}1958911015`]: json('naver-place-1958911015.json'),
+    });
+    expect(await resolveLink('http://naver.me/x?utm=1#h', deps)).toMatchObject({
+      providerId: '1958911015',
+    });
+    // 쿼리·해시도 보내지 않는다.
+    expect(calls.map((c) => c.url)).toEqual(['https://naver.me/x', `${NAVER_SUMMARY}1958911015`]);
+  });
+
+  it('이동 대상이 http면 거절하고 그 주소로 요청하지 않는다', async () => {
+    const { deps, calls } = makeDeps({
+      'https://naver.me/x': redirect('http://map.naver.com/p/entry/place/1958911015'),
+    });
+    const e = await apiError(resolveLink('https://naver.me/x', deps));
+    expect(e.code).toBe('UNSUPPORTED_LINK');
+    expect(calls.map((c) => c.url)).toEqual(['https://naver.me/x']);
+  });
+
+  it('이동 대상이 http 짧은 링크여도 따라가지 않는다', async () => {
+    const { deps, calls } = makeDeps({
+      'https://naver.me/x': redirect('http://kko.to/y'),
+    });
+    expect((await apiError(resolveLink('https://naver.me/x', deps))).code).toBe('UNSUPPORTED_LINK');
+    expect(calls).toHaveLength(1);
+  });
+
   it('허용 호스트지만 장소가 아닌 곳으로 가면 UNSUPPORTED_LINK', async () => {
     const { deps } = makeDeps({
       'https://naver.me/x': redirect('https://map.naver.com/p/'),
@@ -525,6 +554,19 @@ describe('resolveFolder', () => {
     const sids = result.places.map((p) => p.sid);
     for (const b of list.slice(0, 6)) expect(sids).not.toContain(String(b.sid));
     expect(result.places[0]).toMatchObject({ sid: String(list[6]!.sid), memo: '메모 한 줄' });
+  });
+
+  it('sid가 숫자가 아닌 북마크(주소 북마크)는 뺀다', async () => {
+    const folder = fixtureJson<RawFolder>('naver-folder-page1.json');
+    const list = folder.bookmarkList;
+    list[0] = { ...list[0], sid: 'addr-abc123' };
+    list[1] = { ...list[1], sid: '12a' };
+    const { deps } = makeDeps({
+      [`${FOLDER_API}?start=0&limit=500`]: () => new Response(JSON.stringify(folder)),
+    });
+    const result = await resolveFolder(SHARE_ID, deps);
+    expect(result.places).toHaveLength(31 - 2);
+    expect(result.places.every((p) => /^\d+$/.test(p.sid))).toBe(true);
   });
 
   it('없는 공유 ID(400 "공유 정보가 존재하지 않습니다") → NOT_FOUND', async () => {

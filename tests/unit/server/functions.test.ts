@@ -240,6 +240,8 @@ describe('캐시', () => {
     const first = makeContext(placePath(NAVER_WEB_LINK));
     const res = await onPlaceGet(first.ctx);
     expect(res.status).toBe(200);
+    // 브라우저에는 공유 캐시 지시를 주지 않는다.
+    expect(res.headers.get('Cache-Control')).toBe('private, no-store');
     await Promise.all(first.pending);
     expect(cache.put).toHaveBeenCalledTimes(1);
     const [key, stored] = cache.put.mock.calls[0]!;
@@ -250,6 +252,13 @@ describe('캐시', () => {
     const second = makeContext(placePath('https://map.naver.com/p/entry/place/1958911015'));
     const hit = await onPlaceGet(second.ctx);
     expect(hit.status).toBe(200);
+    // 캐시에서 나간 응답도 브라우저에는 private이고, 저장된 사본의 max-age는 그대로다.
+    expect(hit.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(
+      cache.store
+        .get('https://cache.landmark/place/naver/1958911015')!
+        .headers.get('Cache-Control'),
+    ).toBe('max-age=86400');
     expect(((await hit.json()) as { name: string }).name).toBe('구십도씨');
     expect(calls).toHaveLength(1);
   });
