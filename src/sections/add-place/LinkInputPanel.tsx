@@ -56,6 +56,11 @@ const resolveLink = (url: string) =>
     if (result.kind === 'folder') {
       return { step: 'folder', shareId: result.shareId } satisfies AddFlow;
     }
+    // 이름 없는 결과(좌표만 있는 구글 지도 주소 등)는 이름을 꼭 받는 핀 카드로 보낸다(스펙 §2.4.2).
+    // 주소는 핀 카드가 좌표로 채운다.
+    if (result.name.trim() === '') {
+      return { step: 'pin-card', name: '', lng: result.lng, lat: result.lat } satisfies AddFlow;
+    }
     let address = result.address;
     if (result.provider === 'google' && address === '') {
       const geocoder = yield* ReverseGeocoder;

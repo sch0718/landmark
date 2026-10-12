@@ -92,6 +92,26 @@ describe('formatReverseGeocode', () => {
     expect(formatReverseGeocode(response)).toBe('강원특별자치도 홍천군 내촌면 물걸리 7');
   });
 
+  it('산 지번(land.type 2)은 번지 앞에 산을 붙인다', () => {
+    const response = {
+      v2: {
+        results: [
+          {
+            name: 'addr',
+            region: {
+              area1: { name: '강원특별자치도' },
+              area2: { name: '홍천군' },
+              area3: { name: '내촌면' },
+              area4: { name: '물걸리' },
+            },
+            land: { type: '2', number1: '7', number2: '1' },
+          },
+        ],
+      },
+    };
+    expect(formatReverseGeocode(response)).toBe('강원특별자치도 홍천군 내촌면 물걸리 산7-1');
+  });
+
   it('도로명 결과가 있어도 도로 이름이 비면 지번으로 내려간다', () => {
     const response = {
       v2: {

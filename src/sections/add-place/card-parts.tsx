@@ -45,6 +45,7 @@ const isNameTaken = (error: unknown): boolean =>
 /**
  * 카드의 라벨 고르기. `labelIds`는 고른 그대로, `shownIds`는 그사이 지워진
  * 라벨을 뺀 것이다. 저장할 때는 최신본 기준으로 다시 걸러야 한다.
+ * `creating`은 새 라벨을 만드는 중인가다. 그동안 저장하면 만든 라벨이 장소에서 빠지므로 카드는 추가를 막는다.
  */
 export function useCardLabels() {
   const library = useAtomValue(libraryAtom);
@@ -52,6 +53,7 @@ export function useCardLabels() {
   const { run } = useLibraryAction();
   const labels = useMemo(() => liveLabels(library), [library]);
   const [labelIds, setLabelIds] = useState<string[]>([]);
+  const [pendingCreates, setPendingCreates] = useState(0);
   // 고른 라벨 중 그사이 지워진 것은 보이지 않게 뺀다.
   const shownIds = labelIds.filter((id) => labels.some((label) => label.id === id));
 
@@ -64,6 +66,14 @@ export function useCardLabels() {
 
   // 새 라벨을 만들어 고른다. 같은 이름의 라벨이 있으면 그 라벨을 고른다.
   const createAndSelect = async (name: string): Promise<LibraryActionResult> => {
+    setPendingCreates((n) => n + 1);
+    try {
+      return await createAndSelectNow(name);
+    } finally {
+      setPendingCreates((n) => n - 1);
+    }
+  };
+  const createAndSelectNow = async (name: string): Promise<LibraryActionResult> => {
     const result = await run((lib, ctx) => createLabel(lib, name, ctx));
     if (result.ok) {
       select(result.createdId!);
@@ -82,7 +92,7 @@ export function useCardLabels() {
     return result;
   };
 
-  return { labels, labelIds, shownIds, toggle, createAndSelect };
+  return { labels, labelIds, shownIds, toggle, createAndSelect, creating: pendingCreates > 0 };
 }
 
 /** 마운트돼 있는 동안 `true`. 저장하는 사이 칸이 닫혔는지 볼 때 쓴다. */

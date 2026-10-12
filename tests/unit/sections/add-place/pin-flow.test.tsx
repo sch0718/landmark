@@ -312,6 +312,21 @@ describe('핀 입력 카드', () => {
     expect(screen.queryByTestId('marker-candidate')).not.toBeInTheDocument();
   });
 
+  it('새 라벨을 만드는 중에는 추가를 막아, 만든 라벨이 장소에서 빠지지 않는다', async () => {
+    const { user, store } = await openPinCard({ ids: ['newlab01', NEW_ID] });
+    const card = panel();
+    await user.type(within(card).getByRole('textbox', { name: '이름' }), '여기');
+    const nameInput = within(card).getByRole('textbox', { name: '새 라벨 이름' });
+    await user.type(nameInput, '데이트');
+    const add = within(card).getByRole('button', { name: '추가' });
+    fireEvent.keyDown(nameInput, { key: 'Enter' });
+    expect(add).toBeDisabled();
+    await waitFor(() => expect(add).toBeEnabled());
+    await user.click(add);
+    await waitFor(() => expect(store.get(libraryAtom).places[NEW_ID]).toBeDefined());
+    expect(store.get(libraryAtom).places[NEW_ID]!.labelIds.value).toEqual(['newlab01']);
+  });
+
   it('카드의 취소는 저장하지 않고 닫는다', async () => {
     const { user, store } = await openPinCard();
     await user.type(within(panel()).getByRole('textbox', { name: '이름' }), '시청');

@@ -39,7 +39,7 @@ export function CandidateCard({ candidate }: { candidate: PlaceCandidate }) {
   const setFlow = useSetAtom(addFlowAtom);
   const { run } = useLibraryAction();
   const navigate = useNavigate();
-  const { labels, labelIds, shownIds, toggle, createAndSelect } = useCardLabels();
+  const { labels, labelIds, shownIds, toggle, createAndSelect, creating } = useCardLabels();
 
   const [address, setAddress] = useState(candidate.address);
   const [memo, setMemo] = useState('');
@@ -174,7 +174,7 @@ export function CandidateCard({ candidate }: { candidate: PlaceCandidate }) {
         </Button>
         <Button
           variant="contained"
-          disabled={saving}
+          disabled={saving || creating}
           onClick={() => void save()}
           sx={{ minHeight: 44 }}
         >

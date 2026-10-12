@@ -47,8 +47,9 @@ function StepContent({ flow }: { flow: AddFlow }) {
 
 /**
  * 지도가 있어야 하는 단계에서 지도가 안 보이면 지도가 보이는 경로로 옮긴다. 셸(`AppShell`)이 부른다.
- * - 핀 모드(`pin`)는 늘, 확인 카드(`candidate`)는 좁은 화면에서만(후보 핀을 보이려고, 스펙 §2.2) 지도가 필요하다.
- *   좁은 화면은 지도 탭(`/map`)으로, 그 밖은 지도가 있는 보관함(`/`)으로 간다.
+ * - 핀 모드(`pin`)와 확인 카드·핀 카드(`candidate`·`pin-card`, 고른 위치를 지도에 보이려고 — 스펙 §2.2.2)는
+ *   지도가 필요하다.
+ *   좁은 화면은 지도 탭(`/map`)으로, 그 밖은 지도가 있는 보관함(`/`)으로 간다(예: 넓은 화면의 `/labels`).
  * - 핀 모드 중에 경로가 바뀌면(뒤로 가기·목록에서 장소 고르기·다른 메뉴) 지도가 계속 보여도 핀 모드를
  *   끝낸다(스펙 §2.4). 이 훅이 지도로 옮긴 이동은 예외다.
  * `mapShown`은 지금 경로·폭에서 지도가 가려지지 않고 보이는가다.
@@ -60,7 +61,7 @@ export function useAddFlowRoute(mapShown: boolean) {
   const { pathname } = useLocation();
   const compact = layout === 'compact';
   const step = flow.step;
-  const needsMap = step === 'pin' || (compact && step === 'candidate');
+  const needsMap = step === 'pin' || step === 'candidate' || step === 'pin-card';
   const prev = useRef({ step, pathname });
   // 이 훅이 지도로 옮기는 중이다. 그 경로 변경으로는 핀 모드를 끝내지 않는다.
   const movingToMap = useRef(false);

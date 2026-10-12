@@ -369,6 +369,30 @@ describe('확인 카드', () => {
     expect(lib.places[NEW_ID]!.labelIds.value).toEqual(['newlab01']);
   });
 
+  it('새 라벨을 만드는 중에는 추가를 막아, 만든 라벨이 장소에서 빠지지 않는다', async () => {
+    const { user, store } = await openCard(() => naverPlace(), { ids: ['newlab01', NEW_ID] });
+    const card = panel();
+    await within(card).findByRole('heading', { name: '콤포트' });
+    const nameInput = within(card).getByRole('textbox', { name: '새 라벨 이름' });
+    await user.type(nameInput, '데이트');
+    const add = within(card).getByRole('button', { name: '추가' });
+    // 라벨 만들기가 끝나기 전에 추가를 누른다(다른 탭의 저장으로 잠금이 늦어지는 경우).
+    fireEvent.keyDown(nameInput, { key: 'Enter' });
+    expect(add).toBeDisabled();
+    fireEvent.click(add);
+    expect(placeCount(store.get(libraryAtom))).toBe(5);
+    await waitFor(() =>
+      expect(within(card).getByRole('button', { name: '데이트' })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      ),
+    );
+    await waitFor(() => expect(add).toBeEnabled());
+    await user.click(add);
+    await waitFor(() => expect(store.get(libraryAtom).places[NEW_ID]).toBeDefined());
+    expect(store.get(libraryAtom).places[NEW_ID]!.labelIds.value).toEqual(['newlab01']);
+  });
+
   it('같은 이름의 라벨을 만들려 하면 그 라벨을 고른다', async () => {
     const { user, store } = await openCard();
     const card = panel();
@@ -479,6 +503,23 @@ describe('확인 카드', () => {
     expect(store.get(libraryAtom).places[NEW_ID]!.source).toEqual({ kind: 'pin' });
   });
 
+  it('이름 없는 결과(좌표만 있는 구글 지도 주소)는 이름을 받는 핀 카드로 간다', async () => {
+    const coordsOnly = naverPlace({
+      provider: 'google',
+      providerId: null,
+      name: '',
+      address: '',
+      lng: 127,
+      lat: 37.5,
+      category: null,
+    });
+    const { store } = await openCard(() => coordsOnly, { reverse: '서울특별시 어딘가 1' });
+    await waitFor(() =>
+      expect(store.get(addFlowAtom)).toEqual({ step: 'pin-card', name: '', lng: 127, lat: 37.5 }),
+    );
+    expect(within(panel()).getByRole('button', { name: '추가' })).toBeDisabled();
+  });
+
   it('카카오 후보는 카카오 출처로 넣는다', async () => {
     const kakao = naverPlace({ provider: 'kakao', providerId: '16990385', name: '카카오 장소' });
     const { user, store } = await openCard(() => kakao);
@@ -525,6 +566,20 @@ describe('확인 카드', () => {
     expect(
       within(panel()).getByText('네이버 공유 폴더 링크를 붙여 넣어 주세요'),
     ).toBeInTheDocument();
+  });
+
+  it('넓은 화면의 지도 없는 화면(/labels)에서 카드가 열리면 지도가 있는 보관함으로 옮긴다', async () => {
+    const user = userEvent.setup();
+    const lookup = fakeLookup(() => naverPlace());
+    const { router } = await renderLibrary(sampleLibrary(), {
+      path: '/labels',
+      placeLookup: lookup.layer,
+    });
+    await openFrom(user, '링크 붙여넣기');
+    expect(router.state.location.pathname).toBe('/labels');
+    await submitLink(user);
+    await within(panel()).findByRole('heading', { name: '콤포트' });
+    await waitFor(() => expect(router.state.location.pathname).toBe('/'));
   });
 
   it('카드의 취소는 저장하지 않고 닫는다', async () => {

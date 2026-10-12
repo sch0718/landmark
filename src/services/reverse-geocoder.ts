@@ -24,7 +24,10 @@ function formatResult(result: Json, kind: 'roadaddr' | 'addr'): string {
   const areas = ['area1', 'area2', 'area3', ...(kind === 'addr' ? ['area4'] : [])].map((key) =>
     areaName(result.region, key),
   );
-  const tail = kind === 'roadaddr' ? [text(land.name), houseNumber(land)] : [houseNumber(land)];
+  // 지번의 `land.type` '2'는 산이다(`산7-1`). 빼면 다른 지번이 된다.
+  const lot = houseNumber(land);
+  const mountain = kind === 'addr' && text(land.type) === '2' && lot !== '';
+  const tail = kind === 'roadaddr' ? [text(land.name), lot] : [mountain ? `산${lot}` : lot];
   // 도로명은 도로 이름이 없으면 주소가 아니다.
   if (kind === 'roadaddr' && tail[0] === '') return '';
   return [...areas, ...tail].filter((part) => part !== '').join(' ');

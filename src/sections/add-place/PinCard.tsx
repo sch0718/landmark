@@ -41,7 +41,7 @@ export function PinCard({
   const setFlow = useSetAtom(addFlowAtom);
   const { run } = useLibraryAction();
   const navigate = useNavigate();
-  const { labels, labelIds, shownIds, toggle, createAndSelect } = useCardLabels();
+  const { labels, labelIds, shownIds, toggle, createAndSelect, creating } = useCardLabels();
 
   const [name, setName] = useState(initialName);
   const [address, setAddress] = useState('');
@@ -74,7 +74,7 @@ export function PinCard({
   );
 
   const trimmedName = name.trim();
-  const canSave = trimmedName !== '' && !saving;
+  const canSave = trimmedName !== '' && !saving && !creating;
 
   const save = async () => {
     if (savingRef.current || trimmedName === '') return;
