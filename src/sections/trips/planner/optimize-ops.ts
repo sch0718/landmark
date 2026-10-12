@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { toast } from 'sonner';
 import type { LngLat } from 'src/domain/trips/geo';
-import { applyAutoSplit, reorderDay } from 'src/domain/trips/ops';
+import { applyAutoSplit, diffTrip, isEmptyChange, reorderDay } from 'src/domain/trips/ops';
 import { autoSplit, optimizeOrder, type OptStop } from 'src/domain/trips/optimize';
 import { dayEndpoints, visibleCandidates, visibleStops } from 'src/domain/trips/query';
 import type { Library, Place } from 'src/schema/library';
@@ -13,6 +13,7 @@ import { useTripUndo } from 'src/sections/trips/planner/use-trip-undo';
 export const OPTIMIZED_MESSAGE = '순서를 정리했어요';
 export const ALREADY_SHORTEST_MESSAGE = '이미 가장 짧은 순서예요';
 export const SPLIT_APPLIED_MESSAGE = 'Day 자동 나누기를 적용했어요';
+export const SPLIT_STALE_MESSAGE = '일정이 바뀌어 미리보기를 닫았어요. 다시 나눠 보세요';
 
 const lngLat = (place: Place): LngLat => [place.lng, place.lat];
 const orNull = (place: Place | null): LngLat | null => (place === null ? null : lngLat(place));
@@ -81,13 +82,29 @@ export function useOptimizeDay(tripId: string, dayIndex: number): () => Promise<
   }, [run, tripId, dayIndex]);
 }
 
-/** `적용`: 미리보기 결과를 반영하고 `되돌리기` 토스트를 띄운다. */
-export function useApplyAutoSplit(tripId: string): (plan: string[][]) => Promise<void> {
+/**
+ * `적용`: 미리보기 결과를 반영하고 `되돌리기` 토스트를 띄운다. `base`는 미리보기를 만든 때의 여행이다.
+ * 저장 직전 최신본(잠금 안)이 `base`와 다르면(화면이 다시 읽기 전에 다른 탭이 바꿈) 낡은 plan으로 덮어쓰지 않고
+ * 거절한 뒤 다시 나눠 보라고 알린다.
+ */
+export function useApplyAutoSplit(tripId: string): (plan: string[][], base: Trip) => Promise<void> {
   const { run } = useTripUndo(tripId);
   return useCallback(
-    async (plan) => {
-      await run((lib, ctx) => applyAutoSplit(lib, tripId, plan, ctx), SPLIT_APPLIED_MESSAGE);
+    async (plan, base) => {
+      const result = await run((lib, ctx) => {
+        const latest = lib.trips[tripId];
+        if (latest !== undefined && !isEmptyChange(diffTrip(base, latest))) {
+          return { ok: false, error: { _tag: 'TripChanged', id: tripId } };
+        }
+        return applyAutoSplit(lib, tripId, plan, ctx);
+      }, SPLIT_APPLIED_MESSAGE);
+      if (!result.ok && isTripChanged(result.error)) toast(SPLIT_STALE_MESSAGE);
     },
     [run, tripId],
   );
 }
+
+const isTripChanged = (error: unknown): boolean =>
+  typeof error === 'object' &&
+  error !== null &&
+  (error as { _tag?: unknown })._tag === 'TripChanged';

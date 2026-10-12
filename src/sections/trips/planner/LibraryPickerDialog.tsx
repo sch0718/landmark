@@ -7,6 +7,7 @@ import DialogTitle from '@mui/material/DialogTitle';
 import InputBase from '@mui/material/InputBase';
 import { useAtomValue } from 'jotai';
 import { useId, useMemo, useState } from 'react';
+import { toast } from 'sonner';
 import { SearchIcon } from 'src/components/icons';
 import {
   DEFAULT_QUERY,
@@ -21,7 +22,11 @@ import { locatePlace } from 'src/domain/trips/query';
 import type { Place } from 'src/schema/library';
 import { LabelChips } from 'src/sections/library/LabelChips';
 import { RegionChips } from 'src/sections/library/RegionChips';
-import { addedNotice, locationNotice } from 'src/sections/trips/candidate-notice';
+import {
+  addedNotice,
+  ALREADY_CANDIDATE,
+  locationNotice,
+} from 'src/sections/trips/candidate-notice';
 import { useTripUndo } from 'src/sections/trips/planner/use-trip-undo';
 import { libraryAtom } from 'src/stores/library-state';
 
@@ -134,11 +139,14 @@ export function LibraryPickerDialog({ open, tripId, onClose }: Props) {
     if (submitting || picked.length === 0) return;
     setSubmitting(true);
     const ids = picked;
+    // 문구는 체크한 수가 아니라 저장된 최신본에서 새로 넣은 수다(그사이 다른 탭이 먼저 넣었을 수 있다).
     const result = await run(
       (lib, ctx) => addCandidates(lib, tripId, ids, ctx),
-      addedNotice(ids.length),
+      (done) => addedNotice(done.summary?.created ?? ids.length),
     );
     setSubmitting(false);
+    // 새로 넣은 곳이 없으면 바뀐 것이 없어 되돌리기 토스트도 없다. 이미 있다고만 알린다.
+    if (result.ok && result.summary?.created === 0) toast(ALREADY_CANDIDATE);
     // 실패는 저장소 오류 보고자가 알린다. 창과 체크는 그대로 둔다.
     if (result.ok) onClose();
   };

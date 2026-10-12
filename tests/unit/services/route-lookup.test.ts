@@ -186,6 +186,11 @@ describe('RouteLookup 캐시', () => {
         }),
       );
       expect(fetchFn).toHaveBeenCalledTimes(2);
+      // 보통 요청은 엣지 캐시를 쓰고, refresh는 `fresh=1`로 엣지 캐시도 건너뛰게 한다(스펙 §4.2).
+      expect(fetchFn.mock.calls.map(([url]) => String(url))).toEqual([
+        '/api/route?mode=car&from=127.00000,37.50000&to=127.05000,37.52000',
+        '/api/route?mode=car&from=127.00000,37.50000&to=127.05000,37.52000&fresh=1',
+      ]);
       expect(fresh.durationS).toBe(900);
       expect(after.durationS).toBe(900);
       expect(Object.values(readDoc(storage).entries)[0]?.durationS).toBe(900);

@@ -42,6 +42,10 @@ const periodOf = (trip: Trip): TripPeriod => ({
   days: trip.days,
 });
 
+/** `diffTrip` 결과에 바뀐 것이 하나도 없는가. */
+export const isEmptyChange = (change: TripChange): boolean =>
+  change.fields.length === 0 && change.period === undefined;
+
 /**
  * 연산 전후의 여행에서 바뀐 필드를 모은다. 날짜가 바뀌었으면 날짜·Day 배열 전체를 `period`
  * 한 단위로 담고(`fields`에는 날짜·Day 필드를 넣지 않는다), 아니면 Day 필드 단위로 `fields`에 담는다.

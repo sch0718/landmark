@@ -19,7 +19,10 @@ type Props = {
   /** 카드로 보고 있는 장소. 그 핀을 강조한다. */
   cardPlaceId: string | null;
   onOpenCard(placeId: string): void;
-  /** 자동 나누기 미리보기(`plan[d]` = Day d에 둘 장소 id). 후보 핀을 배정될 Day 색으로 칠한다. */
+  /**
+   * 자동 나누기 미리보기(`plan[d]` = Day d에 둘 장소 id). 후보 핀을 배정될 Day 색으로 칠하고, 고른 Day의 번호를
+   * 새 순서로 매기며 경로선은 숨긴다.
+   */
   splitPlan?: string[][] | null;
 };
 

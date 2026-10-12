@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setAppRuntimeForTest } from 'src/lib/effect/runtime';
 import type { Library } from 'src/schema/library';
 import type { FolderRef, FolderResult, ResolvedPlace } from 'src/server/resolve';
+import { LIBRARY_KEY } from 'src/services/library-store';
 import { PlaceLookup } from 'src/services/place-lookup';
 import { addFlowAtom, addTargetAtom } from 'src/stores/add-place';
 import { libraryAtom } from 'src/stores/library-state';
@@ -412,5 +413,46 @@ describe('보관함에서 더하기', () => {
     await waitFor(() =>
       expect(screen.queryByRole('dialog', { name: '보관함에서 더하기' })).toBeNull(),
     );
+  });
+
+  /** 다른 탭이 쓴 것처럼 저장소의 후보에 장소를 더한다. 이 탭의 화면은 모른다. */
+  function addCandidateAsOtherTab(storage: Storage, placeId: string) {
+    const stored = JSON.parse(storage.getItem(LIBRARY_KEY)!) as Library;
+    const t = stored.trips[TRIP]!;
+    const next = { ...t, candidates: { ...t.candidates, value: [...t.candidates.value, placeId] } };
+    storage.setItem(LIBRARY_KEY, JSON.stringify({ ...stored, trips: { [TRIP]: next } }));
+  }
+
+  it('알림은 체크한 수가 아니라 새로 넣은 수를 센다(그사이 다른 탭이 먼저 넣은 곳은 빼고)', async () => {
+    const user = userEvent.setup();
+    const lib = withTrip(sampleLibrary(), makeTrip({ stops: [[P1]], candidates: [P2] }));
+    const { store, storage } = await renderLibrary(lib, { path: `/trips/${TRIP}` });
+
+    await user.click(within(candidatePanel()).getByRole('button', { name: '보관함에서 더하기' }));
+    const dialog = screen.getByRole('dialog', { name: '보관함에서 더하기' });
+    await user.click(within(dialog).getByRole('checkbox', { name: /창가 자리/ }));
+    await user.click(within(dialog).getByRole('checkbox', { name: /속초 횟집/ }));
+    addCandidateAsOtherTab(storage, P5);
+    await user.click(within(dialog).getByRole('button', { name: '2곳 넣기' }));
+
+    await waitFor(() => expect(candidatesOf(store.get(libraryAtom))).toEqual([P2, P5, P3]));
+    expect(toasted('1곳을 후보에 넣었어요')).not.toBeNull();
+    expect(toasted('2곳을 후보에 넣었어요')).toBeNull();
+  });
+
+  it('체크한 곳을 모두 다른 탭이 먼저 넣었으면 이미 후보에 있어요로 알린다', async () => {
+    const user = userEvent.setup();
+    const lib = withTrip(sampleLibrary(), makeTrip({ stops: [[P1]], candidates: [P2] }));
+    const { store, storage } = await renderLibrary(lib, { path: `/trips/${TRIP}` });
+
+    await user.click(within(candidatePanel()).getByRole('button', { name: '보관함에서 더하기' }));
+    const dialog = screen.getByRole('dialog', { name: '보관함에서 더하기' });
+    await user.click(within(dialog).getByRole('checkbox', { name: /창가 자리/ }));
+    addCandidateAsOtherTab(storage, P5);
+    await user.click(within(dialog).getByRole('button', { name: '1곳 넣기' }));
+
+    await waitFor(() => expect(candidatesOf(store.get(libraryAtom))).toEqual([P2, P5]));
+    await waitFor(() => expect(toasted('이미 후보에 있어요')).not.toBeNull());
+    expect(toasted('1곳을 후보에 넣었어요')).toBeNull();
   });
 });

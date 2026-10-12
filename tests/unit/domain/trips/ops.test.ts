@@ -596,6 +596,34 @@ describe('applyAutoSplit', () => {
     const t = tripOf(ok(applyAutoSplit(library(), TRIP, [[pid(1), pid(8)], [], []], ctx)));
     expect(t.days.map(placesOf)).toEqual([[pid(1), pid(3), pid(4)], [pid(5)], []]);
   });
+
+  describe('보관함에서 지운 장소의 Stop은 제자리를 지킨다(스펙 §3.3)', () => {
+    // Day 1: [장소 1, 장소 9(지움), 장소 3], 후보 장소 4. 미리보기 plan에는 보이는 장소만 있다.
+    const hiddenLib = () =>
+      library(
+        trip({
+          candidates: f<string[]>([pid(4)]),
+          days: [day([stop(1, 1), stop(2, 9), stop(3, 3)]), day(), day()],
+        }),
+        [place(9, { deletedAt: T0 })],
+      );
+
+    it('순서가 그대로면 숨은 Stop은 원래 자리, 새 장소는 끝', () => {
+      const t = tripOf(
+        ok(applyAutoSplit(hiddenLib(), TRIP, [[pid(1), pid(3), pid(4)], [], []], ctx)),
+      );
+      expect(placesOf(t.days[0]!)).toEqual([pid(1), pid(9), pid(3), pid(4)]);
+      expect(t.days[0]!.stops.value[1]!.id).toBe(sid(2));
+      expect(t.candidates.value).toEqual([]);
+    });
+
+    it('보이는 순서가 바뀌어도 숨은 Stop은 같은 칸에 남는다', () => {
+      const t = tripOf(
+        ok(applyAutoSplit(hiddenLib(), TRIP, [[pid(3), pid(1), pid(4)], [], []], ctx)),
+      );
+      expect(placesOf(t.days[0]!)).toEqual([pid(3), pid(9), pid(1), pid(4)]);
+    });
+  });
 });
 
 describe('입력 불변', () => {

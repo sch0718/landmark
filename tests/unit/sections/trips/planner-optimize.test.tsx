@@ -3,6 +3,8 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { dayColor } from 'src/components/map/map-colors';
 import { setAppRuntimeForTest } from 'src/lib/effect/runtime';
+import type { Library } from 'src/schema/library';
+import { LIBRARY_KEY } from 'src/services/library-store';
 import { libraryAtom } from 'src/stores/library-state';
 import { selectedDayAtom, splitPreviewAtom } from 'src/stores/trip-planner';
 import { installMapResources } from '../../components/helpers/map-resources';
@@ -79,6 +81,12 @@ const rgb = (hex: string) => {
 const markerChip = (id: string) =>
   screen.getByTestId(`marker-${id}`).firstElementChild as HTMLElement;
 const panel = () => screen.getByRole('region', { name: '후보 칸' });
+const marker = (id: string) => screen.getByTestId(`marker-${id}`);
+
+/** 다른 탭이 쓴 것처럼 저장소의 문서를 직접 고친다. 이 탭의 화면은 모른다. */
+function writeAsOtherTab(storage: Storage, edit: (lib: Library) => Library) {
+  storage.setItem(LIBRARY_KEY, JSON.stringify(edit(JSON.parse(storage.getItem(LIBRARY_KEY)!))));
+}
 
 // ---------- 순서 정리 ----------
 
@@ -222,6 +230,79 @@ describe('Day 자동 나누기', () => {
     await waitFor(() => expect([...candidates(store)].sort()).toEqual([P1, P2, P3, P5].sort()));
     expect(dayPlaces(store, 0)).toEqual([]);
     expect(dayPlaces(store, 1)).toEqual([]);
+  });
+
+  it('미리보기는 Day의 새 전체 순서를 보이고, 지도의 그날 번호도 새 순서를 따른다(스펙 §5.2)', async () => {
+    // 출발지가 닭강정이면 창가 자리(440m)가 카페거리(4.8km)보다 먼저다. 지금 순서는 카페거리 → 창가 자리.
+    const lib = withTrip(
+      plannerLibrary(),
+      makeTrip({ days: 1, origin: P1, stops: [[P2, P5]], candidates: [P3] }),
+    );
+    const { store } = await open(lib);
+    const user = userEvent.setup();
+    await waitFor(() => expect(marker(P2)).toHaveTextContent('1 안목 카페거리'));
+    expect(marker(P5)).toHaveTextContent('2 창가 자리');
+    expect(screen.getAllByTestId(/^polyline-/).length).toBeGreaterThan(0);
+
+    await user.click(screen.getByRole('button', { name: 'Day 자동 나누기' }));
+
+    const plan = store.get(splitPreviewAtom)!.plan;
+    expect(plan).toEqual([[P5, P2, P3]]);
+    const order = within(panel()).getByRole('list', { name: '새 순서' });
+    expect(
+      within(order)
+        .getAllByRole('listitem')
+        .map((li) => li.textContent),
+    ).toEqual(['Day 1: 1 창가 자리 · 2 안목 카페거리 · 3 속초 횟집(새)']);
+    // 지도: 그날 핀 번호가 새 순서, 들어올 후보도 번호와 Day 색. 지금 순서의 경로선은 숨긴다.
+    await waitFor(() => expect(marker(P5)).toHaveTextContent('1 창가 자리'));
+    expect(marker(P2)).toHaveTextContent('2 안목 카페거리');
+    expect(marker(P3)).toHaveTextContent('3 속초 횟집');
+    expect(markerChip(P3).style.background).toBe(rgb(dayColor(0)));
+    expect(screen.queryAllByTestId(/^polyline-/)).toHaveLength(0);
+
+    await user.click(within(panel()).getByRole('button', { name: '취소' }));
+    await waitFor(() => expect(marker(P2)).toHaveTextContent('1 안목 카페거리'));
+    expect(marker(P3)).toHaveTextContent(/^속초 횟집$/);
+  });
+
+  it('미리보기 뒤 다른 탭이 일정을 바꿨으면 적용하지 않고 미리보기를 닫는다', async () => {
+    const lib = withTrip(
+      plannerLibrary(),
+      makeTrip({ days: 2, stops: [[P1, P5], []], candidates: [P2, P3] }),
+    );
+    // 고치기 전에는 낡은 plan을 그대로 적용해 새 Stop id가 필요했다(되돌아간 결과를 보려고 넉넉히 준다).
+    const { store, storage } = await open(lib, { ids: ['stopaaaa', 'stopbbbb'] });
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole('button', { name: 'Day 자동 나누기' }));
+    expect(store.get(splitPreviewAtom)!.plan[0]).toContain(P1);
+
+    // 이 탭이 다시 읽기 전에 다른 탭이 닭강정을 Day 2로 옮겼다.
+    writeAsOtherTab(storage, (l) => {
+      const t = l.trips[TRIP]!;
+      const [d1, d2] = t.days;
+      const moved = d1!.stops.value.find((s) => s.placeId === P1)!;
+      const at = '2026-10-13T03:00:30.000Z';
+      const days = [
+        { ...d1!, stops: { value: d1!.stops.value.filter((s) => s !== moved), updatedAt: at } },
+        { ...d2!, stops: { value: [moved], updatedAt: at } },
+      ];
+      return { ...l, trips: { [TRIP]: { ...t, days } } };
+    });
+    await user.click(within(panel()).getByRole('button', { name: '적용' }));
+
+    await waitFor(() =>
+      expect(toastMock).toHaveBeenCalledWith('일정이 바뀌어 미리보기를 닫았어요. 다시 나눠 보세요'),
+    );
+    const saved = JSON.parse(storage.getItem(LIBRARY_KEY)!) as Library;
+    const savedPlaces = (d: number) =>
+      saved.trips[TRIP]!.days[d]!.stops.value.map((s) => s.placeId);
+    expect(savedPlaces(0)).toEqual([P5]);
+    expect(savedPlaces(1)).toEqual([P1]);
+    expect(saved.trips[TRIP]!.candidates.value).toEqual([P2, P3]);
+    expect(store.get(splitPreviewAtom)).toBeNull();
+    expect(toastMock.mock.calls.some((c) => c[0] === 'Day 자동 나누기를 적용했어요')).toBe(false);
   });
 
   it('미리보기 중에 다른 편집을 하면 미리보기가 닫힌다', async () => {

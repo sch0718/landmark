@@ -13,10 +13,13 @@ export type TripOpError =
   | { _tag: 'TripTitleInvalid'; reason: 'empty' | 'too-long' }
   | { _tag: 'TripDatesInvalid'; reason: 'order' | 'too-many-days' }
   | { _tag: 'AlreadyInTrip'; location: TripLocation }
-  | { _tag: 'NotFound'; id: string };
+  | { _tag: 'NotFound'; id: string }
+  /** 미리보기(자동 나누기)를 만든 뒤 여행이 바뀌어 그 결과를 적용할 수 없다. */
+  | { _tag: 'TripChanged'; id: string };
 
 export {
   diffTrip,
+  isEmptyChange,
   revertTrip,
   type TripChange,
   type TripFieldChange,
@@ -543,8 +546,9 @@ export function reorderDay(
 /**
  * Day 자동 나누기 미리보기를 적용한다. `plan[d]`는 Day d의 전체 장소 순서다.
  * 기존 Stop은 그대로(id·체류·메모) 옮기고, 후보에서 온 장소는 새 Stop으로 만들어 후보에서 뺀다.
+ * 보관함에서 지운 장소의 Stop은 plan에 없어도 Day의 제 칸에 그대로 둔다(스펙 §3.3: 되살리면 원래 자리).
  * 미리보기 뒤에 문서가 바뀌었을 수 있어, 여행에 없는 장소는 무시하고(먼저 나온 자리 우선)
- * plan에 빠진 기존 Stop은 원래 Day 끝에 남긴다.
+ * plan에 빠진 기존 Stop(보이는 장소)은 원래 Day 끝에 남긴다.
  */
 export function applyAutoSplit(
   lib: Library,
@@ -566,21 +570,30 @@ export function applyAutoSplit(
       }),
     );
 
+    const toStop = (placeId: string): Stop =>
+      existing.get(placeId) ?? {
+        id: ctx.newId('stop'),
+        placeId,
+        stayMin: null,
+        fixedTime: null,
+        note: '',
+      };
+
     let next = trip;
     trip.days.forEach((day, d) => {
-      const stops = [
-        ...assigned[d]!.map(
-          (placeId): Stop =>
-            existing.get(placeId) ?? {
-              id: ctx.newId('stop'),
-              placeId,
-              stayMin: null,
-              fixedTime: null,
-              note: '',
-            },
-        ),
-        ...day.stops.value.filter((s) => !placed.has(s.placeId)),
-      ];
+      // 원래 Stop 자리를 따라가며 채운다: 지운 장소의 Stop(plan에 없음)은 제 칸을 지키고(되살리면 원래 자리),
+      // plan에 든 Stop의 칸은 plan 순서대로 다음 장소가 차지한다. 남은 plan 장소는 끝에 붙인다.
+      const queue = [...assigned[d]!];
+      const slotted: Stop[] = [];
+      const strays: Stop[] = [];
+      for (const s of day.stops.value) {
+        if (placed.has(s.placeId)) {
+          const placeId = queue.shift();
+          if (placeId !== undefined) slotted.push(toStop(placeId));
+        } else if (isLivePlace(lib, s.placeId)) strays.push(s);
+        else slotted.push(s);
+      }
+      const stops = [...slotted, ...queue.map(toStop), ...strays];
       next = withDayField(next, d, 'stops', stops, ctx.now);
     });
     return withField(

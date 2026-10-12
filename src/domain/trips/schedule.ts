@@ -103,12 +103,14 @@ export function computeSchedule(input: ScheduleInput): DaySchedule {
 
 const pad2 = (n: number): string => String(n).padStart(2, '0');
 
-/** 640 → '10:40', 1510 → '다음 날 01:10'. 48시간 넘게 가도 '다음 날'로만 보인다. */
+/** 640 → '10:40', 1510 → '다음 날 01:10', 2940 → '2일 뒤 01:00'. 날짜가 넘어간 만큼 앞에 붙인다. */
 export function formatClock(min: number): string {
   const total = Number.isFinite(min) ? Math.max(0, Math.round(min)) : 0;
+  const days = Math.floor(total / DAY_MIN);
   const inDay = total % DAY_MIN;
   const clock = `${pad2(Math.floor(inDay / 60))}:${pad2(inDay % 60)}`;
-  return total >= DAY_MIN ? `다음 날 ${clock}` : clock;
+  if (days === 0) return clock;
+  return days === 1 ? `다음 날 ${clock}` : `${days}일 뒤 ${clock}`;
 }
 
 /** 분 길이: 12 → '12분', 60 → '1시간', 80 → '1시간 20분'. 음수는 절댓값, NaN은 0분. */

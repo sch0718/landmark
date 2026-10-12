@@ -268,8 +268,11 @@ describe('formatClock', () => {
     expect(formatClock(1440)).toBe('다음 날 00:00');
     expect(formatClock(1510)).toBe('다음 날 01:10');
   });
-  it('48시간 이상도 다음 날로 보여 준다', () => {
-    expect(formatClock(2880 + 75)).toBe('다음 날 01:15');
+  it('하루 뒤는 다음 날, 이틀 넘게 뒤는 N일 뒤로 보인다', () => {
+    expect(formatClock(1500)).toBe('다음 날 01:00');
+    expect(formatClock(2940)).toBe('2일 뒤 01:00');
+    expect(formatClock(4500)).toBe('3일 뒤 03:00');
+    expect(formatClock(2880 + 75)).toBe('2일 뒤 01:15');
   });
   it('음수·NaN은 00:00', () => {
     expect(formatClock(-5)).toBe('00:00');

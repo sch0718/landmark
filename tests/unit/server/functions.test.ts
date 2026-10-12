@@ -1,8 +1,10 @@
 // @vitest-environment node
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { Effect } from 'effect';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cacheKey, routeCacheKey } from 'src/server/cache-key';
+import { RouteLookup } from 'src/services/route-lookup';
 import { onRequestGet as onFolderGet } from '../../../functions/api/naver-folder';
 import { onRequestGet as onPlaceGet } from '../../../functions/api/place';
 import { onRequestGet as onRouteGet } from '../../../functions/api/route';
@@ -409,5 +411,76 @@ describe('GET /api/route', () => {
     expect(hit.status).toBe(200);
     expect(hit.headers.get('Cache-Control')).toBe('private, no-store');
     expect(calls).toHaveLength(2);
+  });
+
+  it('fresh=1이면 캐시를 보지 않고 다시 받아, 같은 키(fresh 없이)에 저장한다', async () => {
+    const cache = stubCaches();
+    const calls = stubFetch({
+      [NAVER_CAR]: () => new Response(routeFixture('car-gangneung.json')),
+    });
+    const carKey = routeCacheKey('car:128.89610,37.79530>128.90060,37.79300');
+    const first = makeContext(`/api/route?mode=car&${ROUTE_QS}`);
+    expect((await onRouteGet(first.ctx)).status).toBe(200);
+    await Promise.all(first.pending);
+    expect(cache.match).toHaveBeenCalledTimes(1);
+    expect(cache.match).toHaveBeenLastCalledWith(carKey);
+
+    const fresh = makeContext(`/api/route?mode=car&${ROUTE_QS}&fresh=1`);
+    const res = await onRouteGet(fresh.ctx);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+    await Promise.all(fresh.pending);
+    expect(cache.match).toHaveBeenCalledTimes(1);
+    expect(calls).toEqual([NAVER_CAR, NAVER_CAR]);
+    expect(cache.put).toHaveBeenCalledTimes(2);
+    expect(String(cache.put.mock.calls[1]![0])).toBe(carKey);
+    expect([...cache.store.keys()]).toEqual([carKey]);
+
+    // 이후 보통 요청은 다시 캐시를 본다.
+    const again = makeContext(`/api/route?mode=car&${ROUTE_QS}`);
+    expect((await onRouteGet(again.ctx)).status).toBe(200);
+    expect(cache.match).toHaveBeenCalledTimes(2);
+    expect(calls).toHaveLength(2);
+  });
+
+  it('장소·폴더는 fresh=1을 몰라 그대로 캐시를 본다', async () => {
+    const cache = stubCaches();
+    stubFetch({});
+    await onPlaceGet(makeContext(`${placePath(NAVER_WEB_LINK)}&fresh=1`).ctx);
+    await onFolderGet(makeContext(`${folderPath(SHARE_ID)}&fresh=1`).ctx);
+    expect(cache.match).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('다시 계산 → 엣지 캐시 우회(RouteLookup + GET /api/route)', () => {
+  it('refresh면 엣지 캐시가 있어도 네이버에 다시 묻고 새 queriedAt을 받는다', async () => {
+    stubCaches();
+    vi.useFakeTimers({ toFake: ['Date'] });
+    const calls = stubFetch({
+      [NAVER_CAR]: () => new Response(routeFixture('car-gangneung.json')),
+    });
+    // 브라우저의 fetch 자리에 서버 함수를 바로 잇는다. 응답 저장(waitUntil)이 끝난 뒤 돌려준다.
+    const appFetch = (async (input: RequestInfo | URL) => {
+      const { ctx, pending } = makeContext(String(input));
+      const res = await onRouteGet(ctx);
+      await Promise.all(pending);
+      return res;
+    }) as typeof fetch;
+    const from: [number, number] = [128.8961, 37.7953];
+    const to: [number, number] = [128.9006, 37.793];
+
+    const [first, refreshed] = await Effect.runPromise(
+      Effect.gen(function* () {
+        const lookup = yield* RouteLookup;
+        vi.setSystemTime(new Date('2026-10-13T01:00:00.000Z'));
+        const a = yield* lookup.leg('car', from, to);
+        vi.setSystemTime(new Date('2026-10-13T01:20:00.000Z'));
+        const b = yield* lookup.leg('car', from, to, { refresh: true });
+        return [a, b] as const;
+      }).pipe(Effect.provide(RouteLookup.layerWith({ fetch: appFetch, storage: null }))),
+    );
+    expect(calls).toEqual([NAVER_CAR, NAVER_CAR]);
+    expect(first.queriedAt).toBe('2026-10-13T01:00:00.000Z');
+    expect(refreshed.queriedAt).toBe('2026-10-13T01:20:00.000Z');
   });
 });

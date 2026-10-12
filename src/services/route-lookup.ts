@@ -241,8 +241,14 @@ export class RouteLookup extends Context.Service<
 
       const upstream = () => new RouteLookupError({ code: 'UPSTREAM_ERROR' });
 
-      const request = Effect.fnUntraced(function* (mode: RouteMode, from: LngLat, to: LngLat) {
-        const path = `/api/route?mode=${mode}&from=${coordinate(from)}&to=${coordinate(to)}`;
+      const request = Effect.fnUntraced(function* (
+        mode: RouteMode,
+        from: LngLat,
+        to: LngLat,
+        fresh: boolean,
+      ) {
+        // `다시 계산`(fresh)은 서버의 엣지 캐시도 건너뛰게 한다(스펙 §4.2). 보통 요청은 엣지 캐시를 함께 쓴다.
+        const path = `/api/route?mode=${mode}&from=${coordinate(from)}&to=${coordinate(to)}${fresh ? '&fresh=1' : ''}`;
         // 서버 시한(8초)보다 조금 길게 기다리고, 그래도 안 오면 중단한다. 중단하면 대기 칸과 진행 중 표가 풀린다.
         const response = yield* Effect.gen(function* () {
           const res = yield* Effect.tryPromise({
@@ -285,9 +291,9 @@ export class RouteLookup extends Context.Service<
       });
 
       /** 한 구간을 서버에서 받아 캐시에 넣는다. 동시 요청 수는 `slots`가 제한한다. */
-      const fetchLeg = (key: string, mode: RouteMode, from: LngLat, to: LngLat) =>
+      const fetchLeg = (key: string, mode: RouteMode, from: LngLat, to: LngLat, fresh: boolean) =>
         slots
-          .withPermits(1)(request(mode, from, to))
+          .withPermits(1)(request(mode, from, to, fresh))
           .pipe(Effect.tap((route) => Effect.sync(() => remember(key, route))));
 
       const leg = (
@@ -325,7 +331,7 @@ export class RouteLookup extends Context.Service<
           inflight.set(key, pending);
           // 기다리는 쪽이 중단돼도 같은 키를 기다리는 다른 호출이 있을 수 있으니 요청은 따로 돌린다.
           return Effect.forkDetach(
-            fetchLeg(key, mode, from, to).pipe(
+            fetchLeg(key, mode, from, to, legOptions?.refresh === true).pipe(
               Effect.onExit((exit) =>
                 Effect.suspend(() => {
                   inflight.delete(key);
