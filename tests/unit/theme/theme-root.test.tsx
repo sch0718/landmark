@@ -11,6 +11,7 @@ import { LibraryStore } from 'src/services/library-store';
 import { PlaceLookup } from 'src/services/place-lookup';
 import { PREFS_KEY, PrefsStore } from 'src/services/prefs-store';
 import { ReverseGeocoder } from 'src/services/reverse-geocoder';
+import { RouteLookup } from 'src/services/route-lookup';
 import { ShareTemplate } from 'src/services/share-template';
 import { prefsAtom, setPrefsAtom } from 'src/stores/prefs-state';
 import { cssVarsOf } from 'src/theme/create-app-theme';
@@ -57,6 +58,7 @@ function setup(saved?: Partial<Prefs>) {
         ShareTemplate.layer,
         PlaceLookup.layer,
         ReverseGeocoder.layer,
+        RouteLookup.layer,
       ),
     ),
   );

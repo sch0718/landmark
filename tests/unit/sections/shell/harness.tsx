@@ -8,11 +8,12 @@ import { setAppRuntimeForTest } from 'src/lib/effect/runtime';
 import { routes } from 'src/routes/router';
 import { IdGen } from 'src/services/id-gen';
 import { LegacyTripSource } from 'src/services/legacy-trip-source';
-import { PlaceLookupError } from 'src/services/errors';
+import { PlaceLookupError, RouteLookupError } from 'src/services/errors';
 import { LibraryStore } from 'src/services/library-store';
 import { PlaceLookup } from 'src/services/place-lookup';
 import { PrefsStore } from 'src/services/prefs-store';
 import { ReverseGeocoder } from 'src/services/reverse-geocoder';
+import { RouteLookup } from 'src/services/route-lookup';
 import { ShareTemplate } from 'src/services/share-template';
 import { ThemeRoot } from 'src/theme/ThemeRoot';
 
@@ -59,6 +60,12 @@ const OFFLINE_PLACE_LOOKUP = Layer.succeed(
   }),
 );
 
+/** 테스트 기본 경로 조회: 서버 없이 연결 실패(`OFFLINE`)만 돌려준다. 콘솔 경고도 내지 않는다. */
+const OFFLINE_ROUTE_LOOKUP = Layer.succeed(
+  RouteLookup,
+  RouteLookup.of({ leg: () => Effect.fail(new RouteLookupError({ code: 'OFFLINE' })) }),
+);
+
 /** 테스트 기본 주소 변환: 늘 "주소를 못 찾음"(null). */
 const NULL_REVERSE_GEOCODER = Layer.succeed(
   ReverseGeocoder,
@@ -78,6 +85,8 @@ export async function renderApp(
     shareTemplate?: string | Error | (() => string | Error | Promise<string | Error>);
     /** 장소 조회 가짜 레이어. 없으면 늘 `OFFLINE`으로 실패한다. */
     placeLookup?: Layer.Layer<PlaceLookup>;
+    /** 경로 조회 가짜 레이어. 없으면 늘 `OFFLINE`으로 실패한다. */
+    routeLookup?: Layer.Layer<RouteLookup>;
     /** 주소 변환 가짜 레이어. 없으면 늘 null을 돌려준다. */
     reverseGeocoder?: Layer.Layer<ReverseGeocoder>;
   } = {},
@@ -88,6 +97,7 @@ export async function renderApp(
     ids = [],
     shareTemplate = DEFAULT_SHARE_TEMPLATE,
     placeLookup = OFFLINE_PLACE_LOOKUP,
+    routeLookup = OFFLINE_ROUTE_LOOKUP,
     reverseGeocoder = NULL_REVERSE_GEOCODER,
   } = options;
   setAppRuntimeForTest(
@@ -108,6 +118,7 @@ export async function renderApp(
           url: '/share-viewer.html',
         }),
         placeLookup,
+        routeLookup,
         reverseGeocoder,
       ),
     ),

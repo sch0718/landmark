@@ -6,6 +6,7 @@ import { LibraryStore } from 'src/services/library-store';
 import { PlaceLookup } from 'src/services/place-lookup';
 import { PrefsStore } from 'src/services/prefs-store';
 import { ReverseGeocoder } from 'src/services/reverse-geocoder';
+import { RouteLookup } from 'src/services/route-lookup';
 import { ShareTemplate } from 'src/services/share-template';
 
 /** 앱 서비스 목록. 서비스를 늘리면 여기에 더한다. */
@@ -17,6 +18,7 @@ export const AppLayer = Layer.mergeAll(
   ShareTemplate.layer,
   PlaceLookup.layer,
   ReverseGeocoder.layer,
+  RouteLookup.layer,
 );
 
 export type AppServices = Layer.Success<typeof AppLayer>;

@@ -115,6 +115,8 @@ export async function renderLibrary(
     shareTemplate?: NonNullable<Parameters<typeof renderApp>[0]>['shareTemplate'];
     /** `renderApp`의 `placeLookup`을 그대로 넘긴다. */
     placeLookup?: NonNullable<Parameters<typeof renderApp>[0]>['placeLookup'];
+    /** `renderApp`의 `routeLookup`을 그대로 넘긴다. */
+    routeLookup?: NonNullable<Parameters<typeof renderApp>[0]>['routeLookup'];
     /** `renderApp`의 `reverseGeocoder`를 그대로 넘긴다. */
     reverseGeocoder?: NonNullable<Parameters<typeof renderApp>[0]>['reverseGeocoder'];
   } = {},
@@ -126,6 +128,7 @@ export async function renderLibrary(
     ids,
     shareTemplate,
     placeLookup,
+    routeLookup,
     reverseGeocoder,
   } = options;
   const storage = options.storage ?? createMemoryStorage();
@@ -140,6 +143,7 @@ export async function renderLibrary(
     ids,
     shareTemplate,
     placeLookup,
+    routeLookup,
     reverseGeocoder,
   });
   return { ...rendered, storage, setWidth: viewport.setWidth };

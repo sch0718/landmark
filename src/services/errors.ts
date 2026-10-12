@@ -151,3 +151,35 @@ export class PlaceLookupError extends Schema.TaggedError<PlaceLookupError>()('Pl
     }
   }
 }
+
+export const ROUTE_LOOKUP_ERROR_CODES = [
+  'NO_ROUTE',
+  'UPSTREAM_ERROR',
+  'TIMEOUT',
+  'OFFLINE',
+  'BAD_REQUEST',
+  'FORBIDDEN_ORIGIN',
+] as const;
+export type RouteLookupErrorCode = (typeof ROUTE_LOOKUP_ERROR_CODES)[number];
+
+/**
+ * 구간 경로 조회 실패(스펙 §4.2). 호출한 쪽은 실패한 구간을 직선 추정으로 채우고
+ * `userMessage`를 구간 옆에 보인다.
+ */
+export class RouteLookupError extends Schema.TaggedError<RouteLookupError>()('RouteLookupError', {
+  code: Schema.Literals(ROUTE_LOOKUP_ERROR_CODES),
+}) {
+  get userMessage(): string {
+    switch (this.code) {
+      case 'NO_ROUTE':
+        return '경로 없음 · 직선 추정';
+      case 'OFFLINE':
+        return '인터넷에 연결되지 않아 이동 시간은 어림값이에요';
+      case 'UPSTREAM_ERROR':
+      case 'TIMEOUT':
+      case 'BAD_REQUEST':
+      case 'FORBIDDEN_ORIGIN':
+        return '경로를 못 가져왔어요';
+    }
+  }
+}
