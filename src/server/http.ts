@@ -7,7 +7,9 @@ export type ApiErrorCode =
   | 'FORBIDDEN_ORIGIN'
   | 'TOO_MANY_PLACES'
   | 'UPSTREAM_ERROR'
-  | 'TIMEOUT';
+  | 'TIMEOUT'
+  | 'BAD_REQUEST'
+  | 'NO_ROUTE';
 
 /** 구글 링크에 위치가 없을 때만 붙는다. 앱이 이름을 채워 핀 모드로 간다. */
 export type ApiErrorDetail = { reason: 'no-location'; placeName: string };
@@ -30,6 +32,8 @@ export const STATUS: Record<ApiErrorCode, number> = {
   TOO_MANY_PLACES: 413,
   UPSTREAM_ERROR: 502,
   TIMEOUT: 504,
+  BAD_REQUEST: 400,
+  NO_ROUTE: 404,
 };
 
 const EXACT_ORIGINS: readonly string[] = [

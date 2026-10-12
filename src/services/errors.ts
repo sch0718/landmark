@@ -101,6 +101,8 @@ const API_ERROR_CODES = [
   'TOO_MANY_PLACES',
   'UPSTREAM_ERROR',
   'TIMEOUT',
+  'BAD_REQUEST',
+  'NO_ROUTE',
 ] as const satisfies readonly ApiErrorCode[];
 // 서버 코드가 늘면 여기서 컴파일 오류가 난다(위 목록에 더하고 `userMessage`도 고친다).
 const _allCodesListed: [Exclude<ApiErrorCode, (typeof API_ERROR_CODES)[number]>] extends [never]
@@ -116,6 +118,7 @@ export type PlaceLookupErrorCode = (typeof PLACE_LOOKUP_ERROR_CODES)[number];
 export const isApiErrorCode = (value: unknown): value is ApiErrorCode =>
   (API_ERROR_CODES as readonly unknown[]).includes(value);
 
+// BAD_REQUEST·NO_ROUTE는 경로 조회 전용 코드라 장소 조회는 만들지 않는다. 오면 같은 안내를 보인다.
 const UNAVAILABLE_MESSAGE = '지금은 장소 정보를 가져오지 못했어요. 잠시 뒤 다시 해 주세요';
 
 /**
@@ -142,6 +145,8 @@ export class PlaceLookupError extends Schema.TaggedError<PlaceLookupError>()('Pl
       case 'FORBIDDEN_ORIGIN':
       case 'UPSTREAM_ERROR':
       case 'TIMEOUT':
+      case 'BAD_REQUEST':
+      case 'NO_ROUTE':
         return UNAVAILABLE_MESSAGE;
     }
   }

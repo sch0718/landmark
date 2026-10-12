@@ -6,11 +6,10 @@ import { ApiError, errorResponse, isAllowedOrigin, jsonResponse } from './http';
 export type FunctionContext = { request: Request; waitUntil(p: Promise<unknown>): void };
 
 export type GetHandlerOptions = {
-  /** 입력을 담은 쿼리 이름(`url`·`share`). 없거나 비면 UNSUPPORTED_LINK. */
-  param: string;
-  missingMessage: string;
-  /** 성공 결과를 Cache API에 둘 시간(초). */
-  maxAgeSeconds: number;
+  /** 요청 주소에서 입력을 읽는다. 없거나 틀리면 ApiError를 던진다. */
+  readInput(url: URL): string;
+  /** 성공 결과를 Cache API에 둘 시간(초). 입력에 따라 다르면 함수로 준다. */
+  maxAgeSeconds: number | ((input: string) => number);
   /** 입력으로 캐시 키를 만든다. null이면 캐시를 건너뛴다. */
   cacheKey(input: string): string | null;
   resolve(input: string): Promise<unknown>;
@@ -60,8 +59,7 @@ export async function handleGet(
     if (!isAllowedOrigin(requestOrigin(request))) {
       throw new ApiError('FORBIDDEN_ORIGIN', '허용하지 않는 요청 출처');
     }
-    const input = new URL(request.url).searchParams.get(options.param) ?? '';
-    if (input.trim() === '') throw new ApiError('UNSUPPORTED_LINK', options.missingMessage);
+    const input = options.readInput(new URL(request.url));
 
     const cache = defaultCache();
     const key = cache ? options.cacheKey(input) : null;
@@ -71,8 +69,12 @@ export async function handleGet(
     }
 
     const result = await options.resolve(input);
+    const maxAge =
+      typeof options.maxAgeSeconds === 'function'
+        ? options.maxAgeSeconds(input)
+        : options.maxAgeSeconds;
     const stored = jsonResponse(result, {
-      headers: { 'Cache-Control': `max-age=${options.maxAgeSeconds}` },
+      headers: { 'Cache-Control': `max-age=${maxAge}` },
     });
     if (cache && key !== null) {
       // 저장 실패는 응답에 영향을 주지 않는다.

@@ -85,7 +85,20 @@ describe('PlaceLookup.lookupLink', () => {
     ['TOO_MANY_PLACES', 413],
     ['UPSTREAM_ERROR', 502],
     ['TIMEOUT', 504],
+    ['BAD_REQUEST', 400],
+    ['NO_ROUTE', 404],
   ] as const;
+  it('경로 전용 코드(BAD_REQUEST·NO_ROUTE)는 UPSTREAM 문구로 보인다', () => {
+    for (const code of ['BAD_REQUEST', 'NO_ROUTE'] as const) {
+      expect(new PlaceLookupError({ code }).userMessage).toBe(
+        new PlaceLookupError({ code: 'UPSTREAM_ERROR' }).userMessage,
+      );
+    }
+    expect(new PlaceLookupError({ code: 'NO_ROUTE' }).userMessage).toBe(
+      '지금은 장소 정보를 가져오지 못했어요. 잠시 뒤 다시 해 주세요',
+    );
+  });
+
   for (const [code, status] of codes) {
     it.effect(`${status} ${code} 본문의 코드를 그대로 담는다`, () =>
       Effect.gen(function* () {

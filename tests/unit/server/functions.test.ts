@@ -2,16 +2,26 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cacheKey } from 'src/server/cache-key';
+import { cacheKey, routeCacheKey } from 'src/server/cache-key';
 import { onRequestGet as onFolderGet } from '../../../functions/api/naver-folder';
 import { onRequestGet as onPlaceGet } from '../../../functions/api/place';
+import { onRequestGet as onRouteGet } from '../../../functions/api/route';
 
 const SHARE_ID = 'fb65e7f93f8a4144a4ded594d604a7aa';
 const FOLDER_API = `https://pages.map.naver.com/save-pages/api/maps-bookmark/v3/shares/${SHARE_ID}/bookmarks`;
 const NAVER_SUMMARY = 'https://map.naver.com/p/api/place/summary/';
 const NAVER_WEB_LINK =
   'https://map.naver.com/p/entry/place/1958911015?c=15.00,0,0,0,dh&placePath=/home?entry=plt';
+const NAVER_CAR =
+  'https://map.naver.com/p/api/directions/car?start=128.89610,37.79530&goal=128.90060,37.79300';
+const NAVER_WALK =
+  'https://map.naver.com/p/api/directions/walk?o=all&l=128.89610,37.79530;128.90060,37.79300&lang=ko';
+const ROUTE_QS = 'from=128.8961,37.7953&to=128.9006,37.793';
 const ALLOWED_ORIGIN = 'http://localhost:8788';
+
+function routeFixture(name: string): string {
+  return readFileSync(resolve(process.cwd(), 'tests/fixtures/routes', name), 'utf8');
+}
 
 function fixtureText(name: string): string {
   return readFileSync(resolve(process.cwd(), 'tests/fixtures/links', name), 'utf8');
@@ -291,5 +301,113 @@ describe('캐시', () => {
     const { ctx } = makeContext(placePath(NAVER_WEB_LINK), {});
     expect((await onPlaceGet(ctx)).status).toBe(403);
     expect(cache.match).not.toHaveBeenCalled();
+  });
+});
+
+describe('routeCacheKey', () => {
+  it('입력 키를 인코딩해 route/ 아래에 둔다', () => {
+    expect(routeCacheKey('car:128.89610,37.79530>128.90060,37.79300')).toBe(
+      `https://cache.landmark/route/${encodeURIComponent('car:128.89610,37.79530>128.90060,37.79300')}`,
+    );
+  });
+});
+
+describe('GET /api/route', () => {
+  it('자동차 → 200 RouteResult, 브라우저에는 private, no-store', async () => {
+    const calls = stubFetch({
+      [NAVER_CAR]: () => new Response(routeFixture('car-gangneung.json')),
+    });
+    const { ctx } = makeContext(`/api/route?mode=car&${ROUTE_QS}`);
+    const res = await onRouteGet(ctx);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+    const body = (await res.json()) as {
+      mode: string;
+      distanceM: number;
+      durationS: number;
+      tollFare: number | null;
+      path: unknown[];
+      queriedAt: string;
+    };
+    expect(body).toMatchObject({ mode: 'car', distanceM: 408, durationS: 49, tollFare: 0 });
+    expect(body.path.length).toBeLessThanOrEqual(200);
+    expect(Number.isNaN(Date.parse(body.queriedAt))).toBe(false);
+    expect(calls).toEqual([NAVER_CAR]);
+  });
+
+  it('도보 → 200, 통행료 null', async () => {
+    stubFetch({ [NAVER_WALK]: () => new Response(routeFixture('walk-gangneung.json')) });
+    const res = await onRouteGet(makeContext(`/api/route?mode=walk&${ROUTE_QS}`).ctx);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ mode: 'walk', durationS: 958, tollFare: null });
+  });
+
+  it.each([
+    ['출처 없음', {}],
+    ['다른 출처', { Origin: 'https://evil.example.com' }],
+  ])('%s → 403, 바깥 요청 없음', async (_label, headers: Record<string, string>) => {
+    const calls = stubFetch({});
+    const res = await onRouteGet(makeContext(`/api/route?mode=car&${ROUTE_QS}`, headers).ctx);
+    expect(res.status).toBe(403);
+    expect(calls).toHaveLength(0);
+  });
+
+  it.each([
+    '/api/route',
+    '/api/route?mode=bike&from=128.8,37.7&to=128.9,37.8',
+    '/api/route?mode=car&from=abc&to=128.9,37.8',
+    '/api/route?mode=car&from=10,10&to=128.9,37.8',
+  ])('%s → 400 BAD_REQUEST, 바깥 요청 없음', async (path) => {
+    const calls = stubFetch({});
+    const res = await onRouteGet(makeContext(path).ctx);
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe('BAD_REQUEST');
+    expect(calls).toHaveLength(0);
+  });
+
+  it('도보 직선 50km 초과 → 404 NO_ROUTE, 바깥 요청 없음', async () => {
+    const calls = stubFetch({});
+    const res = await onRouteGet(
+      makeContext('/api/route?mode=walk&from=126.978,37.5665&to=126.5312,33.4996').ctx,
+    );
+    expect(res.status).toBe(404);
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe('NO_ROUTE');
+    expect(calls).toHaveLength(0);
+  });
+
+  it('네이버 503 → 502 UPSTREAM_ERROR, 저장하지 않는다', async () => {
+    const cache = stubCaches();
+    stubFetch({ [NAVER_CAR]: () => new Response('err', { status: 503 }) });
+    const { ctx, pending } = makeContext(`/api/route?mode=car&${ROUTE_QS}`);
+    expect((await onRouteGet(ctx)).status).toBe(502);
+    await Promise.all(pending);
+    expect(cache.put).not.toHaveBeenCalled();
+  });
+
+  it('자동차는 1시간, 도보는 7일 저장하고 같은 좌표(반올림 후)는 바깥 요청 없이 돌려준다', async () => {
+    const cache = stubCaches();
+    const calls = stubFetch({
+      [NAVER_CAR]: () => new Response(routeFixture('car-gangneung.json')),
+      [NAVER_WALK]: () => new Response(routeFixture('walk-gangneung.json')),
+    });
+    const car = makeContext(`/api/route?mode=car&${ROUTE_QS}`);
+    expect((await onRouteGet(car.ctx)).status).toBe(200);
+    const walk = makeContext(`/api/route?mode=walk&${ROUTE_QS}`);
+    expect((await onRouteGet(walk.ctx)).status).toBe(200);
+    await Promise.all([...car.pending, ...walk.pending]);
+
+    const carKey = routeCacheKey('car:128.89610,37.79530>128.90060,37.79300');
+    const walkKey = routeCacheKey('walk:128.89610,37.79530>128.90060,37.79300');
+    expect(cache.store.get(carKey)!.headers.get('Cache-Control')).toBe('max-age=3600');
+    expect(cache.store.get(walkKey)!.headers.get('Cache-Control')).toBe('max-age=604800');
+
+    // 소수 6자리 이하가 달라도 5자리로 반올림하면 같은 키
+    const again = makeContext(
+      '/api/route?mode=car&from=128.896101,37.795299&to=128.900599,37.793001',
+    );
+    const hit = await onRouteGet(again.ctx);
+    expect(hit.status).toBe(200);
+    expect(hit.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(calls).toHaveLength(2);
   });
 });
