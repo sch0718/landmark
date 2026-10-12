@@ -11,6 +11,7 @@ import {
   type Place,
 } from 'src/schema/library';
 import type { IdKind } from 'src/services/id-gen';
+import type { TripOpError } from 'src/domain/trips/ops';
 
 // 보관함 문서를 바꾸는 유일한 경로(스펙 §6.1). 모두 입력을 바꾸지 않는 순수 함수이며,
 // 바뀐 필드만 `updatedAt = ctx.now`로 갱신하고 나머지는 같은 참조로 둔다.
@@ -20,7 +21,8 @@ export type OpCtx = { now: string; newId: (kind: IdKind) => string };
 export type OpError =
   | { _tag: 'LabelNameTaken'; name: string }
   | { _tag: 'LabelNameInvalid'; name: string }
-  | { _tag: 'NotFound'; id: string };
+  | { _tag: 'NotFound'; id: string }
+  | TripOpError;
 
 /** 여러 장소를 한 번에 넣는 연산(폴더 가져오기)이 직접 센 결과. */
 export type OpSummary = { created: number; merged: number; restored: number };
