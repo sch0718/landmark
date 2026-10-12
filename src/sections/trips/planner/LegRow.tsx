@@ -42,6 +42,7 @@ export function LegRow({ leg, onMode, onRetry }: Props) {
     },
     layout === 'compact' ? 'app' : 'web',
   );
+  const isWebUrl = directionsUrl?.startsWith('https://') ?? false;
   const choose = (mode: 'car' | 'walk') => {
     setAnchor(null);
     if (mode !== leg.mode) onMode(mode);
@@ -112,8 +113,8 @@ export function LegRow({ leg, onMode, onRetry }: Props) {
         <Box
           component="a"
           href={directionsUrl}
-          target="_blank"
-          rel="noopener noreferrer"
+          // 웹 길찾기만 새 탭으로 연다. 앱 주소(nmap://)는 새 탭이면 빈 탭이 남는다.
+          {...(isWebUrl ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
           sx={{
             display: 'inline-flex',
             alignItems: 'center',

@@ -28,6 +28,14 @@ import {
   withTrip,
 } from './planner-fixtures';
 
+const toastMock = vi.hoisted(() => {
+  const error = vi.fn();
+  return Object.assign(vi.fn(), { error });
+});
+vi.mock('sonner', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('sonner')>()),
+  toast: toastMock,
+}));
 vi.mock('src/theme/fonts', () => ({ loadDisplayFont: vi.fn(() => Promise.resolve()) }));
 
 let resources: ReturnType<typeof installMapResources>;
@@ -38,6 +46,8 @@ beforeEach(() => {
   resources = installMapResources();
 });
 afterEach(() => {
+  toastMock.mockClear();
+  toastMock.error.mockClear();
   resources.restore();
   setAppRuntimeForTest(null);
   vi.useRealTimers();
@@ -377,6 +387,15 @@ describe('지도 위 카드', () => {
     await waitFor(() => expect(days(store).map((d) => d.lodging.value)).toEqual([null, HOTEL]));
     await waitFor(() => expect(marker(`end:${HOTEL}`)).toHaveTextContent('🛏 파도 호텔'));
     expect(within(card('파도 호텔')).getByRole('button', { name: '숙소로 정하기' })).toBeDisabled();
+
+    // 되돌리기 토스트로 이전 숙소(없음)로 돌아간다.
+    const call = toastMock.mock.calls.findLast((c) => c[0] === '숙소를 정했어요');
+    const options = call![1] as { action: { label: string; onClick(): void } };
+    expect(options.action.label).toBe('되돌리기');
+    await act(async () => {
+      options.action.onClick();
+    });
+    await waitFor(() => expect(days(store).map((d) => d.lodging.value)).toEqual([null, null]));
   });
 
   it('상세는 시간표 칸 자리에 장소 상세를 열고, ← 일정으로 돌아온다', async () => {

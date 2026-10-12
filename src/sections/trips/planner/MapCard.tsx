@@ -4,13 +4,15 @@ import IconButton from '@mui/material/IconButton';
 import { useAtomValue } from 'jotai';
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { XIcon } from 'src/components/icons';
-import { setLodging, setStopFixedTime, setStopStay } from 'src/domain/trips/ops';
+import { setStopFixedTime, setStopStay } from 'src/domain/trips/ops';
 import { visibleStops } from 'src/domain/trips/query';
 import type { Stop, Trip } from 'src/schema/trip';
 import { OtherDayMenu } from 'src/sections/trips/planner/StopMenu';
 import {
   insertAtEnd,
   insertedMessage,
+  LODGING_SET_MESSAGE,
+  lodgingOp,
   moveToEnd,
   movedMessage,
   unschedule,
@@ -184,7 +186,7 @@ type Props = {
 export function MapCard({ trip, dayIndex, placeId, onClose, onDetail }: Props) {
   const library = useAtomValue(libraryAtom);
   const { run } = useLibraryAction();
-  // 넣기·옮기기·빼기는 되돌리기 토스트를 띄운다.
+  // 넣기·옮기기·빼기·숙소로 정하기는 되돌리기 토스트를 띄운다.
   const { run: runUndoable } = useTripUndo(trip.id);
   const cardRef = useRef<HTMLDivElement>(null);
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
@@ -340,7 +342,7 @@ export function MapCard({ trip, dayIndex, placeId, onClose, onDetail }: Props) {
           variant="outlined"
           disabled={trip.days[dayIndex]?.lodging.value === placeId}
           onClick={() =>
-            void run((lib, ctx) => setLodging(lib, tripId, dayIndex, placeId, false, ctx))
+            void runUndoable(lodgingOp(tripId, dayIndex, placeId, false), LODGING_SET_MESSAGE)
           }
           sx={BUTTON_SX}
         >

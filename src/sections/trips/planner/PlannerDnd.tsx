@@ -317,6 +317,8 @@ export function DragHandle({
       {...attributes}
       {...listeners}
       aria-label={`${name} 끌어 옮기기`}
+      // dnd-kit 기본값(`sortable`)은 영어로 읽힌다.
+      aria-roledescription="옮길 수 있는 항목"
       sx={{
         flex: 'none',
         width: 32,

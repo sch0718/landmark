@@ -65,7 +65,7 @@ export function useOptimizeDay(tripId: string, dayIndex: number): () => Promise<
   const { run } = useTripUndo(tripId);
   return useCallback(async () => {
     const box = { unchanged: false };
-    await run((lib, ctx) => {
+    const result = await run((lib, ctx) => {
       box.unchanged = false; // 저장소가 다시 시도하면 연산이 여러 번 불릴 수 있다
       const trip = lib.trips[tripId];
       if (trip === undefined) return { ok: true, lib };
@@ -76,7 +76,8 @@ export function useOptimizeDay(tripId: string, dayIndex: number): () => Promise<
       }
       return reorderDay(lib, tripId, dayIndex, ids, ctx);
     }, OPTIMIZED_MESSAGE);
-    if (box.unchanged) toast(ALREADY_SHORTEST_MESSAGE);
+    // 저장이 실패했으면(용량 초과 등) 이미 가장 짧다고 알리지 않는다.
+    if (result.ok && box.unchanged) toast(ALREADY_SHORTEST_MESSAGE);
   }, [run, tripId, dayIndex]);
 }
 

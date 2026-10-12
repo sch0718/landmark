@@ -9,6 +9,13 @@ import { RouteLookupError, type RouteLookupErrorCode } from 'src/services/errors
 export const ROUTE_CACHE_KEY = 'tripmap:routes:v1';
 /** 캐시에 둘 수 있는 구간 수. 넘으면 `usedAt`이 오래된 것부터 지운다. */
 export const ROUTE_CACHE_MAX = 500;
+/**
+ * 캐시 문서(JSON)의 최대 글자 수. 넘으면 `usedAt`이 오래된 것부터 지운다. 경로선이 긴 구간이 많아도
+ * 경로 캐시가 localStorage(대개 5MB)를 차지해 보관함을 밀어내지 않게 한다.
+ */
+export const ROUTE_CACHE_MAX_CHARS = 1_500_000;
+/** 캐시 변경을 모아 저장하는 지연(ms). 구간이 연달아 들어와도 저장은 이 간격에 한 번이다. */
+export const ROUTE_PERSIST_DELAY_MS = 300;
 /** 클라이언트가 응답을 기다리는 최대 시간(ms). 서버 시한 8초보다 길다. */
 export const ROUTE_TIMEOUT_MS = 12_000;
 /** 동시에 서버에 보내는 경로 요청 수. 넘으면 대기열에서 차례를 기다린다. */
@@ -71,6 +78,11 @@ const toRouteCode = (code: string): RouteLookupErrorCode =>
 /** 서버 응답에는 항상 소수 5자리로 보낸다(캐시 키와 같은 정밀도). */
 const coordinate = ([lng, lat]: LngLat): string => `${lng.toFixed(5)},${lat.toFixed(5)}`;
 
+/** 저장할 경로선 좌표는 소수 5자리(약 1m)로 줄인다. 그보다 정밀해도 지도에서 차이가 없고 용량만 커진다. */
+const round5 = (n: number): number => Math.round(n * 1e5) / 1e5;
+const roundPath = (path: readonly LngLat[]): LngLat[] =>
+  path.map(([lng, lat]) => [round5(lng), round5(lat)]);
+
 /** 저장된 캐시 문서를 읽는다. 저장 값이 깨졌거나 없으면 빈 캐시. 모양이 틀린 항목만 버린다. */
 function readCache(storage: Storage | null): Map<string, CachedRoute> {
   const entries = new Map<string, CachedRoute>();
@@ -96,9 +108,19 @@ function readCache(storage: Storage | null): Map<string, CachedRoute> {
   return entries;
 }
 
+/** 페이지가 숨거나 닫힐 때 `flush`를 부른다(모아 둔 캐시 저장을 잃지 않게). */
+export function listenPageLeave(flush: () => void): void {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return;
+  window.addEventListener('pagehide', flush);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') flush();
+  });
+}
+
 /**
  * 구간(두 좌표) 사이 경로를 서버 함수(`/api/route`)로 조회하고, 결과를 localStorage에 캐시한다.
- * - 캐시 키는 Task 6의 `routeInputKey`. 읽을 때 `usedAt`을 새로 하고, 500개를 넘으면 오래 안 쓴 것부터 지운다.
+ * - 캐시 키는 Task 6의 `routeInputKey`. 읽을 때 `usedAt`을 새로 하고, 500개 또는 150만 자를 넘으면
+ *   오래 안 쓴 것부터 지운다. 경로선 좌표는 소수 5자리로 줄여 저장하고, 저장은 300ms 간격으로 모아서 한다.
  * - 직선 10m 미만은 같은 지점으로 보고 서버에 묻지 않는다.
  * - 같은 키 요청이 진행 중이면 합치고, 동시에 나가는 요청은 최대 4개다.
  * - 서버 응답 처리는 `PlaceLookup`과 같다(HTML·`error` 없는 404·네트워크 실패는 `OFFLINE`).
@@ -119,16 +141,27 @@ export class RouteLookup extends Context.Service<
     storage: Storage | null;
     base?: string;
     now?: () => Date;
+    /** 모아 둔 캐시 변경을 저장할 때를 정한다. 기본은 `ROUTE_PERSIST_DELAY_MS` 뒤(`setTimeout`). */
+    schedule?: (flush: () => void) => void;
+    /** 페이지를 떠날 때(숨김·닫기) 부를 `flush`를 받는다. 기다리던 저장을 바로 한다. */
+    onLeave?: (flush: () => void) => void;
+    /** 테스트에서 글자 수 한도를 낮추는 용도. */
+    maxChars?: number;
   }) {
     return Layer.sync(RouteLookup, () => {
       const base = options.base ?? '';
       const now = options.now ?? (() => new Date());
       const storage = options.storage;
+      const schedule =
+        options.schedule ?? ((flush: () => void) => void setTimeout(flush, ROUTE_PERSIST_DELAY_MS));
+      const maxChars = options.maxChars ?? ROUTE_CACHE_MAX_CHARS;
 
       const entries = readCache(storage);
       // 쓰기가 끝내 안 되면 이 세션은 메모리에서만 캐시한다.
       let persistent = storage !== null;
-      let flushQueued = false;
+      // 저장할 변경이 있는가, 저장이 예약돼 있는가.
+      let dirty = false;
+      let flushScheduled = false;
       let offlineWarned = false;
       let forbiddenWarned = false;
       const inflight = new Map<string, Deferred.Deferred<RouteResult, RouteLookupError>>();
@@ -139,12 +172,22 @@ export class RouteLookup extends Context.Service<
         for (const key of [...entries.keys()].slice(0, count)) entries.delete(key);
       };
 
+      const serialize = () => JSON.stringify({ entries: Object.fromEntries(entries) });
+
+      /** 글자 수 한도를 넘으면 넘친 비율만큼 오래된 것부터 지우며 다시 맞춘다. 한도 안의 문서를 돌려준다. */
+      const fitted = (): string => {
+        let json = serialize();
+        while (json.length > maxChars && entries.size > 0) {
+          const excess = Math.ceil(entries.size * (1 - maxChars / json.length));
+          dropOldest(Math.max(1, excess));
+          json = serialize();
+        }
+        return json;
+      };
+
       const write = (): boolean => {
         try {
-          storage?.setItem(
-            ROUTE_CACHE_KEY,
-            JSON.stringify({ entries: Object.fromEntries(entries) }),
-          );
+          storage?.setItem(ROUTE_CACHE_KEY, fitted());
           return true;
         } catch {
           return false;
@@ -159,21 +202,34 @@ export class RouteLookup extends Context.Service<
         if (!write()) persistent = false;
       };
 
-      /** 읽기로 바뀐 `usedAt`은 같은 틱 안에서 한 번에 모아 저장한다(구간이 많아도 쓰기는 한 번). */
+      /** 기다리던 변경이 있으면 지금 저장한다. 예약된 저장이 나중에 와도 할 일이 없다. */
+      const flush = () => {
+        if (!dirty) return;
+        dirty = false;
+        persist();
+      };
+
+      /**
+       * 캐시 변경(읽기로 바뀐 `usedAt`, 새로 받은 구간)을 모아 `schedule`이 정한 때에 한 번 저장한다.
+       * 구간을 받을 때마다 캐시 문서 전체를 다시 쓰지 않는다.
+       */
       const persistSoon = () => {
-        if (!persistent || flushQueued) return;
-        flushQueued = true;
-        queueMicrotask(() => {
-          flushQueued = false;
-          persist();
+        if (!persistent) return;
+        dirty = true;
+        if (flushScheduled) return;
+        flushScheduled = true;
+        schedule(() => {
+          flushScheduled = false;
+          flush();
         });
       };
+      options.onLeave?.(flush);
 
       const remember = (key: string, route: RouteResult) => {
         entries.delete(key);
-        entries.set(key, { ...route, usedAt: now().toISOString() });
+        entries.set(key, { ...route, path: roundPath(route.path), usedAt: now().toISOString() });
         if (entries.size > ROUTE_CACHE_MAX) dropOldest(entries.size - ROUTE_CACHE_MAX);
-        persist();
+        persistSoon();
       };
 
       const offline = (cause: unknown) =>
@@ -292,6 +348,10 @@ export class RouteLookup extends Context.Service<
     } catch {
       storage = null;
     }
-    return RouteLookup.layerWith({ fetch: (...args) => globalThis.fetch(...args), storage });
+    return RouteLookup.layerWith({
+      fetch: (...args) => globalThis.fetch(...args),
+      storage,
+      onLeave: listenPageLeave,
+    });
   });
 }

@@ -73,16 +73,17 @@ export function PlannerSheet({ trip, library, dayIndex, plan, onSelectDay }: Pro
   };
   const onPointerUp = (event: PointerEvent<HTMLElement>) => {
     const start = drag.current;
-    drag.current = null; // click이 뒤따르지 않아도 끌기 상태는 여기서 끝낸다
+    // 다른 포인터(두 번째 손가락 등)가 떼어진 것이면 지금 끌기는 그대로 둔다.
     if (start === null || start.pointerId !== event.pointerId) return;
+    drag.current = null; // click이 뒤따르지 않아도 끌기 상태는 여기서 끝낸다
     const dy = event.clientY - start.y;
     if (Math.abs(dy) > DRAG_STEP_PX) {
       skipClick.current = true;
       step(dy < 0 ? 1 : -1);
     }
   };
-  const onPointerCancel = () => {
-    drag.current = null;
+  const onPointerCancel = (event: PointerEvent<HTMLElement>) => {
+    if (drag.current?.pointerId === event.pointerId) drag.current = null;
   };
   const onHandleClick = (event: MouseEvent<HTMLElement>) => {
     // 키보드로 누른 것(`detail === 0`)은 끌기와 상관없이 늘 한 단계 돈다.

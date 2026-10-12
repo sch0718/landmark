@@ -167,6 +167,30 @@ describe('여행에 넣기', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: '여행에 넣기' })).toBeNull());
   });
 
+  it('여행을 두 번 빠르게 눌러도 한 번만 넣고 토스트도 한 번이다', async () => {
+    const user = userEvent.setup();
+    const lib = withTrip(sampleLibrary(), makeTrip({ candidates: [P2] }));
+    const { store } = await renderLibrary(lib, { prefs: LIST });
+
+    await selectRows(user, /중앙시장 닭강정/);
+    await user.click(within(toolbar()).getByRole('button', { name: '여행에 넣기' }));
+    const pick = within(screen.getByRole('dialog', { name: '여행에 넣기' })).getByRole('button', {
+      name: /강릉 여행/,
+    });
+    // 저장이 끝나기 전에 두 번(동기로 연달아) 누른다.
+    act(() => {
+      pick.click();
+      pick.click();
+    });
+
+    await waitFor(() => expect(candidatesOf(store.get(libraryAtom))).toEqual([P2, P1]));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '여행에 넣기' })).toBeNull());
+    const notices = toastMock.mock.calls.filter(
+      ([first]) => first === '1곳을 후보에 넣었어요' || first === '이미 후보에 있어요',
+    );
+    expect(notices).toEqual([['1곳을 후보에 넣었어요']]);
+  });
+
   it('모두 이미 있으면 이미 후보에 있어요로 알린다', async () => {
     const user = userEvent.setup();
     const lib = withTrip(sampleLibrary(), makeTrip({ candidates: [P2, P1] }));

@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { dayColor } from 'src/components/map/map-colors';
 import { setAppRuntimeForTest } from 'src/lib/effect/runtime';
 import { libraryAtom } from 'src/stores/library-state';
-import { splitPreviewAtom } from 'src/stores/trip-planner';
+import { selectedDayAtom, splitPreviewAtom } from 'src/stores/trip-planner';
 import { installMapResources } from '../../components/helpers/map-resources';
 import {
   f,
@@ -108,6 +108,29 @@ describe('순서 정리', () => {
     await waitFor(() => expect(toastMock).toHaveBeenCalledWith('이미 가장 짧은 순서예요'));
     expect(toastMock.mock.calls.some((c) => c[0] === '순서를 정리했어요')).toBe(false);
     expect(trip(store)).toEqual(before);
+  });
+
+  it('저장이 실패하면 `이미 가장 짧은 순서예요`를 띄우지 않는다', async () => {
+    const lib = withTrip(plannerLibrary(), makeTrip({ origin: P1, stops: [[P5, P2]] }));
+    const { storage } = await open(lib);
+    const user = userEvent.setup();
+    // 이제부터 보관함 쓰기는 늘 용량 초과다.
+    const setItem = storage.setItem.bind(storage);
+    let attempts = 0;
+    storage.setItem = (key: string, value: string) => {
+      if (key === 'tripmap:library:v2') {
+        attempts += 1;
+        throw new DOMException('', 'QuotaExceededError');
+      }
+      setItem(key, value);
+    };
+
+    await user.click(screen.getByRole('button', { name: '순서 정리' }));
+    await waitFor(() => expect(attempts).toBeGreaterThan(0));
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    expect(toastMock).not.toHaveBeenCalledWith('이미 가장 짧은 순서예요');
   });
 
   it('고정 시각 순서를 어기고 있으면 거리와 상관없이 바로잡는다', async () => {
@@ -298,6 +321,29 @@ describe('여행 설정', () => {
     expect(screen.getByText('장소를 넣어 보세요')).toBeInTheDocument();
     expect(dayPlaces(store, 0)).toEqual([P1]);
     expect(dayPlaces(store, 1)).toEqual([P2]);
+  });
+
+  it('보던 Day가 기간을 줄여 사라지면 마지막 Day로 옮기고, 다시 늘려도 예전 Day로 넘어가지 않는다', async () => {
+    const lib = withTrip(plannerLibrary(), makeTrip({ days: 3, stops: [[P1]] }));
+    const { store } = await open(lib);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('tab', { name: /^Day 3/ }));
+    expect(store.get(selectedDayAtom)[TRIP]).toBe(2);
+
+    let { dialog } = await settings();
+    setEnd(dialog, '2026-10-23'); // 3일 → 1일
+    await user.click(within(dialog).getByRole('button', { name: '저장' }));
+    await waitFor(() => expect(trip(store).days).toHaveLength(1));
+    await waitFor(() => expect(store.get(selectedDayAtom)[TRIP]).toBe(0));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+
+    ({ dialog } = await settings());
+    setEnd(dialog, '2026-10-25'); // 1일 → 3일
+    await user.click(within(dialog).getByRole('button', { name: '저장' }));
+    await waitFor(() => expect(trip(store).days).toHaveLength(3));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(screen.getByRole('tab', { name: /^Day 1/ })).toHaveAttribute('aria-selected', 'true');
+    expect(store.get(selectedDayAtom)[TRIP]).toBe(0);
   });
 
   it('제목도 여기서 고친다', async () => {

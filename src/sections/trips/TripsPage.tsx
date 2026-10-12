@@ -36,6 +36,8 @@ function TripCard({ trip, library, onMenu }: CardProps) {
   const title = trip.title.value;
   const scheduled = trip.days.reduce((sum, day) => sum + visibleStops(library, day).length, 0);
   const candidates = visibleCandidates(library, trip).length;
+  const period = periodLabel(trip.startDate.value, trip.endDate.value);
+  const counts = `일정 ${scheduled}곳 · 후보 ${candidates}곳`;
   return (
     <Box
       component="li"
@@ -51,7 +53,8 @@ function TripCard({ trip, library, onMenu }: CardProps) {
       <Box
         component={Link}
         to={paths.trip(trip.id)}
-        aria-label={`${title}, ${periodLabel(trip.startDate.value, trip.endDate.value)}`}
+        // 화면의 세 줄(제목·기간·일정/후보 수)을 쉼표로 이어 읽는다.
+        aria-label={`${title}, ${period}, ${counts}`}
         sx={{
           display: 'block',
           minHeight: 44,
@@ -67,12 +70,8 @@ function TripCard({ trip, library, onMenu }: CardProps) {
         <Box component="h3" sx={{ m: 0, fontSize: 16, fontWeight: 800, overflowWrap: 'anywhere' }}>
           {title}
         </Box>
-        <Box sx={{ mt: 0.5, fontSize: 13, color: 'var(--tm-text-secondary)' }}>
-          {periodLabel(trip.startDate.value, trip.endDate.value)}
-        </Box>
-        <Box sx={{ mt: 0.25, fontSize: 13, color: 'var(--tm-text-secondary)' }}>
-          {`일정 ${scheduled}곳 · 후보 ${candidates}곳`}
-        </Box>
+        <Box sx={{ mt: 0.5, fontSize: 13, color: 'var(--tm-text-secondary)' }}>{period}</Box>
+        <Box sx={{ mt: 0.25, fontSize: 13, color: 'var(--tm-text-secondary)' }}>{counts}</Box>
       </Box>
       <Box
         component="button"

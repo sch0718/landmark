@@ -21,11 +21,12 @@ type Props = {
   hasLegs: boolean;
   totals: DaySchedule['totals'];
   oldestQueriedAt: string | null;
-  onLodging(placeId: string, alsoFollowingDays: boolean): void;
+  /** 숙소를 정한다. `placeId`가 null이면 숙소를 뺀다(`숙소 빼기`). */
+  onLodging(placeId: string | null, alsoFollowingDays: boolean): void;
   onRefresh(): void;
 };
 
-/** Day 꼬리: 숙소(또는 `숙소 정하기`), 그날 합계, `<M>월 <D>일 조회 · 다시 계산`. */
+/** Day 꼬리: 숙소(`바꾸기`·`숙소 빼기`, 없으면 `숙소 정하기`), 그날 합계, `<M>월 <D>일 조회 · 다시 계산`. */
 export function DayTail({
   tripId,
   isLastDay,
@@ -71,6 +72,9 @@ export function DayTail({
           </Box>
           <Button size="small" onClick={openPicker} aria-label="숙소 바꾸기" sx={{ minHeight: 44 }}>
             바꾸기
+          </Button>
+          <Button size="small" onClick={() => onLodging(null, false)} sx={{ minHeight: 44 }}>
+            숙소 빼기
           </Button>
         </Box>
       )}

@@ -1,6 +1,6 @@
 import Box from '@mui/material/Box';
 import { useAtomValue, useSetAtom } from 'jotai';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import {
@@ -125,17 +125,25 @@ export function LibraryPage() {
   };
   const clearFilters = () => patch({ ...DEFAULT_QUERY, sort: query.sort });
   // 고른 장소를 기존 여행의 후보에 더한다. 이미 그 여행에 있는 곳은 건너뛰고 새로 넣은 수만 알린다.
+  // 저장이 끝나기 전에 또 누르면(두 번 탭) 무시한다. 토스트가 두 번 뜨지 않게.
+  const addingToTrip = useRef(false);
   const addToTrip = async (tripId: string) => {
-    const ids = selectedIds;
-    const box: { trip?: Trip } = {};
-    const result = await run((lib, ctx) => {
-      const out = addCandidates(lib, tripId, ids, ctx);
-      box.trip = out.ok ? out.lib.trips[tripId] : undefined;
-      return out;
-    });
-    if (!result.ok) return;
-    setPickingTrip(false);
-    toast(candidatesNotice(result.summary?.created ?? 0, box.trip, ids));
+    if (addingToTrip.current) return;
+    addingToTrip.current = true;
+    try {
+      const ids = selectedIds;
+      const box: { trip?: Trip } = {};
+      const result = await run((lib, ctx) => {
+        const out = addCandidates(lib, tripId, ids, ctx);
+        box.trip = out.ok ? out.lib.trips[tripId] : undefined;
+        return out;
+      });
+      if (!result.ok) return;
+      setPickingTrip(false);
+      toast(candidatesNotice(result.summary?.created ?? 0, box.trip, ids));
+    } finally {
+      addingToTrip.current = false;
+    }
   };
   // 지역 칩 하나 → 그 지역의 보관함 장소 전부(다른 필터와 상관없이)를 후보로 새 여행.
   const createRegionTrip = (region: string) =>

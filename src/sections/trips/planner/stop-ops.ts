@@ -1,4 +1,10 @@
-import { insertStop, moveStop, removeCandidate, unscheduleStop } from 'src/domain/trips/ops';
+import {
+  insertStop,
+  moveStop,
+  removeCandidate,
+  setLodging,
+  unscheduleStop,
+} from 'src/domain/trips/ops';
 import type { Library } from 'src/schema/library';
 import { directionParticle } from 'src/sections/trips/planner/format';
 import type { TripOp } from 'src/sections/trips/planner/use-trip-undo';
@@ -15,6 +21,9 @@ export function movedMessage(dayIndex: number): string {
 }
 export const UNSCHEDULED_MESSAGE = '후보로 뺐어요';
 export const REMOVED_MESSAGE = '후보에서 뺐어요';
+/** 숙소 정하기·빼기의 되돌리기 토스트 문구. */
+export const LODGING_SET_MESSAGE = '숙소를 정했어요';
+export const LODGING_CLEARED_MESSAGE = '숙소를 뺐어요';
 
 /** 최신본에서 Day의 Stop 수(끝 자리). */
 function endOf(lib: Library, tripId: string, dayIndex: number): number {
@@ -64,3 +73,16 @@ export const dropCandidate =
   (tripId: string, placeId: string): TripOp =>
   (lib, ctx) =>
     removeCandidate(lib, tripId, placeId, ctx);
+
+/**
+ * Day의 숙소를 정한다(`placeId`가 null이면 뺀다). `alsoFollowingDays`면 그 뒤 Day들도 같은 숙소가 된다.
+ * 여러 Day가 바뀌어도 되돌리기 기록(`diffTrip`)이 Day마다 숙소 필드를 담아 한 번에 되돌린다.
+ */
+export const lodgingOp =
+  (tripId: string, dayIndex: number, placeId: string | null, alsoFollowingDays: boolean): TripOp =>
+  (lib, ctx) =>
+    setLodging(lib, tripId, dayIndex, placeId, alsoFollowingDays, ctx);
+
+/** 숙소 연산의 토스트 문구. */
+export const lodgingMessage = (placeId: string | null) =>
+  placeId === null ? LODGING_CLEARED_MESSAGE : LODGING_SET_MESSAGE;

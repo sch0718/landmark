@@ -245,6 +245,16 @@ describe('후보 행 메뉴', () => {
 // ---------- 끌어 옮기기 ----------
 
 describe('끌어 옮기기(키보드)', () => {
+  it('끌기 손잡이는 한국어 역할 설명(`옮길 수 있는 항목`)을 읽는다', async () => {
+    const lib = withTrip(plannerLibrary(), makeTrip({ stops: [[P1, P5]], candidates: [P2] }));
+    await open(lib);
+    const handles = screen.getAllByRole('button', { name: /끌어 옮기기$/ });
+    expect(handles.length).toBeGreaterThanOrEqual(3);
+    for (const handle of handles) {
+      expect(handle).toHaveAttribute('aria-roledescription', '옮길 수 있는 항목');
+    }
+  });
+
   it('스페이스 → 아래 화살표 → 스페이스로 시간표 안 순서를 바꾼다', async () => {
     stubLayout();
     const lib = withTrip(plannerLibrary(), makeTrip({ stops: [[P1, P5, P2]] }));

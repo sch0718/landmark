@@ -49,6 +49,24 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+type ToastOptions = { duration?: number; action?: { label: string; onClick(): void } };
+
+/** `message`로 띄운 마지막 토스트의 옵션. */
+function lastToast(message: string): ToastOptions {
+  const call = toastMock.mock.calls.findLast((c) => c[0] === message);
+  expect(call, `토스트 '${message}'`).toBeDefined();
+  return (call![1] ?? {}) as ToastOptions;
+}
+
+/** `message` 토스트의 `되돌리기`를 누른다. */
+async function undoLast(message: string) {
+  const options = lastToast(message);
+  expect(options.action?.label).toBe('되돌리기');
+  await act(async () => {
+    options.action!.onClick();
+  });
+}
+
 // ---------- 테스트 ----------
 
 describe('후보 칸', () => {
@@ -158,6 +176,9 @@ describe('구간과 경로 상태', () => {
     expect(href).toMatch(/^nmap:\/\/route\/walk\?slat=37\.75&slng=128\.9&sname=/);
     expect(href).toContain('&dlat=37.75&dlng=128.905&dname=');
     expect(href).toContain('&appname=landmark-c5f.pages.dev');
+    // 앱 주소는 새 탭으로 열지 않는다.
+    expect(link).not.toHaveAttribute('target');
+    expect(link).not.toHaveAttribute('rel');
   });
 
   it('오프라인이면 시간표 위에 한 번 안내하고 구간은 직선 추정', async () => {
@@ -332,6 +353,53 @@ describe('Day 머리와 꼬리', () => {
         P2,
       ]),
     );
+  });
+
+  it('다음 날들도 같은 숙소로 정한 것을 되돌리면 바뀐 Day 모두 이전 숙소로 돌아간다', async () => {
+    const lib = withTrip(plannerLibrary(), makeTrip({ days: 3, stops: [[P1]] }));
+    const { store } = await open(lib);
+    const user = userEvent.setup();
+    const lodgings = () => store.get(libraryAtom).trips[TRIP]!.days.map((d) => d.lodging.value);
+
+    // Day 1만 바다 숙소.
+    await user.click(within(timeline()).getByRole('button', { name: '숙소 정하기' }));
+    await user.click(
+      within(screen.getByRole('dialog', { name: '숙소 정하기' })).getByRole('button', {
+        name: /바다 숙소/,
+      }),
+    );
+    await waitFor(() => expect(lodgings()).toEqual([HOUSE, null, null]));
+    expect(lastToast('숙소를 정했어요').action?.label).toBe('되돌리기');
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '숙소 정하기' })).toBeNull());
+
+    // Day 1부터 끝까지 안목 카페거리.
+    await user.click(within(timeline()).getByRole('button', { name: '숙소 바꾸기' }));
+    const dialog = screen.getByRole('dialog', { name: '숙소 정하기' });
+    await user.click(within(dialog).getByRole('checkbox', { name: '다음 날들도 같은 숙소' }));
+    await user.click(within(dialog).getByRole('button', { name: /안목 카페거리/ }));
+    await waitFor(() => expect(lodgings()).toEqual([P2, P2, P2]));
+
+    await undoLast('숙소를 정했어요');
+    await waitFor(() => expect(lodgings()).toEqual([HOUSE, null, null]));
+  });
+
+  it('숙소 빼기: 그날 숙소를 비우고 되돌릴 수 있다', async () => {
+    const lib = withTrip(
+      plannerLibrary(),
+      makeTrip({ days: 2, stops: [[P1]], lodging: [HOUSE, HOUSE] }),
+    );
+    const { store } = await open(lib);
+    const user = userEvent.setup();
+    const lodgings = () => store.get(libraryAtom).trips[TRIP]!.days.map((d) => d.lodging.value);
+
+    await user.click(within(timeline()).getByRole('button', { name: '숙소 빼기' }));
+    await waitFor(() => expect(lodgings()).toEqual([null, HOUSE]));
+    expect(within(timeline()).getByRole('button', { name: '숙소 정하기' })).toBeInTheDocument();
+    expect(within(timeline()).queryByRole('button', { name: '숙소 빼기' })).toBeNull();
+
+    await undoLast('숙소를 뺐어요');
+    await waitFor(() => expect(lodgings()).toEqual([HOUSE, HOUSE]));
+    expect(within(timeline()).getByRole('button', { name: '숙소 빼기' })).toBeInTheDocument();
   });
 
   it('장소가 0곳인 Day는 안내를 보인다', async () => {
@@ -564,5 +632,12 @@ describe('검토 반영', () => {
     fireEvent.pointerDown(handle, { pointerId: 3, clientY: 400 });
     fireEvent.pointerUp(handle, { pointerId: 3, clientY: 340 });
     expect(sheet).toHaveAttribute('data-snap', 'half');
+
+    // 다른 포인터의 up·cancel은 지금 끌기를 끝내지 않는다.
+    fireEvent.pointerDown(handle, { pointerId: 4, clientY: 400 });
+    fireEvent.pointerUp(handle, { pointerId: 5, clientY: 400 });
+    fireEvent.pointerCancel(handle, { pointerId: 5 });
+    fireEvent.pointerUp(handle, { pointerId: 4, clientY: 300 });
+    expect(sheet).toHaveAttribute('data-snap', 'full');
   });
 });

@@ -4,7 +4,7 @@ import Tabs from '@mui/material/Tabs';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { Fragment, useState } from 'react';
 import { LockIcon } from 'src/components/icons';
-import { setDayStartTime, setLegMode, setLodging } from 'src/domain/trips/ops';
+import { setDayStartTime, setLegMode } from 'src/domain/trips/ops';
 import { dayEndpoints, tripDates, visibleStops } from 'src/domain/trips/query';
 import { formatClock, formatSlack, formatSpan, type PointTime } from 'src/domain/trips/schedule';
 import type { Place } from 'src/schema/library';
@@ -19,6 +19,7 @@ import {
   useDropTarget,
   useStopDrag,
 } from 'src/sections/trips/planner/PlannerDnd';
+import { lodgingMessage, lodgingOp } from 'src/sections/trips/planner/stop-ops';
 import { StopMenu } from 'src/sections/trips/planner/StopMenu';
 import { TripSettingsDialog } from 'src/sections/trips/planner/TripSettingsDialog';
 import {
@@ -26,6 +27,7 @@ import {
   type DayPlan,
   type PlannedLeg,
 } from 'src/sections/trips/planner/use-day-plan';
+import { useTripUndo } from 'src/sections/trips/planner/use-trip-undo';
 import { shortDate } from 'src/sections/trips/trip-dates';
 import { libraryAtom, useLibraryAction } from 'src/stores/library-state';
 import { mapCardAtom } from 'src/stores/trip-planner';
@@ -233,6 +235,8 @@ export function DayTimeline({
 }) {
   const library = useAtomValue(libraryAtom);
   const { run } = useLibraryAction();
+  // 숙소 정하기·빼기는 되돌리기 토스트를 띄운다.
+  const { run: runUndoable } = useTripUndo(trip.id);
   const openCard = useSetAtom(mapCardAtom);
   const day = trip.days[dayIndex]!;
   const { start, end } = dayEndpoints(library, trip, dayIndex);
@@ -322,7 +326,10 @@ export function DayTimeline({
         totals={totals}
         oldestQueriedAt={plan.oldestQueriedAt}
         onLodging={(placeId, alsoFollowing) =>
-          void run((lib, ctx) => setLodging(lib, trip.id, dayIndex, placeId, alsoFollowing, ctx))
+          void runUndoable(
+            lodgingOp(trip.id, dayIndex, placeId, alsoFollowing),
+            lodgingMessage(placeId),
+          )
         }
         onRefresh={plan.refresh}
       />

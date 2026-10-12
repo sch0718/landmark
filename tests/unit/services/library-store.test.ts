@@ -20,6 +20,7 @@ import {
   LibraryStore,
   type LibraryStoreOptions,
 } from 'src/services/library-store';
+import { ROUTE_CACHE_KEY } from 'src/services/route-lookup';
 import { createHeldLocks } from '../../fixtures/fake-locks';
 
 const T0 = '2026-10-08T01:00:00.000Z';
@@ -422,6 +423,52 @@ describe('LibraryStore.update', () => {
         Effect.flip(s.update((lib) => Effect.succeed(setPlaceMemo(lib, P1, '길게', ctx)))),
       );
       expect(error).toBeInstanceOf(StorageQuotaExceeded);
+      expect(storage.getItem(LIBRARY_KEY)).toBe(raw);
+    }),
+  );
+
+  it.effect('quota: drops the disposable route cache and retries the library write once', () =>
+    Effect.gen(function* () {
+      const storage = createMemoryStorage();
+      seed(storage, libraryOf(place(P1)));
+      storage.setItem(ROUTE_CACHE_KEY, '{"entries":{}}');
+      // 경로 캐시가 있는 동안에는 보관함 쓰기가 용량 초과다.
+      const setItem = storage.setItem.bind(storage);
+      let libraryAttempts = 0;
+      storage.setItem = (key: string, value: string) => {
+        if (key === LIBRARY_KEY) {
+          libraryAttempts += 1;
+          if (storage.getItem(ROUTE_CACHE_KEY) !== null)
+            throw new DOMException('', 'QuotaExceededError');
+        }
+        setItem(key, value);
+      };
+      const saved = yield* withStore({ storage }, (s) =>
+        s.update((lib) => Effect.succeed(setPlaceMemo(lib, P1, '길게', ctx))),
+      );
+      expect(saved.places[P1]!.memo.value).toBe('길게');
+      expect(libraryAttempts).toBe(2);
+      expect(storage.getItem(ROUTE_CACHE_KEY)).toBeNull();
+      const stored = JSON.parse(storage.getItem(LIBRARY_KEY)!) as Library;
+      expect(stored.places[P1]!.memo.value).toBe('길게');
+    }),
+  );
+
+  it.effect('quota: still StorageQuotaExceeded when dropping the route cache is not enough', () =>
+    Effect.gen(function* () {
+      const storage = createMemoryStorage();
+      const raw = seed(storage, libraryOf(place(P1)));
+      storage.setItem(ROUTE_CACHE_KEY, '{"entries":{}}');
+      let libraryAttempts = 0;
+      storage.setItem = (key: string) => {
+        if (key === LIBRARY_KEY) libraryAttempts += 1;
+        throw new DOMException('', 'QuotaExceededError');
+      };
+      const error = yield* withStore({ storage }, (s) =>
+        Effect.flip(s.update((lib) => Effect.succeed(setPlaceMemo(lib, P1, '길게', ctx)))),
+      );
+      expect(error).toBeInstanceOf(StorageQuotaExceeded);
+      expect(libraryAttempts).toBe(2);
       expect(storage.getItem(LIBRARY_KEY)).toBe(raw);
     }),
   );

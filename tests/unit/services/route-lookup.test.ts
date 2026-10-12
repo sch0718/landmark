@@ -5,7 +5,12 @@ import { TestClock } from 'effect/testing';
 import { createMemoryStorage } from 'src/repositories/edit-layer-repo';
 import { routeInputKey, type RouteMode, type RouteResult } from 'src/server/route';
 import { RouteLookupError } from 'src/services/errors';
-import { ROUTE_CACHE_KEY, RouteLookup } from 'src/services/route-lookup';
+import {
+  listenPageLeave,
+  ROUTE_CACHE_KEY,
+  ROUTE_PERSIST_DELAY_MS,
+  RouteLookup,
+} from 'src/services/route-lookup';
 
 type Pt = [number, number];
 const A: Pt = [127.0, 37.5];
@@ -37,12 +42,25 @@ const clock = () => {
   return () => new Date((t += 1000));
 };
 
+type RunOptions = {
+  fetch: unknown;
+  storage: Storage | null;
+  base?: string;
+  /** 기본은 마이크로태스크에 저장한다(테스트가 300ms를 기다리지 않게). */
+  schedule?: (flush: () => void) => void;
+  onLeave?: (flush: () => void) => void;
+  maxChars?: number;
+};
+
 const run = <A>(
-  options: { fetch: unknown; storage: Storage | null; base?: string },
+  options: RunOptions,
   use: (lookup: (typeof RouteLookup)['Service']) => Effect.Effect<A, RouteLookupError>,
 ) =>
   Effect.gen(function* () {
-    return yield* use(yield* RouteLookup);
+    const out = yield* use(yield* RouteLookup);
+    // 모아 둔 저장이 끝난 뒤 저장소를 확인한다.
+    yield* settle;
+    return out;
   }).pipe(
     Effect.provide(
       RouteLookup.layerWith({
@@ -50,9 +68,15 @@ const run = <A>(
         storage: options.storage,
         base: options.base,
         now: clock(),
+        schedule: options.schedule ?? ((flush) => queueMicrotask(flush)),
+        onLeave: options.onLeave,
+        maxChars: options.maxChars,
       }),
     ),
   );
+
+/** 마이크로태스크에 예약된 저장이 돌 때까지 기다린다. */
+const settle = Effect.promise(() => new Promise<void>((r) => setTimeout(r, 0)));
 
 const leg = (mode: RouteMode, from: Pt, to: Pt, refresh?: boolean) => (l: RouteLookup['Service']) =>
   l.leg(mode, from, to, refresh === undefined ? undefined : { refresh });
@@ -175,10 +199,12 @@ describe('RouteLookup 캐시', () => {
       yield* run({ fetch: fetchFn, storage }, (l) =>
         Effect.gen(function* () {
           yield* l.leg('car', A, B);
+          yield* settle;
           const before = Object.values(readDoc(storage).entries)[0]?.usedAt ?? '';
+          expect(before).not.toBe('');
           yield* l.leg('car', A, B);
-          // 읽기로 인한 저장은 마이크로태스크로 모아서 한다.
-          yield* Effect.promise(() => Promise.resolve());
+          // 읽기로 인한 저장도 모아서 한다.
+          yield* settle;
           const after = Object.values(readDoc(storage).entries)[0]?.usedAt ?? '';
           expect(after > before).toBe(true);
         }),
@@ -250,11 +276,12 @@ describe('RouteLookup 캐시', () => {
           const first = yield* l.leg('car', A, B);
           const second = yield* l.leg('car', A, B);
           expect(second).toEqual(first);
+          yield* settle;
           // 처음 쓰기는 실패 → 절반 삭제 → 재시도 실패로 두 번 시도하고, 그 뒤로는 저장소에 쓰지 않는다.
           const writesAtFallback = storage.writes;
           expect(writesAtFallback).toBe(2);
           for (const lng of [127.1, 127.2, 127.3]) yield* l.leg('car', A, [lng, 37.5]);
-          yield* Effect.promise(() => Promise.resolve());
+          yield* settle;
           expect(storage.writes).toBe(writesAtFallback);
           return first;
         }),
@@ -318,6 +345,130 @@ describe('RouteLookup 캐시', () => {
       expect(fetchFn).toHaveBeenCalledTimes(1);
     }),
   );
+});
+
+describe('RouteLookup 캐시 저장 공간', () => {
+  /** 예약된 저장을 손으로 돌리는 스케줄러. */
+  const manualSchedule = () => {
+    const queued: (() => void)[] = [];
+    return {
+      schedule: (flush: () => void) => void queued.push(flush),
+      runAll: () => queued.splice(0).forEach((flush) => flush()),
+      get size() {
+        return queued.length;
+      },
+    };
+  };
+  const to = (i: number): Pt => [127.1 + i * 0.01, 37.5];
+
+  it.effect('새로 받은 구간 여러 개를 한 번에 모아 저장한다', () =>
+    Effect.gen(function* () {
+      const storage = new QuotaStorage(Number.MAX_SAFE_INTEGER);
+      const timer = manualSchedule();
+      const fetchFn = vi.fn(async () => json(result()));
+      yield* run({ fetch: fetchFn, storage, schedule: timer.schedule }, (l) =>
+        Effect.gen(function* () {
+          for (const i of [0, 1, 2]) yield* l.leg('car', A, to(i));
+          yield* l.leg('car', A, to(0)); // 캐시 읽기도 같은 저장에 모인다
+          return null;
+        }),
+      );
+      expect(fetchFn).toHaveBeenCalledTimes(3);
+      expect(storage.writes).toBe(0);
+      expect(timer.size).toBe(1);
+      timer.runAll();
+      expect(storage.writes).toBe(1);
+      expect(Object.keys(readDoc(storage).entries)).toHaveLength(3);
+    }),
+  );
+
+  it.effect('기본 지연은 300ms다', () =>
+    Effect.sync(() => {
+      expect(ROUTE_PERSIST_DELAY_MS).toBe(300);
+    }),
+  );
+
+  it.effect('페이지를 떠나면 기다리던 저장을 바로 하고, 예약된 저장은 다시 쓰지 않는다', () =>
+    Effect.gen(function* () {
+      const storage = new QuotaStorage(Number.MAX_SAFE_INTEGER);
+      const timer = manualSchedule();
+      let leave = () => {};
+      const fetchFn = vi.fn(async () => json(result()));
+      yield* run(
+        {
+          fetch: fetchFn,
+          storage,
+          schedule: timer.schedule,
+          onLeave: (flush) => {
+            leave = flush;
+          },
+        },
+        leg('car', A, B),
+      );
+      expect(storage.writes).toBe(0);
+      leave();
+      expect(storage.writes).toBe(1);
+      expect(Object.keys(readDoc(storage).entries)).toHaveLength(1);
+      timer.runAll();
+      expect(storage.writes).toBe(1);
+    }),
+  );
+
+  it.effect('경로선 좌표는 소수 5자리로 줄여 저장한다', () =>
+    Effect.gen(function* () {
+      const storage = createMemoryStorage();
+      const path: Pt[] = [
+        [127.123456789, 37.987654321],
+        [127.000004999, 37.500005001],
+      ];
+      const fetchFn = vi.fn(async () => json(result({ path })));
+      yield* run({ fetch: fetchFn, storage }, leg('car', A, B));
+      const saved = Object.values(readDoc(storage).entries)[0]!;
+      expect(saved.path).toEqual([
+        [127.12346, 37.98765],
+        [127, 37.50001],
+      ]);
+    }),
+  );
+
+  it.effect('문서가 글자 수 한도를 넘으면 오래 안 쓴 것부터 지운다', () =>
+    Effect.gen(function* () {
+      const storage = createMemoryStorage();
+      const entries: StoredDoc['entries'] = {};
+      for (let i = 0; i < 20; i += 1) {
+        entries[routeInputKey({ mode: 'car', from: A, to: to(i) })] = {
+          ...result(),
+          usedAt: new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString(),
+        };
+      }
+      const seed = JSON.stringify({ entries });
+      storage.setItem(ROUTE_CACHE_KEY, seed);
+      const maxChars = Math.floor(seed.length / 2);
+      const fetchFn = vi.fn(async () => json(result()));
+      yield* run({ fetch: fetchFn, storage, maxChars }, leg('car', A, B));
+      const raw = storage.getItem(ROUTE_CACHE_KEY)!;
+      expect(raw.length).toBeLessThanOrEqual(maxChars);
+      const keys = Object.keys(readDoc(storage).entries);
+      expect(keys).toContain(routeInputKey({ mode: 'car', from: A, to: B }));
+      expect(keys).not.toContain(routeInputKey({ mode: 'car', from: A, to: to(0) }));
+      expect(keys).toContain(routeInputKey({ mode: 'car', from: A, to: to(19) }));
+    }),
+  );
+
+  it('listenPageLeave: pagehide와 숨김(visibilitychange)에 flush를 부른다', () => {
+    const flush = vi.fn();
+    listenPageLeave(flush);
+    window.dispatchEvent(new Event('pagehide'));
+    expect(flush).toHaveBeenCalledTimes(1);
+
+    const visibility = vi.spyOn(document, 'visibilityState', 'get');
+    visibility.mockReturnValue('visible');
+    document.dispatchEvent(new Event('visibilitychange'));
+    expect(flush).toHaveBeenCalledTimes(1);
+    visibility.mockReturnValue('hidden');
+    document.dispatchEvent(new Event('visibilitychange'));
+    expect(flush).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe('RouteLookup 동시 요청', () => {

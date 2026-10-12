@@ -4,6 +4,7 @@ import { emptyLibrary, LIBRARY_LIMITS, LibrarySchema, type Library } from 'src/s
 import { safeParse, type Issue } from 'src/schema/parse';
 import { browserStorage } from 'src/services/browser-storage';
 import { LibraryCorrupt, LibraryInvalid, StorageQuotaExceeded } from 'src/services/errors';
+import { ROUTE_CACHE_KEY } from 'src/services/route-lookup';
 
 /** 보관함 문서의 저장 키(스펙 §3). */
 export const LIBRARY_KEY = 'tripmap:library:v2';
@@ -89,17 +90,30 @@ function makeLibraryStore(options: LibraryStoreOptions) {
   const { locks, events } = options;
   const libraryChars = options.limits?.libraryChars ?? LIBRARY_LIMITS.libraryChars;
 
-  /** `storage.setItem`. 용량 초과는 `StorageQuotaExceeded`, 그 밖의 예외는 결함으로 보고한다. */
+  /**
+   * `storage.setItem`. 용량 초과면 버려도 되는 경로 캐시(`tripmap:routes:v1`)를 지우고 한 번 더 쓴다.
+   * 보관함은 사용자의 데이터이고 경로 캐시는 다시 받으면 된다. 그래도 넘치면 `StorageQuotaExceeded`,
+   * 그 밖의 예외는 결함으로 보고한다.
+   */
   const putItem = (key: string, value: string): Effect.Effect<void, StorageQuotaExceeded> =>
     Effect.suspend(() => {
-      try {
-        storage.setItem(key, value);
-        return Effect.void;
-      } catch (error) {
-        return isQuotaError(error)
-          ? Effect.fail(new StorageQuotaExceeded({ bytes: value.length }))
-          : Effect.die(error);
+      const attempt = (): unknown => {
+        try {
+          storage.setItem(key, value);
+          return null;
+        } catch (error) {
+          return error ?? new Error('setItem 실패');
+        }
+      };
+      let error = attempt();
+      if (error !== null && isQuotaError(error) && storage.getItem(ROUTE_CACHE_KEY) !== null) {
+        storage.removeItem(ROUTE_CACHE_KEY);
+        error = attempt();
       }
+      if (error === null) return Effect.void;
+      return isQuotaError(error)
+        ? Effect.fail(new StorageQuotaExceeded({ bytes: value.length }))
+        : Effect.die(error);
     });
 
   /** 원문과 똑같은 값을 가진 기존 백업 키. 없으면 `null`. */

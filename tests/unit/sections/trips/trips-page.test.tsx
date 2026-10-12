@@ -101,6 +101,12 @@ describe('여행 목록', () => {
     expect(screen.getByText('일정 2곳 · 후보 1곳')).toBeInTheDocument();
     expect(screen.getByText('10.30(금) ~ 10.30(금) · 당일')).toBeInTheDocument();
     expect(screen.getByText('일정 0곳 · 후보 0곳')).toBeInTheDocument();
+    // 링크 이름에도 일정/후보 수가 들어간다(aria-label이 가리지 않는다).
+    expect(
+      screen.getByRole('link', {
+        name: '강릉 여행, 10.23(금) ~ 10.25(일) · 2박 3일, 일정 2곳 · 후보 1곳',
+      }),
+    ).toBeInTheDocument();
   });
 
   it('보관함에서 지운 장소는 일정·후보 수에서 뺀다', async () => {

@@ -78,11 +78,19 @@ function NotFound() {
   );
 }
 
-/** 지금 보는 Day. 기간이 줄어 없는 Day를 가리키면 마지막 Day로 본다. */
+/**
+ * 지금 보는 Day. 기간이 줄어 없는 Day를 가리키면 마지막 Day로 보고, 그 값을 저장해 둔다.
+ * 저장하지 않으면 기간을 다시 늘렸을 때 예전의 먼 Day로 갑자기 넘어간다.
+ */
 function useSelectedDay(trip: Trip): [number, (dayIndex: number) => void] {
   const [selected, setSelected] = useAtom(selectedDayAtom);
   const raw = selected[trip.id] ?? 0;
   const dayIndex = Math.min(Math.max(0, raw), trip.days.length - 1);
+  useEffect(() => {
+    if (selected[trip.id] !== undefined && selected[trip.id] !== dayIndex) {
+      setSelected((prev) => ({ ...prev, [trip.id]: dayIndex }));
+    }
+  }, [selected, trip.id, dayIndex, setSelected]);
   const select = (next: number) => setSelected((prev) => ({ ...prev, [trip.id]: next }));
   return [dayIndex, select];
 }
