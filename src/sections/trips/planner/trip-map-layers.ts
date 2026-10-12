@@ -27,6 +27,7 @@ const point = (place: Place) => ({ lng: place.lng, lat: place.lat });
  * - 후보: 이름, 회색
  * - 다른 Day의 Stop: 그 Day 색의 흐린 작은 점(이름 없음)
  * - 경로선: 고른 Day의 구간마다 하나(같은 지점 구간은 없음), 도보는 점선. 경로가 없으면 두 점 직선이다.
+ * - 자동 나누기 미리보기 중(`splitPlan`)이면 후보 핀은 배정될 Day의 색이다.
  * 지도 맞추기는 고른 Day의 Stop·출발점·숙소만 쓴다(후보·다른 Day는 `fit: false`). 그날 장소가 없으면 후보에 맞춘다.
  */
 export function tripMapLayers(
@@ -35,6 +36,7 @@ export function tripMapLayers(
   dayIndex: number,
   legs: PlannedLeg[],
   selectedPlaceId: string | null,
+  splitPlan: string[][] | null = null,
 ): { markers: MapMarker[]; polylines: MapPolyline[] } {
   const color = dayColor(dayIndex);
   const markers: MapMarker[] = [];
@@ -77,12 +79,16 @@ export function tripMapLayers(
     if (end !== null && end.id !== start?.id) endpoint(END_PREFIX, end, '🛏');
   }
 
+  // 미리보기: 후보가 어느 Day로 가는지.
+  const previewDay = new Map<string, number>();
+  splitPlan?.forEach((ids, d) => ids.forEach((id) => previewDay.set(id, d)));
   for (const place of visibleCandidates(lib, trip)) {
+    const target = previewDay.get(place.id);
     push({
       id: place.id,
       ...point(place),
       label: place.name.value,
-      color: NO_CATEGORY_COLOR,
+      color: target === undefined ? NO_CATEGORY_COLOR : dayColor(target),
       textColor: MARKER_TEXT,
       selected: selected(place.id),
       clusterable: false,

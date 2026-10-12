@@ -82,16 +82,17 @@ describe('후보 칸', () => {
     expect(within(panel).getByText('후보 0')).toBeInTheDocument();
   });
 
-  it('이름·지역·대표 라벨 색을 보이고, 뒤 Task의 버튼은 자리만 있다', async () => {
+  it('이름·지역·대표 라벨 색을 보이고, 후보가 있으면 Day 자동 나누기가 켜진다(나머지는 자리만)', async () => {
     const lib = withTrip(plannerLibrary(), makeTrip({ candidates: [P3] }));
     await open(lib);
     const panel = screen.getByRole('region', { name: '후보 칸' });
     const row = within(panel).getByText('속초 횟집').closest('li')!;
     expect(within(row).getByText('속초')).toBeInTheDocument();
     expect(within(row).getByRole('img', { name: '맛집' })).toBeInTheDocument();
-    for (const name of ['보관함에서 더하기', '링크·핀으로 새로 추가', 'Day 자동 나누기']) {
+    for (const name of ['보관함에서 더하기', '링크·핀으로 새로 추가']) {
       expect(within(panel).getByRole('button', { name })).toBeDisabled();
     }
+    expect(within(panel).getByRole('button', { name: 'Day 자동 나누기' })).toBeEnabled();
   });
 });
 

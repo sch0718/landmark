@@ -12,6 +12,7 @@ import { renameTrip, setOrigin, setTripDates, createTrip } from 'src/domain/trip
 import type { OpResult } from 'src/domain/library/ops';
 import { LIBRARY_LIMITS } from 'src/schema/library';
 import { daysBetween } from 'src/schema/trip';
+import { useTripUndo } from 'src/sections/trips/planner/use-trip-undo';
 import { PlacePickerDialog } from 'src/sections/trips/PlacePickerDialog';
 import { addDays } from 'src/sections/trips/trip-dates';
 import { libraryAtom, useLibraryAction } from 'src/stores/library-state';
@@ -81,6 +82,8 @@ export function TripFormDialog({
 }: Props) {
   const library = useAtomValue(libraryAtom);
   const { run } = useLibraryAction();
+  // 고치기는 되돌리기 토스트를 띄운다(기간 변경도 되돌릴 수 있다, 스펙 §2.5). 만들기에서는 쓰지 않는다.
+  const { run: runEdit } = useTripUndo(tripId ?? '');
   const titleId = useId();
 
   const fresh = () => {
@@ -128,12 +131,17 @@ export function TripFormDialog({
   const shrinkNotices: string[] = [];
   if (trip !== undefined && periodError === null) {
     const span = daysBetween(form.startDate, form.endDate);
-    trip.days.forEach((day, index) => {
-      const count = day.stops.value.length;
-      if (index >= span && count > 0) {
-        shrinkNotices.push(`Day ${index + 1}의 ${count}곳은 후보로 돌아가요. 바꿀까요?`);
-      }
-    });
+    // 잘리는 Day 중 장소가 있는 것만: 하나면 `Day 3의 4곳`, 여럿이면 `Day 3~4의 6곳`.
+    const cut = trip.days
+      .map((day, index) => ({ day: index + 1, count: day.stops.value.length }))
+      .filter(({ day, count }) => day > span && count > 0);
+    if (cut.length > 0) {
+      const total = cut.reduce((sum, { count }) => sum + count, 0);
+      const first = cut[0]!.day;
+      const last = cut[cut.length - 1]!.day;
+      const range = first === last ? `Day ${first}` : `Day ${first}~${last}`;
+      shrinkNotices.push(`${range}의 ${total}곳은 후보로 돌아가요. 바꿀까요?`);
+    }
   }
 
   const originName =
@@ -154,14 +162,14 @@ export function TripFormDialog({
         ? await run((lib, ctx) =>
             createTrip(lib, { title, startDate, endDate, origin, candidates }, ctx),
           )
-        : await run((lib, ctx): OpResult => {
+        : await runEdit((lib, ctx): OpResult => {
             // 세 가지를 한 번에 저장한다. 하나라도 거절되면 아무것도 바뀌지 않는다.
             const id = tripId!;
             let out = renameTrip(lib, id, title, ctx);
             if (out.ok) out = setTripDates(out.lib, id, startDate, endDate, ctx);
             if (out.ok) out = setOrigin(out.lib, id, origin, ctx);
             return out;
-          });
+          }, '여행 설정을 바꿨어요');
     setSubmitting(false);
     if (!result.ok) {
       setFailure(rejectionMessage(result.error));

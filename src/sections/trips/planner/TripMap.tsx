@@ -19,17 +19,27 @@ type Props = {
   /** 카드로 보고 있는 장소. 그 핀을 강조한다. */
   cardPlaceId: string | null;
   onOpenCard(placeId: string): void;
+  /** 자동 나누기 미리보기(`plan[d]` = Day d에 둘 장소 id). 후보 핀을 배정될 Day 색으로 칠한다. */
+  splitPlan?: string[][] | null;
 };
 
 /**
  * 계획 화면의 지도(스펙 §2.3). 고른 Day의 번호 핀·경로선, 출발지·숙소 핀, 회색 후보 핀, 다른 Day의 흐린 점을
  * 보인다. Day를 바꾸면(`fitKey`) 그 Day에 맞추고, 지도 밖(시간표 행·후보 행)에서 카드를 열면 그 장소로 옮긴다.
  */
-export function TripMap({ trip, dayIndex, legs, padding, cardPlaceId, onOpenCard }: Props) {
+export function TripMap({
+  trip,
+  dayIndex,
+  legs,
+  padding,
+  cardPlaceId,
+  onOpenCard,
+  splitPlan = null,
+}: Props) {
   const library = useAtomValue(libraryAtom);
   const { markers, polylines } = useMemo(
-    () => tripMapLayers(library, trip, dayIndex, legs, cardPlaceId),
-    [library, trip, dayIndex, legs, cardPlaceId],
+    () => tripMapLayers(library, trip, dayIndex, legs, cardPlaceId, splitPlan),
+    [library, trip, dayIndex, legs, cardPlaceId, splitPlan],
   );
 
   // 카드가 새 장소로 열리면 그 장소로 옮긴다(렌더 중 상태 갱신). 방금 핀을 눌러 연 장소는 이미 보이므로 그대로 둔다.

@@ -13,14 +13,26 @@ type Props = {
   /** 출발점(1일차는 여행 출발지, 그 뒤는 전날 숙소). 없으면 첫 장소에서 출발한다. */
   start: Place | null;
   onStartTime(value: string): void;
+  /** 순서를 바꿀 만큼 장소가 있는가(2곳 이상). 아니면 `순서 정리`는 꺼진다. */
+  canOptimize: boolean;
+  onOptimize(): void;
+  onSettings(): void;
 };
 
 /**
- * Day 머리: 출발 시각 입력, 출발점 이름, `순서 정리`(Task 11에서 동작).
+ * Day 머리: 출발 시각 입력, 출발점 이름, `순서 정리`, `여행 설정`.
  * 출발 시각은 형식이 맞는 값('HH:mm')만 저장하고, 비우거나 틀린 채로 나가면 저장된 값으로 되돌린다.
  * Day가 바뀌면 부른 쪽이 `key`로 새로 만든다.
  */
-export function DayHeader({ dayIndex, startTime, start, onStartTime }: Props) {
+export function DayHeader({
+  dayIndex,
+  startTime,
+  start,
+  onStartTime,
+  canOptimize,
+  onOptimize,
+  onSettings,
+}: Props) {
   // 입력 중인 값. 저장된 값이 바뀌면(저장 성공·다른 탭) 그 값으로 맞춘다.
   const [draft, setDraft] = useState({ base: startTime, value: startTime });
   let value = draft.value;
@@ -88,9 +100,11 @@ export function DayHeader({ dayIndex, startTime, start, onStartTime }: Props) {
           {start === null ? '첫 장소에서 출발' : start.name.value}
         </Box>
       </Box>
-      {/* Task 11에서 동작한다. */}
-      <Button size="small" disabled sx={{ minHeight: 44 }}>
+      <Button size="small" disabled={!canOptimize} onClick={onOptimize} sx={{ minHeight: 44 }}>
         순서 정리
+      </Button>
+      <Button size="small" onClick={onSettings} sx={{ minHeight: 44 }}>
+        여행 설정
       </Button>
     </Box>
   );

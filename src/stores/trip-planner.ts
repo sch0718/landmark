@@ -1,4 +1,5 @@
 import { atom, type PrimitiveAtom } from 'jotai';
+import type { Trip } from 'src/schema/trip';
 import type { RouteResult } from 'src/server/route';
 import type { RouteLookupErrorCode } from 'src/services/errors';
 
@@ -15,11 +16,12 @@ export const mapCardAtom: PrimitiveAtom<{ tripId: string; placeId: string } | nu
   placeId: string;
 } | null>(null);
 
-/** Day 자동 나누기 미리보기. `plan[d]`는 Day d에 둘 장소 id들. */
-export const splitPreviewAtom: PrimitiveAtom<{ tripId: string; plan: string[][] } | null> = atom<{
-  tripId: string;
-  plan: string[][];
-} | null>(null);
+/**
+ * Day 자동 나누기 미리보기. `plan[d]`는 Day d에 둘 장소 id들, `base`는 미리보기를 만든 때의 여행이다.
+ * 여행이 `base`와 다른 객체가 되면(다른 편집·다른 탭) 미리보기는 낡은 것이라 닫는다.
+ */
+export type SplitPreview = { tripId: string; plan: string[][]; base: Trip };
+export const splitPreviewAtom: PrimitiveAtom<SplitPreview | null> = atom<SplitPreview | null>(null);
 
 /**
  * 구간 경로 조회 결과. 키는 `routeInputKey`(수단·좌표 소수 5자리)라 여행과 상관없이 같은 구간이면 함께 쓴다.

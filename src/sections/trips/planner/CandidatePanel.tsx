@@ -10,6 +10,11 @@ import { regionsByPlace } from 'src/domain/library/region';
 import { visibleCandidates } from 'src/domain/trips/query';
 import type { Label, Place } from 'src/schema/library';
 import type { Trip } from 'src/schema/trip';
+import {
+  AutoSplitPreview,
+  useSplitPlan,
+  useStartAutoSplit,
+} from 'src/sections/trips/planner/AutoSplitPreview';
 import { labelColors } from 'src/sections/library/label-style';
 import { placeLabels } from 'src/sections/library/place-labels';
 import { objectParticle } from 'src/sections/trips/planner/format';
@@ -144,7 +149,8 @@ type Props = {
 /**
  * 후보 칸(스펙 §2.3): 여행 제목·기간, `후보 N`, 후보 행(이름·지역·대표 라벨 색, `＋`로 지금 Day 끝에 넣기, 행 메뉴).
  * 후보 행은 끌어서 시간표의 자리·Day 탭에 놓을 수 있고, 시간표 행을 이 칸에 놓으면 후보로 뺀다.
- * 아래의 `보관함에서 더하기`·`링크·핀으로 새로 추가`·`Day 자동 나누기`는 Task 12·13에서 동작한다(지금은 비활성).
+ * `Day 자동 나누기`는 후보가 있으면 켜지고, 누르면 목록 자리에 미리보기(`적용`·`취소`)를 보인다.
+ * `보관함에서 더하기`·`링크·핀으로 새로 추가`는 Task 13에서 동작한다(지금은 비활성).
  */
 export function CandidatePanel({ trip, dayIndex, onCollapse, fill = true }: Props) {
   const library = useAtomValue(libraryAtom);
@@ -158,6 +164,8 @@ export function CandidatePanel({ trip, dayIndex, onCollapse, fill = true }: Prop
     kind: 'candidates',
   });
   const stopOver = isOver && dragging?.kind === 'stop';
+  const splitPlan = useSplitPlan(trip);
+  const startSplit = useStartAutoSplit(trip);
 
   const { candidates, regions, labelById } = useMemo(() => {
     const places = visibleCandidates(library, trip);
@@ -215,7 +223,9 @@ export function CandidatePanel({ trip, dayIndex, onCollapse, fill = true }: Prop
           borderTop: '1px solid var(--tm-border)',
         }}
       >
-        {candidates.length === 0 ? (
+        {splitPlan !== null ? (
+          <AutoSplitPreview trip={trip} plan={splitPlan} />
+        ) : candidates.length === 0 ? (
           <Box sx={{ px: 2, py: 4, textAlign: 'center', color: 'var(--tm-text-muted)' }}>
             후보가 없어요
           </Box>
@@ -241,7 +251,7 @@ export function CandidatePanel({ trip, dayIndex, onCollapse, fill = true }: Prop
           </Box>
         )}
       </Box>
-      {/* Task 12·13에서 동작한다. */}
+      {/* 위 두 버튼은 Task 13에서 동작한다. */}
       <Box
         sx={{
           flex: 'none',
@@ -258,7 +268,12 @@ export function CandidatePanel({ trip, dayIndex, onCollapse, fill = true }: Prop
         <Button variant="outlined" disabled sx={{ minHeight: 44, textTransform: 'none' }}>
           링크·핀으로 새로 추가
         </Button>
-        <Button variant="outlined" disabled sx={{ minHeight: 44, textTransform: 'none' }}>
+        <Button
+          variant="outlined"
+          disabled={candidates.length === 0 || splitPlan !== null}
+          onClick={startSplit}
+          sx={{ minHeight: 44, textTransform: 'none' }}
+        >
           Day 자동 나누기
         </Button>
       </Box>

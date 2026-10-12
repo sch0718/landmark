@@ -14,6 +14,7 @@ import type { Trip } from 'src/schema/trip';
 import { PlaceDetail } from 'src/sections/place/PlaceDetail';
 import { DETAIL_WIDTH, LIST_WIDTH } from 'src/sections/shell/pane-widths';
 import { useLayout } from 'src/sections/shell/use-layout';
+import { useCloseStaleSplit, useSplitPlan } from 'src/sections/trips/planner/AutoSplitPreview';
 import { CandidatePanel } from 'src/sections/trips/planner/CandidatePanel';
 import { DayTabs, DayTimeline } from 'src/sections/trips/planner/DayTimeline';
 import { MapCard } from 'src/sections/trips/planner/MapCard';
@@ -236,6 +237,8 @@ function Planner({ trip, library }: { trip: Trip; library: Library }) {
   // 화면을 떠나면 카드를 닫는다(다시 들어왔을 때 옛 카드가 떠 있지 않게).
   useEffect(() => () => setCard(null), [setCard]);
   useHiddenPlaceToast(library, trip);
+  useCloseStaleSplit(trip);
+  const splitPlan = useSplitPlan(trip);
 
   const compact = layout === 'compact';
   const medium = layout === 'medium';
@@ -248,6 +251,7 @@ function Planner({ trip, library }: { trip: Trip; library: Library }) {
         padding={padding}
         cardPlaceId={cardPlaceId}
         onOpenCard={openCard}
+        splitPlan={splitPlan}
       />
       {plan.offline && <OfflineNotice rightInset={medium ? DETAIL_WIDTH : 0} />}
       {extra}
