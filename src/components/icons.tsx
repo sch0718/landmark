@@ -27,6 +27,9 @@ import SunIcon from '~icons/lucide/sun';
 import MoonIcon from '~icons/lucide/moon';
 import MonitorIcon from '~icons/lucide/monitor';
 import ShareIcon from '~icons/lucide/share-2';
+import LockIcon from '~icons/lucide/lock';
+import PanelLeftCloseIcon from '~icons/lucide/panel-left-close';
+import PanelLeftOpenIcon from '~icons/lucide/panel-left-open';
 
 // 라벨 아이콘 허용 목록(`LABEL_ICONS`). 번들러가 정적으로 찾도록 하나씩 import한다.
 import UtensilsGlyph from '~icons/lucide/utensils';
@@ -92,6 +95,9 @@ export {
   MoonIcon,
   MonitorIcon,
   ShareIcon,
+  LockIcon,
+  PanelLeftCloseIcon,
+  PanelLeftOpenIcon,
 };
 
 type IconComponent = ComponentType<SVGProps<SVGSVGElement>>;

@@ -111,14 +111,18 @@ export function formatClock(min: number): string {
   return total >= DAY_MIN ? `다음 날 ${clock}` : clock;
 }
 
+/** 분 길이: 12 → '12분', 60 → '1시간', 80 → '1시간 20분'. 음수는 절댓값, NaN은 0분. */
+export function formatSpan(min: number): string {
+  const abs = Number.isFinite(min) ? Math.round(Math.abs(min)) : 0;
+  const hours = Math.floor(abs / 60);
+  const rest = abs % 60;
+  if (hours === 0) return `${rest}분`;
+  if (rest === 0) return `${hours}시간`;
+  return `${hours}시간 ${rest}분`;
+}
+
 /** 40 → '여유 40분', -80 → '늦음 1시간 20분'. */
 export function formatSlack(slackMin: number): string {
   const abs = Number.isFinite(slackMin) ? Math.round(Math.abs(slackMin)) : 0;
-  const hours = Math.floor(abs / 60);
-  const rest = abs % 60;
-  let span: string;
-  if (hours === 0) span = `${rest}분`;
-  else if (rest === 0) span = `${hours}시간`;
-  else span = `${hours}시간 ${rest}분`;
-  return `${slackMin < 0 && abs > 0 ? '늦음' : '여유'} ${span}`;
+  return `${slackMin < 0 && abs > 0 ? '늦음' : '여유'} ${formatSpan(slackMin)}`;
 }
