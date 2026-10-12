@@ -9,6 +9,8 @@ import { RouteLookupError, type RouteLookupErrorCode } from 'src/services/errors
 export const ROUTE_CACHE_KEY = 'tripmap:routes:v1';
 /** 캐시에 둘 수 있는 구간 수. 넘으면 `usedAt`이 오래된 것부터 지운다. */
 export const ROUTE_CACHE_MAX = 500;
+/** 클라이언트가 응답을 기다리는 최대 시간(ms). 서버 시한 8초보다 길다. */
+export const ROUTE_TIMEOUT_MS = 12_000;
 /** 동시에 서버에 보내는 경로 요청 수. 넘으면 대기열에서 차례를 기다린다. */
 export const ROUTE_MAX_CONCURRENT = 4;
 
@@ -185,13 +187,23 @@ export class RouteLookup extends Context.Service<
 
       const request = Effect.fnUntraced(function* (mode: RouteMode, from: LngLat, to: LngLat) {
         const path = `/api/route?mode=${mode}&from=${coordinate(from)}&to=${coordinate(to)}`;
-        const response = yield* Effect.tryPromise({
-          try: () => options.fetch(`${base}${path}`),
-          catch: (e) => e,
-        }).pipe(Effect.catch(offline));
-        const text = yield* Effect.tryPromise({ try: () => response.text(), catch: (e) => e }).pipe(
-          Effect.catch(offline),
+        // 서버 시한(8초)보다 조금 길게 기다리고, 그래도 안 오면 중단한다. 중단하면 대기 칸과 진행 중 표가 풀린다.
+        const response = yield* Effect.gen(function* () {
+          const res = yield* Effect.tryPromise({
+            try: (signal) => options.fetch(`${base}${path}`, { signal }),
+            catch: (e) => e,
+          }).pipe(Effect.catch(offline));
+          const body = yield* Effect.tryPromise({ try: () => res.text(), catch: (e) => e }).pipe(
+            Effect.catch(offline),
+          );
+          return { status: res.status, ok: res.ok, text: body };
+        }).pipe(
+          Effect.timeoutOrElse({
+            duration: ROUTE_TIMEOUT_MS,
+            orElse: () => Effect.fail(new RouteLookupError({ code: 'TIMEOUT' })),
+          }),
         );
+        const text = response.text;
         let body: unknown;
         try {
           body = JSON.parse(text);

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, vi } from 'vitest';
 import { it } from '@effect/vitest';
-import { Effect } from 'effect';
+import { Effect, Fiber } from 'effect';
+import { TestClock } from 'effect/testing';
 import { createMemoryStorage } from 'src/repositories/edit-layer-repo';
 import { routeInputKey, type RouteMode, type RouteResult } from 'src/server/route';
 import { RouteLookupError } from 'src/services/errors';
@@ -98,6 +99,7 @@ describe('RouteLookup 요청', () => {
       expect(fetchFn).toHaveBeenCalledTimes(1);
       expect(fetchFn).toHaveBeenCalledWith(
         'https://x.test/api/route?mode=car&from=127.00000,37.50000&to=127.05000,37.52000',
+        { signal: expect.any(AbortSignal) },
       );
     }),
   );
@@ -248,11 +250,17 @@ describe('RouteLookup 캐시', () => {
           const first = yield* l.leg('car', A, B);
           const second = yield* l.leg('car', A, B);
           expect(second).toEqual(first);
+          // 처음 쓰기는 실패 → 절반 삭제 → 재시도 실패로 두 번 시도하고, 그 뒤로는 저장소에 쓰지 않는다.
+          const writesAtFallback = storage.writes;
+          expect(writesAtFallback).toBe(2);
+          for (const lng of [127.1, 127.2, 127.3]) yield* l.leg('car', A, [lng, 37.5]);
+          yield* Effect.promise(() => Promise.resolve());
+          expect(storage.writes).toBe(writesAtFallback);
           return first;
         }),
       );
       expect(got).toEqual(result());
-      expect(fetchFn).toHaveBeenCalledTimes(1);
+      expect(fetchFn).toHaveBeenCalledTimes(4);
       expect(storage.items.has(ROUTE_CACHE_KEY)).toBe(false);
     }),
   );
@@ -287,18 +295,27 @@ describe('RouteLookup 캐시', () => {
     Effect.gen(function* () {
       const storage = createMemoryStorage();
       const good = routeInputKey({ mode: 'car', from: A, to: B });
+      const other: Pt = [127.2, 37.5];
+      const bad = routeInputKey({ mode: 'car', from: A, to: other });
       storage.setItem(
         ROUTE_CACHE_KEY,
         JSON.stringify({
           entries: {
             [good]: { ...result(), usedAt: '2026-10-01T00:00:00.000Z' },
-            'car:bad': { distanceM: 'x' },
+            // 요청하는 키 아래에 모양이 틀린 값이 있다: 검증이 없으면 이 값이 그대로 나온다.
+            [bad]: { distanceM: 'x', usedAt: '2026-10-01T00:00:00.000Z' },
           },
         }),
       );
-      const fetchFn = vi.fn(async () => json(result()));
-      yield* run({ fetch: fetchFn, storage }, leg('car', A, B));
-      expect(fetchFn).not.toHaveBeenCalled();
+      const fetchFn = vi.fn(async () => json(result({ durationS: 777 })));
+      const [kept, refetched] = yield* run({ fetch: fetchFn, storage }, (l) =>
+        Effect.gen(function* () {
+          return [yield* l.leg('car', A, B), yield* l.leg('car', A, other)] as const;
+        }),
+      );
+      expect(kept).toEqual(result());
+      expect(refetched.durationS).toBe(777);
+      expect(fetchFn).toHaveBeenCalledTimes(1);
     }),
   );
 });
@@ -315,6 +332,22 @@ describe('RouteLookup 동시 요청', () => {
       );
       expect(fetchFn).toHaveBeenCalledTimes(1);
       expect(a).toEqual(b);
+    }),
+  );
+
+  it.effect('refresh 호출도 진행 중인 같은 키 요청에 합쳐진다', () =>
+    Effect.gen(function* () {
+      const fetchFn = vi.fn(async () => {
+        await new Promise((r) => setTimeout(r, 5));
+        return json(result());
+      });
+      const [plain, refreshed] = yield* run({ fetch: fetchFn, storage: null }, (l) =>
+        Effect.all([l.leg('car', A, B), l.leg('car', A, B, { refresh: true })], {
+          concurrency: 'unbounded',
+        }),
+      );
+      expect(fetchFn).toHaveBeenCalledTimes(1);
+      expect(refreshed).toEqual(plain);
     }),
   );
 
@@ -425,6 +458,41 @@ describe('RouteLookup 오류', () => {
       const error = yield* run({ fetch: fetchFn, storage }, leg('car', A, B)).pipe(Effect.flip);
       expect(error.code).toBe('UPSTREAM_ERROR');
       expect(storage.getItem(ROUTE_CACHE_KEY)).toBeNull();
+    }),
+  );
+
+  it.effect('12초 안에 응답이 없으면 TIMEOUT이고, 대기 칸과 진행 중 표가 풀린다', () =>
+    Effect.gen(function* () {
+      const fetchFn = vi
+        .fn()
+        .mockImplementation(() => new Promise<Response>(() => {})) // 응답이 오지 않는다
+        .mockImplementationOnce(() => new Promise<Response>(() => {}))
+        .mockImplementationOnce(() => new Promise<Response>(() => {}))
+        .mockImplementationOnce(() => new Promise<Response>(() => {}))
+        .mockImplementationOnce(() => new Promise<Response>(() => {}))
+        .mockImplementationOnce(async () => json(result()));
+      const targets: Pt[] = Array.from({ length: 4 }, (_, i) => [127.02 + i * 0.01, 37.5]);
+      const outcome = yield* run({ fetch: fetchFn, storage: null }, (l) =>
+        Effect.gen(function* () {
+          const hung = yield* Effect.all(
+            targets.map((t) => Effect.flip(l.leg('car', A, t)).pipe(Effect.forkChild)),
+          );
+          for (let i = 0; i < 5; i += 1) yield* Effect.yieldNow;
+          expect(fetchFn).toHaveBeenCalledTimes(4);
+          yield* TestClock.adjust('11999 millis');
+          expect(hung[0]?.pollUnsafe()).toBeUndefined();
+          yield* TestClock.adjust('1 millis');
+          const errors = yield* Effect.all(hung.map((f) => Fiber.join(f)));
+          // 같은 키를 다시 부르면 진행 중 표에 남아 있지 않아 새로 요청한다.
+          const retry = yield* l.leg('car', A, targets[0] as Pt);
+          return { codes: errors.map((e) => e.code), retry };
+        }).pipe(
+          Effect.catch((e) => (e instanceof RouteLookupError ? Effect.fail(e) : Effect.die(e))),
+        ),
+      );
+      expect(outcome.codes).toEqual(['TIMEOUT', 'TIMEOUT', 'TIMEOUT', 'TIMEOUT']);
+      expect(outcome.retry).toEqual(result());
+      expect(fetchFn).toHaveBeenCalledTimes(5);
     }),
   );
 
