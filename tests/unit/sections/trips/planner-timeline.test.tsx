@@ -128,6 +128,38 @@ describe('구간과 경로 상태', () => {
     expect(within(failed).queryByText('경로를 못 가져왔어요')).not.toBeInTheDocument();
   });
 
+  it('구간 행의 `네이버 지도로 길찾기`: 넓은 화면은 웹 길찾기 주소', async () => {
+    const routes = fakeRoutes(() => route(12, 1100));
+    await open(withTrip(plannerLibrary(), makeTrip({ stops: [[P1, P2]] })), { routes });
+    const row = legRow('중앙시장 닭강정', '안목 카페거리');
+    const link = within(row).getByRole('link', { name: '네이버 지도로 길찾기' });
+    expect(link.getAttribute('href')).toMatch(
+      /^https:\/\/map\.naver\.com\/p\/directions\/128\.9,37\.75,.+,,SIMPLE_POI\/128\.947,37\.772,.+,,SIMPLE_POI\/-\/car$/,
+    );
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'));
+  });
+
+  it('구간 행의 `네이버 지도로 길찾기`: 좁은 화면은 nmap:// 앱 주소(수단 반영)', async () => {
+    const routes = fakeRoutes(() => route(12, 1100));
+    // P1 → P5는 약 440m라 자동 도보.
+    await open(withTrip(plannerLibrary(), makeTrip({ stops: [[P1, P5]] })), {
+      routes,
+      width: 375,
+    });
+    const user = userEvent.setup();
+    await user.click(
+      within(screen.getByRole('region', { name: '일정 시트' })).getByRole('tab', { name: 'Day 1' }),
+    );
+    const link = within(legRow('중앙시장 닭강정', '창가 자리')).getByRole('link', {
+      name: '네이버 지도로 길찾기',
+    });
+    const href = link.getAttribute('href')!;
+    expect(href).toMatch(/^nmap:\/\/route\/walk\?slat=37\.75&slng=128\.9&sname=/);
+    expect(href).toContain('&dlat=37.75&dlng=128.905&dname=');
+    expect(href).toContain('&appname=landmark-c5f.pages.dev');
+  });
+
   it('오프라인이면 시간표 위에 한 번 안내하고 구간은 직선 추정', async () => {
     // 기본 하네스: 경로 조회가 늘 OFFLINE.
     const lib = withTrip(plannerLibrary(), makeTrip({ stops: [[P1, P2, P5]] }));

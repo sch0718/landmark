@@ -4,7 +4,9 @@ import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import { useState } from 'react';
 import { LabelGlyph } from 'src/components/icons';
+import { useLayout } from 'src/sections/shell/use-layout';
 import { formatDistance, formatDuration } from 'src/sections/trips/planner/format';
+import { naverDirectionsUrl } from 'src/sections/trips/planner/naver-directions';
 import type { PlannedLeg } from 'src/sections/trips/planner/use-day-plan';
 
 const MODE_LABEL = { car: '자동차', walk: '도보' } as const;
@@ -30,6 +32,16 @@ type Props = {
 export function LegRow({ leg, onMode, onRetry }: Props) {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const status = STATUS_TEXT[leg.status];
+  // 좁은 화면은 네이버 지도 앱 주소, 그 밖은 웹 길찾기. 주소를 못 만들면 링크를 숨긴다.
+  const layout = useLayout();
+  const directionsUrl = naverDirectionsUrl(
+    {
+      from: { name: leg.from.name.value, lng: leg.from.lng, lat: leg.from.lat },
+      to: { name: leg.to.name.value, lng: leg.to.lng, lat: leg.to.lat },
+      mode: leg.mode,
+    },
+    layout === 'compact' ? 'app' : 'web',
+  );
   const choose = (mode: 'car' | 'walk') => {
     setAnchor(null);
     if (mode !== leg.mode) onMode(mode);
@@ -95,6 +107,27 @@ export function LegRow({ leg, onMode, onRetry }: Props) {
         <Button size="small" onClick={onRetry} sx={{ minHeight: 44 }}>
           다시 시도
         </Button>
+      )}
+      {directionsUrl !== null && (
+        <Box
+          component="a"
+          href={directionsUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          sx={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            minHeight: 44,
+            px: 1,
+            color: 'var(--tm-accent-main)',
+            textDecoration: 'none',
+            borderRadius: 'var(--tm-radius-md)',
+            '&:hover': { textDecoration: 'underline' },
+            '&:focus-visible': { outline: '2px solid var(--tm-accent-main)', outlineOffset: -2 },
+          }}
+        >
+          네이버 지도로 길찾기
+        </Box>
       )}
       <Menu anchorEl={anchor} open={anchor !== null} onClose={() => setAnchor(null)}>
         <MenuItem
