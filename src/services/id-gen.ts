@@ -3,7 +3,8 @@ import { Context, Layer } from 'effect';
 const ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789';
 // 256 이하의 36 배수 중 가장 큰 값. 이 값 이상의 바이트는 버려서 `% 36` 편향을 없앤다.
 const BYTE_LIMIT = 252;
-const LENGTH = { place: 10, label: 8 } as const;
+const LENGTH = { place: 10, label: 8, trip: 10, stop: 8 } as const;
+export type IdKind = keyof typeof LENGTH;
 
 function randomId(length: number): string {
   let id = '';
@@ -18,8 +19,8 @@ function randomId(length: number): string {
   return id;
 }
 
-/** 무작위 ID. PlaceId는 10자, LabelId는 8자의 영숫자 소문자(스펙 §3). */
-export class IdGen extends Context.Service<IdGen, { next(kind: 'place' | 'label'): string }>()(
+/** 무작위 ID. PlaceId·TripId는 10자, LabelId·TripStopId는 8자의 영숫자 소문자(스펙 §3). */
+export class IdGen extends Context.Service<IdGen, { next(kind: IdKind): string }>()(
   'tripmap/IdGen',
 ) {
   static readonly layer = Layer.succeed(

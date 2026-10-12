@@ -10,6 +10,7 @@ import {
 } from 'src/schema/library';
 import type { EditLayer } from 'src/schema/legacy/edit-layer';
 import type { TripData } from 'src/schema/legacy/trip-data';
+import type { IdKind } from 'src/services/id-gen';
 
 // 옛 여행(TripData + 편집 레이어) → 보관함 변환(스펙 §4.6, §3 중복 규칙).
 // 미리보기와 적용이 같은 계획 함수를 쓰고, 적용 때는 최신 보관함으로 다시 계획해 `semanticKey`로 비교한다.
@@ -212,7 +213,7 @@ export function planLegacyImport(
   source: LegacySource,
   choices: ImportChoices,
   ids: PlannedIds | null,
-  newId: (kind: 'place' | 'label') => string,
+  newId: (kind: IdKind) => string,
   now: string,
 ): ImportPlan {
   const { trip, edit } = source;

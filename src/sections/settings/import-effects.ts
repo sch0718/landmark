@@ -10,12 +10,12 @@ import {
 import { startEffect, startEffectSync } from 'src/lib/effect/runtime';
 import type { Library } from 'src/schema/library';
 import { LegacyImportStale } from 'src/services/errors';
-import { IdGen } from 'src/services/id-gen';
+import { IdGen, type IdKind } from 'src/services/id-gen';
 import { LegacyTripSource } from 'src/services/legacy-trip-source';
 import { LibraryStore } from 'src/services/library-store';
 
 /** 새 장소·라벨 ID를 만든다(미리보기 계산용, 동기). */
-export function mintId(kind: 'place' | 'label'): string {
+export function mintId(kind: IdKind): string {
   return startEffectSync(
     Effect.gen(function* () {
       return (yield* IdGen).next(kind);

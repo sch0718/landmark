@@ -10,7 +10,7 @@ const run = <A>(use: (gen: IdGen['Service']) => A, layer = IdGen.layer) =>
       return use(yield* IdGen);
     }).pipe(Effect.provide(layer)),
   );
-const next = (kind: 'place' | 'label') => run((g) => g.next(kind));
+const next = (kind: 'place' | 'label' | 'trip' | 'stop') => run((g) => g.next(kind));
 
 describe('IdGen', () => {
   it('makes lowercase alphanumeric ids of length 10 (place) and 8 (label)', () => {
@@ -20,6 +20,13 @@ describe('IdGen', () => {
     }
     expect(safeParse(PlaceId, next('place')).success).toBe(true);
     expect(safeParse(LabelId, next('label')).success).toBe(true);
+  });
+
+  it('makes ids of length 10 (trip) and 8 (stop)', () => {
+    for (let i = 0; i < 200; i++) {
+      expect(next('trip')).toMatch(/^[a-z0-9]{10}$/);
+      expect(next('stop')).toMatch(/^[a-z0-9]{8}$/);
+    }
   });
 
   it('does not repeat in a small sample', () => {

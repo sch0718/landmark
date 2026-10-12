@@ -1,16 +1,11 @@
 import { Schema } from 'effect';
 import { IsoDateTime, Lat, Lng, PlaceKey, PublicId } from 'src/schema/common';
 import { LABEL_COLORS } from 'src/schema/label-colors';
+import { FieldSchema, LIBRARY_LIMITS, PlaceId } from 'src/schema/library-base';
+import { checkTrip, TripSchema } from 'src/schema/trip';
 
 // 기존 import 경로가 그대로 동작하도록 다시 내보낸다.
-export { LABEL_COLORS };
-
-export const LIBRARY_LIMITS = {
-  memoChars: 10_000,
-  labelNameChars: 30,
-  /** 직렬화한 JSON의 `String.length` 상한. */
-  libraryChars: 4_000_000,
-} as const;
+export { FieldSchema, LABEL_COLORS, LIBRARY_LIMITS, PlaceId };
 
 export const LABEL_ICONS = [
   'utensils',
@@ -47,9 +42,6 @@ export const LABEL_ICONS = [
   'flag',
 ] as const;
 
-export const PlaceId = Schema.String.check(
-  Schema.isPattern(/^[a-z0-9]{10}$/, { message: 'PlaceId는 영숫자 소문자 10자입니다' }),
-);
 export const LabelId = Schema.String.check(
   Schema.isPattern(/^[a-z0-9]{8}$/, { message: 'LabelId는 영숫자 소문자 8자입니다' }),
 );
@@ -57,10 +49,6 @@ export const LabelColor = Schema.Literals(LABEL_COLORS);
 export const LabelIcon = Schema.Literals(LABEL_ICONS);
 export type LabelColor = typeof LabelColor.Type;
 export type LabelIcon = typeof LabelIcon.Type;
-
-/** 필드 단위 최신값 우선(LWW)을 위한 `{ value, updatedAt }` 묶음. */
-export const FieldSchema = <S extends Schema.Constraint>(schema: S) =>
-  Schema.Struct({ value: schema, updatedAt: IsoDateTime });
 
 export const PlaceSource = Schema.Union([
   Schema.Struct({
@@ -124,8 +112,7 @@ export const LibrarySchema = Schema.Struct({
   // 키는 `Schema.String`으로 받고, 아래 필터에서 `키 === id`를 검사한다(id는 값 스키마가 검증한다).
   places: Schema.Record(Schema.String, PlaceSchema),
   labels: Schema.Record(Schema.String, LabelSchema),
-  /** 3번 하위 프로젝트에서 정의한다. 1번에서는 빈 객체만 허용한다. */
-  trips: Schema.Record(Schema.String, Schema.Never),
+  trips: Schema.Record(Schema.String, TripSchema),
 }).check(
   Schema.makeFilter((library) => {
     const issues: Schema.FilterIssue[] = [];
@@ -138,6 +125,13 @@ export const LibrarySchema = Schema.Struct({
       if (key !== label.id) {
         issues.push({ path: ['labels', key], issue: `키와 id가 다릅니다: ${key}` });
       }
+    }
+    for (const [key, trip] of Object.entries(library.trips)) {
+      if (key !== trip.id) {
+        issues.push({ path: ['trips', key], issue: `키와 id가 다릅니다: ${key}` });
+      }
+      // 묘비인 장소도 참조할 수 있어 `library.places` 전체를 넘긴다.
+      issues.push(...checkTrip(trip, library.places, ['trips', key]));
     }
     const livePlaces = Object.entries(library.places).filter(([, p]) => p.deletedAt === null);
     const liveLabels = Object.entries(library.labels).filter(([, l]) => l.deletedAt === null);

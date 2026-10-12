@@ -17,6 +17,7 @@ import { emptyLibrary, LibrarySchema, type Library, type Place } from 'src/schem
 import { safeParse } from 'src/schema/parse';
 import type { TripData } from 'src/schema/legacy/trip-data';
 import { makeEdit, makeTrip } from '../../../fixtures/builders';
+import type { IdKind } from 'src/services/id-gen';
 
 const T0 = '2026-10-01T00:00:00.000Z';
 const NOW = '2026-10-09T00:00:00.000Z';
@@ -24,8 +25,9 @@ const NO_CHOICES: ImportChoices = { labels: {}, memos: {} };
 const f = <V>(value: V, updatedAt = T0) => ({ value, updatedAt });
 
 let seq = 0;
-const newId = (kind: 'place' | 'label'): string => {
+const newId = (kind: IdKind): string => {
   const n = String(seq++);
+  if (kind !== 'place' && kind !== 'label') throw new Error(`테스트에서 쓰지 않는 종류: ${kind}`);
   return kind === 'place' ? `np${n.padStart(8, '0')}` : `nl${n.padStart(6, '0')}`;
 };
 
