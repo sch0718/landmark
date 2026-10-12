@@ -129,6 +129,17 @@ function applyPeriod(trip: Trip, before: TripPeriod, now: string): Trip {
 
 const dayKey = (d: number) => `day:${d}`;
 
+/** 중간에 새 객체를 만들었어도 모든 필드·Day가 같은 참조면 바뀐 것이 없다. */
+function sameRefs(a: Trip, b: Trip): boolean {
+  if (a === b) return true;
+  const keys = Object.keys(b) as (keyof Trip)[];
+  return (
+    keys.every((k) => k === 'days' || a[k] === b[k]) &&
+    a.days.length === b.days.length &&
+    a.days.every((day, d) => day === b.days[d])
+  );
+}
+
 /** 위치 필드(후보·Day별 Stop)에 있는 장소. 후보, Day 순서다. */
 function placedIds(trip: Trip): string[] {
   return [
@@ -238,10 +249,14 @@ export function revertTrip(lib: Library, change: TripChange, ctx: OpCtx): OpResu
     const candidates = [...next.candidates.value, ...lost];
     next = putField(next, 'candidates', setField(next.candidates, candidates, ctx.now));
   }
+  // 되돌렸다가 복구해 결국 지금과 같은 값이면 지금 필드를 그대로 둔다(시각을 올리지 않는다).
+  if (JSON.stringify(next.candidates.value) === JSON.stringify(trip.candidates.value)) {
+    next = putField(next, 'candidates', trip.candidates);
+  }
 
   return {
     ok: true,
-    lib: next === trip ? lib : { ...lib, trips: { ...lib.trips, [trip.id]: next } },
+    lib: sameRefs(next, trip) ? lib : { ...lib, trips: { ...lib.trips, [trip.id]: next } },
     summary: { created: 0, merged: skipped, restored: 0 },
   };
 }

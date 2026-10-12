@@ -474,6 +474,17 @@ describe('Stop 세부', () => {
     expect(tripOf(c).days[1]!.stops.value[0]!.note).toBe('예약함');
   });
 
+  it('고정 시각 입력을 비우면(빈 문자열) 고정 시각을 지우고, 틀린 형식은 무시한다', () => {
+    const lib = library(trip({ days: [day([stop(1, 3, { fixedTime: '12:00' })]), day(), day()] }));
+    const cleared = tripOf(ok(setStopFixedTime(lib, TRIP, sid(1), '', ctx)));
+    expect(cleared.days[0]!.stops).toEqual({
+      value: [{ ...stop(1, 3), fixedTime: null }],
+      updatedAt: NOW,
+    });
+    const r = setStopFixedTime(lib, TRIP, sid(1), '25:00', ctx);
+    expect(r.ok && r.lib).toBe(lib);
+  });
+
   it('같은 값이면 문서를 그대로 돌려준다', () => {
     const lib = library();
     const r = setStopStay(lib, TRIP, sid(1), 60, ctx);
@@ -504,6 +515,14 @@ describe('setLodging / setDayStartTime', () => {
     expect(t.days[1]!.startTime).toEqual({ value: '10:30', updatedAt: NOW });
   });
 
+  it('출발 시각은 필수라 빈 값·틀린 형식은 무시한다', () => {
+    const lib = library();
+    const empty = setDayStartTime(lib, TRIP, 0, '', ctx);
+    expect(empty.ok && empty.lib).toBe(lib);
+    const bad = setDayStartTime(lib, TRIP, 0, '9:00', ctx);
+    expect(bad.ok && bad.lib).toBe(lib);
+  });
+
   it('모르는 숙소·없는 Day는 NotFound', () => {
     expect(setLodging(library(), TRIP, 0, 'pzzzzzzzzz', false, ctx).ok).toBe(false);
     expect(setLodging(library(), TRIP, 5, pid(1), false, ctx).ok).toBe(false);
@@ -526,6 +545,12 @@ describe('setLegMode', () => {
 
   it('자동 값과 같으면 기록하지 않는다', () => {
     const r = setLegMode(lib, TRIP, pid(1), pid(2), 'car', ctx);
+    expect(r.ok && r.lib).toBe(lib);
+  });
+
+  it('직선 50km를 넘는 구간의 도보 선택은 무시한다', () => {
+    // pid(1)↔pid(8): 경도 0.7도 차이, 직선 약 62km
+    const r = setLegMode(lib, TRIP, pid(1), pid(8), 'walk', ctx);
     expect(r.ok && r.lib).toBe(lib);
   });
 
@@ -756,10 +781,50 @@ describe('되돌리기', () => {
       );
       expect(tripOf(a).candidates.value).toEqual([pid(1), pid(2), pid(4)]);
       const b = ok(setDayStartTime(a, TRIP, 1, '10:00', ctxAt(at(3))));
-      const t = tripOf(ok(revertTrip(b, change, ctxAt(at(4)))));
+      const r = revertTrip(b, change, ctxAt(at(4)));
+      const t = tripOf(ok(r));
       expect(t.days).toHaveLength(2);
       expect(t.candidates.value).toEqual([pid(1), pid(2), pid(4)]);
+      // 값이 그대로면 후보 필드도 그대로(시각을 올리지 않는다).
+      expect(t.candidates).toBe(tripOf(b).candidates);
+      expect(t.candidates.updatedAt).toBe(at(2));
+      expect(r.ok && r.lib).toBe(b);
+      expect(r.ok && r.summary!.merged).toBe(1);
     });
+  });
+
+  it('applyAutoSplit 기록을 되돌리면 여러 Day와 후보가 함께 돌아간다', () => {
+    const lib = library();
+    const { lib: a, change } = record(lib, (l) =>
+      applyAutoSplit(l, TRIP, [[pid(3), pid(1)], [pid(5), pid(4)], [pid(2)]], ctxAt(at(2))),
+    );
+    expect(change.fields.map((x) => x.path)).toEqual([
+      'candidates',
+      { day: 0, field: 'stops' },
+      { day: 1, field: 'stops' },
+      { day: 2, field: 'stops' },
+    ]);
+    const r = revertTrip(a, change, ctxAt(at(3)));
+    const t = tripOf(ok(r));
+    const before = tripOf(lib);
+    expect(t.candidates.value).toEqual(before.candidates.value);
+    expect(t.days.map((d) => d.stops.value)).toEqual(before.days.map((d) => d.stops.value));
+    expect(r.ok && r.summary!.merged).toBe(0);
+  });
+
+  it('기록한 Day가 다른 편집으로 없어졌으면 그 필드는 건너뛴다', () => {
+    const lib = library();
+    // 시각 2: 후보 pid(1)을 Day 3에 넣는다.
+    const { lib: a, change } = record(lib, (l) => insertStop(l, TRIP, pid(1), 2, 0, ctxAt(at(2))));
+    // 시각 3: 다른 편집이 기간을 2일로 줄여 Day 3(pid(1))이 후보로 돌아간다.
+    const b = ok(setTripDates(a, TRIP, '2026-10-20', '2026-10-21', ctxAt(at(3))));
+    const r = revertTrip(b, change, ctxAt(at(4)));
+    const t = tripOf(ok(r));
+    // 후보(시각 3에 바뀜)와 Day 3(없음) 둘 다 건너뛴다.
+    expect(r.ok && r.summary!.merged).toBe(2);
+    expect(t.days).toHaveLength(2);
+    expect(t.candidates).toBe(tripOf(b).candidates);
+    expect(t.candidates.value).toEqual([pid(2), pid(1)]);
   });
 
   it('여행이 없거나 지워졌으면 NotFound', () => {

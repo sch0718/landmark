@@ -408,7 +408,10 @@ export function setStopStay(
   );
 }
 
-/** 고정 시각('HH:mm'). 형식이 틀린 값은 무시한다(입력란이 막는다). */
+/**
+ * 고정 시각('HH:mm'). 빈 문자열(시각 입력란을 비움)은 `null`(고정 해제)로 본다.
+ * 그 밖에 형식이 틀린 값은 무시한다(입력란이 막는다).
+ */
 export function setStopFixedTime(
   lib: Library,
   tripId: string,
@@ -416,10 +419,9 @@ export function setStopFixedTime(
   fixedTime: string | null,
   ctx: OpCtx,
 ): OpResult {
+  const value = fixedTime === '' ? null : fixedTime;
   return updateStop(lib, tripId, stopId, ctx, (s) =>
-    s.fixedTime === fixedTime || (fixedTime !== null && !HHMM.test(fixedTime))
-      ? s
-      : { ...s, fixedTime },
+    s.fixedTime === value || (value !== null && !HHMM.test(value)) ? s : { ...s, fixedTime: value },
   );
 }
 
@@ -461,7 +463,7 @@ export function setLodging(
   });
 }
 
-/** Day 출발 시각('HH:mm'). 형식이 틀린 값은 무시한다(입력란이 막는다). */
+/** Day 출발 시각('HH:mm'). 필수라 빈 값·형식이 틀린 값은 무시한다(입력란이 막는다). */
 export function setDayStartTime(
   lib: Library,
   tripId: string,
