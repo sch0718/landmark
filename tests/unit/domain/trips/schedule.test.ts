@@ -135,20 +135,47 @@ describe('computeSchedule', () => {
     expect(formatClock(r.points[2]?.arriveMin ?? 0)).toBe('다음 날 01:30');
   });
 
-  it('구간 시간은 구간마다 가장 가까운 분으로 반올림해 더한다', () => {
+  it('시계는 초로 누적하고 점마다 한 번만 반올림한다: 31초 구간 네 개', () => {
     const r = computeSchedule({
       startTime: '09:00',
       hasStart: true,
       stops: [
         { stayMin: 0, fixedTime: null },
         { stayMin: 0, fixedTime: null },
+        { stayMin: 0, fixedTime: null },
       ],
-      hasEnd: false,
-      legs: [leg(89), leg(91)], // 1.48분→1, 1.52분→2
+      hasEnd: true,
+      legs: [leg(31), leg(31), leg(31), leg(31)],
     });
-    expect(r.points.map((p) => p.arriveMin)).toEqual([540, 541, 543]);
-    // 합계 초는 반올림하지 않은 값
-    expect(r.totals.travelS).toBe(180);
+    // 31, 62, 93, 124초 → 0.52, 1.03, 1.55, 2.07분
+    expect(r.points.map((p) => p.arriveMin)).toEqual([540, 541, 541, 542, 542]);
+    expect(r.totals.travelS).toBe(124);
+    expect(r.points[4]?.arriveMin).toBe(540 + Math.round(124 / 60));
+  });
+
+  it('29초 구간 열 개: 마지막 도착이 합계 초의 반올림과 맞는다', () => {
+    const stops = Array.from({ length: 9 }, () => ({ stayMin: 0, fixedTime: null }));
+    const r = computeSchedule({
+      startTime: '09:00',
+      hasStart: true,
+      stops,
+      hasEnd: true,
+      legs: Array.from({ length: 10 }, () => leg(29)),
+    });
+    expect(r.totals.travelS).toBe(290);
+    expect(r.points.at(-1)?.arriveMin).toBe(540 + Math.round(290 / 60));
+  });
+
+  it('31초 여덟 구간도 시간표와 합계가 1분 안에서 맞는다', () => {
+    const stops = Array.from({ length: 7 }, () => ({ stayMin: 0, fixedTime: null }));
+    const r = computeSchedule({
+      startTime: '09:00',
+      hasStart: true,
+      stops,
+      hasEnd: true,
+      legs: Array.from({ length: 8 }, () => leg(31)),
+    });
+    expect(r.points.at(-1)?.arriveMin).toBe(540 + Math.round(248 / 60));
   });
 
   it('합계: 통행료 null은 0, 추정이 하나라도 있으면 approximate', () => {
@@ -212,6 +239,22 @@ describe('computeSchedule', () => {
       legs: [],
     });
     expect(r.points[1]?.arriveMin).toBe(540);
+    expect(r.totals.approximate).toBe(true);
+  });
+
+  it('남는 구간은 무시하고 합계에도 넣지 않는다', () => {
+    const r = computeSchedule({
+      startTime: '09:00',
+      hasStart: true,
+      stops: [{ stayMin: 0, fixedTime: null }],
+      hasEnd: false,
+      legs: [
+        leg(600, { distanceM: 500 }),
+        leg(6000, { distanceM: 9999, tollFare: 7000, estimated: true }),
+      ],
+    });
+    expect(r.points.map((p) => p.arriveMin)).toEqual([540, 550]);
+    expect(r.totals).toEqual({ travelS: 600, distanceM: 500, tollFare: 0, approximate: false });
   });
 });
 

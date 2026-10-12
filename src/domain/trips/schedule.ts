@@ -47,43 +47,51 @@ function safeMin(value: number | null): number {
 
 export function computeSchedule(input: ScheduleInput): DaySchedule {
   const { hasStart, hasEnd, stops, legs } = input;
-  const startMin = parseClock(input.startTime) ?? 0;
+  const startSec = (parseClock(input.startTime) ?? 0) * 60;
   const pointCount = (hasStart ? 1 : 0) + stops.length + (hasEnd ? 1 : 0);
   const legCount = Math.max(0, pointCount - 1);
-  // 모자란 구간은 0으로, 남는 구간은 무시해 점과 구간의 짝을 지킨다.
+  // 남는 구간은 무시해 점과 구간의 짝을 지킨다(합계에도 넣지 않는다).
   const usedLegs = legs.slice(0, legCount);
-  // 구간 시간은 구간마다 가장 가까운 분으로 반올림해 더한다(합계 초는 반올림하지 않는다).
-  const legMin = (i: number): number => safeMin((usedLegs[i]?.durationS ?? 0) / 60);
+  // 빠진 구간은 0으로 두되 합계는 어림값으로 표시한다.
+  const missingLeg = usedLegs.length < legCount;
+  const legSec = (i: number): number => {
+    const d = usedLegs[i]?.durationS ?? 0;
+    return Number.isFinite(d) && d > 0 ? d : 0;
+  };
+  // 시계는 초 단위로 누적하고, 점마다 화면에 낼 때만 분으로 반올림한다(구간별 반올림 오차가 쌓이지 않는다).
+  const toMin = (sec: number): number => Math.round(sec / 60) || 0; // -0 방지
 
   const points: PointTime[] = [];
-  let clock = startMin; // 직전 점의 출발 시각
+  let clockSec = startSec; // 직전 점의 출발 시각
   let legIndex = 0;
 
   if (hasStart) {
-    points.push({ arriveMin: startMin, departMin: startMin, slackMin: null });
+    points.push({ arriveMin: toMin(startSec), departMin: toMin(startSec), slackMin: null });
   }
   stops.forEach((stop, i) => {
     // 출발점이 없으면 첫 장소는 이동 없이 startTime에 도착한다.
     const isFirstWithoutStart = !hasStart && i === 0;
-    const arrive = isFirstWithoutStart ? startMin : clock + legMin(legIndex++);
-    const stay = safeMin(stop.stayMin);
+    const arriveSec = isFirstWithoutStart ? startSec : clockSec + legSec(legIndex++);
+    const staySec = safeMin(stop.stayMin) * 60;
     const fixed = parseClock(stop.fixedTime);
-    let depart = arrive + stay;
+    let departSec = arriveSec + staySec;
     let slack: number | null = null;
     if (fixed !== null) {
-      slack = fixed - arrive;
+      // 고정 시각은 같은 날의 HH:mm다. Day 시작보다 이르거나 자정을 넘겨 도착하면 늦음으로 나온다.
+      const fixedSec = fixed * 60;
+      slack = toMin(fixedSec - arriveSec);
       // 여유면 고정 시각까지 기다린 뒤 체류, 늦으면 도착하자마자 체류.
-      depart = (slack >= 0 ? fixed : arrive) + stay;
+      departSec = (fixedSec >= arriveSec ? fixedSec : arriveSec) + staySec;
     }
-    points.push({ arriveMin: arrive, departMin: depart, slackMin: slack });
-    clock = depart;
+    points.push({ arriveMin: toMin(arriveSec), departMin: toMin(departSec), slackMin: slack });
+    clockSec = departSec;
   });
   if (hasEnd) {
-    const arrive = clock + legMin(legIndex++);
-    points.push({ arriveMin: arrive, departMin: arrive, slackMin: null });
+    const arriveSec = clockSec + legSec(legIndex++);
+    points.push({ arriveMin: toMin(arriveSec), departMin: toMin(arriveSec), slackMin: null });
   }
 
-  const totals = { travelS: 0, distanceM: 0, tollFare: 0, approximate: false };
+  const totals = { travelS: 0, distanceM: 0, tollFare: 0, approximate: missingLeg };
   for (const l of usedLegs) {
     totals.travelS += l.durationS;
     totals.distanceM += l.distanceM;
