@@ -174,10 +174,11 @@
   reorderDay(lib, tripId, dayIndex, stopIds: string[], ctx) // 같은 집합이어야 함
   applyAutoSplit(lib, tripId, plan: string[][] /* Day별 전체 placeId 순서 */, ctx) // plan에 들어간 후보는 후보에서 빠짐
   // 되돌리기(스펙 §2.5)
-  export type TripFieldPath = 'title' | 'startDate' | 'endDate' | 'origin' | 'candidates' | 'legModes' | { day: number; field: 'stops' | 'lodging' | 'startTime' };
-  export type TripChange = { tripId: string; fields: { path: TripFieldPath; before: Field<unknown>; after: Field<unknown> }[]; days?: { before: Day[]; after: Day[] } };
-  diffTrip(before: Trip, after: Trip): TripChange // 연산이 startDate·endDate를 바꿨으면 기간 단위(startDate·endDate·days 통째를 `days`에, `fields`에는 넣지 않음), 아니면 Day 필드 단위
-  revertTrip(lib, change: TripChange, ctx) // summary.merged = 건너뛴 필드 수(재사용). 지금 updatedAt === after.updatedAt인 필드만 before 값으로. 결과의 장소 중복은 되돌리지 않은 필드 쪽을 남기고 되돌린 필드에서 뺀다
+  export type TripFieldPath = 'title' | 'origin' | 'candidates' | 'legModes' | { day: number; field: 'stops' | 'lodging' | 'startTime' };
+  export type TripPeriod = { startDate: Field<string>; endDate: Field<string>; days: Day[] }; // 기간 단위: 날짜 두 필드(값·updatedAt)와 Day 배열 전체
+  export type TripChange = { tripId: string; fields: { path: TripFieldPath; before: Field<unknown>; after: Field<unknown> }[]; period?: { before: TripPeriod; after: TripPeriod } };
+  diffTrip(before: Trip, after: Trip): TripChange // 연산이 startDate·endDate를 바꿨으면 `period`에 전후 기간 단위를 담고(`fields`에는 날짜·Day 필드를 넣지 않음), 아니면 Day 필드 단위로 `fields`에
+  revertTrip(lib, change: TripChange, ctx) // summary.merged = 건너뛴 필드 수(재사용, 기간 단위는 1로 셈). 지금 updatedAt === after.updatedAt인 필드만 before 값으로. `period`는 지금 startDate·endDate·모든 Day 필드의 updatedAt이 `period.after`와 모두 같을 때만 `period.before`의 날짜·Day 배열로 함께 쓴다. 결과의 장소 중복은 되돌리지 않은 필드 쪽을 남기고 되돌린 필드에서 뺀다
   ```
 
 - [ ] **Step 1: 실패하는 테스트** — 연산마다 결과 + `LibrarySchema` 통과. 특히: `insertStop`로 후보 → Day, Day → 다른 Day(Stop id 유지), `addCandidates` 중복 건너뛰고 `summary.created`, `insertStop`에 이미 다른 Day에 있는 장소를 후보 칸에서 넣으려 하면 `AlreadyInTrip` 대신 옮김(장소 하나 규칙), `addCandidates`로 Day에 있는 장소를 넣으면 건너뜀, `setTripDates` 줄일 때 후보 복귀·늘릴 때 빈 Day·시작일만 옮기면 내용 유지, 31일 → `TripDatesInvalid`, `setLegMode` 자동 값으로 되돌리면 삭제, `setLodging(…, true)`가 뒤 Day들 모두 바꿈, 입력 불변(원본 객체 그대로). 되돌리기:
@@ -186,6 +187,7 @@
   - 겹친 필드: 연산이 바꾼 `candidates`를 다른 편집이 또 바꿨으면 건너뜀(`summary.merged === 1`)
   - 중복 정리: 후보 X → Day 1 넣기 기록 → 다른 편집이 X를 Day 1 → Day 2로 옮김 → 되돌리기 → X는 Day 2에만 있고(후보에 다시 생기지 않음) 결과가 `LibrarySchema` 통과
   - 기간 변경 되돌리기: 그사이 기간·Day 필드가 모두 그대로면 기간·Day 수·내용 복원; Day 필드가 바뀌었으면 기간·days 모두 건너뜀
+  - 리뷰 반례: 빈 Day 2개로 `10/12~10/13 → 10/20~10/21`과 `10/14~10/15 → 10/20~10/21` 두 기록 → `diffTrip` 결과가 서로 다르고(`period.before` 날짜), 각각 되돌리면 자기 이전 기간(`10/12~10/13` / `10/14~10/15`)으로 돌아감
   - 리뷰 반례: `10/12~10/14`(Day 3) → 줄이기 `10/12~10/13` 기록 → 다른 편집이 Day는 그대로 두고 `10/20~10/21`로 옮김 → 되돌리기 → 기간 `10/20~10/21`·Day 2개 그대로(기간·days 모두 건너뜀, `summary.merged > 0`), 결과가 `LibrarySchema` 통과
 - [ ] **Step 2:** FAIL → **Step 3:** 구현 → **Step 4:** PASS + `yarn typecheck`
 - [ ] **Step 5:** 커밋 `feat(trips): 여행 연산`
