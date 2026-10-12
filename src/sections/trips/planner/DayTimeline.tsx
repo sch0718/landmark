@@ -1,7 +1,7 @@
 import Box from '@mui/material/Box';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
-import { useAtomValue } from 'jotai';
+import { useAtomValue, useSetAtom } from 'jotai';
 import { Fragment } from 'react';
 import { LockIcon } from 'src/components/icons';
 import { setDayStartTime, setLegMode, setLodging } from 'src/domain/trips/ops';
@@ -14,13 +14,12 @@ import { DayTail } from 'src/sections/trips/planner/DayTail';
 import { LegRow } from 'src/sections/trips/planner/LegRow';
 import {
   isSamePointLeg,
-  useDayPlan,
+  type DayPlan,
   type PlannedLeg,
 } from 'src/sections/trips/planner/use-day-plan';
 import { shortDate } from 'src/sections/trips/trip-dates';
 import { libraryAtom, useLibraryAction } from 'src/stores/library-state';
-
-const OFFLINE_NOTICE = '인터넷에 연결되지 않아 이동 시간은 어림값이에요';
+import { mapCardAtom } from 'src/stores/trip-planner';
 
 /** Day 탭: `Day 1 10.24(금)` …. */
 export function DayTabs({
@@ -66,11 +65,14 @@ function StopRow({
   stop,
   place,
   point,
+  onOpen,
 }: {
   number: number;
   stop: Stop;
   place: Place;
   point: PointTime | undefined;
+  /** 행을 누르면 지도 위 카드를 연다. */
+  onOpen(): void;
 }) {
   const late = point?.slackMin !== null && point?.slackMin !== undefined && point.slackMin < 0;
   return (
@@ -103,8 +105,27 @@ function StopRow({
       >
         {number}
       </Box>
-      <Box sx={{ flex: 1, minWidth: 0 }}>
-        <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
+      <Box
+        component="button"
+        type="button"
+        onClick={onOpen}
+        sx={{
+          flex: 1,
+          minWidth: 0,
+          minHeight: 44,
+          display: 'block',
+          p: 0,
+          border: 0,
+          background: 'transparent',
+          color: 'inherit',
+          font: 'inherit',
+          textAlign: 'left',
+          cursor: 'pointer',
+          borderRadius: 'var(--tm-radius-sm)',
+          '&:focus-visible': { outline: '2px solid var(--tm-accent-main)', outlineOffset: 2 },
+        }}
+      >
+        <Box component="span" sx={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
           {point !== undefined && (
             <Box
               component="span"
@@ -118,6 +139,7 @@ function StopRow({
           </Box>
         </Box>
         <Box
+          component="span"
           sx={{
             display: 'flex',
             flexWrap: 'wrap',
@@ -149,13 +171,22 @@ function StopRow({
 }
 
 /**
- * Day 시간표 몸통(스펙 §2.3): 오프라인 안내, 머리(출발 시각·출발점), 장소 행과 구간 행, 꼬리(숙소·합계).
- * 같은 지점 구간(직선 10m 미만)은 계산에는 넣되(0분) 행은 보이지 않는다.
+ * Day 시간표 몸통(스펙 §2.3): 머리(출발 시각·출발점), 장소 행과 구간 행, 꼬리(숙소·합계).
+ * 같은 지점 구간(직선 10m 미만)은 계산에는 넣되(0분) 행은 보이지 않는다. 장소 행을 누르면 지도 위 카드를 연다.
+ * 구간·시각(`plan`)은 계획 화면이 한 번 구해 지도와 함께 쓴다. 오프라인 안내도 계획 화면이 한 번 보인다.
  */
-export function DayTimeline({ trip, dayIndex }: { trip: Trip; dayIndex: number }) {
+export function DayTimeline({
+  trip,
+  dayIndex,
+  plan,
+}: {
+  trip: Trip;
+  dayIndex: number;
+  plan: DayPlan;
+}) {
   const library = useAtomValue(libraryAtom);
   const { run } = useLibraryAction();
-  const plan = useDayPlan(trip.id, dayIndex);
+  const openCard = useSetAtom(mapCardAtom);
   const day = trip.days[dayIndex]!;
   const { start, end } = dayEndpoints(library, trip, dayIndex);
   const stops = visibleStops(library, day);
@@ -178,23 +209,6 @@ export function DayTimeline({ trip, dayIndex }: { trip: Trip; dayIndex: number }
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-      {plan.offline && (
-        <Box
-          role="status"
-          sx={{
-            mx: 2,
-            mt: 1,
-            px: 1.5,
-            py: 1,
-            borderRadius: 'var(--tm-radius-md)',
-            bgcolor: 'var(--tm-bg-raised)',
-            fontSize: 13,
-            color: 'var(--tm-text-secondary)',
-          }}
-        >
-          {OFFLINE_NOTICE}
-        </Box>
-      )}
       <DayHeader
         key={`${trip.id}/${dayIndex}`}
         dayIndex={dayIndex}
@@ -213,6 +227,7 @@ export function DayTimeline({ trip, dayIndex }: { trip: Trip; dayIndex: number }
               stop={stop}
               place={library.places[stop.placeId]!}
               point={points[offset + i]}
+              onOpen={() => openCard({ tripId: trip.id, placeId: stop.placeId })}
             />
           </Fragment>
         ))}

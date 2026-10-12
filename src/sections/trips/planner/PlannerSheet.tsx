@@ -1,12 +1,15 @@
 import Box from '@mui/material/Box';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
+import { useAtomValue } from 'jotai';
 import { useRef, useState, type MouseEvent, type PointerEvent } from 'react';
 import { visibleCandidates } from 'src/domain/trips/query';
 import type { Library } from 'src/schema/library';
 import type { Trip } from 'src/schema/trip';
 import { CandidatePanel } from 'src/sections/trips/planner/CandidatePanel';
 import { DayTimeline } from 'src/sections/trips/planner/DayTimeline';
+import type { DayPlan } from 'src/sections/trips/planner/use-day-plan';
+import { mapCardAtom } from 'src/stores/trip-planner';
 
 export type SheetSnap = 'collapsed' | 'half' | 'full';
 
@@ -14,7 +17,7 @@ export type SheetSnap = 'collapsed' | 'half' | 'full';
 const DRAG_STEP_PX = 24;
 const ORDER: SheetSnap[] = ['collapsed', 'half', 'full'];
 /** 손잡이(44) + 탭 줄(48). 접힘이면 이것만 보인다. */
-const COLLAPSED_PX = 92;
+export const COLLAPSED_PX = 92;
 const HEIGHT: Record<SheetSnap, string> = {
   collapsed: `${COLLAPSED_PX}px`,
   half: '50%',
@@ -25,6 +28,8 @@ type Props = {
   trip: Trip;
   library: Library;
   dayIndex: number;
+  /** 고른 Day의 구간·시각(계획 화면이 지도와 함께 쓴다). */
+  plan: DayPlan;
   onSelectDay(dayIndex: number): void;
 };
 
@@ -32,9 +37,19 @@ type Props = {
  * 좁은 화면의 일정 시트(스펙 §2.3): 지도 위 아래쪽에서 끌어올린다. 높이는 접힘(탭 줄만)·반쯤·거의 전체.
  * 손잡이를 누르면 접힘 → 반쯤 → 거의 전체 → 접힘으로 돌고, 위아래로 끌면 그 방향으로 한 단계 바뀐다.
  * 탭은 `후보 N`, `Day 1`, `Day 2` …이고 내용은 넓은 화면의 후보 칸·시간표와 같다.
+ * 지도 위 카드가 열리면 지도가 보이도록 접는다.
  */
-export function PlannerSheet({ trip, library, dayIndex, onSelectDay }: Props) {
-  const [snap, setSnap] = useState<SheetSnap>('half');
+export function PlannerSheet({ trip, library, dayIndex, plan, onSelectDay }: Props) {
+  const card = useAtomValue(mapCardAtom);
+  // 카드가 열린 채 좁은 화면이 되면(창 줄이기) 접힌 채로 시작한다.
+  const [snap, setSnap] = useState<SheetSnap>(() =>
+    card !== null && card.tripId === trip.id ? 'collapsed' : 'half',
+  );
+  const [seenCard, setSeenCard] = useState(card);
+  if (seenCard !== card) {
+    setSeenCard(card); // 렌더 중 상태 갱신
+    if (card !== null && card.tripId === trip.id) setSnap('collapsed');
+  }
   const [tab, setTab] = useState<'candidates' | 'day'>('candidates');
   // 끄는 중인 포인터. 끌기로 높이를 바꿨으면 뒤따르는 포인터 click 한 번은 무시한다.
   const drag = useRef<{ y: number; pointerId: number } | null>(null);
@@ -162,7 +177,7 @@ export function PlannerSheet({ trip, library, dayIndex, onSelectDay }: Props) {
           (tab === 'candidates' ? (
             <CandidatePanel trip={trip} dayIndex={dayIndex} fill={false} />
           ) : (
-            <DayTimeline trip={trip} dayIndex={dayIndex} />
+            <DayTimeline trip={trip} dayIndex={dayIndex} plan={plan} />
           ))}
       </Box>
     </Box>

@@ -1,7 +1,7 @@
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
-import { useAtomValue } from 'jotai';
+import { useAtomValue, useSetAtom } from 'jotai';
 import { useMemo } from 'react';
 import { PanelLeftCloseIcon, PlusIcon } from 'src/components/icons';
 import { liveLabels } from 'src/domain/library/query';
@@ -15,6 +15,7 @@ import { placeLabels } from 'src/sections/library/place-labels';
 import { objectParticle } from 'src/sections/trips/planner/format';
 import { periodLabel } from 'src/sections/trips/trip-dates';
 import { libraryAtom, useLibraryAction } from 'src/stores/library-state';
+import { mapCardAtom } from 'src/stores/trip-planner';
 
 function CandidateRow({
   place,
@@ -22,12 +23,15 @@ function CandidateRow({
   label,
   dayIndex,
   onAdd,
+  onOpen,
 }: {
   place: Place;
   region: string;
   label: Label | undefined;
   dayIndex: number;
   onAdd(): void;
+  /** 행을 누르면 지도 위 카드를 연다. */
+  onOpen(): void;
 }) {
   const name = place.name.value;
   return (
@@ -57,9 +61,30 @@ function CandidateRow({
           bgcolor: label === undefined ? 'transparent' : labelColors(label.color.value).marker,
         }}
       />
-      <Box sx={{ flex: 1, minWidth: 0 }}>
+      <Box
+        component="button"
+        type="button"
+        onClick={onOpen}
+        sx={{
+          flex: 1,
+          minWidth: 0,
+          minHeight: 44,
+          display: 'block',
+          p: 0,
+          border: 0,
+          background: 'transparent',
+          color: 'inherit',
+          font: 'inherit',
+          textAlign: 'left',
+          cursor: 'pointer',
+          borderRadius: 'var(--tm-radius-sm)',
+          '&:focus-visible': { outline: '2px solid var(--tm-accent-main)', outlineOffset: 2 },
+        }}
+      >
         <Box
+          component="span"
           sx={{
+            display: 'block',
             fontWeight: 700,
             overflow: 'hidden',
             textOverflow: 'ellipsis',
@@ -68,7 +93,12 @@ function CandidateRow({
         >
           {name}
         </Box>
-        <Box sx={{ fontSize: 12, color: 'var(--tm-text-secondary)' }}>{region}</Box>
+        <Box
+          component="span"
+          sx={{ display: 'block', fontSize: 12, color: 'var(--tm-text-secondary)' }}
+        >
+          {region}
+        </Box>
       </Box>
       <IconButton
         aria-label={`${name}${objectParticle(name)} Day ${dayIndex + 1}에 넣기`}
@@ -98,6 +128,7 @@ type Props = {
 export function CandidatePanel({ trip, dayIndex, onCollapse, fill = true }: Props) {
   const library = useAtomValue(libraryAtom);
   const { run } = useLibraryAction();
+  const openCard = useSetAtom(mapCardAtom);
 
   const { candidates, regions, labelById } = useMemo(() => {
     const places = visibleCandidates(library, trip);
@@ -169,6 +200,7 @@ export function CandidatePanel({ trip, dayIndex, onCollapse, fill = true }: Prop
                 label={placeLabels(place, labelById)[0]}
                 dayIndex={dayIndex}
                 onAdd={() => add(place.id)}
+                onOpen={() => openCard({ tripId: trip.id, placeId: place.id })}
               />
             ))}
           </Box>

@@ -1,0 +1,90 @@
+import Box from '@mui/material/Box';
+import { useAtomValue } from 'jotai';
+import { useCallback, useMemo, useState } from 'react';
+import type { MapPadding } from 'src/components/map/MapAdapter';
+import { MapView } from 'src/components/map/MapView';
+import type { Trip } from 'src/schema/trip';
+import { placeIdOfMarker, tripMapLayers } from 'src/sections/trips/planner/trip-map-layers';
+import type { PlannedLeg } from 'src/sections/trips/planner/use-day-plan';
+import { libraryAtom } from 'src/stores/library-state';
+
+type MapFocus = { point: [number, number]; seq: number };
+
+type Props = {
+  trip: Trip;
+  dayIndex: number;
+  /** 고른 Day의 구간(`useDayPlan`). 경로선을 그린다. */
+  legs: PlannedLeg[];
+  padding: MapPadding;
+  /** 카드로 보고 있는 장소. 그 핀을 강조한다. */
+  cardPlaceId: string | null;
+  onOpenCard(placeId: string): void;
+};
+
+/**
+ * 계획 화면의 지도(스펙 §2.3). 고른 Day의 번호 핀·경로선, 출발지·숙소 핀, 회색 후보 핀, 다른 Day의 흐린 점을
+ * 보인다. Day를 바꾸면(`fitKey`) 그 Day에 맞추고, 지도 밖(시간표 행·후보 행)에서 카드를 열면 그 장소로 옮긴다.
+ */
+export function TripMap({ trip, dayIndex, legs, padding, cardPlaceId, onOpenCard }: Props) {
+  const library = useAtomValue(libraryAtom);
+  const { markers, polylines } = useMemo(
+    () => tripMapLayers(library, trip, dayIndex, legs, cardPlaceId),
+    [library, trip, dayIndex, legs, cardPlaceId],
+  );
+
+  // 카드가 새 장소로 열리면 그 장소로 옮긴다(렌더 중 상태 갱신). 방금 핀을 눌러 연 장소는 이미 보이므로 그대로 둔다.
+  const [seen, setSeen] = useState<string | null>(null);
+  const [fromMarker, setFromMarker] = useState<string | null>(null);
+  const [focus, setFocus] = useState<MapFocus | null>(null);
+  if (seen !== cardPlaceId) {
+    setSeen(cardPlaceId);
+    setFromMarker(null);
+    const place = cardPlaceId === null ? undefined : library.places[cardPlaceId];
+    if (place !== undefined && place.deletedAt === null && fromMarker !== cardPlaceId) {
+      setFocus({ point: [place.lng, place.lat], seq: (focus?.seq ?? 0) + 1 });
+    }
+  }
+
+  const onMarkerClick = useCallback(
+    (markerId: string) => {
+      const placeId = placeIdOfMarker(markerId);
+      setFromMarker(placeId);
+      onOpenCard(placeId);
+    },
+    [onOpenCard],
+  );
+
+  const [unavailable, setUnavailable] = useState<string | null>(null);
+
+  return (
+    <Box sx={{ position: 'absolute', inset: 0, bgcolor: 'var(--tm-bg-raised)' }}>
+      <MapView
+        markers={markers}
+        polylines={polylines}
+        padding={padding}
+        onMarkerClick={onMarkerClick}
+        focus={focus}
+        fitKey={`${trip.id}:${dayIndex}`}
+        onUnavailable={setUnavailable}
+      />
+      {unavailable !== null && (
+        <Box
+          role="status"
+          sx={{
+            position: 'absolute',
+            inset: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            p: 3,
+            textAlign: 'center',
+            bgcolor: 'var(--tm-bg-raised)',
+            color: 'var(--tm-text-secondary)',
+          }}
+        >
+          {unavailable}
+        </Box>
+      )}
+    </Box>
+  );
+}
