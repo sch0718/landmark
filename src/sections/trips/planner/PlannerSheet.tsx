@@ -1,7 +1,7 @@
 import Box from '@mui/material/Box';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
-import { useRef, useState, type PointerEvent } from 'react';
+import { useRef, useState, type MouseEvent, type PointerEvent } from 'react';
 import { visibleCandidates } from 'src/domain/trips/query';
 import type { Library } from 'src/schema/library';
 import type { Trip } from 'src/schema/trip';
@@ -36,7 +36,9 @@ type Props = {
 export function PlannerSheet({ trip, library, dayIndex, onSelectDay }: Props) {
   const [snap, setSnap] = useState<SheetSnap>('half');
   const [tab, setTab] = useState<'candidates' | 'day'>('candidates');
-  const drag = useRef<{ y: number; moved: boolean } | null>(null);
+  // 끄는 중인 포인터. 끌기로 높이를 바꿨으면 뒤따르는 포인터 click 한 번은 무시한다.
+  const drag = useRef<{ y: number; pointerId: number } | null>(null);
+  const skipClick = useRef(false);
   const candidateCount = visibleCandidates(library, trip).length;
 
   const step = (direction: 1 | -1) => {
@@ -45,21 +47,33 @@ export function PlannerSheet({ trip, library, dayIndex, onSelectDay }: Props) {
   };
 
   const onPointerDown = (event: PointerEvent<HTMLElement>) => {
-    drag.current = { y: event.clientY, moved: false };
+    drag.current = { y: event.clientY, pointerId: event.pointerId };
+    skipClick.current = false; // 지난 끌기의 표시가 남아 있으면 지운다
+    // 손잡이 밖으로 끌려 나가도 pointerup을 받는다.
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      // 포인터가 이미 사라졌으면 잡지 못해도 괜찮다.
+    }
   };
   const onPointerUp = (event: PointerEvent<HTMLElement>) => {
     const start = drag.current;
-    if (start === null) return;
+    drag.current = null; // click이 뒤따르지 않아도 끌기 상태는 여기서 끝낸다
+    if (start === null || start.pointerId !== event.pointerId) return;
     const dy = event.clientY - start.y;
     if (Math.abs(dy) > DRAG_STEP_PX) {
-      start.moved = true; // 뒤따르는 click은 무시한다
+      skipClick.current = true;
       step(dy < 0 ? 1 : -1);
     }
   };
-  const onHandleClick = () => {
-    const moved = drag.current?.moved === true;
+  const onPointerCancel = () => {
     drag.current = null;
-    if (moved) return;
+  };
+  const onHandleClick = (event: MouseEvent<HTMLElement>) => {
+    // 키보드로 누른 것(`detail === 0`)은 끌기와 상관없이 늘 한 단계 돈다.
+    const skip = skipClick.current && event.detail !== 0;
+    skipClick.current = false;
+    if (skip) return;
     setSnap(ORDER[(ORDER.indexOf(snap) + 1) % ORDER.length]!);
   };
 
@@ -102,6 +116,7 @@ export function PlannerSheet({ trip, library, dayIndex, onSelectDay }: Props) {
         aria-label="시트 높이 바꾸기"
         onPointerDown={onPointerDown}
         onPointerUp={onPointerUp}
+        onPointerCancel={onPointerCancel}
         onClick={onHandleClick}
         sx={{
           flex: 'none',

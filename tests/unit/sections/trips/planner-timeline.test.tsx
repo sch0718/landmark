@@ -1,6 +1,8 @@
-import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, renderHook, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Effect, Layer } from 'effect';
+import { Provider } from 'jotai';
+import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setAppRuntimeForTest } from 'src/lib/effect/runtime';
 import type { Library, Place } from 'src/schema/library';
@@ -8,7 +10,9 @@ import type { Trip } from 'src/schema/trip';
 import type { RouteResult } from 'src/server/route';
 import { RouteLookupError, type RouteLookupErrorCode } from 'src/services/errors';
 import { RouteLookup } from 'src/services/route-lookup';
+import { useDayPlan } from 'src/sections/trips/planner/use-day-plan';
 import { libraryAtom } from 'src/stores/library-state';
+import { selectedDayAtom } from 'src/stores/trip-planner';
 import { makePlace, renderLibrary, sampleLibrary, T0, withPlaces } from '../library/fixtures';
 
 const toastMock = vi.hoisted(() => {
@@ -546,6 +550,129 @@ describe('화면 열기', () => {
     expect(sheet).toHaveAttribute('data-snap', 'collapsed');
     // 접힌 상태에서 탭을 누르면 반쯤 연다.
     await user.click(within(sheet).getByRole('tab', { name: 'Day 2' }));
+    expect(sheet).toHaveAttribute('data-snap', 'half');
+  });
+});
+
+describe('검토 반영', () => {
+  it('Day 2를 고른 채 열면 Day 2의 구간을 Day 1보다 먼저 요청한다', async () => {
+    const routes = fakeRoutes(() => route(10, 1000));
+    const lib = withTrip(
+      plannerLibrary(),
+      makeTrip({
+        stops: [
+          [P5, P2],
+          [P1, P3],
+        ],
+      }),
+    );
+    const { router, store } = await open(lib, { routes, path: '/trips' });
+    expect(routes.calls).toHaveLength(0);
+    store.set(selectedDayAtom, { [TRIP]: 1 });
+    await act(async () => {
+      await router.navigate(`/trips/${TRIP}`);
+    });
+    await waitFor(() => expect(routes.calls).toHaveLength(2));
+    expect(routes.calls[0]).toMatchObject({ from: '중앙시장 닭강정', to: '속초 횟집' });
+    expect(routes.calls[1]).toMatchObject({ from: '창가 자리', to: '안목 카페거리' });
+    expect(screen.getByRole('tab', { name: 'Day 2 10.24(토)' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+  });
+
+  it('인터넷이 돌아오면(online) 연결 실패 구간을 다시 묻고 안내를 거둔다', async () => {
+    let online = false;
+    const routes = fakeRoutes(() => (online ? route(12, 1100) : 'OFFLINE'));
+    const lib = withTrip(plannerLibrary(), makeTrip({ stops: [[P1, P2]] }));
+    await open(lib, { routes });
+    const notice = '인터넷에 연결되지 않아 이동 시간은 어림값이에요';
+    expect(await screen.findByText(notice)).toBeInTheDocument();
+    const before = routes.calls.length;
+
+    online = true;
+    await act(async () => {
+      window.dispatchEvent(new Event('online'));
+    });
+    const leg = legRow('중앙시장 닭강정', '안목 카페거리');
+    expect(await within(leg).findByText('12분 · 1.1km')).toBeInTheDocument();
+    expect(screen.queryByText(notice)).not.toBeInTheDocument();
+    expect(routes.calls.length).toBe(before + 1);
+    expect(routes.calls.at(-1)).toMatchObject({ to: '안목 카페거리', refresh: false });
+  });
+
+  it('useDayPlan은 상관없는 다시 그리기·문서 변경에도 같은 참조를 돌려준다', async () => {
+    const routes = fakeRoutes(() => route(12, 1100));
+    const lib = withTrip(plannerLibrary(), makeTrip({ stops: [[P1, P2]] }));
+    // 앱은 목록에 두고(런타임·보관함 준비), 같은 저장소로 훅만 따로 그린다.
+    const { store } = await open(lib, { routes, path: '/trips' });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <Provider store={store}>{children}</Provider>
+    );
+    const { result, rerender } = renderHook(() => useDayPlan(TRIP, 0), { wrapper });
+    await waitFor(() => expect(result.current.legs[0]?.status).toBe('routed'));
+    const first = result.current;
+
+    rerender();
+    expect(result.current).toBe(first);
+    expect(result.current.legs).toBe(first.legs);
+    expect(result.current.schedule).toBe(first.schedule);
+    expect(result.current.refresh).toBe(first.refresh);
+    expect(result.current.retryLeg).toBe(first.retryLeg);
+
+    // 이 Day와 상관없는 장소(강남 한 곳)의 메모만 바뀐 문서.
+    act(() => {
+      const current = store.get(libraryAtom);
+      const other = current.places['place00004']!;
+      store.set(libraryAtom, {
+        ...current,
+        places: {
+          ...current.places,
+          [other.id]: { ...other, memo: { value: '새 메모', updatedAt: T0 } },
+        },
+      });
+    });
+    expect(result.current.legs).toBe(first.legs);
+    expect(result.current.schedule).toBe(first.schedule);
+
+    // 출발 시각이 바뀌면 시각은 새로 계산하지만 구간은 그대로다.
+    act(() => {
+      const current = store.get(libraryAtom);
+      const trip = current.trips[TRIP]!;
+      const days = trip.days.map((d, i) =>
+        i === 0 ? { ...d, startTime: { value: '10:00', updatedAt: T0 } } : d,
+      );
+      store.set(libraryAtom, { ...current, trips: { [TRIP]: { ...trip, days } } });
+    });
+    expect(result.current.legs).toBe(first.legs);
+    expect(result.current.schedule).not.toBe(first.schedule);
+    expect(result.current.schedule.points[0]!.arriveMin).toBe(600);
+  });
+
+  it('시트 손잡이를 끌면 끈 방향으로 한 단계 바뀌고, 그 뒤 키보드로도 바꿀 수 있다', async () => {
+    await open(withTrip(plannerLibrary(), makeTrip({ candidates: [P1] })), { width: 375 });
+    const sheet = screen.getByRole('region', { name: '일정 시트' });
+    const handle = within(sheet).getByRole('button', { name: '시트 높이 바꾸기' });
+    expect(sheet).toHaveAttribute('data-snap', 'half');
+
+    // 위로 끌기 → 거의 전체. 끈 뒤 click이 따라오지 않는다.
+    fireEvent.pointerDown(handle, { pointerId: 1, clientY: 400 });
+    fireEvent.pointerUp(handle, { pointerId: 1, clientY: 300 });
+    expect(sheet).toHaveAttribute('data-snap', 'full');
+
+    // 키보드로 누르면 한 단계 돈다(끌기 표시가 남아 있어도 막히지 않는다).
+    handle.focus();
+    const user = userEvent.setup();
+    await user.keyboard('{Enter}');
+    expect(sheet).toHaveAttribute('data-snap', 'collapsed');
+
+    // 아래로 끌기는 접힘에서 더 내려가지 않고, 위로 끌면 반쯤.
+    fireEvent.pointerDown(handle, { pointerId: 2, clientY: 300 });
+    fireEvent.pointerCancel(handle, { pointerId: 2 });
+    fireEvent.pointerUp(handle, { pointerId: 2, clientY: 400 });
+    expect(sheet).toHaveAttribute('data-snap', 'collapsed');
+    fireEvent.pointerDown(handle, { pointerId: 3, clientY: 400 });
+    fireEvent.pointerUp(handle, { pointerId: 3, clientY: 340 });
     expect(sheet).toHaveAttribute('data-snap', 'half');
   });
 });
