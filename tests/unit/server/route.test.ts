@@ -169,10 +169,21 @@ describe('resolveRoute 자동차', () => {
     ['code가 0이 아님', { code: 1, message: '경로 없음', route: {} }],
     ['route가 비어 있음', { code: 0, message: 'ok', route: {} }],
     ['route 결과가 빈 배열', { code: 0, message: 'ok', route: { '3,0,0,0,0,0': [] } }],
-    ['route 없음', { code: 0, message: 'ok' }],
   ])('%s → NO_ROUTE (HTTP 200이어도)', async (_label, body) => {
     const { deps } = makeDeps(() => new Response(JSON.stringify(body)));
     expect((await apiError(resolveRoute(carQuery, deps))).code).toBe('NO_ROUTE');
+  });
+
+  it.each([
+    ['route 없음', { code: 0, message: 'ok' }],
+    ['route가 문자열', { code: 0, route: 'x' }],
+    ['route가 배열', { code: 0, route: [] }],
+    ['route가 null', { code: 0, route: null }],
+    ['code가 문자열', { code: '0', route: {} }],
+    ['code가 null', { code: null, route: {} }],
+  ])('%s → UPSTREAM_ERROR (모양이 다름)', async (_label, body) => {
+    const { deps } = makeDeps(() => new Response(JSON.stringify(body)));
+    expect((await apiError(resolveRoute(carQuery, deps))).code).toBe('UPSTREAM_ERROR');
   });
 });
 
@@ -256,6 +267,38 @@ describe('resolveRoute 도보', () => {
   it('routes가 빈 배열이면 NO_ROUTE', async () => {
     const { deps } = makeDeps(() => new Response(JSON.stringify({ routes: [] })));
     expect((await apiError(resolveRoute(walkQuery, deps))).code).toBe('NO_ROUTE');
+  });
+
+  it.each([
+    ['routes 없음', {}],
+    ['routes가 객체', { routes: {} }],
+    ['routes가 null', { routes: null }],
+    ['code가 문자열', { code: '4' }],
+    ['code가 null', { code: null, routes: [] }],
+  ])('%s → UPSTREAM_ERROR (모양이 다름)', async (_label, body) => {
+    const { deps } = makeDeps(() => new Response(JSON.stringify(body)));
+    expect((await apiError(resolveRoute(walkQuery, deps))).code).toBe('UPSTREAM_ERROR');
+  });
+
+  it('숫자 code가 0이 아니면 routes가 없어도 NO_ROUTE', async () => {
+    const { deps } = makeDeps(() => new Response(JSON.stringify({ code: 4, error: 'x' })));
+    expect((await apiError(resolveRoute(walkQuery, deps))).code).toBe('NO_ROUTE');
+  });
+
+  it('한쪽이 빈 쌍·숫자가 아닌 쌍은 건너뛴다(빈 값이 0으로 읽히지 않는다)', async () => {
+    const body = {
+      routes: [
+        {
+          summary: { distance: 100, duration: 80 },
+          legs: [{ steps: [{ path: '128.1,37.1 ,37.1 128.2, abc,def 128.2,37.1,5 128.3,37.2' }] }],
+        },
+      ],
+    };
+    const { deps } = makeDeps(() => new Response(JSON.stringify(body)));
+    expect((await resolveRoute(walkQuery, deps)).path).toEqual([
+      [128.1, 37.1],
+      [128.3, 37.2],
+    ]);
   });
 
   it('직선 50km 초과 도보는 네이버에 묻지 않고 NO_ROUTE', async () => {

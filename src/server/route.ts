@@ -113,10 +113,10 @@ function summaryOf(route: Raw): { distanceM: number; duration: number; tollFare:
 
 function parseCar(body: Raw): Omit<RouteResult, 'mode' | 'queriedAt'> {
   const options = asRecord(body.route);
+  // `route`가 객체가 아니면 응답 모양이 바뀐 것이다. 객체인데 쓸 결과가 없으면 경로 없음이다.
+  if (!options) throw badResponse();
   // 옵션 키(`3,0,0,0,0,0` 등)는 요청에 따라 달라질 수 있어 첫 번째 결과를 쓴다.
-  const first = options
-    ? Object.values(options).find((v) => Array.isArray(v) && v.length > 0)
-    : undefined;
+  const first = Object.values(options).find((v) => Array.isArray(v) && v.length > 0);
   const route = asRecord((first as unknown[] | undefined)?.[0]);
   if (!route) throw noRoute();
   const { distanceM, duration, tollFare } = summaryOf(route);
@@ -133,7 +133,9 @@ function parseCar(body: Raw): Omit<RouteResult, 'mode' | 'queriedAt'> {
 
 function parseWalk(body: Raw): Omit<RouteResult, 'mode' | 'queriedAt'> {
   const routes = body.routes;
-  const route = asRecord(Array.isArray(routes) ? routes[0] : undefined);
+  // `routes`가 배열이 아니면 응답 모양이 바뀐 것이다. 빈 배열은 경로 없음이다.
+  if (!Array.isArray(routes)) throw badResponse();
+  const route = asRecord(routes[0]);
   if (!route) throw noRoute();
   const { distanceM, duration } = summaryOf(route);
   const legs = Array.isArray(route.legs) ? route.legs : [];
@@ -144,8 +146,10 @@ function parseWalk(body: Raw): Omit<RouteResult, 'mode' | 'queriedAt'> {
     // 첫 단계 등은 경로선이 `null`이다.
     if (typeof path !== 'string') continue;
     for (const pair of path.split(' ')) {
-      const [lng, lat] = pair.split(',').map(Number);
-      const point = toPoint([lng, lat]);
+      // `",37.1"`처럼 한쪽이 빈 쌍이 `Number('')`=0으로 읽히지 않도록 형식부터 본다.
+      const parts = pair.split(',');
+      if (parts.length !== 2 || !parts.every((part) => COORDINATE.test(part))) continue;
+      const point = toPoint(parts.map(Number));
       if (point) points.push(point);
     }
   }
@@ -190,7 +194,11 @@ export async function resolveRoute(
   const body = asRecord(parsed);
   if (!body) throw badResponse();
   // 본문 `code`가 0이 아니면 HTTP 200이어도 경로가 없다. 도보 성공 응답에는 `code`가 없다.
-  if (body.code !== undefined && body.code !== 0) throw noRoute();
+  if (body.code !== undefined) {
+    // 숫자가 아닌 `code`("0"·null 등)는 모양이 바뀐 것이다.
+    if (!isFiniteNumber(body.code)) throw badResponse();
+    if (body.code !== 0) throw noRoute();
+  }
   const result = q.mode === 'car' ? parseCar(body) : parseWalk(body);
   return { mode: q.mode, ...result, queriedAt: (deps.now?.() ?? new Date()).toISOString() };
 }
