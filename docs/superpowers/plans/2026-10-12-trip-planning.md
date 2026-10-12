@@ -26,7 +26,7 @@
   - `경로 없음 · 직선 추정` / `직선 추정` / `경로를 못 가져왔어요` / `다시 시도` / `인터넷에 연결되지 않아 이동 시간은 어림값이에요`
   - `이미 Day <N>에 있어요` / `이미 후보에 있어요` / `<N>곳을 후보에 넣었어요`
   - `Day <N>의 <M>곳은 후보로 돌아가요. 바꿀까요?` / `여행은 30일까지 만들 수 있어요` / `여행 이름을 넣어 주세요` / `여행 이름은 60자까지예요`
-  - `순서를 정리했어요` / `이미 가장 짧은 순서예요` / `보관함에서 지운 <N>곳은 일정에서 빠졌어요` / `여행을 찾지 못했어요` / `여행 목록으로`
+  - `순서를 정리했어요` / `이미 가장 짧은 순서예요` / `다른 곳에서 바뀐 부분은 그대로 두었어요` / `보관함에서 지운 <N>곳은 일정에서 빠졌어요` / `여행을 찾지 못했어요` / `여행 목록으로`
   - 버튼: `새 여행`, `순서 정리`, `Day 자동 나누기`, `적용`, `취소`, `되돌리기`, `Day <N>에 넣기`, `후보로 빼기`, `다른 Day로`, `숙소로 정하기`, `숙소 정하기`, `상세`, `← 일정으로`, `보관함에서 더하기`, `링크·핀으로 새로 추가`, `여행에 넣기`, `이 지역으로 여행 만들기`, `다시 계산`, `네이버 지도로 길찾기`, `여행 설정`
   - 시간표 꼬리: `<M>월 <D>일 조회`. 자정 넘김: `다음 날 HH:mm`. 고정 시각: `여유 <N>분` / `늦음 <N>분`(60분 이상은 `1시간 20분`).
 - 되돌리기 토스트는 8초.
@@ -173,10 +173,19 @@
   setLegMode(lib, tripId, fromId, toId, mode, ctx) // 자동 값과 같으면 legModes 항목 삭제
   reorderDay(lib, tripId, dayIndex, stopIds: string[], ctx) // 같은 집합이어야 함
   applyAutoSplit(lib, tripId, plan: string[][] /* Day별 전체 placeId 순서 */, ctx) // plan에 들어간 후보는 후보에서 빠짐
-  replaceTrip(lib, trip: Trip, ctx) // 되돌리기: 그 여행을 통째로 그 값으로(바뀐 필드만 updatedAt 갱신)
+  // 되돌리기(스펙 §2.5)
+  export type TripFieldPath = 'title' | 'startDate' | 'endDate' | 'origin' | 'candidates' | 'legModes' | { day: number; field: 'stops' | 'lodging' | 'startTime' };
+  export type TripChange = { tripId: string; fields: { path: TripFieldPath; before: Field<unknown>; after: Field<unknown> }[]; days?: { before: Day[]; after: Day[] } };
+  diffTrip(before: Trip, after: Trip): TripChange // Day 수가 같으면 Day 필드 단위, 다르면 days 통째(+ startDate·endDate)
+  revertTrip(lib, change: TripChange, ctx) // summary.merged = 건너뛴 필드 수(재사용). 지금 updatedAt === after.updatedAt인 필드만 before 값으로. 결과의 장소 중복은 되돌리지 않은 필드 쪽을 남기고 되돌린 필드에서 뺀다
   ```
 
-- [ ] **Step 1: 실패하는 테스트** — 연산마다 결과 + `LibrarySchema` 통과. 특히: `insertStop`로 후보 → Day, Day → 다른 Day(Stop id 유지), `addCandidates` 중복 건너뛰고 `summary.created`, `insertStop`에 이미 다른 Day에 있는 장소를 후보 칸에서 넣으려 하면 `AlreadyInTrip` 대신 옮김(장소 하나 규칙), `addCandidates`로 Day에 있는 장소를 넣으면 건너뜀, `setTripDates` 줄일 때 후보 복귀·늘릴 때 빈 Day·시작일만 옮기면 내용 유지, 31일 → `TripDatesInvalid`, `setLegMode` 자동 값으로 되돌리면 삭제, `setLodging(…, true)`가 뒤 Day들 모두 바꿈, `replaceTrip` 왕복, 입력 불변(원본 객체 그대로).
+- [ ] **Step 1: 실패하는 테스트** — 연산마다 결과 + `LibrarySchema` 통과. 특히: `insertStop`로 후보 → Day, Day → 다른 Day(Stop id 유지), `addCandidates` 중복 건너뛰고 `summary.created`, `insertStop`에 이미 다른 Day에 있는 장소를 후보 칸에서 넣으려 하면 `AlreadyInTrip` 대신 옮김(장소 하나 규칙), `addCandidates`로 Day에 있는 장소를 넣으면 건너뜀, `setTripDates` 줄일 때 후보 복귀·늘릴 때 빈 Day·시작일만 옮기면 내용 유지, 31일 → `TripDatesInvalid`, `setLegMode` 자동 값으로 되돌리면 삭제, `setLodging(…, true)`가 뒤 Day들 모두 바꿈, 입력 불변(원본 객체 그대로). 되돌리기:
+  - 왕복: `insertStop` 뒤 `revertTrip(diffTrip(전, 후))` → 후보·Day가 전과 같은 값
+  - 리뷰 반례: Day 1 변경(시각 2) 기록 → 다른 편집이 Day 2 변경(시각 3) → 되돌리기(시각 4) → Day 1만 이전 값, Day 2는 시각 3 값 그대로, `summary.merged === 0`
+  - 겹친 필드: 연산이 바꾼 `candidates`를 다른 편집이 또 바꿨으면 건너뜀(`summary.merged === 1`)
+  - 중복 정리: 후보 X → Day 1 넣기 기록 → 다른 편집이 X를 Day 1 → Day 2로 옮김 → 되돌리기 → X는 Day 2에만 있고(후보에 다시 생기지 않음) 결과가 `LibrarySchema` 통과
+  - 기간 변경 되돌리기: 그사이 Day 필드가 바뀌지 않았으면 Day 수·내용 복원, 바뀌었으면 days·기간 모두 건너뜀
 - [ ] **Step 2:** FAIL → **Step 3:** 구현 → **Step 4:** PASS + `yarn typecheck`
 - [ ] **Step 5:** 커밋 `feat(trips): 여행 연산`
 
@@ -229,9 +238,9 @@
     days: { start: LngLat | null; end: LngLat | null; stops: OptStop[] }[];
   }): string[][]; // Day별 새 전체 순서(이미 넣은 장소 + 배정된 후보, §5.1 적용 후)
   ```
-- 스펙 §5 그대로. `start`가 없으면 지금 첫 Stop을 출발로 고정(그 Stop은 순서 맨 앞에 남음). 고정 시각 장소끼리는 시각 오름차순. `changed`는 새 총 거리 ≤ 지금 × 0.99일 때만 참(아니면 `order`는 지금 순서). 자동 나누기의 k-means++ 초기화는 **결정적**(첫 중심 = 후보 중 id 사전순 첫째, 다음은 가장 먼 점, 동률은 id 순).
+- 스펙 §5 그대로. `start`가 없으면 시작도 자유(Held–Karp는 모든 시작점을 본다). 고정 시각 장소끼리는 시각 오름차순(같은 시각은 지금 순서). `changed`는 새 총 거리 ≤ 지금 × 0.99일 때만 참(아니면 `order`는 지금 순서). 자동 나누기의 k-means++ 초기화는 **결정적**(첫 중심 = 후보 중 id 사전순 첫째, 다음은 가장 먼 점, 동률은 id 순).
 
-- [ ] **Step 1: 실패하는 테스트** — 시드 고정 무작위 좌표(강원 범위) 7곳 이하 50회: Held–Karp 결과 거리 = 모든 순열 최솟값; 고정 시각 순서 지킴; 출발·도착 고정; 출발 없음이면 첫 Stop 유지; 13곳·20곳 근사가 제약을 지키고 nearest neighbor보다 길지 않음; 같은 좌표 두 곳(NaN 없음); 1% 미만 개선이면 `changed: false`. 자동 나누기: 후보 10·Day 3 → 각 Day 새 장소 수 차 ≤ 1; 숙소 기준점에 가까운 후보가 그 Day로; 기준점 없는 Day는 k-means; 같은 입력 두 번 → 같은 결과; 후보 0 → 지금 순서 그대로.
+- [ ] **Step 1: 실패하는 테스트** — 시드 고정 무작위 좌표(강원 범위) 7곳 이하 50회: Held–Karp 결과 거리 = 모든 순열 최솟값; 고정 시각 순서 지킴; 출발·도착 고정; 출발 없음이면 시작 자유(리뷰 반례: 출발 없음, A 10:00·B 09:00 → `[B, A]`, 해가 없지 않음); 13곳·20곳 근사가 제약을 지키고 nearest neighbor보다 길지 않음; 같은 좌표 두 곳(NaN 없음); 1% 미만 개선이면 `changed: false`. 자동 나누기: 리뷰 반례 — 후보 `[128.8961 + i×0.0001, 37.7953]`(i=0…9), 빈 Day 3개 기준점 `[128.8961,37.7953]`·`[129.1,37.7953]`·`[129.4,37.7953]` → 새 장소 수 `[4, 3, 3]`; 무작위 입력에서 용량 합 = 후보 수·모두 배정; 이미 목표를 넘은 Day(Day 1에 이미 6곳, 후보 3, Day 3개) → Day 1 용량 0; 숙소 기준점에 가까운 후보가 그 Day로; 기준점 없는 Day는 k-means; 같은 입력 두 번 → 같은 결과; 후보 0 → 지금 순서 그대로.
 - [ ] **Step 2:** FAIL → **Step 3:** 구현 → **Step 4:** PASS
 - [ ] **Step 5:** 커밋 `feat(trips): 순서 정리와 Day 자동 나누기 계산`
 
@@ -382,12 +391,12 @@
 
 **Interfaces:**
 - Consumes: `@dnd-kit/core`·`@dnd-kit/sortable`(이미 의존성), Task 3 연산.
-- Produces: `useTripUndo(tripId): { run(op: (lib, ctx) => OpResult, message: string): Promise<void> }` — 연산 직전 여행 값을 잡아 두고, 성공하면 `toast(message, { action: { label: '되돌리기', onClick: () => replaceTrip(…) }, duration: 8000 })`. 넣기·빼기·옮기기·순서 정리·자동 나누기·기간 변경이 이것을 쓴다.
+- Produces: `useTripUndo(tripId): { run(op: (lib, ctx) => OpResult, message: string): Promise<void> }` — 같은 `run` 안(잠금 안 최신본)에서 연산 전후 여행으로 `diffTrip`을 만들어 두고, 성공하면 `toast(message, { action: { label: '되돌리기', onClick: () => run(revertTrip(change)) }, duration: 8000 })`. 되돌린 결과 `summary.merged > 0`이면 `다른 곳에서 바뀐 부분은 그대로 두었어요`. 넣기·빼기·옮기기·순서 정리·자동 나누기·기간 변경이 이것을 쓴다.
 - 끌기 대상: 시간표 안 순서(`moveStop`), 후보 행 → 시간표의 자리(`insertStop`), 시간표 행 → 후보 칸(`unscheduleStop`), 행 → Day 탭(그 Day 끝으로 `moveStop`). 센서: 포인터(5px 이동 후 시작), 터치(250ms 누름), 키보드(`sortableKeyboardCoordinates`).
 - 행 메뉴(`aria-label="<이름> 메뉴"`): `위로`·`아래로`·`다른 Day로`·`후보로 빼기`(후보 행은 `Day <N>에 넣기`·`후보에서 빼기`).
 - 토스트 문구: 넣기 `Day <N>에 넣었어요`, 빼기 `후보로 뺐어요`, 옮기기 `Day <N>로 옮겼어요`.
 
-- [ ] **Step 1: 실패하는 테스트** — 행 메뉴로 위로·아래로·다른 Day로·후보로 빼기(각각 저장 결과), 키보드 끌기(스페이스 → 화살표 → 스페이스)로 순서 바꾸기, 되돌리기 → 원래 값, 다른 탭이 그사이 같은 여행의 다른 Day를 바꿨을 때 되돌리기 결과(LWW: 되돌린 Day만 이전 값, 스펙 §2.5).
+- [ ] **Step 1: 실패하는 테스트** — 행 메뉴로 위로·아래로·다른 Day로·후보로 빼기(각각 저장 결과), 키보드 끌기(스페이스 → 화살표 → 스페이스)로 순서 바꾸기, 되돌리기 → 원래 값, 다른 탭이 그사이 같은 여행의 다른 Day를 바꿨을 때(저장소에 직접 써서 재현) 되돌리기 → 되돌린 Day만 이전 값, 다른 Day는 그대로; 같은 필드를 바꿨으면 그 필드는 그대로 + `다른 곳에서 바뀐 부분은 그대로 두었어요`.
 - [ ] **Step 2:** FAIL → **Step 3:** 구현 → **Step 4:** PASS
 - [ ] **Step 5:** 커밋 `feat(trips): 끌어 옮기기와 되돌리기`
 
