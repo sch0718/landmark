@@ -17,6 +17,7 @@ import { useLayout } from 'src/sections/shell/use-layout';
 import { CandidatePanel } from 'src/sections/trips/planner/CandidatePanel';
 import { DayTabs, DayTimeline } from 'src/sections/trips/planner/DayTimeline';
 import { MapCard } from 'src/sections/trips/planner/MapCard';
+import { PlannerDnd } from 'src/sections/trips/planner/PlannerDnd';
 import { COLLAPSED_PX, PlannerSheet } from 'src/sections/trips/planner/PlannerSheet';
 import { TripMap } from 'src/sections/trips/planner/TripMap';
 import { useDayPlan, type DayPlan } from 'src/sections/trips/planner/use-day-plan';
@@ -362,12 +363,17 @@ function Planner({ trip, library }: { trip: Trip; library: Library }) {
 /**
  * `/trips/:id` 계획 화면(스펙 §2.3). 넓은 화면은 [후보 칸][지도][Day 시간표], 중간 폭은 후보 칸을 접을 수 있고
  * 시간표가 지도 위를 덮으며, 좁은 화면은 지도 위에 끌어올리는 일정 시트를 둔다. 핀·행을 누르면 지도 위 카드를 연다. 셸의 `Outlet` 본문을 높이 100%로 채운다.
+ * 후보 행·시간표 행은 끌어 옮길 수 있다(`PlannerDnd`가 화면 전체를 감싼다).
  */
 export function TripPlannerPage() {
   const { id = '' } = useParams();
   const library = useAtomValue(libraryAtom);
   const trip = library.trips[id];
   if (trip === undefined || trip.deletedAt !== null) return <NotFound />;
-  // 여행이 바뀌면 화면 상태(후보 칸 접기·토스트 확인)를 새로 시작한다.
-  return <Planner key={trip.id} trip={trip} library={library} />;
+  // 여행이 바뀌면 화면 상태(후보 칸 접기·토스트 확인·끌기)를 새로 시작한다.
+  return (
+    <PlannerDnd key={trip.id} tripId={trip.id}>
+      <Planner trip={trip} library={library} />
+    </PlannerDnd>
+  );
 }

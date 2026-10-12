@@ -1,3 +1,4 @@
+import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
@@ -6,18 +7,22 @@ import { useMemo } from 'react';
 import { PanelLeftCloseIcon, PlusIcon } from 'src/components/icons';
 import { liveLabels } from 'src/domain/library/query';
 import { regionsByPlace } from 'src/domain/library/region';
-import { insertStop } from 'src/domain/trips/ops';
 import { visibleCandidates } from 'src/domain/trips/query';
 import type { Label, Place } from 'src/schema/library';
 import type { Trip } from 'src/schema/trip';
 import { labelColors } from 'src/sections/library/label-style';
 import { placeLabels } from 'src/sections/library/place-labels';
 import { objectParticle } from 'src/sections/trips/planner/format';
+import { DragHandle, useCandidateDrag, useDropTarget } from 'src/sections/trips/planner/PlannerDnd';
+import { CandidateMenu } from 'src/sections/trips/planner/StopMenu';
+import { insertAtEnd, insertedMessage } from 'src/sections/trips/planner/stop-ops';
+import { useTripUndo } from 'src/sections/trips/planner/use-trip-undo';
 import { periodLabel } from 'src/sections/trips/trip-dates';
-import { libraryAtom, useLibraryAction } from 'src/stores/library-state';
+import { libraryAtom } from 'src/stores/library-state';
 import { mapCardAtom } from 'src/stores/trip-planner';
 
 function CandidateRow({
+  tripId,
   place,
   region,
   label,
@@ -25,6 +30,7 @@ function CandidateRow({
   onAdd,
   onOpen,
 }: {
+  tripId: string;
   place: Place;
   region: string;
   label: Label | undefined;
@@ -34,20 +40,33 @@ function CandidateRow({
   onOpen(): void;
 }) {
   const name = place.name.value;
+  const { setNodeRef, setActivatorNodeRef, attributes, listeners, isDragging } = useCandidateDrag({
+    kind: 'candidate',
+    placeId: place.id,
+    name,
+  });
   return (
     <Box
       component="li"
+      ref={setNodeRef}
       sx={{
         listStyle: 'none',
         display: 'flex',
         alignItems: 'center',
         gap: 1,
         minHeight: 56,
-        pl: 2,
+        pl: 0.5,
         pr: 0.5,
         borderBottom: '1px solid var(--tm-border)',
+        opacity: isDragging ? 0.4 : 1,
       }}
     >
+      <DragHandle
+        name={name}
+        setActivatorNodeRef={setActivatorNodeRef}
+        attributes={attributes}
+        listeners={listeners}
+      />
       {/* 대표 라벨 색. 라벨이 없으면 자리만 둔다. */}
       <Box
         {...(label === undefined
@@ -107,6 +126,7 @@ function CandidateRow({
       >
         <PlusIcon aria-hidden="true" width={20} height={20} />
       </IconButton>
+      <CandidateMenu tripId={tripId} dayIndex={dayIndex} name={name} placeId={place.id} />
     </Box>
   );
 }
@@ -122,13 +142,22 @@ type Props = {
 };
 
 /**
- * 후보 칸(스펙 §2.3): 여행 제목·기간, `후보 N`, 후보 행(이름·지역·대표 라벨 색, `＋`로 지금 Day 끝에 넣기).
+ * 후보 칸(스펙 §2.3): 여행 제목·기간, `후보 N`, 후보 행(이름·지역·대표 라벨 색, `＋`로 지금 Day 끝에 넣기, 행 메뉴).
+ * 후보 행은 끌어서 시간표의 자리·Day 탭에 놓을 수 있고, 시간표 행을 이 칸에 놓으면 후보로 뺀다.
  * 아래의 `보관함에서 더하기`·`링크·핀으로 새로 추가`·`Day 자동 나누기`는 Task 12·13에서 동작한다(지금은 비활성).
  */
 export function CandidatePanel({ trip, dayIndex, onCollapse, fill = true }: Props) {
   const library = useAtomValue(libraryAtom);
-  const { run } = useLibraryAction();
+  const { run } = useTripUndo(trip.id);
   const openCard = useSetAtom(mapCardAtom);
+  const {
+    setNodeRef: setDropRef,
+    isOver,
+    dragging,
+  } = useDropTarget('candidates', {
+    kind: 'candidates',
+  });
+  const stopOver = isOver && dragging?.kind === 'stop';
 
   const { candidates, regions, labelById } = useMemo(() => {
     const places = visibleCandidates(library, trip);
@@ -140,20 +169,20 @@ export function CandidatePanel({ trip, dayIndex, onCollapse, fill = true }: Prop
   }, [library, trip]);
 
   const add = (placeId: string) =>
-    void run((lib, ctx) => {
-      // 끝 자리는 저장 직전의 최신본 기준으로 정한다.
-      const end = lib.trips[trip.id]?.days[dayIndex]?.stops.value.length ?? 0;
-      return insertStop(lib, trip.id, placeId, dayIndex, end, ctx);
-    });
+    void run(insertAtEnd(trip.id, placeId, dayIndex), insertedMessage(dayIndex));
 
   return (
     <Box
       component="section"
+      ref={setDropRef}
       aria-label="후보 칸"
       sx={{
         ...(fill ? { height: '100%', minHeight: 0 } : {}),
         display: 'flex',
         flexDirection: 'column',
+        // 시간표 행을 끌어 이 칸 위에 두면 놓을 곳임을 보인다.
+        outline: stopOver ? '2px solid var(--tm-accent-main)' : 'none',
+        outlineOffset: -2,
       }}
     >
       <Box sx={{ flex: 'none', display: 'flex', alignItems: 'flex-start', gap: 1, px: 2, pt: 2 }}>
@@ -192,17 +221,23 @@ export function CandidatePanel({ trip, dayIndex, onCollapse, fill = true }: Prop
           </Box>
         ) : (
           <Box component="ul" aria-label="후보" sx={{ m: 0, p: 0 }}>
-            {candidates.map((place) => (
-              <CandidateRow
-                key={place.id}
-                place={place}
-                region={regions.get(place.id) ?? ''}
-                label={placeLabels(place, labelById)[0]}
-                dayIndex={dayIndex}
-                onAdd={() => add(place.id)}
-                onOpen={() => openCard({ tripId: trip.id, placeId: place.id })}
-              />
-            ))}
+            <SortableContext
+              items={candidates.map((p) => `cand:${p.id}`)}
+              strategy={verticalListSortingStrategy}
+            >
+              {candidates.map((place) => (
+                <CandidateRow
+                  key={place.id}
+                  tripId={trip.id}
+                  place={place}
+                  region={regions.get(place.id) ?? ''}
+                  label={placeLabels(place, labelById)[0]}
+                  dayIndex={dayIndex}
+                  onAdd={() => add(place.id)}
+                  onOpen={() => openCard({ tripId: trip.id, placeId: place.id })}
+                />
+              ))}
+            </SortableContext>
           </Box>
         )}
       </Box>

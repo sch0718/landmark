@@ -198,7 +198,8 @@ describe('지도 위 카드', () => {
     await mapReady();
     const user = userEvent.setup();
 
-    await user.click(within(timeline()).getByRole('button', { name: /창가 자리/ }));
+    // 행 본문(시각·이름) 버튼. 손잡이(…끌어 옮기기)·행 메뉴(…메뉴)와 구분한다.
+    await user.click(within(timeline()).getByRole('button', { name: /^\S*창가 자리$/ }));
     expect(within(card('창가 자리')).getByText('Day 1 · 2번째')).toBeInTheDocument();
 
     const panel = screen.getByRole('region', { name: '후보 칸' });

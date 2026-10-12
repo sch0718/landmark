@@ -43,3 +43,17 @@ export function objectParticle(word: string): '을' | '를' {
   if (/\d/.test(last)) return DIGIT_HAS_FINAL.has(last) ? '을' : '를';
   return '을';
 }
+
+/** 방향 조사: 받침이 없거나 ㄹ 받침이면 `로`, 그 밖의 받침이면 `으로`. 숫자는 읽는 소리로 본다(3 → 삼으로). */
+export function directionParticle(word: string): '로' | '으로' {
+  const last = word.trimEnd().at(-1);
+  if (last === undefined) return '로';
+  const code = last.charCodeAt(0);
+  if (code >= 0xac00 && code <= 0xd7a3) {
+    const final = (code - 0xac00) % 28;
+    return final === 0 || final === 8 ? '로' : '으로'; // 8 = ㄹ
+  }
+  // 0(영)·3(삼)·6(육)은 ㄹ이 아닌 받침, 1(일)·7(칠)·8(팔)은 ㄹ 받침이다.
+  if (/\d/.test(last)) return ['0', '3', '6'].includes(last) ? '으로' : '로';
+  return '로';
+}

@@ -1,5 +1,5 @@
+import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import Box from '@mui/material/Box';
-import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { Fragment } from 'react';
@@ -13,6 +13,13 @@ import { DayHeader } from 'src/sections/trips/planner/DayHeader';
 import { DayTail } from 'src/sections/trips/planner/DayTail';
 import { LegRow } from 'src/sections/trips/planner/LegRow';
 import {
+  DragHandle,
+  DropTab,
+  useDropTarget,
+  useStopDrag,
+} from 'src/sections/trips/planner/PlannerDnd';
+import { StopMenu } from 'src/sections/trips/planner/StopMenu';
+import {
   isSamePointLeg,
   type DayPlan,
   type PlannedLeg,
@@ -21,7 +28,7 @@ import { shortDate } from 'src/sections/trips/trip-dates';
 import { libraryAtom, useLibraryAction } from 'src/stores/library-state';
 import { mapCardAtom } from 'src/stores/trip-planner';
 
-/** Day 탭: `Day 1 10.24(금)` …. */
+/** Day 탭: `Day 1 10.24(금)` …. 행을 끌어 탭에 놓으면 그 Day 끝으로 옮긴다. */
 export function DayTabs({
   trip,
   dayIndex,
@@ -42,8 +49,10 @@ export function DayTabs({
       sx={{ flex: 'none', borderBottom: '1px solid var(--tm-border)' }}
     >
       {trip.days.map((_, i) => (
-        <Tab
+        <DropTab
           key={i}
+          dropId={`tab:${i}`}
+          target={{ kind: 'day', dayIndex: i }}
           value={i}
           label={
             <span>
@@ -60,37 +69,65 @@ export function DayTabs({
   );
 }
 
+/** 끌기로 놓을 자리 표시(행 위·아래의 선). */
+const markerSx = (marker: 'before' | 'after' | null) =>
+  marker === null
+    ? {}
+    : { boxShadow: `inset 0 ${marker === 'before' ? 2 : -2}px 0 var(--tm-accent-main)` };
+
 function StopRow({
+  trip,
+  dayIndex,
   number,
   stop,
   place,
   point,
+  prevStopId,
+  nextStopId,
   onOpen,
 }: {
+  trip: Trip;
+  dayIndex: number;
   number: number;
   stop: Stop;
   place: Place;
   point: PointTime | undefined;
+  /** 바로 위·아래에 보이는 행(행 메뉴의 `위로`·`아래로`). */
+  prevStopId: string | null;
+  nextStopId: string | null;
   /** 행을 누르면 지도 위 카드를 연다. */
   onOpen(): void;
 }) {
   const late = point?.slackMin !== null && point?.slackMin !== undefined && point.slackMin < 0;
+  const name = place.name.value;
+  const { setNodeRef, setActivatorNodeRef, attributes, listeners, isDragging, marker } =
+    useStopDrag({ kind: 'stop', stopId: stop.id, placeId: stop.placeId, dayIndex, name });
   return (
     <Box
       component="li"
+      ref={setNodeRef}
       sx={{
         listStyle: 'none',
         display: 'flex',
         alignItems: 'flex-start',
-        gap: 1,
-        px: 1,
+        gap: 0.5,
+        pr: 0,
         py: 1,
         minHeight: 44,
+        opacity: isDragging ? 0.4 : 1,
+        ...markerSx(marker),
       }}
     >
+      <DragHandle
+        name={name}
+        setActivatorNodeRef={setActivatorNodeRef}
+        attributes={attributes}
+        listeners={listeners}
+      />
       <Box
         aria-hidden="true"
         sx={{
+          mt: 0.5,
           flex: 'none',
           width: 28,
           height: 28,
@@ -135,7 +172,7 @@ function StopRow({
             </Box>
           )}
           <Box component="span" sx={{ fontWeight: 700, overflowWrap: 'anywhere' }}>
-            {place.name.value}
+            {name}
           </Box>
         </Box>
         <Box
@@ -166,6 +203,14 @@ function StopRow({
           )}
         </Box>
       </Box>
+      <StopMenu
+        trip={trip}
+        dayIndex={dayIndex}
+        name={name}
+        stopId={stop.id}
+        prevStopId={prevStopId}
+        nextStopId={nextStopId}
+      />
     </Box>
   );
 }
@@ -193,6 +238,11 @@ export function DayTimeline({
   const { points, totals } = plan.schedule;
   const offset = start === null ? 0 : 1;
   const legs = plan.legs;
+  // 시간표 목록의 빈 곳(구간 행 사이·장소 없는 Day)에 놓으면 가장 가까운 행 또는 그 Day 끝.
+  const { setNodeRef: setListRef } = useDropTarget(`list:${dayIndex}`, {
+    kind: 'day-end',
+    dayIndex,
+  });
 
   const legRow = (leg: PlannedLeg | undefined) => {
     if (leg === undefined || isSamePointLeg(leg)) return null;
@@ -218,19 +268,33 @@ export function DayTimeline({
           void run((lib, ctx) => setDayStartTime(lib, trip.id, dayIndex, value, ctx))
         }
       />
-      <Box component="ol" aria-label={`Day ${dayIndex + 1} 일정`} sx={{ m: 0, px: 1, py: 1 }}>
-        {stops.map((stop, i) => (
-          <Fragment key={stop.id}>
-            {offset + i > 0 && legRow(legs[offset + i - 1])}
-            <StopRow
-              number={i + 1}
-              stop={stop}
-              place={library.places[stop.placeId]!}
-              point={points[offset + i]}
-              onOpen={() => openCard({ tripId: trip.id, placeId: stop.placeId })}
-            />
-          </Fragment>
-        ))}
+      <Box
+        component="ol"
+        ref={setListRef}
+        aria-label={`Day ${dayIndex + 1} 일정`}
+        sx={{ m: 0, px: 0.5, py: 1 }}
+      >
+        <SortableContext
+          items={stops.map((s) => `stop:${s.id}`)}
+          strategy={verticalListSortingStrategy}
+        >
+          {stops.map((stop, i) => (
+            <Fragment key={stop.id}>
+              {offset + i > 0 && legRow(legs[offset + i - 1])}
+              <StopRow
+                trip={trip}
+                dayIndex={dayIndex}
+                number={i + 1}
+                stop={stop}
+                place={library.places[stop.placeId]!}
+                point={points[offset + i]}
+                prevStopId={stops[i - 1]?.id ?? null}
+                nextStopId={stops[i + 1]?.id ?? null}
+                onOpen={() => openCard({ tripId: trip.id, placeId: stop.placeId })}
+              />
+            </Fragment>
+          ))}
+        </SortableContext>
         {stops.length === 0 && (
           <Box
             component="li"

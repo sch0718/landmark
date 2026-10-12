@@ -1,5 +1,4 @@
 import Box from '@mui/material/Box';
-import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 import { useAtomValue } from 'jotai';
 import { useRef, useState, type MouseEvent, type PointerEvent } from 'react';
@@ -8,6 +7,7 @@ import type { Library } from 'src/schema/library';
 import type { Trip } from 'src/schema/trip';
 import { CandidatePanel } from 'src/sections/trips/planner/CandidatePanel';
 import { DayTimeline } from 'src/sections/trips/planner/DayTimeline';
+import { DropTab } from 'src/sections/trips/planner/PlannerDnd';
 import type { DayPlan } from 'src/sections/trips/planner/use-day-plan';
 import { mapCardAtom } from 'src/stores/trip-planner';
 
@@ -163,9 +163,23 @@ export function PlannerSheet({ trip, library, dayIndex, plan, onSelectDay }: Pro
         aria-label="일정 시트 탭"
         sx={{ flex: 'none', minHeight: 48, borderBottom: '1px solid var(--tm-border)' }}
       >
-        <Tab value="candidates" label={`후보 ${candidateCount}`} sx={{ textTransform: 'none' }} />
+        {/* 행을 끌어 탭에 놓을 수 있다: `후보 N`이면 후보로 빼고, `Day N`이면 그 Day 끝으로. */}
+        <DropTab
+          dropId="candidates-tab"
+          target={{ kind: 'candidates' }}
+          value="candidates"
+          label={`후보 ${candidateCount}`}
+          sx={{ textTransform: 'none' }}
+        />
         {trip.days.map((_, i) => (
-          <Tab key={i} value={i} label={`Day ${i + 1}`} sx={{ textTransform: 'none' }} />
+          <DropTab
+            key={i}
+            dropId={`tab:${i}`}
+            target={{ kind: 'day', dayIndex: i }}
+            value={i}
+            label={`Day ${i + 1}`}
+            sx={{ textTransform: 'none' }}
+          />
         ))}
       </Tabs>
       <Box

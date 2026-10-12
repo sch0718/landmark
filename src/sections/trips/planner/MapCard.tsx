@@ -1,22 +1,22 @@
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
-import Menu from '@mui/material/Menu';
-import MenuItem from '@mui/material/MenuItem';
 import { useAtomValue } from 'jotai';
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { XIcon } from 'src/components/icons';
-import {
-  insertStop,
-  moveStop,
-  setLodging,
-  setStopFixedTime,
-  setStopStay,
-  unscheduleStop,
-} from 'src/domain/trips/ops';
-import { tripDates, visibleStops } from 'src/domain/trips/query';
+import { setLodging, setStopFixedTime, setStopStay } from 'src/domain/trips/ops';
+import { visibleStops } from 'src/domain/trips/query';
 import type { Stop, Trip } from 'src/schema/trip';
-import { shortDate } from 'src/sections/trips/trip-dates';
+import { OtherDayMenu } from 'src/sections/trips/planner/StopMenu';
+import {
+  insertAtEnd,
+  insertedMessage,
+  moveToEnd,
+  movedMessage,
+  unschedule,
+  UNSCHEDULED_MESSAGE,
+} from 'src/sections/trips/planner/stop-ops';
+import { useTripUndo } from 'src/sections/trips/planner/use-trip-undo';
 import { libraryAtom, useLibraryAction } from 'src/stores/library-state';
 
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -184,6 +184,8 @@ type Props = {
 export function MapCard({ trip, dayIndex, placeId, onClose, onDetail }: Props) {
   const library = useAtomValue(libraryAtom);
   const { run } = useLibraryAction();
+  // 넣기·옮기기·빼기는 되돌리기 토스트를 띄운다.
+  const { run: runUndoable } = useTripUndo(trip.id);
   const cardRef = useRef<HTMLDivElement>(null);
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
   const menuOpen = useRef(false);
@@ -233,23 +235,14 @@ export function MapCard({ trip, dayIndex, placeId, onClose, onDetail }: Props) {
         : trip.origin.value === placeId
           ? '출발지'
           : null;
-  const dates = tripDates(trip);
   const tripId = trip.id;
 
   const addToDay = () =>
-    void run((lib, ctx) => {
-      // 끝 자리는 저장 직전의 최신본 기준으로 정한다.
-      const end = lib.trips[tripId]?.days[dayIndex]?.stops.value.length ?? 0;
-      return insertStop(lib, tripId, placeId, dayIndex, end, ctx);
-    });
+    void runUndoable(insertAtEnd(tripId, placeId, dayIndex), insertedMessage(dayIndex));
   const moveToDay = (target: number) => {
     setMenuAnchor(null);
     if (found === null) return;
-    const stopId = found.stop.id;
-    void run((lib, ctx) => {
-      const end = lib.trips[tripId]?.days[target]?.stops.value.length ?? 0;
-      return moveStop(lib, tripId, stopId, target, end, ctx);
-    });
+    void runUndoable(moveToEnd(tripId, found.stop.id, target), movedMessage(target));
   };
 
   return (
@@ -335,7 +328,7 @@ export function MapCard({ trip, dayIndex, placeId, onClose, onDetail }: Props) {
             <Button
               variant="outlined"
               onClick={() =>
-                void run((lib, ctx) => unscheduleStop(lib, tripId, found.stop.id, ctx))
+                void runUndoable(unschedule(tripId, found.stop.id), UNSCHEDULED_MESSAGE)
               }
               sx={BUTTON_SX}
             >
@@ -358,15 +351,15 @@ export function MapCard({ trip, dayIndex, placeId, onClose, onDetail }: Props) {
         </Button>
       </Box>
 
-      <Menu anchorEl={menuAnchor} open={menuAnchor !== null} onClose={() => setMenuAnchor(null)}>
-        {trip.days.map((_, d) =>
-          found === null || d === found.dayIndex ? null : (
-            <MenuItem key={d} onClick={() => moveToDay(d)} sx={{ minHeight: 44 }}>
-              {`Day ${d + 1} ${dates[d] === undefined ? '' : shortDate(dates[d])}`}
-            </MenuItem>
-          ),
-        )}
-      </Menu>
+      {found !== null && (
+        <OtherDayMenu
+          trip={trip}
+          exclude={found.dayIndex}
+          anchorEl={menuAnchor}
+          onPick={moveToDay}
+          onClose={() => setMenuAnchor(null)}
+        />
+      )}
     </Box>
   );
 }
