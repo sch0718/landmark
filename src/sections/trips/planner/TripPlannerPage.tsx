@@ -7,7 +7,7 @@ import { Link, useParams } from 'react-router';
 import { toast } from 'sonner';
 import { PanelLeftOpenIcon } from 'src/components/icons';
 import type { MapPadding } from 'src/components/map/MapAdapter';
-import { hiddenPlaceCount } from 'src/domain/trips/query';
+import { hiddenPlaceCount, locatePlace } from 'src/domain/trips/query';
 import { paths } from 'src/routes/paths';
 import type { Library } from 'src/schema/library';
 import type { Trip } from 'src/schema/trip';
@@ -85,6 +85,17 @@ function useSelectedDay(trip: Trip): [number, (dayIndex: number) => void] {
   return [dayIndex, select];
 }
 
+/** 살아 있는 장소가 여행의 후보·Stop·출발지·숙소 중 하나인가. */
+function isInTrip(library: Library, trip: Trip, placeId: string): boolean {
+  const place = library.places[placeId];
+  if (place === undefined || place.deletedAt !== null) return false;
+  return (
+    locatePlace(trip, placeId) !== null ||
+    trip.origin.value === placeId ||
+    trip.days.some((day) => day.lodging.value === placeId)
+  );
+}
+
 /** 화면을 열 때 지운 장소가 일정에서 빠졌으면 한 번 알린다(스펙 §3.3). */
 function useHiddenPlaceToast(library: Library, trip: Trip) {
   const checked = useRef(false);
@@ -97,18 +108,19 @@ function useHiddenPlaceToast(library: Library, trip: Trip) {
 }
 
 /** 계획 화면 위에 한 번 보이는 오프라인 안내(스펙 §6). 지도 칸 위쪽 가운데에 덮는다. */
-function OfflineNotice() {
+function OfflineNotice({ rightInset }: { rightInset: number }) {
+  // 중간 폭에서는 시간표 칸이 지도 오른쪽(`rightInset`)을 덮으므로 보이는 부분의 가운데에 둔다.
   return (
     <Box
       role="status"
       sx={{
         position: 'absolute',
         top: 8,
-        left: '50%',
+        left: `calc((100% - ${rightInset}px) / 2)`,
         transform: 'translateX(-50%)',
         zIndex: 1,
         width: 'max-content',
-        maxWidth: 'calc(100% - 120px)',
+        maxWidth: `calc(100% - ${rightInset}px - 120px)`,
         px: 1.5,
         py: 1,
         borderRadius: 'var(--tm-radius-md)',
@@ -208,12 +220,18 @@ function Planner({ trip, library }: { trip: Trip; library: Library }) {
   // 후보 탭이어도 경로 요청이 지도와 함께 시작된다.
   const plan = useDayPlan(trip.id, dayIndex);
   const [card, setCard] = useAtom(mapCardAtom);
-  const cardPlaceId = card !== null && card.tripId === trip.id ? card.placeId : null;
+  const cardId = card !== null && card.tripId === trip.id ? card.placeId : null;
+  // 카드의 장소가 지워졌거나 여행에서 빠졌으면(다른 탭·되돌리기 등) 카드를 닫는다.
+  const cardGone = cardId !== null && !isInTrip(library, trip, cardId);
+  const cardPlaceId = cardGone ? null : cardId;
   const openCard = useCallback(
     (placeId: string) => setCard({ tripId: trip.id, placeId }),
     [setCard, trip.id],
   );
   const closeCard = useCallback(() => setCard(null), [setCard]);
+  useEffect(() => {
+    if (cardGone) setCard(null);
+  }, [cardGone, setCard]);
   // 화면을 떠나면 카드를 닫는다(다시 들어왔을 때 옛 카드가 떠 있지 않게).
   useEffect(() => () => setCard(null), [setCard]);
   useHiddenPlaceToast(library, trip);
@@ -230,7 +248,7 @@ function Planner({ trip, library }: { trip: Trip; library: Library }) {
         cardPlaceId={cardPlaceId}
         onOpenCard={openCard}
       />
-      {plan.offline && <OfflineNotice />}
+      {plan.offline && <OfflineNotice rightInset={medium ? DETAIL_WIDTH : 0} />}
       {extra}
       {cardPlaceId !== null && (
         <Box

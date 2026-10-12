@@ -27,6 +27,7 @@ const point = (place: Place) => ({ lng: place.lng, lat: place.lat });
  * - 후보: 이름, 회색
  * - 다른 Day의 Stop: 그 Day 색의 흐린 작은 점(이름 없음)
  * - 경로선: 고른 Day의 구간마다 하나(같은 지점 구간은 없음), 도보는 점선. 경로가 없으면 두 점 직선이다.
+ * 지도 맞추기는 고른 Day의 Stop·출발점·숙소만 쓴다(후보·다른 Day는 `fit: false`). 그날 장소가 없으면 후보에 맞춘다.
  */
 export function tripMapLayers(
   lib: Library,
@@ -85,6 +86,7 @@ export function tripMapLayers(
       textColor: MARKER_TEXT,
       selected: selected(place.id),
       clusterable: false,
+      fit: false,
     });
   }
 
@@ -100,6 +102,7 @@ export function tripMapLayers(
         dimmed: true,
         selected: selected(place.id),
         clusterable: false,
+        fit: false,
       });
     }
   });

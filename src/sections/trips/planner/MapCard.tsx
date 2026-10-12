@@ -61,7 +61,20 @@ function useDraft(saved: string): [string, (value: string) => void] {
   return [draft.value, (value) => setDraft({ base: saved, value })];
 }
 
-/** Stop의 체류 시간(분)·고정 시각 입력. 체류 시간은 나갈 때나 Enter로 저장하고, 고정 시각은 바로 저장한다. */
+/** 체류 시간 입력값 → 분(0–1440 정수, 연산과 같은 범위). 비우면 null(기본값), 숫자가 아니면 undefined. */
+function parseStay(text: string): number | null | undefined {
+  const trimmed = text.trim();
+  if (trimmed === '') return null;
+  const minutes = Number(trimmed);
+  if (!Number.isFinite(minutes)) return undefined;
+  return Math.min(1440, Math.max(0, Math.round(minutes)));
+}
+
+/**
+ * Stop의 체류 시간(분)·고정 시각 입력. 체류 시간은 나갈 때나 Enter로 저장하고, 입력 중에 카드가 닫혀
+ * 사라지면(카드 밖을 누름 — 블러가 오지 않는다) 그때 저장한다. 입력란에서 Esc를 누르면 입력을 버린다.
+ * 고정 시각은 형식이 맞는 값이 되는 즉시 저장하므로 남는 입력이 없다.
+ */
 function StopFields({
   stop,
   onStay,
@@ -76,17 +89,32 @@ function StopFields({
   const savedFixed = stop.fixedTime ?? '';
   const [fixed, setFixed] = useDraft(savedFixed);
 
+  // 사라질 때 저장하려고 최신 입력·저장값·저장 함수를 둔다.
+  const live = useRef({ stay, stayMin: stop.stayMin, onStay });
+  useEffect(() => {
+    live.current = { stay, stayMin: stop.stayMin, onStay };
+  });
+  useEffect(
+    () => () => {
+      const { stay: text, stayMin, onStay: save } = live.current;
+      const minutes = parseStay(text);
+      if (minutes !== undefined && minutes !== stayMin) save(minutes);
+    },
+    [],
+  );
+
   const commitStay = () => {
-    const text = stay.trim();
-    const minutes = text === '' ? null : Number(text);
-    if (minutes !== null && !Number.isFinite(minutes)) {
+    // 렌더의 값이 아니라 최신 입력을 읽는다: Esc로 버린 직후 카드가 닫히며 초점이 옮겨 가면 블러가 먼저 온다.
+    const minutes = parseStay(live.current.stay);
+    if (minutes === undefined) {
       setStay(savedStay);
       return;
     }
-    // 연산과 같은 범위(0–1440 정수)로 맞춰 보인다. 같은 값이 저장돼 있어도 입력란이 맞춘 값을 보이게 한다.
-    const clamped = minutes === null ? null : Math.min(1440, Math.max(0, Math.round(minutes)));
-    setStay(clamped === null ? '' : String(clamped));
-    if (clamped !== stop.stayMin) onStay(clamped);
+    // 맞춘 값을 보인다. 같은 값이 저장돼 있어도 입력란이 맞춘 값을 보이게 한다.
+    const text = minutes === null ? '' : String(minutes);
+    setStay(text);
+    live.current.stay = text; // 곧바로 카드가 닫혀도 두 번 저장하지 않게
+    if (minutes !== stop.stayMin) onStay(minutes);
   };
 
   return (
@@ -107,6 +135,11 @@ function StopFields({
           onBlur={commitStay}
           onKeyDown={(event: KeyboardEvent<HTMLInputElement>) => {
             if (event.key === 'Enter') commitStay();
+            else if (event.key === 'Escape') {
+              // 입력을 버린다. 이어서 카드가 닫혀도(문서의 Esc) 저장하지 않는다.
+              setStay(savedStay);
+              live.current.stay = savedStay;
+            }
           }}
           sx={{ ...INPUT_SX, mt: 0.5 }}
         />

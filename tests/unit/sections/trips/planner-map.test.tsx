@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { dayColor, NO_CATEGORY_COLOR } from 'src/components/map/map-colors';
@@ -6,8 +6,9 @@ import { setAppRuntimeForTest } from 'src/lib/effect/runtime';
 import type { Library } from 'src/schema/library';
 import type { RouteResult } from 'src/server/route';
 import { libraryAtom } from 'src/stores/library-state';
+import { mapCardAtom } from 'src/stores/trip-planner';
 import { installMapResources } from '../../components/helpers/map-resources';
-import { makePlace } from '../library/fixtures';
+import { makePlace, T0 } from '../library/fixtures';
 import {
   at,
   f,
@@ -130,18 +131,42 @@ describe('지도 마커와 경로선', () => {
     await waitFor(() => expect(polyline(`${P1}>${P2}`)).toHaveAttribute('data-points', '2'));
   });
 
-  it('Day 탭을 바꾸면 그 Day에 맞춰 지도를 다시 맞춘다', async () => {
-    const lib = withTrip(mapLibrary(), makeTrip({ stops: [[P1, P5], [P3]] }));
+  it('Day 탭을 바꾸면 그 Day의 장소·출발점·숙소에만 지도를 다시 맞춘다(후보는 빼고)', async () => {
+    const lib = withTrip(
+      mapLibrary(),
+      makeTrip({ stops: [[P1, P5], [P3]], candidates: [P2], lodging: [HOTEL] }),
+    );
     await open(lib);
     await mapReady();
     await waitFor(() => expect(fakeAdapter().fitCalls.length).toBeGreaterThan(0));
+    expect(fakeAdapter().fitCalls.at(-1)).toEqual([
+      [128.9, 37.75],
+      [128.905, 37.75],
+      [128.92, 37.77],
+    ]);
     const before = fakeAdapter().fitCalls.length;
     const user = userEvent.setup();
 
     await user.click(screen.getByRole('tab', { name: 'Day 2 10.24(토)' }));
     await waitFor(() => expect(marker(P3)).toHaveTextContent('1 속초 횟집'));
     await waitFor(() => expect(fakeAdapter().fitCalls.length).toBe(before + 1));
+    // Day 2: 출발점(전날 숙소)과 속초 횟집.
+    expect(fakeAdapter().fitCalls.at(-1)).toEqual([
+      [128.59, 38.2],
+      [128.92, 37.77],
+    ]);
     expect(marker(P1)).toHaveAttribute('data-dimmed', 'true');
+  });
+
+  it('장소가 없는 Day는 후보에 맞춘다', async () => {
+    await open(withTrip(mapLibrary(), makeTrip({ candidates: [P1, P2] })));
+    await mapReady();
+    await waitFor(() =>
+      expect(fakeAdapter().fitCalls.at(-1)).toEqual([
+        [128.9, 37.75],
+        [128.947, 37.772],
+      ]),
+    );
   });
 });
 
@@ -222,6 +247,64 @@ describe('지도 위 카드', () => {
     await user.type(stay, '5000');
     await user.tab();
     await waitFor(() => expect(days(store)[0]!.stops.value[0]!.stayMin).toBe(1440));
+  });
+
+  it('체류 시간을 입력한 채 다른 핀을 누르거나 지도를 눌러 카드가 닫혀도 저장한다', async () => {
+    const lib = withTrip(mapLibrary(), makeTrip({ stops: [[P1, P2]] }));
+    const { store } = await open(lib);
+    await mapReady();
+    const user = userEvent.setup();
+
+    await user.click(marker(P1));
+    await user.type(within(card('중앙시장 닭강정')).getByLabelText('체류 시간(분)'), '30');
+    await user.click(marker(P2));
+    expect(card('안목 카페거리')).toBeInTheDocument();
+    await waitFor(() => expect(days(store)[0]!.stops.value[0]!.stayMin).toBe(30));
+
+    await user.type(within(card('안목 카페거리')).getByLabelText('체류 시간(분)'), '20');
+    await user.click(screen.getByTestId('fake-map'));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await waitFor(() => expect(days(store)[0]!.stops.value[1]!.stayMin).toBe(20));
+
+    // 입력란에서 Esc는 입력을 버리고 카드를 닫는다.
+    await user.click(marker(P1));
+    const stay = within(card('중앙시장 닭강정')).getByLabelText('체류 시간(분)');
+    await user.clear(stay);
+    await user.type(stay, '90');
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(days(store)[0]!.stops.value[0]!.stayMin).toBe(30);
+  });
+
+  it('카드의 장소가 지워지거나 여행에서 빠지면 카드를 닫는다', async () => {
+    const lib = withTrip(mapLibrary(), makeTrip({ stops: [[P1, P2]] }));
+    const { store } = await open(lib);
+    await mapReady();
+    const user = userEvent.setup();
+
+    await user.click(marker(P1));
+    expect(card('중앙시장 닭강정')).toBeInTheDocument();
+    act(() => {
+      const current = store.get(libraryAtom);
+      const place = current.places[P1]!;
+      store.set(libraryAtom, {
+        ...current,
+        places: { ...current.places, [P1]: { ...place, deletedAt: T0 } },
+      });
+    });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(store.get(mapCardAtom)).toBeNull();
+
+    await user.click(marker(P2));
+    expect(card('안목 카페거리')).toBeInTheDocument();
+    act(() => {
+      const current = store.get(libraryAtom);
+      const trip = current.trips[TRIP]!;
+      const days = trip.days.map((d, i) => (i === 0 ? { ...d, stops: f([]) } : d));
+      store.set(libraryAtom, { ...current, trips: { [TRIP]: { ...trip, days } } });
+    });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(store.get(mapCardAtom)).toBeNull();
   });
 
   it('고정 시각을 넣으면 여유·늦음을 보이고, 지우면 고정을 푼다', async () => {
