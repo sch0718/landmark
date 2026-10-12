@@ -194,10 +194,10 @@ describe('AppShell layout', () => {
     expect(within(nav).getByRole('link', { name: '지도' })).not.toHaveAttribute('aria-current');
   });
 
-  it('shows the trips placeholder at /trips', async () => {
+  it('shows the trips page at /trips', async () => {
     mockViewport(390);
     await renderApp({ path: '/trips' });
-    expect(screen.getByText('여행 계획은 곧 제공돼요')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '여행', level: 1 })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '여행' })).toHaveAttribute('aria-current', 'page');
   });
 

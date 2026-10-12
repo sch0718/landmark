@@ -36,6 +36,23 @@ function foldText(s: string): string {
   return s.normalize('NFC').toLocaleLowerCase('ko-KR');
 }
 
+/**
+ * 이름·주소로 장소를 찾는다. 보관함 목록과 달리 `saved: false`(보관함에서 숨긴 장소)도 포함하고
+ * 지운 장소는 뺀다. 검색어가 비면 전부, 이름순(한국어)이다. 여행의 출발지·숙소 고르기가 쓴다.
+ */
+export function searchPlaces(lib: Library, text: string): Place[] {
+  const needle = foldText(text.trim());
+  return Object.values(lib.places)
+    .filter(
+      (p) =>
+        p.deletedAt === null &&
+        (needle === '' ||
+          foldText(p.name.value).includes(needle) ||
+          foldText(p.address).includes(needle)),
+    )
+    .sort((a, b) => compareKo(a.name.value, b.name.value) || a.id.localeCompare(b.id));
+}
+
 /** 장소에 붙은 라벨 중 지워지지 않은 것만, 보관함의 라벨 순서대로. */
 function labelsOf(place: Place, byId: ReadonlyMap<string, Label>): Label[] {
   const labels: Label[] = [];

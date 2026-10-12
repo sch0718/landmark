@@ -7,7 +7,8 @@ export const legKey = (fromId: string, toId: string): string => `${fromId}>${toI
 
 const pad2 = (n: number): string => String(n).padStart(2, '0');
 
-function localToday(): string {
+/** 이 기기의 오늘('YYYY-MM-DD'). */
+export function localToday(): string {
   const now = new Date();
   return `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
 }

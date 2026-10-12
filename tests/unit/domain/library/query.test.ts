@@ -6,6 +6,7 @@ import {
   livePlaces,
   queryPlaces,
   regionCounts,
+  searchPlaces,
   type LibraryQuery,
 } from 'src/domain/library/query';
 import { emptyLibrary, type Label, type Library, type Place } from 'src/schema/library';
@@ -376,5 +377,23 @@ describe('inferred regions', () => {
       { region: '제주', count: 2 },
       { region: '기타', count: 1 },
     ]);
+  });
+});
+
+describe('searchPlaces', () => {
+  const lib = (places: Place[]): Library => ({
+    ...emptyLibrary(),
+    places: Object.fromEntries(places.map((p) => [p.id, p])),
+  });
+
+  it('이름·주소로 찾고, 숨긴(saved:false) 장소는 넣고 지운 장소는 뺀다', () => {
+    const a = place({ name: '다 카페', address: '서울 강남구 테헤란로 1' });
+    const b = place({ name: '가 숙소', saved: f(false) });
+    const c = place({ name: '나 지운 곳', deletedAt: T });
+    const library = lib([a, b, c]);
+    expect(searchPlaces(library, '').map((p) => p.name.value)).toEqual(['가 숙소', '다 카페']);
+    expect(searchPlaces(library, ' 테헤란 ').map((p) => p.id)).toEqual([a.id]);
+    expect(searchPlaces(library, '숙소').map((p) => p.id)).toEqual([b.id]);
+    expect(searchPlaces(library, '지운')).toEqual([]);
   });
 });
