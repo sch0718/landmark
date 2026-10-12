@@ -624,6 +624,41 @@ describe('applyAutoSplit', () => {
       expect(placesOf(t.days[0]!)).toEqual([pid(3), pid(9), pid(1), pid(4)]);
     });
   });
+
+  describe('미리보기 뒤에 지운 장소도 제자리를 지킨다', () => {
+    // Day 1: [장소 2, 장소 5], 후보 장소 3. 미리보기 때는 장소 2가 보였고 plan은 [5, 2, 3]이었다.
+    // 그 뒤 다른 탭에서 장소 2를 지웠다(lib에는 지운 표시, plan에는 아직 남아 있음).
+    const staleLib = (candidate = pid(3)) =>
+      library(
+        trip({
+          candidates: f<string[]>([candidate]),
+          days: [day([stop(1, 2), stop(2, 5)]), day(), day()],
+        }),
+        [place(2, { deletedAt: T0 })],
+      );
+
+    it('plan에 남은 지운 장소는 무시하고 Stop을 원래 칸에 둔다', () => {
+      const t = tripOf(
+        ok(applyAutoSplit(staleLib(), TRIP, [[pid(5), pid(2), pid(3)], [], []], ctx)),
+      );
+      expect(placesOf(t.days[0]!)).toEqual([pid(2), pid(5), pid(3)]);
+      expect(t.days[0]!.stops.value[0]!.id).toBe(sid(1));
+      expect(t.candidates.value).toEqual([]);
+    });
+
+    it('지운 후보는 plan에 있어도 Day에 넣지 않고 후보에 남긴다', () => {
+      const lib = library(
+        trip({
+          candidates: f<string[]>([pid(3), pid(6)]),
+          days: [day([stop(1, 5)]), day(), day()],
+        }),
+        [place(6, { deletedAt: T0 })],
+      );
+      const t = tripOf(ok(applyAutoSplit(lib, TRIP, [[pid(5), pid(6), pid(3)], [], []], ctx)));
+      expect(placesOf(t.days[0]!)).toEqual([pid(5), pid(3)]);
+      expect(t.candidates.value).toEqual([pid(6)]);
+    });
+  });
 });
 
 describe('입력 불변', () => {

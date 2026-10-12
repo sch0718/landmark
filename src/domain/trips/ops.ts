@@ -547,7 +547,7 @@ export function reorderDay(
  * Day 자동 나누기 미리보기를 적용한다. `plan[d]`는 Day d의 전체 장소 순서다.
  * 기존 Stop은 그대로(id·체류·메모) 옮기고, 후보에서 온 장소는 새 Stop으로 만들어 후보에서 뺀다.
  * 보관함에서 지운 장소의 Stop은 plan에 없어도 Day의 제 칸에 그대로 둔다(스펙 §3.3: 되살리면 원래 자리).
- * 미리보기 뒤에 문서가 바뀌었을 수 있어, 여행에 없는 장소는 무시하고(먼저 나온 자리 우선)
+ * 미리보기 뒤에 문서가 바뀌었을 수 있어, 여행에 없는 장소와 그 사이 지운 장소는 plan에서 무시하고(먼저 나온 자리 우선)
  * plan에 빠진 기존 Stop(보이는 장소)은 원래 Day 끝에 남긴다.
  */
 export function applyAutoSplit(
@@ -564,6 +564,8 @@ export function applyAutoSplit(
     const placed = new Set<string>();
     const assigned = trip.days.map((_, d) =>
       (plan[d] ?? []).filter((p) => {
+        // 미리보기 뒤에 지운 장소가 plan에 남아 있어도 plan 자리를 주지 않는다. 지운 장소는 숨은 Stop처럼 제 칸을 지킨다.
+        if (!isLivePlace(lib, p)) return false;
         if (placed.has(p) || !(existing.has(p) || isCandidate.has(p))) return false;
         placed.add(p);
         return true;

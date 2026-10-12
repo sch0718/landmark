@@ -491,19 +491,46 @@ describe('RouteLookup 동시 요청', () => {
     }),
   );
 
-  it.effect('refresh 호출도 진행 중인 같은 키 요청에 합쳐진다', () =>
+  it.effect('refresh 호출은 진행 중인 보통 요청에 합쳐지지 않고 fresh=1로 따로 보낸다', () =>
+    Effect.gen(function* () {
+      const storage = createMemoryStorage();
+      // 보통 요청은 엣지 캐시의 오래된 답(600초)을, refresh는 새 답(900초)을 받는다.
+      const fetchFn = vi.fn(async (url: unknown) => {
+        const fresh = String(url).includes('fresh=1');
+        await new Promise((r) => setTimeout(r, fresh ? 10 : 5));
+        return json(result({ durationS: fresh ? 900 : 600 }));
+      });
+      const [plain, refreshed] = yield* run({ fetch: fetchFn, storage }, (l) =>
+        Effect.all([l.leg('car', A, B), l.leg('car', A, B, { refresh: true })], {
+          concurrency: 'unbounded',
+        }),
+      );
+      expect(fetchFn).toHaveBeenCalledTimes(2);
+      expect(fetchFn.mock.calls.map(([url]) => String(url).includes('fresh=1'))).toEqual([
+        false,
+        true,
+      ]);
+      expect(plain.durationS).toBe(600);
+      expect(refreshed.durationS).toBe(900);
+      // 나중에 끝난 refresh 결과가 캐시에 남는다.
+      expect(Object.values(readDoc(storage).entries)[0]?.durationS).toBe(900);
+    }),
+  );
+
+  it.effect('refresh끼리는 진행 중인 요청을 나눠 쓴다', () =>
     Effect.gen(function* () {
       const fetchFn = vi.fn(async () => {
         await new Promise((r) => setTimeout(r, 5));
         return json(result());
       });
-      const [plain, refreshed] = yield* run({ fetch: fetchFn, storage: null }, (l) =>
-        Effect.all([l.leg('car', A, B), l.leg('car', A, B, { refresh: true })], {
+      const [a, b] = yield* run({ fetch: fetchFn, storage: null }, (l) =>
+        Effect.all([l.leg('car', A, B, { refresh: true }), l.leg('car', A, B, { refresh: true })], {
           concurrency: 'unbounded',
         }),
       );
       expect(fetchFn).toHaveBeenCalledTimes(1);
-      expect(refreshed).toEqual(plain);
+      expect(String((fetchFn.mock.calls[0] as unknown[])[0])).toContain('fresh=1');
+      expect(a).toEqual(b);
     }),
   );
 

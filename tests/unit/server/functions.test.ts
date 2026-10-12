@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { Effect } from 'effect';
+import { Effect, Fiber } from 'effect';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cacheKey, routeCacheKey } from 'src/server/cache-key';
 import { RouteLookup } from 'src/services/route-lookup';
@@ -481,6 +481,49 @@ describe('다시 계산 → 엣지 캐시 우회(RouteLookup + GET /api/route)',
     );
     expect(calls).toEqual([NAVER_CAR, NAVER_CAR]);
     expect(first.queriedAt).toBe('2026-10-13T01:00:00.000Z');
+    expect(refreshed.queriedAt).toBe('2026-10-13T01:20:00.000Z');
+  });
+
+  it('엣지 캐시 응답이 늦어 보통 요청이 진행 중이어도, refresh는 합쳐지지 않고 네이버에 다시 묻는다', async () => {
+    const cache = stubCaches();
+    vi.useFakeTimers({ toFake: ['Date'] });
+    const calls = stubFetch({
+      [NAVER_CAR]: () => new Response(routeFixture('car-gangneung.json')),
+    });
+    const appFetch = (async (input: RequestInfo | URL) => {
+      const { ctx, pending } = makeContext(String(input));
+      const res = await onRouteGet(ctx);
+      await Promise.all(pending);
+      return res;
+    }) as typeof fetch;
+    const from: [number, number] = [128.8961, 37.7953];
+    const to: [number, number] = [128.9006, 37.793];
+    const wait = (ms: number) => Effect.promise(() => new Promise<void>((r) => setTimeout(r, ms)));
+
+    // 엣지 캐시에 오래된 답(01:00)을 미리 넣어 둔다.
+    vi.setSystemTime(new Date('2026-10-13T01:00:00.000Z'));
+    await appFetch('/api/route?mode=car&from=128.89610,37.79530&to=128.90060,37.79300');
+    expect(calls).toEqual([NAVER_CAR]);
+    // 이제 엣지 캐시 조회가 느리다: 보통 요청이 캐시 응답을 기다리는 동안 refresh가 들어온다.
+    const hit = cache.match.getMockImplementation()!;
+    cache.match.mockImplementation(async (key) => {
+      const stale = await hit(key); // 조회 시점의 오래된 답을 쥐고 늦게 돌려준다
+      await new Promise((r) => setTimeout(r, 40));
+      return stale;
+    });
+
+    vi.setSystemTime(new Date('2026-10-13T01:20:00.000Z'));
+    const [plain, refreshed] = await Effect.runPromise(
+      Effect.gen(function* () {
+        const lookup = yield* RouteLookup;
+        const slow = yield* Effect.forkChild(lookup.leg('car', from, to));
+        yield* wait(5);
+        const b = yield* lookup.leg('car', from, to, { refresh: true });
+        return [yield* Fiber.join(slow), b] as const;
+      }).pipe(Effect.provide(RouteLookup.layerWith({ fetch: appFetch, storage: null }))),
+    );
+    expect(calls).toEqual([NAVER_CAR, NAVER_CAR]);
+    expect(plain.queriedAt).toBe('2026-10-13T01:00:00.000Z');
     expect(refreshed.queriedAt).toBe('2026-10-13T01:20:00.000Z');
   });
 });

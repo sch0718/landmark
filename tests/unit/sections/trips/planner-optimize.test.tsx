@@ -305,6 +305,33 @@ describe('Day 자동 나누기', () => {
     expect(toastMock.mock.calls.some((c) => c[0] === 'Day 자동 나누기를 적용했어요')).toBe(false);
   });
 
+  it('미리보기 뒤 다른 탭이 장소를 지워도 그 Stop은 제 칸에 남고 나머지만 plan을 따른다', async () => {
+    const lib = withTrip(
+      plannerLibrary(),
+      makeTrip({ days: 1, origin: P1, stops: [[P2, P5]], candidates: [P3] }),
+    );
+    const { store, storage } = await open(lib, { ids: ['stopaaaa'] });
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole('button', { name: 'Day 자동 나누기' }));
+    expect(store.get(splitPreviewAtom)!.plan).toEqual([[P5, P2, P3]]);
+
+    // 이 탭이 다시 읽기 전에 다른 탭이 안목 카페거리를 보관함에서 지웠다.
+    writeAsOtherTab(storage, (l) => ({
+      ...l,
+      places: {
+        ...l.places,
+        [P2]: { ...l.places[P2]!, deletedAt: '2026-10-13T03:00:30.000Z' },
+      },
+    }));
+    await user.click(within(panel()).getByRole('button', { name: '적용' }));
+
+    await waitFor(() => expect(lastToast('Day 자동 나누기를 적용했어요')).toBeDefined());
+    const saved = JSON.parse(storage.getItem(LIBRARY_KEY)!) as Library;
+    expect(saved.trips[TRIP]!.days[0]!.stops.value.map((s) => s.placeId)).toEqual([P2, P5, P3]);
+    expect(saved.trips[TRIP]!.candidates.value).toEqual([]);
+  });
+
   it('미리보기 중에 다른 편집을 하면 미리보기가 닫힌다', async () => {
     const { store } = await open(splitTrip());
     const user = userEvent.setup();

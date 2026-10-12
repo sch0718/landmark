@@ -325,16 +325,20 @@ export class RouteLookup extends Context.Service<
               return Effect.succeed(stripUsedAt(cached));
             }
           }
-          const running = inflight.get(key);
+          // 진행 중 표는 (경로, fresh 여부)별로 둔다: `다시 계산`이 엣지 캐시를 쓰는 보통 요청에 합쳐지면
+          // 오래된 답을 받고 `fresh=1`도 못 보낸다. refresh끼리는 합쳐도 된다.
+          const fresh = legOptions?.refresh === true;
+          const flightKey = fresh ? `${key}|fresh` : key;
+          const running = inflight.get(flightKey);
           if (running !== undefined) return Deferred.await(running);
           const pending = Deferred.makeUnsafe<RouteResult, RouteLookupError>();
-          inflight.set(key, pending);
+          inflight.set(flightKey, pending);
           // 기다리는 쪽이 중단돼도 같은 키를 기다리는 다른 호출이 있을 수 있으니 요청은 따로 돌린다.
           return Effect.forkDetach(
-            fetchLeg(key, mode, from, to, legOptions?.refresh === true).pipe(
+            fetchLeg(key, mode, from, to, fresh).pipe(
               Effect.onExit((exit) =>
                 Effect.suspend(() => {
-                  inflight.delete(key);
+                  inflight.delete(flightKey);
                   return Deferred.done(pending, exit);
                 }),
               ),
