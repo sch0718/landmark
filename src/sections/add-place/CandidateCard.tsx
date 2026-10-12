@@ -41,6 +41,10 @@ export function CandidateCard({ candidate }: { candidate: PlaceCandidate }) {
   const navigate = useNavigate();
   const { labels, labelIds, shownIds, toggle, createAndSelect, creating } = useCardLabels();
 
+  // 이름 없는 결과(좌표만 있는 구글 지도 주소 등)는 카드에서 이름을 받는다. 출처·좌표는 그대로라
+  // 같은 구글 ID 장소와의 중복 판단과 지도 이동이 이름 있는 후보와 같다.
+  const needsName = candidate.name.trim() === '';
+  const [name, setName] = useState(candidate.name);
   const [address, setAddress] = useState(candidate.address);
   const [memo, setMemo] = useState('');
   const [saving, setSaving] = useState(false);
@@ -51,6 +55,9 @@ export function CandidateCard({ candidate }: { candidate: PlaceCandidate }) {
 
   const existing = findExisting(library, candidate.source);
   const merging = existing !== undefined && existing.deletedAt === null;
+  // 이미 있는 장소에 라벨만 더할 때는 이름이 필요 없다.
+  const askName = needsName && !merging;
+  const missingName = askName && name.trim() === '';
 
   const save = async () => {
     if (savingRef.current) return;
@@ -59,7 +66,7 @@ export function CandidateCard({ candidate }: { candidate: PlaceCandidate }) {
     const result = await run((lib, ctx) =>
       addPlace(
         lib,
-        { ...candidate, address: address.trim() },
+        { ...candidate, name: askName ? name.trim() : candidate.name, address: address.trim() },
         {
           // 다른 탭이 그사이 지운 라벨은 빼고 넣는다(최신본 기준).
           labelIds: labelIds.filter((id) => lib.labels[id]?.deletedAt === null),
@@ -112,17 +119,33 @@ export function CandidateCard({ candidate }: { candidate: PlaceCandidate }) {
       >
         {PROVIDER_LABEL[candidate.source.kind]}
       </Box>
-      <Typography
-        variant="h6"
-        component="h2"
-        sx={{ mt: 0.75, fontWeight: 800, wordBreak: 'break-word' }}
-      >
-        {candidate.name}
-      </Typography>
+      {!needsName && (
+        <Typography
+          variant="h6"
+          component="h2"
+          sx={{ mt: 0.75, fontWeight: 800, wordBreak: 'break-word' }}
+        >
+          {candidate.name}
+        </Typography>
+      )}
       {candidate.category !== null && (
         <Box component="p" sx={{ m: 0, mt: 0.25, fontSize: 13, color: 'var(--tm-text-secondary)' }}>
           {candidate.category}
         </Box>
+      )}
+      {askName && (
+        <CardSection title="이름">
+          <Box
+            component="input"
+            type="text"
+            aria-label="이름"
+            autoComplete="off"
+            aria-required="true"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            sx={CARD_FIELD_SX}
+          />
+        </CardSection>
       )}
       <CardSection title="주소">
         <Box
@@ -174,7 +197,7 @@ export function CandidateCard({ candidate }: { candidate: PlaceCandidate }) {
         </Button>
         <Button
           variant="contained"
-          disabled={saving || creating}
+          disabled={saving || creating || missingName}
           onClick={() => void save()}
           sx={{ minHeight: 44 }}
         >

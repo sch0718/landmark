@@ -503,21 +503,51 @@ describe('확인 카드', () => {
     expect(store.get(libraryAtom).places[NEW_ID]!.source).toEqual({ kind: 'pin' });
   });
 
-  it('이름 없는 결과(좌표만 있는 구글 지도 주소)는 이름을 받는 핀 카드로 간다', async () => {
-    const coordsOnly = naverPlace({
+  it('이름 없는 구글 결과는 확인 카드에서 이름을 받아야 추가하고, 구글 ID 출처는 그대로다', async () => {
+    const nameless = naverPlace({
       provider: 'google',
-      providerId: null,
+      providerId: '0x1:0x2',
       name: '',
       address: '',
       lng: 127,
       lat: 37.5,
       category: null,
     });
-    const { store } = await openCard(() => coordsOnly, { reverse: '서울특별시 어딘가 1' });
-    await waitFor(() =>
-      expect(store.get(addFlowAtom)).toEqual({ step: 'pin-card', name: '', lng: 127, lat: 37.5 }),
-    );
-    expect(within(panel()).getByRole('button', { name: '추가' })).toBeDisabled();
+    const { user, store } = await openCard(() => nameless, { reverse: '서울특별시 어딘가 1' });
+    const card = panel();
+    const nameInput = await within(card).findByRole('textbox', { name: '이름' });
+    expect(store.get(addFlowAtom)).toMatchObject({ step: 'candidate' });
+    const add = within(card).getByRole('button', { name: '추가' });
+    expect(add).toBeDisabled();
+    await user.type(nameInput, '   ');
+    expect(add).toBeDisabled();
+    await user.type(nameInput, '이름 붙인 곳 ');
+    expect(add).toBeEnabled();
+    await user.click(add);
+    await waitFor(() => expect(store.get(libraryAtom).places[NEW_ID]).toBeDefined());
+    const added = store.get(libraryAtom).places[NEW_ID]!;
+    expect(added.name.value).toBe('이름 붙인 곳');
+    expect(added.source).toEqual({ kind: 'google', googleId: '0x1:0x2' });
+  });
+
+  it('이름 없는 구글 결과도 같은 구글 ID 장소가 있으면 라벨만 더한다(이름 칸 없이)', async () => {
+    const google = naverPlace({ provider: 'google', providerId: '0x1:0x2', name: '', address: '' });
+    const { user, store } = await openCard(() => google, { reverse: null });
+    await waitFor(() => expect(store.get(addFlowAtom)).toMatchObject({ step: 'candidate' }));
+    // 처음 추가
+    await user.type(within(panel()).getByRole('textbox', { name: '이름' }), '첫 저장');
+    await user.click(within(panel()).getByRole('button', { name: '추가' }));
+    await waitFor(() => expect(store.get(libraryAtom).places[NEW_ID]).toBeDefined());
+    // 같은 링크로 다시 열면 이미 있는 장소로 다룬다.
+    act(() => store.set(addFlowAtom, { step: 'link', hint: 'place' }));
+    await submitLink(user);
+    expect(
+      await within(panel()).findByText('이미 있는 장소예요. 고른 라벨만 더할게요'),
+    ).toBeInTheDocument();
+    expect(within(panel()).queryByRole('textbox', { name: '이름' })).not.toBeInTheDocument();
+    await user.click(within(panel()).getByRole('button', { name: '라벨 더하기' }));
+    await waitFor(() => expect(store.get(addFlowAtom)).toEqual({ step: 'closed' }));
+    expect(placeCount(store.get(libraryAtom))).toBe(6);
   });
 
   it('카카오 후보는 카카오 출처로 넣는다', async () => {
@@ -617,5 +647,15 @@ describe('후보 마커', () => {
 
     await user.click(within(panel()).getByRole('button', { name: '취소' }));
     await waitFor(() => expect(screen.queryByTestId('marker-candidate')).not.toBeInTheDocument());
+  });
+
+  it('이름 없는 결과도 확인 카드에서 지도를 그 좌표로 옮긴다', async () => {
+    await openCard(() =>
+      naverPlace({ provider: 'google', providerId: null, name: '', lng: 127, lat: 37.5 }),
+    );
+    await within(panel()).findByRole('textbox', { name: '이름' });
+    await screen.findByTestId('marker-candidate');
+    const adapter = [...resources.liveInstances][0]!;
+    await waitFor(() => expect(adapter.getCamera()?.center).toEqual([127, 37.5]));
   });
 });
