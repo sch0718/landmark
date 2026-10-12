@@ -20,8 +20,8 @@ import { libraryAtom, useLibraryAction } from 'src/stores/library-state';
 type Props = {
   open: boolean;
   mode: 'create' | 'edit';
-  /** 처음 채울 값. 생략하면 제목 없이 오늘~내일, 출발지 없음. 대화상자를 열 때마다 이 값으로 시작한다. */
-  initial?: { title: string; startDate: string; endDate: string; origin: string | null };
+  /** 처음 채울 값. 빠진 값은 제목 없음·오늘~내일·출발지 없음. 대화상자를 열 때마다 이 값으로 시작한다. */
+  initial?: Partial<{ title: string; startDate: string; endDate: string; origin: string | null }>;
   /** 만들 때 처음부터 후보로 넣을 장소(`create`에서만 쓴다). */
   candidates?: string[];
   /** 고칠 여행(`edit`에서만 쓴다). */

@@ -309,6 +309,48 @@ describe('addPlace', () => {
       error: { _tag: 'NotFound', id: A },
     });
   });
+
+  describe('saved option', () => {
+    it('creates a new place hidden from the library when saved is false', () => {
+      const r = ok(
+        addPlace(lib([]), candidate(), { labelIds: [], memo: '', saved: false }, makeCtx()),
+      );
+      expect(r.lib.places[r.createdId!]!.saved).toEqual({ value: false, updatedAt: NOW });
+      expect(valid(r.lib)).toBe(true);
+    });
+
+    it('defaults to saved: true for a new place', () => {
+      const r = ok(addPlace(lib([]), candidate(), { labelIds: [], memo: '' }, makeCtx()));
+      expect(r.lib.places[r.createdId!]!.saved.value).toBe(true);
+    });
+
+    it('keeps a saved place saved when saved is false', () => {
+      const existing = place(P1);
+      const r = ok(
+        addPlace(lib([existing]), candidate(), { labelIds: [], memo: '', saved: false }, makeCtx()),
+      );
+      expect(r.createdId).toBe(P1);
+      expect(r.lib.places[P1]!.saved).toEqual(existing.saved);
+      expect(r.lib.places[P1]).toBe(existing);
+    });
+
+    it('keeps a trip-only place hidden when saved is false', () => {
+      const existing = place(P1, { saved: f(false) });
+      const r = ok(
+        addPlace(lib([existing]), candidate(), { labelIds: [], memo: '', saved: false }, makeCtx()),
+      );
+      expect(r.lib.places[P1]!.saved).toEqual({ value: false, updatedAt: T0 });
+    });
+
+    it('restores a deleted place without changing saved when saved is false', () => {
+      const existing = place(P1, { deletedAt: T0 });
+      const r = ok(
+        addPlace(lib([existing]), candidate(), { labelIds: [], memo: '', saved: false }, makeCtx()),
+      );
+      expect(r.lib.places[P1]!.deletedAt).toBeNull();
+      expect(r.lib.places[P1]!.saved).toEqual(existing.saved);
+    });
+  });
 });
 
 function item(sid: string, over: Partial<FolderItem> = {}): FolderItem {

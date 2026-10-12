@@ -193,3 +193,13 @@ export function regionCounts(
       return b.count - a.count || compareKo(a.region, b.region);
     });
 }
+
+/**
+ * 그 지역의 보관함 장소 id(지역 칩과 같은 `regionsByPlace` 기준). 검색·라벨 필터와 상관없이 살아 있는
+ * `saved: true` 장소 전부다. `이 지역으로 여행 만들기`의 처음 후보.
+ */
+export function placeIdsInRegion(lib: Library, region: string): string[] {
+  const places = livePlaces(lib);
+  const regionOf = regionsByPlace(places);
+  return places.filter((p) => regionOf.get(p.id) === region).map((p) => p.id);
+}
