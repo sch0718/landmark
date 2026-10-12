@@ -36,10 +36,13 @@ yarn install --frozen-lockfile  # .yarnrc의 ignore-engines가 적용된다
 echo 'VITE_NAVER_MAP_CLIENT_ID=<발급받은 Client ID>' > .env.local
 ```
 
-**NCP 콘솔 도메인 등록**: Maps 애플리케이션의 Web 서비스 URL에 아래 두 곳을 등록해야 지도가 뜹니다.
+**NCP 콘솔 도메인 등록**: Maps 애플리케이션의 Web 서비스 URL에 아래 주소를 등록해야 지도가 뜹니다.
 
-- Cloudflare Pages 도메인(예: `https://<프로젝트>.pages.dev`, 커스텀 도메인을 쓰면 그것도)
-- `http://localhost:5173`
+- 배포 주소 `https://landmark-c5f.pages.dev`(커스텀 도메인을 쓰면 그것도)
+- `http://localhost:5173`(`yarn dev`)
+- `http://localhost:8788`(`yarn dev:full`)
+
+**NCP Reverse Geocoding 켜기**: 지도에서 핀으로 장소를 추가할 때 주소를 자동으로 채우려면 같은 Maps 애플리케이션에서 Reverse Geocoding API를 켜야 합니다. 꺼져 있으면 주소 칸이 비어 직접 입력해야 합니다.
 
 NCP Maps 요금·무료 사용량: **확인 필요**(배포 후 확인해 날짜와 함께 여기에 기록).
 
@@ -48,7 +51,22 @@ NCP Maps 요금·무료 사용량: **확인 필요**(배포 후 확인해 날짜
 ```bash
 yarn dev                           # http://localhost:5173 (네이버 지도, .env.local 필요)
 VITE_MAP_ADAPTER=fake yarn dev     # 가짜 지도
+yarn dev:full                      # http://localhost:8788 (Vite + 서버 함수 /api/*)
 ```
+
+### 서버 함수 함께 띄우기 (`yarn dev:full`)
+
+링크·폴더로 장소를 추가하는 기능은 Cloudflare Pages Functions(`functions/api/place.ts`, `functions/api/naver-folder.ts`)를 부릅니다. `yarn dev`만 띄우면 `/api/*`가 없어 링크 추가가 `인터넷 연결을 확인하고 다시 시도해 주세요`로 끝납니다.
+
+`yarn dev:full`은 `wrangler pages dev`가 Vite 개발 서버(5173)를 띄우고 그 앞에서 `http://localhost:8788`로 받습니다. `/api/*`는 함수가, 나머지는 Vite가 응답합니다(HMR 유지). **브라우저는 8788로 엽니다.**
+
+```bash
+curl -H 'Origin: http://localhost:8788' 'http://localhost:8788/api/place?url=https%3A%2F%2Fnaver.me%2FFk73Vab5'
+```
+
+- 함수는 요청 출처(`Origin`, 없으면 `Referer`)가 배포 주소·미리보기 주소·`http://localhost:5173`·`http://localhost:8788`일 때만 응답합니다(그 밖은 403 `FORBIDDEN_ORIGIN`).
+- 함수 코드는 `src/server/*`를 상대 경로로 가져옵니다(wrangler에는 `src/` 별칭이 없음). React·MUI·Effect를 가져오지 않습니다.
+- `wrangler pages dev`의 명령 프록시(`-- <명령>`, `--proxy`)는 wrangler 4.142.0에서 "deprecated" 경고를 냅니다. 이 버전에서 Vite 개발 서버와 함수를 함께 띄우는 방법은 이것뿐이라(대안 `wrangler pages dev dist`는 빌드 결과만 서빙해 HMR이 없음) 그대로 씁니다. IPv6·`compatibility_date` 경고도 무시해도 됩니다. 로컬 상태는 `.wrangler/`(gitignore)에 생깁니다.
 
 ### 화면 경로
 
@@ -153,7 +171,7 @@ node scripts/measure-ui-assets.mjs dist/assets
 
 ## 배포 (Cloudflare Pages)
 
-비공개 GitHub repo를 Cloudflare Pages에 연결합니다.
+비공개 GitHub repo `sch0718/landmark`의 `main`을 Cloudflare Pages 프로젝트 `landmark`에 연결했습니다. 배포 주소는 **https://landmark-c5f.pages.dev**, 브랜치 미리보기는 `https://<이름>.landmark-c5f.pages.dev`입니다.
 
 | 설정                                | 값                                                               |
 | ----------------------------------- | ---------------------------------------------------------------- |
@@ -162,7 +180,8 @@ node scripts/measure-ui-assets.mjs dist/assets
 | 환경변수 `NODE_VERSION`             | `24` (engines 검사는 `.yarnrc`의 `ignore-engines true`로 건너뜀) |
 | 환경변수 `VITE_NAVER_MAP_CLIENT_ID` | NCP Client ID (Production·Preview 모두)                          |
 
-- `yarn build:ci`는 `yarn validate && yarn typecheck && yarn test && yarn build`입니다. 검증이나 테스트가 실패하면 배포되지 않습니다.
+- `yarn build:ci`는 `yarn validate && yarn typecheck && yarn test && yarn build && yarn build:map`입니다. 검증이나 테스트가 실패하면 배포되지 않습니다.
+- 저장소 루트의 `functions/`는 Pages가 자동으로 서버 함수(`/api/place`, `/api/naver-folder`)로 배포합니다. 별도 설정은 없습니다. 결과는 Cloudflare Cache API에 장소 1일·폴더 10분 동안 둡니다.
 - SPA 라우팅은 Pages 기본 동작(404.html이 없으면 index.html)을 씁니다.
 - `public/_headers`: 전체 `X-Robots-Tag: noindex`, `/data/*`는 `Cache-Control: public, max-age=60`.
 - GitHub Actions(`.github/workflows/ci.yml`)는 push·PR마다 lint, `build:ci`, E2E를 돌리는 보조 검증입니다. 배포 여부는 Pages 빌드 명령이 결정합니다.
@@ -204,8 +223,11 @@ node scripts/measure-ui-assets.mjs dist/assets
 
 ### 첫 배포 체크리스트 (작성자와 함께)
 
-- [ ] Cloudflare Pages에 repo 연결, 빌드 명령·출력·`NODE_VERSION`·`VITE_NAVER_MAP_CLIENT_ID` 설정
-- [ ] NCP 콘솔에 Pages 도메인과 `http://localhost:5173` 등록
+- [x] Cloudflare Pages에 repo 연결(`sch0718/landmark` `main` → `https://landmark-c5f.pages.dev`, 2026-10-12 확인)
+- [ ] Pages 빌드 명령(`yarn build:ci`)·출력(`dist`)·`NODE_VERSION=24`·`VITE_NAVER_MAP_CLIENT_ID` 설정 확인
+- [ ] NCP 콘솔 Web 서비스 URL에 `https://landmark-c5f.pages.dev`·`http://localhost:5173`·`http://localhost:8788` 등록
+- [x] NCP Maps 애플리케이션에서 Reverse Geocoding 켜기(2026-10-12 확인)
+- [ ] 배포 주소에서 링크 추가(`/api/place`)·폴더 가져오기(`/api/naver-folder`) 동작 확인
 - [ ] 실제 여행 yaml 작성 → `yarn collect` → 커밋·push → 배포 확인
 - [ ] 위 수동 확인 체크리스트 수행
 - [ ] NCP Maps 요금·무료 사용량을 확인해 이 README에 날짜와 함께 기록

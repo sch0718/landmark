@@ -1,10 +1,12 @@
 import Box from '@mui/material/Box';
 import IconButton from '@mui/material/IconButton';
 import type { SxProps, Theme } from '@mui/material/styles';
+import { useAtomValue } from 'jotai';
 import { useState, type ReactNode } from 'react';
 import { matchPath, Outlet, useLocation, useNavigate } from 'react-router';
 import { ChevronLeftIcon, XIcon } from 'src/components/icons';
 import { paths } from 'src/routes/paths';
+import { AddPlaceHost, useAddFlowRoute } from 'src/sections/add-place/AddPlaceHost';
 import { AddSheet } from 'src/sections/shell/AddSheet';
 import { BottomTabs } from 'src/sections/shell/BottomTabs';
 import { NavRail } from 'src/sections/shell/NavRail';
@@ -12,6 +14,7 @@ import { DETAIL_WIDTH, LIST_WIDTH } from 'src/sections/shell/pane-widths';
 import { DetailSlot, ListSlot, MapSlot } from 'src/sections/shell/ShellSlots';
 import { StorageBanner } from 'src/sections/shell/StorageBanner';
 import { useLayout } from 'src/sections/shell/use-layout';
+import { addFlowAtom, showsAddPanel } from 'src/stores/add-place';
 
 /** 슬롯 하나. 랜드마크(`aria-label`)와 스크롤을 맡는다. */
 function Pane({
@@ -112,6 +115,11 @@ export function AppShell() {
   const { pathname } = location;
   const navigate = useNavigate();
   const [addOpen, setAddOpen] = useState(false);
+  // 추가 흐름의 칸은 상세 칸 자리를 쓴다(상세가 열려 있어도 추가 흐름이 우선).
+  const flow = useAtomValue(addFlowAtom);
+  const adding = showsAddPanel(flow);
+  // 핀 모드는 지도 전체를 쓴다. 중간 폭에서 지도를 덮는 상세 오버레이를 그동안 내린다.
+  const pinning = flow.step === 'pin';
 
   // 끝의 `/`가 있어도(`/map/`) 같은 경로로 본다.
   const placeId = matchPath(paths.place(':id'), pathname)?.params.id ?? null;
@@ -123,6 +131,8 @@ export function AppShell() {
   const viewOrigin = isMap ? 'map' : 'list';
   if (placeId === null && isLibraryView && origin !== viewOrigin) setOrigin(viewOrigin); // 렌더 중 상태 갱신
   const sheetOnMap = placeId !== null && origin === 'map';
+  // 좁은 화면은 지도 탭에서만 지도가 가리지 않고 보인다(장소 시트는 지도를 덮는다).
+  useAddFlowRoute(layout === 'compact' ? isMap : isLibraryView);
 
   const closeDetail = () => {
     // 좁은 화면은 시트를 연 기록을 되감아 모바일 뒤로가기와 어긋나지 않게 한다. 앱 안에서 연
@@ -138,8 +148,11 @@ export function AppShell() {
   let body: ReactNode;
   if (!isLibraryView) {
     body = (
-      <Box component="main" sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-        <Outlet />
+      <Box sx={{ flex: 1, minHeight: 0, display: 'flex', position: 'relative' }}>
+        <Box component="main" sx={{ flex: 1, minWidth: 0, minHeight: 0, overflow: 'auto' }}>
+          <Outlet />
+        </Box>
+        {layout !== 'compact' && <AddPlaceHost floating />}
       </Box>
     );
   } else if (layout !== 'compact') {
@@ -156,8 +169,16 @@ export function AppShell() {
         <Pane label="지도" sx={MAP_PANE_SX}>
           <MapSlot />
         </Pane>
-        {(wide || placeId !== null) && (
-          <DetailPane mode={wide ? 'column' : 'overlay'} placeId={placeId} onClose={closeDetail} />
+        {adding ? (
+          <AddPlaceHost floating={!wide} />
+        ) : (
+          (wide || (placeId !== null && !pinning)) && (
+            <DetailPane
+              mode={wide ? 'column' : 'overlay'}
+              placeId={placeId}
+              onClose={closeDetail}
+            />
+          )
         )}
       </Box>
     );
@@ -194,6 +215,7 @@ export function AppShell() {
         {layout === 'compact' && <BottomTabs onAdd={() => setAddOpen(true)} />}
       </Box>
       <AddSheet open={addOpen} onClose={() => setAddOpen(false)} />
+      {layout === 'compact' && <AddPlaceHost />}
     </Box>
   );
 }

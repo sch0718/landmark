@@ -1,0 +1,6 @@
+{
+  "statusCode": "400",
+  "apiErrorCode": 1603,
+  "apiErrorMessage": "공유 정보가 존재하지 않습니다.",
+  "displayMessage": "공유 정보가 존재하지 않습니다."
+}

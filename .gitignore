@@ -20,3 +20,5 @@ trips/*
 !trips/example.yaml
 public/data/*
 !public/data/.gitkeep
+# wrangler pages dev가 만드는 로컬 상태
+.wrangler/

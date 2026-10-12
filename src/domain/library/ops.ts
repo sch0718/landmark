@@ -21,8 +21,12 @@ export type OpError =
   | { _tag: 'LabelNameInvalid'; name: string }
   | { _tag: 'NotFound'; id: string };
 
+/** 여러 장소를 한 번에 넣는 연산(폴더 가져오기)이 직접 센 결과. */
+export type OpSummary = { created: number; merged: number; restored: number };
+
 export type OpResult =
-  { ok: true; lib: Library; createdId?: string } | { ok: false; error: OpError };
+  | { ok: true; lib: Library; createdId?: string; summary?: OpSummary }
+  | { ok: false; error: OpError };
 
 const fail = (error: OpError): OpResult => ({ ok: false, error });
 

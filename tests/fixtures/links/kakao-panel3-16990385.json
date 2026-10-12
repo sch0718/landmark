@@ -1,0 +1,93 @@
+{
+  "summary": {
+    "meta": {
+      "updated_at": "2026-03-25 14:36:27"
+    },
+    "confirm_id": "16990385",
+    "name": "쟝블랑제리",
+    "status": "Y",
+    "category": {
+      "name": "제과,베이커리",
+      "id1": "9",
+      "id2": "46",
+      "id3": "695",
+      "name1": "음식점",
+      "name2": "간식",
+      "name3": "제과,베이커리"
+    },
+    "point": {
+      "lon": 126.96196823436256,
+      "lat": 37.477157623198956
+    },
+    "address": {
+      "disp": "서울 관악구 낙성대역길 8 1층 (봉천동)",
+      "jibun": "봉천동 1660-7",
+      "road": "서울 관악구 낙성대역길 8 1층",
+      "base_zone_no": "08792",
+      "road_part": "낙성대역길 8 1층",
+      "jibun_part": "봉천동 1660-7",
+      "address_detail_part": "1층"
+    },
+    "road_view": {
+      "pano_id": "1212788943",
+      "pan": 303.0,
+      "tilt": -1.0,
+      "point": {
+        "lon": 126.9620948889147,
+        "lat": 37.477092791208584
+      },
+      "level": 6,
+      "url": "https://map.kakaocdn.net/map_roadview/2026/07/9153091/2_101371_9153091_20260727022050_cube/left_800.jpg"
+    },
+    "regions": [
+      {
+        "depth": 1,
+        "id": "I",
+        "name": "서울",
+        "simple_name": "서울"
+      },
+      {
+        "depth": 2,
+        "id": "I1004",
+        "name": "관악구",
+        "simple_name": "관악구"
+      },
+      {
+        "depth": 3,
+        "id": "I10040100",
+        "name": "봉천동",
+        "simple_name": "봉천동"
+      }
+    ],
+    "homepages": ["https://www.instagram.com/jeanboulangerie_kr"],
+    "related_links": {
+      "primary_links": [
+        {
+          "url": "https://www.instagram.com/jeanboulangerie_kr",
+          "display_text": "인스타그램"
+        }
+      ]
+    },
+    "phone_numbers": [
+      {
+        "tel": "02-889-5170"
+      }
+    ],
+    "payments": [
+      {
+        "img_url": "https://t1.kakaocdn.net/kakaomap_mobile/android/ico_kakaopay.png",
+        "image_keyword": "카카오페이",
+        "landing_url": "kakaotalk://kakaopay/offline?referer=kakaomap"
+      },
+      {
+        "img_url": "https://t1.kakaocdn.net/kakaomap_mobile/android/ico_zeropay.png",
+        "image_keyword": "제로페이",
+        "landing_url": "https://www.zeropay.or.kr"
+      }
+    ],
+    "main_photo_url": "http://t1.kakaocdn.net/local/kakaomapPhoto/review/82d883830e2dca35c6b6589936986e56c4623f2f?original",
+    "display_info": {
+      "display_name1": "쟝블랑제리"
+    }
+  }
+}

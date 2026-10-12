@@ -22,13 +22,13 @@ afterEach(() => {
 });
 
 describe('loadNaverSdk', () => {
-  it('src에 ncpKeyId=<인코딩된 id>를 쓴다', async () => {
+  it('src에 ncpKeyId=<인코딩된 id>와 geocoder 하위 모듈을 쓴다', async () => {
     const load = await freshLoader();
     const p = load('a b&c');
     const assertion = expect(p).rejects.toThrow();
     expect(scripts()).toHaveLength(1);
     expect(scripts()[0]!.src).toBe(
-      `https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=${encodeURIComponent('a b&c')}`,
+      `https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=${encodeURIComponent('a b&c')}&submodules=geocoder`,
     );
     vi.advanceTimersByTime(10000);
     await assertion;

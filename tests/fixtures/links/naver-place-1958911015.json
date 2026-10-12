@@ -1,0 +1,75 @@
+{
+  "data": {
+    "placeDetail": {
+      "id": "1958911015",
+      "name": "구십도씨",
+      "businessType": "restaurant",
+      "opinet": null,
+      "coordinate": {
+        "longitude": 126.7260583,
+        "latitude": 37.3691439
+      },
+      "panorama": {
+        "street": {
+          "id": "6GiKpUMUwilCJjytm7gYNw==",
+          "lat": "37.3689385",
+          "lon": "126.7258550",
+          "fov": "120",
+          "tilt": "10.00",
+          "pan": "44.73"
+        }
+      },
+      "labels": {
+        "booking": false,
+        "delivery": false,
+        "nPay": false,
+        "nPayPromotion": false,
+        "talktalk": false,
+        "order": false
+      },
+      "category": {
+        "category": "카페,디저트",
+        "categoryCodeList": ["220036", "220052", "220563"]
+      },
+      "address": {
+        "address": "경기 시흥시 배곧동 220",
+        "roadAddress": "경기 시흥시 서울대학로264번길 7 138호, 139호 카페 구십도씨",
+        "formattedAddress": "경기 시흥시 배곧동"
+      },
+      "businessHours": {
+        "description": "11:00에 영업 시작"
+      },
+      "reprPrice": null,
+      "visitorReviews": {
+        "score": null,
+        "displayText": "방문자 리뷰 797"
+      },
+      "blogReviews": {
+        "total": 633
+      },
+      "images": {
+        "images": [
+          {
+            "origin": "https://ldb-phinf.pstatic.net/20231118_265/1700236203714TQDCs_JPEG/2023.11.16_%B9%E8%B0%F0_%C4%AB%C6%E4402129.jpg",
+            "originalUrl": "https://ldb-phinf.pstatic.net/20231118_265/1700236203714TQDCs_JPEG/2023.11.16_%B9%E8%B0%F0_%C4%AB%C6%E4402129.jpg"
+          },
+          {
+            "origin": "https://ldb-phinf.pstatic.net/20231118_48/1700236203753OKnfe_JPEG/2023.11.16_%B9%E8%B0%F0_%C4%AB%C6%E4402137.jpg",
+            "originalUrl": "https://ldb-phinf.pstatic.net/20231118_48/1700236203753OKnfe_JPEG/2023.11.16_%B9%E8%B0%F0_%C4%AB%C6%E4402137.jpg"
+          },
+          {
+            "origin": "https://ldb-phinf.pstatic.net/20231118_272/1700236203788odgFa_JPEG/2023.11.16_%B9%E8%B0%F0_%C4%AB%C6%E4402131.jpg",
+            "originalUrl": "https://ldb-phinf.pstatic.net/20231118_272/1700236203788odgFa_JPEG/2023.11.16_%B9%E8%B0%F0_%C4%AB%C6%E4402131.jpg"
+          },
+          {
+            "origin": "https://ldb-phinf.pstatic.net/20231118_38/1700236203702fFwIz_JPEG/2023.11.16_%B9%E8%B0%F0_%C4%AB%C6%E4402127.jpg",
+            "originalUrl": "https://ldb-phinf.pstatic.net/20231118_38/1700236203702fFwIz_JPEG/2023.11.16_%B9%E8%B0%F0_%C4%AB%C6%E4402127.jpg"
+          }
+        ]
+      },
+      "naverBookingMenu": null,
+      "beautyStyles": null,
+      "immersiveVideo3D": null
+    }
+  }
+}

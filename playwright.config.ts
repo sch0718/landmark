@@ -1,6 +1,10 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const PORT = 5173;
+/**
+ * 앱(vite dev) 포트. 기본은 5173이고, 다른 프로젝트의 서버가 5173을 쓰고 있으면 `E2E_PORT`로 바꾼다
+ * (`reuseExistingServer`가 켜져 있어 남의 서버를 앱으로 착각하고 시험할 수 있다).
+ */
+const PORT = Number(process.env.E2E_PORT) || 5173;
 /** 지도 페이지(`dist-map/`) 포트. `tests/e2e/fixtures.ts`의 `SHARE_MAP_URL`과 같아야 한다. */
 const MAP_PORT = 5174;
 const isCI = !!process.env.CI;
@@ -38,19 +42,25 @@ export default defineConfig({
         'legacy-import.spec.ts',
         'themes.spec.ts',
         'share-export.spec.ts',
+        'place-adding.spec.ts',
       ],
       use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 } },
     },
     {
       name: 'iphone',
       grepInvert: /@desktop/,
-      testMatch: ['library.spec.ts', 'themes.spec.ts', 'share-export.spec.ts'],
+      testMatch: [
+        'library.spec.ts',
+        'themes.spec.ts',
+        'share-export.spec.ts',
+        'place-adding.spec.ts',
+      ],
       use: { ...devices['iPhone 13'], viewport: { width: 390, height: 844 } },
     },
     {
       name: 'galaxy',
       grepInvert: /@desktop/,
-      testMatch: ['library.spec.ts'],
+      testMatch: ['library.spec.ts', 'place-adding.spec.ts'],
       use: {
         ...devices['Galaxy S9+'],
         browserName: 'chromium',

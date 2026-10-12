@@ -3,6 +3,8 @@
  * 클라이언트 ID 쿼리 파라미터명 확인(2026-10-04): 공식 문서(navermaps.github.io/maps.js.ncp,
  * Getting Started "변경사항")가 `ncpClientId`를 `ncpKeyId`로 바꿨다고 안내한다 → `ncpKeyId` 사용.
  *
+ * `submodules=geocoder`는 주소 변환(`naver.maps.Service.reverseGeocode`)에 필요하다(2026-10-12 확인: 등록 도메인에서 200).
+ *
  * 등록되지 않은 도메인이면 스크립트는 정상 로드되고 SDK가 전역 `navermap_authFailure`를 부른다
  * (보통 로드가 끝난 뒤 비동기 인증 확인을 거쳐서). 그래서 스크립트를 넣기 전에 이 함수를 정의해 두고,
  * 로드 대기 중이면 reject하고 이미 끝났으면 `onNaverAuthFailure`로 등록한 콜백을 부른다.
@@ -51,7 +53,7 @@ export function loadNaverSdk(clientId: string, timeoutMs = 10000): Promise<void>
     };
     rejectPending = fail;
     const timer = setTimeout(() => fail('네이버 지도 SDK 로드 시간 초과'), timeoutMs);
-    script.src = `https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=${encodeURIComponent(clientId)}`;
+    script.src = `https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=${encodeURIComponent(clientId)}&submodules=geocoder`;
     script.async = true;
     script.onload = () => {
       if (!rejectPending) return;

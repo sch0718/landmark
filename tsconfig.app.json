@@ -6,5 +6,5 @@
     "emitDeclarationOnly": true,
     "outDir": "./node_modules/.tmp/app-out"
   },
-  "include": ["src", "pipeline", "tests", "build/inline-assets.ts"]
+  "include": ["src", "functions", "pipeline", "tests", "build/inline-assets.ts"]
 }

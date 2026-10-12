@@ -148,11 +148,17 @@ function baseOf(trip: TripData, placeKey: string): PlannedPlaceBase {
   return { source, name: lp.name, address: lp.address, lng: lp.lng, lat: lp.lat };
 }
 
-/** 이미 있는 살아 있는 장소. 네이버는 `sid`, 핀은 `source.legacy`로 찾는다. */
+/** 이미 있는 살아 있는 장소. 네이버는 `sid`, 카카오·구글은 각자의 ID, 핀은 `source.legacy`로 찾는다. */
 function findExisting(lib: Library, source: PlaceSource): Place | undefined {
   return Object.values(lib.places).find((p) => {
     if (p.deletedAt !== null) return false;
     if (source.kind === 'naver') return p.source.kind === 'naver' && p.source.sid === source.sid;
+    if (source.kind === 'kakao') {
+      return p.source.kind === 'kakao' && p.source.kakaoId === source.kakaoId;
+    }
+    if (source.kind === 'google') {
+      return p.source.kind === 'google' && p.source.googleId === source.googleId;
+    }
     return (
       p.source.kind === 'pin' &&
       p.source.legacy !== undefined &&

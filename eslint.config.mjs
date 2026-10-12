@@ -14,6 +14,7 @@ export default tseslint.config(
       '.claude',
       '.superpowers',
       '.reference',
+      '.wrangler',
     ],
   },
   js.configs.recommended,

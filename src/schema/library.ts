@@ -68,6 +68,18 @@ export const PlaceSource = Schema.Union([
     sid: Schema.String.check(Schema.isPattern(/^\d+$/, { message: 'sid는 숫자입니다' })),
   }),
   Schema.Struct({
+    kind: Schema.Literal('kakao'),
+    kakaoId: Schema.String.check(Schema.isPattern(/^\d+$/, { message: 'kakaoId는 숫자입니다' })),
+  }),
+  Schema.Struct({
+    kind: Schema.Literal('google'),
+    googleId: Schema.String.check(
+      Schema.isPattern(/^0x[0-9a-f]+:0x[0-9a-f]+$/, {
+        message: 'googleId는 0x…:0x… 형식입니다',
+      }),
+    ),
+  }),
+  Schema.Struct({
     kind: Schema.Literal('pin'),
     legacy: Schema.optional(Schema.Struct({ publicId: PublicId, placeKey: PlaceKey })),
   }),
@@ -140,6 +152,30 @@ export const LibrarySchema = Schema.Struct({
         });
       }
       seenSid.add(place.source.sid);
+    }
+
+    const seenKakao = new Set<string>();
+    for (const [id, place] of livePlaces) {
+      if (place.source.kind !== 'kakao') continue;
+      if (seenKakao.has(place.source.kakaoId)) {
+        issues.push({
+          path: ['places', id],
+          issue: `카카오 장소가 중복됩니다: ${place.source.kakaoId}`,
+        });
+      }
+      seenKakao.add(place.source.kakaoId);
+    }
+
+    const seenGoogle = new Set<string>();
+    for (const [id, place] of livePlaces) {
+      if (place.source.kind !== 'google') continue;
+      if (seenGoogle.has(place.source.googleId)) {
+        issues.push({
+          path: ['places', id],
+          issue: `구글 장소가 중복됩니다: ${place.source.googleId}`,
+        });
+      }
+      seenGoogle.add(place.source.googleId);
     }
 
     const seenLegacy = new Set<string>();

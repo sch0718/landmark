@@ -3,7 +3,9 @@ import { withAppErrorReporter } from 'src/lib/effect/error-reporter';
 import { IdGen } from 'src/services/id-gen';
 import { LegacyTripSource } from 'src/services/legacy-trip-source';
 import { LibraryStore } from 'src/services/library-store';
+import { PlaceLookup } from 'src/services/place-lookup';
 import { PrefsStore } from 'src/services/prefs-store';
+import { ReverseGeocoder } from 'src/services/reverse-geocoder';
 import { ShareTemplate } from 'src/services/share-template';
 
 /** 앱 서비스 목록. 서비스를 늘리면 여기에 더한다. */
@@ -13,6 +15,8 @@ export const AppLayer = Layer.mergeAll(
   IdGen.layer,
   LegacyTripSource.layer,
   ShareTemplate.layer,
+  PlaceLookup.layer,
+  ReverseGeocoder.layer,
 );
 
 export type AppServices = Layer.Success<typeof AppLayer>;

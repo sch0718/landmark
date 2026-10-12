@@ -83,6 +83,8 @@ export class FakeMapAdapter implements MapAdapter {
     this.camera = { center: [...camera.center], zoom: camera.zoom };
     this.root.dataset.center = camera.center.join(',');
     this.root.dataset.zoom = String(camera.zoom);
+    // 네이버 지도는 카메라가 바뀌면 `idle`로 영역을 알린다. 테스트에서 지도를 끄는 것도 이 경로다.
+    this.boundsCb?.(FAKE_BOUNDS);
   }
 
   fitBounds(points: [number, number][], padding?: MapPadding): void {
