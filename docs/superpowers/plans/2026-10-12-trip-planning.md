@@ -20,7 +20,7 @@
 - `functions/`·`src/server/`는 상대 경로 import만, React·MUI·Effect·브라우저 전용 모듈 금지.
 - 한도: 여행 이름 1–60자, 기간 최대 30일, Stop 메모 500자, 체류 0–1440분 정수, 경로 캐시 500개, 경로선 200점, 서버 시한 8초, 동시 경로 요청 4개.
 - 이동 수단 자동 기준: 직선 **800m 이하 도보**, 그 밖 자동차. 직선 **50km 초과**는 도보 불가. 직선 추정: `직선 × 1.3`, 자동차 시속 40km, 도보 시속 4km.
-- 순서 정리: 움직일 장소 **12곳 이하** Held–Karp, 13곳 이상 nearest neighbor + 2-opt, 결과가 **1% 이상** 짧을 때만 바꾼다.
+- 순서 정리: 움직일 장소 **12곳 이하** Held–Karp, 13곳 이상 nearest neighbor + 2-opt, 지금 순서가 고정 시각 순서를 어기면 거리와 상관없이 바꾸고, 아니면 결과가 **1% 이상** 짧을 때만 바꾼다.
 - 서버 오류 코드: 기존 + `BAD_REQUEST` 400, `NO_ROUTE` 404. 엣지 캐시 자동차 3,600초·도보 604,800초. 브라우저에는 `private, no-store`.
 - 고정 문구(스펙 §6·§2):
   - `경로 없음 · 직선 추정` / `직선 추정` / `경로를 못 가져왔어요` / `다시 시도` / `인터넷에 연결되지 않아 이동 시간은 어림값이에요`
@@ -176,7 +176,7 @@
   // 되돌리기(스펙 §2.5)
   export type TripFieldPath = 'title' | 'startDate' | 'endDate' | 'origin' | 'candidates' | 'legModes' | { day: number; field: 'stops' | 'lodging' | 'startTime' };
   export type TripChange = { tripId: string; fields: { path: TripFieldPath; before: Field<unknown>; after: Field<unknown> }[]; days?: { before: Day[]; after: Day[] } };
-  diffTrip(before: Trip, after: Trip): TripChange // Day 수가 같으면 Day 필드 단위, 다르면 days 통째(+ startDate·endDate)
+  diffTrip(before: Trip, after: Trip): TripChange // 연산이 startDate·endDate를 바꿨으면 기간 단위(startDate·endDate·days 통째를 `days`에, `fields`에는 넣지 않음), 아니면 Day 필드 단위
   revertTrip(lib, change: TripChange, ctx) // summary.merged = 건너뛴 필드 수(재사용). 지금 updatedAt === after.updatedAt인 필드만 before 값으로. 결과의 장소 중복은 되돌리지 않은 필드 쪽을 남기고 되돌린 필드에서 뺀다
   ```
 
@@ -185,7 +185,8 @@
   - 리뷰 반례: Day 1 변경(시각 2) 기록 → 다른 편집이 Day 2 변경(시각 3) → 되돌리기(시각 4) → Day 1만 이전 값, Day 2는 시각 3 값 그대로, `summary.merged === 0`
   - 겹친 필드: 연산이 바꾼 `candidates`를 다른 편집이 또 바꿨으면 건너뜀(`summary.merged === 1`)
   - 중복 정리: 후보 X → Day 1 넣기 기록 → 다른 편집이 X를 Day 1 → Day 2로 옮김 → 되돌리기 → X는 Day 2에만 있고(후보에 다시 생기지 않음) 결과가 `LibrarySchema` 통과
-  - 기간 변경 되돌리기: 그사이 Day 필드가 바뀌지 않았으면 Day 수·내용 복원, 바뀌었으면 days·기간 모두 건너뜀
+  - 기간 변경 되돌리기: 그사이 기간·Day 필드가 모두 그대로면 기간·Day 수·내용 복원; Day 필드가 바뀌었으면 기간·days 모두 건너뜀
+  - 리뷰 반례: `10/12~10/14`(Day 3) → 줄이기 `10/12~10/13` 기록 → 다른 편집이 Day는 그대로 두고 `10/20~10/21`로 옮김 → 되돌리기 → 기간 `10/20~10/21`·Day 2개 그대로(기간·days 모두 건너뜀, `summary.merged > 0`), 결과가 `LibrarySchema` 통과
 - [ ] **Step 2:** FAIL → **Step 3:** 구현 → **Step 4:** PASS + `yarn typecheck`
 - [ ] **Step 5:** 커밋 `feat(trips): 여행 연산`
 
@@ -238,9 +239,9 @@
     days: { start: LngLat | null; end: LngLat | null; stops: OptStop[] }[];
   }): string[][]; // Day별 새 전체 순서(이미 넣은 장소 + 배정된 후보, §5.1 적용 후)
   ```
-- 스펙 §5 그대로. `start`가 없으면 시작도 자유(Held–Karp는 모든 시작점을 본다). 고정 시각 장소끼리는 시각 오름차순(같은 시각은 지금 순서). `changed`는 새 총 거리 ≤ 지금 × 0.99일 때만 참(아니면 `order`는 지금 순서). 자동 나누기의 k-means++ 초기화는 **결정적**(첫 중심 = 후보 중 id 사전순 첫째, 다음은 가장 먼 점, 동률은 id 순).
+- 스펙 §5 그대로. `start`가 없으면 시작도 자유(Held–Karp는 모든 시작점을 본다). 고정 시각 장소끼리는 시각 오름차순(같은 시각은 지금 순서). `changed`: 지금 순서가 고정 시각 순서를 어기면 늘 참(제약을 지키는 최단 순서), 아니면 새 총 거리 ≤ 지금 × 0.99일 때만 참(거짓이면 `order`는 지금 순서). 자동 나누기의 k-means++ 초기화는 **결정적**(첫 중심 = 후보 중 id 사전순 첫째, 다음은 가장 먼 점, 동률은 id 순).
 
-- [ ] **Step 1: 실패하는 테스트** — 시드 고정 무작위 좌표(강원 범위) 7곳 이하 50회: Held–Karp 결과 거리 = 모든 순열 최솟값; 고정 시각 순서 지킴; 출발·도착 고정; 출발 없음이면 시작 자유(리뷰 반례: 출발 없음, A 10:00·B 09:00 → `[B, A]`, 해가 없지 않음); 13곳·20곳 근사가 제약을 지키고 nearest neighbor보다 길지 않음; 같은 좌표 두 곳(NaN 없음); 1% 미만 개선이면 `changed: false`. 자동 나누기: 리뷰 반례 — 후보 `[128.8961 + i×0.0001, 37.7953]`(i=0…9), 빈 Day 3개 기준점 `[128.8961,37.7953]`·`[129.1,37.7953]`·`[129.4,37.7953]` → 새 장소 수 `[4, 3, 3]`; 무작위 입력에서 용량 합 = 후보 수·모두 배정; 이미 목표를 넘은 Day(Day 1에 이미 6곳, 후보 3, Day 3개) → Day 1 용량 0; 숙소 기준점에 가까운 후보가 그 Day로; 기준점 없는 Day는 k-means; 같은 입력 두 번 → 같은 결과; 후보 0 → 지금 순서 그대로.
+- [ ] **Step 1: 실패하는 테스트** — 시드 고정 무작위 좌표(강원 범위) 7곳 이하 50회: Held–Karp 결과 거리 = 모든 순열 최솟값; 고정 시각 순서 지킴; 출발·도착 고정; 출발 없음이면 시작 자유(리뷰 반례: 출발·도착 없음, 지금 순서 `[A(10:00) 128.8961,37.7953, B(09:00) 128.9,37.79]` → 두 순서 거리가 같아도 `changed: true`, `order: [B, A]`); 13곳·20곳 근사가 제약을 지키고 nearest neighbor보다 길지 않음; 같은 좌표 두 곳(NaN 없음); 1% 미만 개선이면 `changed: false`. 자동 나누기: 리뷰 반례 — 후보 `[128.8961 + i×0.0001, 37.7953]`(i=0…9), 빈 Day 3개 기준점 `[128.8961,37.7953]`·`[129.1,37.7953]`·`[129.4,37.7953]` → 새 장소 수 `[4, 3, 3]`; 무작위 입력에서 용량 합 = 후보 수·모두 배정; 이미 목표를 넘은 Day(Day 1에 이미 6곳, 후보 3, Day 3개) → Day 1 용량 0; 숙소 기준점에 가까운 후보가 그 Day로; 기준점 없는 Day는 k-means; 같은 입력 두 번 → 같은 결과; 후보 0 → 지금 순서 그대로.
 - [ ] **Step 2:** FAIL → **Step 3:** 구현 → **Step 4:** PASS
 - [ ] **Step 5:** 커밋 `feat(trips): 순서 정리와 Day 자동 나누기 계산`
 
