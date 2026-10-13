@@ -454,6 +454,31 @@ describe('LibraryStore.update', () => {
     }),
   );
 
+  it.effect.each(['getItem', 'removeItem'] as const)(
+    'quota: 재시도 중 경로 캐시 %s가 던져도 StorageQuotaExceeded',
+    (method) =>
+      Effect.gen(function* () {
+        const storage = createMemoryStorage();
+        const raw = seed(storage, libraryOf(place(P1)));
+        storage.setItem(ROUTE_CACHE_KEY, '{"entries":{}}');
+        const original = storage[method].bind(storage) as (key: string) => string | null | void;
+        storage[method] = ((key: string) => {
+          if (key === ROUTE_CACHE_KEY) throw new Error('storage blocked');
+          return original(key);
+        }) as never;
+        const setItem = storage.setItem.bind(storage);
+        storage.setItem = (key: string, value: string) => {
+          if (key === LIBRARY_KEY) throw new DOMException('', 'QuotaExceededError');
+          setItem(key, value);
+        };
+        const error = yield* withStore({ storage }, (s) =>
+          Effect.flip(s.update((lib) => Effect.succeed(setPlaceMemo(lib, P1, '길게', ctx)))),
+        );
+        expect(error).toBeInstanceOf(StorageQuotaExceeded);
+        expect(storage.getItem(LIBRARY_KEY)).toBe(raw);
+      }),
+  );
+
   it.effect('quota: still StorageQuotaExceeded when dropping the route cache is not enough', () =>
     Effect.gen(function* () {
       const storage = createMemoryStorage();

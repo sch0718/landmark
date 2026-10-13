@@ -45,6 +45,7 @@ export function makePlace(
     memo?: string;
     labelIds?: string[];
     sid?: string;
+    saved?: boolean;
     deletedAt?: string | null;
   } = {},
 ): Place {
@@ -61,7 +62,7 @@ export function makePlace(
     category: f<string | null>(null),
     labelIds: f<string[]>(options.labelIds ?? []),
     memo: f(options.memo ?? ''),
-    saved: f(true, savedAt),
+    saved: f(options.saved ?? true, savedAt),
     createdAt: T0,
     deletedAt: options.deletedAt ?? null,
   };

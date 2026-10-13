@@ -1,6 +1,5 @@
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { createStore, Provider, useAtomValue, useSetAtom } from 'jotai';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { FakeMapAdapter, FAKE_BOUNDS } from 'src/components/map/FakeMapAdapter';
 import { buildClusterIndex, clusterFeatures } from 'src/components/map/cluster';
@@ -9,9 +8,8 @@ import { createMarkerLabelElement } from 'src/components/map/marker-label';
 import type { MapMarker } from 'src/components/map/MapAdapter';
 import { fitPoints, focusCamera } from 'src/components/map/camera';
 import { MapView } from 'src/components/map/MapView';
-import { StrictMode } from 'react';
+import { StrictMode, useState } from 'react';
 import { installMapResources } from './helpers/map-resources';
-import { createTripStore, TripStoreContext } from 'src/stores/trip-store';
 
 const sdk = vi.hoisted(() => ({
   load: (): Promise<void> => Promise.reject(new Error('blocked')),
@@ -191,13 +189,10 @@ describe('지도 사용 불가', () => {
     vi.stubEnv('VITE_MAP_ADAPTER', '');
     vi.stubEnv('VITE_NAVER_MAP_CLIENT_ID', 'cid');
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const ts = createTripStore('t1', { storage: window.localStorage });
-    const store = createStore();
     const reasons: string[] = [];
 
     function Connected() {
-      const setUnavailable = useSetAtom(ts.mapUnavailableAtom);
-      const unavailable = useAtomValue(ts.mapUnavailableAtom);
+      const [unavailable, setUnavailable] = useState<string | null>(null);
       return (
         <>
           <div data-testid="trip-map-area">
@@ -218,13 +213,7 @@ describe('지도 사용 불가', () => {
         </>
       );
     }
-    render(
-      <TripStoreContext value={ts}>
-        <Provider store={store}>
-          <Connected />
-        </Provider>
-      </TripStoreContext>,
-    );
+    render(<Connected />);
     const msg = '지도를 불러오지 못했어요. 도메인 등록을 확인하세요';
     expect(await screen.findByText(msg)).toBeInTheDocument();
     expect(reasons).toEqual([msg]);
@@ -292,14 +281,6 @@ describe('지도 사용 불가', () => {
     );
     await waitFor(() => expect(onUnavailable).toHaveBeenCalled());
     expect(onUnavailable.mock.calls[0]![0]).toContain('VITE_NAVER_MAP_CLIENT_ID');
-  });
-
-  it('mapUnavailableAtom은 여행(store)마다 따로이고 초기값이 null이다', () => {
-    const a = createTripStore('a', { storage: window.localStorage });
-    const b = createTripStore('b', { storage: window.localStorage });
-    expect(a.mapUnavailableAtom).not.toBe(b.mapUnavailableAtom);
-    const s = createStore();
-    expect(s.get(a.mapUnavailableAtom)).toBeNull();
   });
 });
 

@@ -4,6 +4,8 @@ import {
   emptyLibrary,
   LABEL_COLORS,
   LABEL_ICONS,
+  LABEL_NAME_RANGE_MESSAGE,
+  labelNameIssue,
   LIBRARY_LIMITS,
   LibrarySchema,
   normalizeLabelName,
@@ -237,5 +239,25 @@ describe('constants', () => {
 describe('normalizeLabelName', () => {
   it('trims, collapses whitespace, lowercases', () => {
     expect(normalizeLabelName('  Cafe   Latte ')).toBe('cafe latte');
+  });
+});
+
+describe('labelNameIssue', () => {
+  it('flags empty and whitespace-only names as empty', () => {
+    expect(labelNameIssue('')).toBe('empty');
+    expect(labelNameIssue('   ')).toBe('empty');
+  });
+
+  it('judges the length after trimming', () => {
+    const max = LIBRARY_LIMITS.labelNameChars;
+    expect(labelNameIssue('가'.repeat(max))).toBeNull();
+    expect(labelNameIssue('가'.repeat(max + 1))).toBe('too-long');
+    expect(labelNameIssue(` ${'가'.repeat(max)} `)).toBeNull();
+  });
+});
+
+describe('LABEL_NAME_RANGE_MESSAGE', () => {
+  it('states the 1 to max range', () => {
+    expect(LABEL_NAME_RANGE_MESSAGE).toBe('1–30자로 입력하세요');
   });
 });

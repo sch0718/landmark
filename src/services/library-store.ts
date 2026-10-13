@@ -105,11 +105,18 @@ function makeLibraryStore(options: LibraryStoreOptions) {
           return error ?? new Error('setItem 실패');
         }
       };
+      // 경로 캐시를 지우는 길에서 저장소가 던지면 처음 쿼터 오류를 그대로 낸다.
+      const dropRouteCache = (): boolean => {
+        try {
+          if (storage.getItem(ROUTE_CACHE_KEY) === null) return false;
+          storage.removeItem(ROUTE_CACHE_KEY);
+          return true;
+        } catch {
+          return false;
+        }
+      };
       let error = attempt();
-      if (error !== null && isQuotaError(error) && storage.getItem(ROUTE_CACHE_KEY) !== null) {
-        storage.removeItem(ROUTE_CACHE_KEY);
-        error = attempt();
-      }
+      if (error !== null && isQuotaError(error) && dropRouteCache()) error = attempt();
       if (error === null) return Effect.void;
       return isQuotaError(error)
         ? Effect.fail(new StorageQuotaExceeded({ bytes: value.length }))

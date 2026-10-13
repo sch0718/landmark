@@ -219,8 +219,8 @@ export function addPlace(
 
 const folderKey = (item: FolderItem): string => sourceKey({ kind: 'naver', sid: item.sid })!;
 
-/** 같은 `sid`가 여러 번 나오면 처음 것만 남긴다. */
-function uniqueBySid(items: readonly FolderItem[]): FolderItem[] {
+/** 같은 `sid`가 여러 번 나오면 처음 것만 남긴다(순서 유지). */
+export function uniqueBySid<T extends { sid: string }>(items: readonly T[]): T[] {
   const seen = new Set<string>();
   return items.filter((item) => {
     if (seen.has(item.sid)) return false;

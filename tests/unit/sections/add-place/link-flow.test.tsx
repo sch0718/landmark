@@ -9,7 +9,7 @@ import { PlaceLookupError } from 'src/services/errors';
 import { LIBRARY_KEY } from 'src/services/library-store';
 import { PlaceLookup } from 'src/services/place-lookup';
 import { ReverseGeocoder } from 'src/services/reverse-geocoder';
-import { addFlowAtom } from 'src/stores/add-place';
+import { addFlowAtom, addTargetAtom, linkDraftAtom } from 'src/stores/add-place';
 import { libraryAtom } from 'src/stores/library-state';
 import { installMapResources } from '../../components/helpers/map-resources';
 import {
@@ -237,6 +237,51 @@ describe('링크 입력', () => {
   });
 });
 
+describe('링크 입력 유지', () => {
+  const linkBox = () => screen.getByRole('textbox', { name: '링크' });
+
+  it('창 폭이 768px 경계를 넘어 추가 칸이 다시 그려져도 쓰던 글이 남는다', async () => {
+    const user = userEvent.setup();
+    const { store, setWidth } = await renderLibrary(sampleLibrary(), { width: 390 });
+    act(() => store.set(addFlowAtom, { step: 'link', hint: 'place' }));
+    await user.click(linkBox());
+    await user.paste('https://naver.me/abc');
+    expect(linkBox()).toHaveValue('https://naver.me/abc');
+
+    setWidth(800);
+    expect(linkBox()).toHaveValue('https://naver.me/abc');
+    setWidth(390);
+    expect(linkBox()).toHaveValue('https://naver.me/abc');
+  });
+
+  it('장소 링크를 쓰다 폴더 링크 안내로 바꾸면 빈 칸이다', async () => {
+    const user = userEvent.setup();
+    const { store } = await renderLibrary(sampleLibrary());
+    act(() => store.set(addFlowAtom, { step: 'link', hint: 'place' }));
+    await user.click(linkBox());
+    await user.paste('https://naver.me/abc');
+    expect(linkBox()).toHaveValue('https://naver.me/abc');
+
+    act(() => store.set(addFlowAtom, { step: 'link', hint: 'folder' }));
+    await waitFor(() => expect(linkBox()).toHaveValue(''));
+    expect(store.get(linkDraftAtom)).toBe('');
+  });
+
+  it('흐름을 닫았다 link로 다시 열면 빈 칸이다', async () => {
+    const user = userEvent.setup();
+    const { store } = await renderLibrary(sampleLibrary());
+    act(() => store.set(addFlowAtom, { step: 'link', hint: 'place' }));
+    await user.click(linkBox());
+    await user.paste('https://naver.me/abc');
+    expect(store.get(linkDraftAtom)).toBe('https://naver.me/abc');
+
+    act(() => store.set(addFlowAtom, { step: 'closed' }));
+    await waitFor(() => expect(store.get(linkDraftAtom)).toBe(''));
+    act(() => store.set(addFlowAtom, { step: 'link', hint: 'place' }));
+    expect(linkBox()).toHaveValue('');
+  });
+});
+
 describe('조회 오류', () => {
   const failWith = (error: PlaceLookupError) => () => error;
 
@@ -433,6 +478,76 @@ describe('확인 카드', () => {
     expect(store.get(addFlowAtom)).toEqual({ step: 'closed' });
   });
 
+  describe('라벨 더하기 켜짐 조건 (저장해도 바뀔 것이 없을 때만 끈다)', () => {
+    const SID = '1958911015';
+    const mergeButton = () => within(panel()).getByRole('button', { name: '라벨 더하기' });
+    const openMerge = async (saved = true, tripId: string | null = null) => {
+      const existing = makePlace(9, { name: '콤포트(저장됨)', sid: SID, saved });
+      const user = userEvent.setup();
+      const lookup = fakeLookup(() => naverPlace());
+      const rendered = await renderLibrary(withPlaces(sampleLibrary(), [existing]), {
+        placeLookup: lookup.layer,
+      });
+      await openFrom(user, '링크 붙여넣기');
+      await submitLink(user);
+      await within(panel()).findByText('이미 있는 장소예요. 고른 라벨만 더할게요');
+      // ＋추가 시트를 여는 일이 여행 대상을 비우므로, 카드가 뜬 뒤에 붙인다.
+      if (tripId !== null) act(() => rendered.store.set(addTargetAtom, { tripId }));
+      return { user, ...rendered };
+    };
+
+    it('보이는 장소 + 라벨·메모 없음 + 여행 대상 없음이면 꺼져 있고, 공백만 쓴 메모도 같다', async () => {
+      const { user } = await openMerge();
+      expect(mergeButton()).toBeDisabled();
+      await user.type(within(panel()).getByRole('textbox', { name: '메모' }), '   ');
+      expect(mergeButton()).toBeDisabled();
+    });
+
+    it('라벨을 고르면 켜지고, 메모를 쓰면 켜진다', async () => {
+      const { user } = await openMerge();
+      await user.click(within(panel()).getByRole('button', { name: '카페' }));
+      expect(mergeButton()).toBeEnabled();
+      await user.click(within(panel()).getByRole('button', { name: '카페' }));
+      expect(mergeButton()).toBeDisabled();
+      await user.type(within(panel()).getByRole('textbox', { name: '메모' }), '창가');
+      expect(mergeButton()).toBeEnabled();
+    });
+
+    it('고른 라벨을 그사이 지웠으면(다른 탭) 고른 것이 없는 것으로 보고 다시 꺼진다', async () => {
+      const { user, store } = await openMerge();
+      await user.click(within(panel()).getByRole('button', { name: '카페' }));
+      expect(mergeButton()).toBeEnabled();
+
+      const current = store.get(libraryAtom);
+      act(() =>
+        store.set(libraryAtom, {
+          ...current,
+          labels: {
+            ...current.labels,
+            [L_CAFE]: { ...current.labels[L_CAFE]!, deletedAt: '2026-10-12T00:00:00.000Z' },
+          },
+        }),
+      );
+      await waitFor(() => expect(mergeButton()).toBeDisabled());
+    });
+
+    it('여행 대상이 있으면 켜져 있다(후보에 넣는 일이 있다)', async () => {
+      await openMerge(true, 'trip00001');
+      expect(mergeButton()).toBeEnabled();
+    });
+
+    it('그 장소가 saved: false면 켜져 있다(보관함에 보이게 바뀐다)', async () => {
+      await openMerge(false);
+      expect(mergeButton()).toBeEnabled();
+    });
+
+    it('새 장소의 추가 버튼은 그대로 켜져 있다', async () => {
+      await openCard(() => naverPlace());
+      await within(panel()).findByRole('heading', { name: '콤포트' });
+      expect(within(panel()).getByRole('button', { name: '추가' })).toBeEnabled();
+    });
+  });
+
   it('같은 sid의 장소가 지운 것이면 안내 없이 추가하고 그 장소를 되살린다', async () => {
     const deleted = makePlace(9, { sid: '1958911015', deletedAt: '2026-10-09T00:00:00.000Z' });
     const { user, store, router } = await openCard(() => naverPlace(), {
@@ -545,6 +660,9 @@ describe('확인 카드', () => {
       await within(panel()).findByText('이미 있는 장소예요. 고른 라벨만 더할게요'),
     ).toBeInTheDocument();
     expect(within(panel()).queryByRole('textbox', { name: '이름' })).not.toBeInTheDocument();
+    // 라벨도 메모도 없으면 바뀔 것이 없어 꺼져 있다. 라벨을 고르면 켜진다.
+    expect(within(panel()).getByRole('button', { name: '라벨 더하기' })).toBeDisabled();
+    await user.click(within(panel()).getByRole('button', { name: '카페' }));
     await user.click(within(panel()).getByRole('button', { name: '라벨 더하기' }));
     await waitFor(() => expect(store.get(addFlowAtom)).toEqual({ step: 'closed' }));
     expect(placeCount(store.get(libraryAtom))).toBe(6);

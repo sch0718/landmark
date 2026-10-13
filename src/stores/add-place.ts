@@ -26,6 +26,12 @@ export type AddFlow =
 export const addFlowAtom: PrimitiveAtom<AddFlow> = atom<AddFlow>({ step: 'closed' });
 
 /**
+ * 링크 입력 창에 쓰던 글. 창 폭이 768px 경계를 넘으면 추가 칸이 다시 그려지므로(시트 ↔ 오른쪽 칸) 글을
+ * 컴포넌트 밖에 둔다. 흐름이 `link` 단계를 떠나면 `AddPlaceHost`(`useAddFlowRoute`)가 비운다.
+ */
+export const linkDraftAtom: PrimitiveAtom<string> = atom('');
+
+/**
  * 추가 흐름이 넣을 여행(스펙 §2.2의 4). 계획 화면의 `링크·핀으로 새로 추가`가 정한다.
  * 있으면 카드에 `보관함에도 저장`이 생기고, 추가가 끝나면 그 여행의 후보에 넣고 계획 화면으로 돌아온다.
  * 흐름이 `closed`가 되면(추가·취소·Esc·뒤로 가기 무엇이든) `useAddFlowRoute`가 `null`로 되돌린다.

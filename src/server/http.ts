@@ -66,6 +66,7 @@ export function errorResponse(e: unknown): Response {
   const error = e instanceof ApiError ? e : new ApiError('UPSTREAM_ERROR', UNKNOWN_ERROR_MESSAGE);
   return jsonResponse(
     { error: { code: error.code, message: error.message, ...error.detail } },
-    { status: STATUS[error.code] },
+    // 오류 응답도 성공 응답처럼 공유 캐시에 남기지 않는다.
+    { status: STATUS[error.code], headers: { 'Cache-Control': 'private, no-store' } },
   );
 }

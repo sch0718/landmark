@@ -2,9 +2,9 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import { useEffect, useRef, type ChangeEvent, type DragEvent } from 'react';
-import { useLayout } from 'src/sections/shell/use-layout';
-import { hasFiles } from 'src/sections/share-import/ShareDropOverlay';
+import { hasFiles } from 'src/sections/share-import/drag-files';
 import { useShareFile } from 'src/sections/share-import/use-share-file';
+import { useLayout } from 'src/sections/shell/use-layout';
 
 const TITLE = '공유 파일 가져오기';
 

@@ -1,13 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  CodecError,
-  decodeCompressedJson,
-  decodeEditLayer,
-  encodeCompressedJson,
-  encodeEditLayer,
-} from 'src/domain/codec';
-import { LIMITS } from 'src/schema/common';
-import { makeEdit } from '../../fixtures/builders';
+import { CodecError, decodeCompressedJson, encodeCompressedJson } from 'src/domain/codec';
 
 async function deflateRawBase64Url(text: string): Promise<string> {
   const src = new ReadableStream<Uint8Array<ArrayBuffer>>({
@@ -38,34 +30,38 @@ async function codeOf(p: Promise<unknown>): Promise<string | undefined> {
   return undefined;
 }
 
-describe('편집 코덱', () => {
+// 편집 링크(옛 PoC)가 쓰던 한도와 같은 크기로 시험한다.
+const LIMITS = { maxChars: 16000, maxBytes: 1048576 };
+const decode = (value: string) => decodeCompressedJson(value, LIMITS);
+
+describe('압축 JSON 코덱', () => {
   it('왕복해도 같다', async () => {
-    const edit = makeEdit({
+    const value = {
       authors: { 'a-local': { nickname: '한글 닉네임', updatedAt: '2026-01-01T00:00:00.000Z' } },
-    });
-    const encoded = await encodeEditLayer(edit);
+    };
+    const encoded = await encodeCompressedJson(value);
     expect(encoded).toMatch(/^[A-Za-z0-9_-]+$/);
-    expect(await decodeEditLayer(encoded)).toEqual(edit);
+    expect(await decode(encoded)).toEqual(value);
   });
 
   it('16,001자는 too-long', async () => {
-    expect(await codeOf(decodeEditLayer('A'.repeat(LIMITS.linkChars + 1)))).toBe('too-long');
+    expect(await codeOf(decode('A'.repeat(LIMITS.maxChars + 1)))).toBe('too-long');
   });
 
   it('해제 결과가 1MB를 넘으면 too-large', async () => {
     const json = `{"a":"${' '.repeat(2 * 1024 * 1024)}"}`;
     const encoded = await deflateRawBase64Url(json);
-    expect(encoded.length).toBeLessThanOrEqual(LIMITS.linkChars);
-    expect(await codeOf(decodeEditLayer(encoded))).toBe('too-large');
+    expect(encoded.length).toBeLessThanOrEqual(LIMITS.maxChars);
+    expect(await codeOf(decode(encoded))).toBe('too-large');
   });
 
   it('잘못된 문자는 corrupt', async () => {
-    expect(await codeOf(decodeEditLayer('!!!'))).toBe('corrupt');
+    expect(await codeOf(decode('!!!'))).toBe('corrupt');
   });
 
   it('압축이 아닌 데이터와 JSON이 아닌 내용은 corrupt', async () => {
-    expect(await codeOf(decodeEditLayer('AAAAAAAA'))).toBe('corrupt');
-    expect(await codeOf(decodeEditLayer(await deflateRawBase64Url('not json')))).toBe('corrupt');
+    expect(await codeOf(decode('AAAAAAAA'))).toBe('corrupt');
+    expect(await codeOf(decode(await deflateRawBase64Url('not json')))).toBe('corrupt');
   });
 });
 

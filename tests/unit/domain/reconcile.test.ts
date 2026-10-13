@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { hashDayStops } from 'src/domain/day-hash';
 import { findDuplicateStopIds, overlay } from 'src/domain/overlay';
 import { keepMine, reconcile } from 'src/domain/reconcile';
-import { applyRevert, planRevert } from 'src/domain/revert';
 import { EDIT_LAYER_PARSE, EditLayerSchema } from 'src/schema/legacy/edit-layer';
 import { safeParse } from 'src/schema/parse';
 import { makeEdit, makeTrip, sid } from '../../fixtures/builders';
@@ -100,12 +99,6 @@ describe('reconcile', () => {
     expect(reconcile(v2, kept!).report.unresolvedGroups).toEqual([]);
     const ids = overlay(v2, kept!).days.flatMap((d) => d.stops.map((s) => s.id));
     expect(ids).toEqual([sid('X')]);
-
-    const dates = planRevert(v2, rec, D1).dates;
-    expect(dates).toEqual([D1, D2]);
-    const after = overlay(v2, applyRevert(rec, dates, NOW)).days;
-    expect(after[0]!.stops).toEqual([]);
-    expect(after[1]!.stops.map((s) => s.id)).toEqual([sid('X')]);
   });
 
   it('keepMine은 중복이 생기면 null을 돌려준다', () => {

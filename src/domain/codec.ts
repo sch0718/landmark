@@ -1,6 +1,3 @@
-import { LIMITS } from 'src/schema/common';
-import type { EditLayer } from 'src/schema/legacy/edit-layer';
-
 export type CodecErrorCode = 'too-long' | 'too-large' | 'corrupt';
 
 export class CodecError extends Error {
@@ -39,10 +36,10 @@ export async function encodeCompressedJson(value: unknown): Promise<string> {
   const parts: Uint8Array[] = [];
   let size = 0;
   for (;;) {
-    const { done, value } = await reader.read();
+    const { done, value: chunk } = await reader.read();
     if (done) break;
-    parts.push(value);
-    size += value.byteLength;
+    parts.push(chunk);
+    size += chunk.byteLength;
   }
   return toBase64Url(concat(parts, size));
 }
@@ -64,10 +61,6 @@ function concat(parts: Uint8Array[], size: number): Uint8Array {
     offset += p.byteLength;
   }
   return merged;
-}
-
-export async function encodeEditLayer(edit: EditLayer): Promise<string> {
-  return encodeCompressedJson(edit);
 }
 
 /**
@@ -106,9 +99,4 @@ export async function decodeCompressedJson(
   } catch {
     throw new CodecError('corrupt', 'JSON 해석에 실패했습니다');
   }
-}
-
-/** 스키마 검증은 하지 않는다(호출자 몫). */
-export async function decodeEditLayer(value: string): Promise<unknown> {
-  return decodeCompressedJson(value, { maxChars: LIMITS.linkChars, maxBytes: LIMITS.decodedBytes });
 }

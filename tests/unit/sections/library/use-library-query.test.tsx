@@ -3,7 +3,7 @@ import { Layer, ManagedRuntime } from 'effect';
 import { createStore, Provider } from 'jotai';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { setAppRuntimeForTest } from 'src/lib/effect/runtime';
+import { setAppRuntimeForTest, type AppRuntime } from 'src/lib/effect/runtime';
 import { createMemoryStorage } from 'src/repositories/edit-layer-repo';
 import { QUERY_PERSIST_DELAY_MS, useLibraryQuery } from 'src/sections/library/use-library-query';
 import { IdGen } from 'src/services/id-gen';
@@ -18,22 +18,24 @@ import { libraryAtom } from 'src/stores/library-state';
 import { prefsAtom } from 'src/stores/prefs-state';
 import { L_FOOD, sampleLibrary } from './fixtures';
 
+// 진짜 `RouteLookup.layer`가 창 이벤트 구독을 걸므로 테스트가 끝나면 런타임을 닫는다.
+let runtime: AppRuntime | undefined;
+
 function setup() {
   const storage = createMemoryStorage();
-  setAppRuntimeForTest(
-    ManagedRuntime.make(
-      Layer.mergeAll(
-        LibraryStore.layerWith({ storage, events: new EventTarget() }),
-        PrefsStore.layerWith({ storage }),
-        IdGen.layerSequence([]),
-        LegacyTripSource.layerWith({ storage, fetch: (...args) => globalThis.fetch(...args) }),
-        ShareTemplate.layer,
-        PlaceLookup.layer,
-        ReverseGeocoder.layer,
-        RouteLookup.layer,
-      ),
+  runtime = ManagedRuntime.make(
+    Layer.mergeAll(
+      LibraryStore.layerWith({ storage, events: new EventTarget() }),
+      PrefsStore.layerWith({ storage }),
+      IdGen.layerSequence([]),
+      LegacyTripSource.layerWith({ storage, fetch: (...args) => globalThis.fetch(...args) }),
+      ShareTemplate.layer,
+      PlaceLookup.layer,
+      ReverseGeocoder.layer,
+      RouteLookup.layer,
     ),
   );
+  setAppRuntimeForTest(runtime);
   const store = createStore();
   store.set(libraryAtom, sampleLibrary());
   const wrapper = ({ children }: { children: ReactNode }) => (
@@ -49,9 +51,11 @@ function setup() {
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
 });
-afterEach(() => {
+afterEach(async () => {
   vi.useRealTimers();
   setAppRuntimeForTest(null);
+  await runtime?.dispose();
+  runtime = undefined;
 });
 
 /** 저장은 Effect 파이버에서 비동기로 일어난다. 마이크로태스크를 비워 끝나게 한다. */

@@ -155,6 +155,16 @@ export function PinCard({
           onChange={(event) => setAddress(event.target.value)}
           sx={CARD_FIELD_SX}
         />
+        {/* 주소를 찾는 동안, 사용자가 주소를 쓰기 전까지만 보인다. */}
+        {geocode === 'loading' && address.trim() === '' && (
+          <Box
+            component="p"
+            role="status"
+            sx={{ m: 0, mt: 0.5, fontSize: 12, color: 'var(--tm-text-secondary)' }}
+          >
+            주소 찾는 중…
+          </Box>
+        )}
         {/* 주소 변환이 못 찾았을 때, 사용자가 주소를 쓰기 전까지만 보인다. */}
         {geocode === 'missing' && address.trim() === '' && (
           <Box

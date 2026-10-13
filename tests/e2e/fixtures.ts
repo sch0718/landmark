@@ -40,6 +40,24 @@ export type PrefsSeed = {
   libraryView?: 'bento' | 'cards' | 'tiles' | 'list';
 };
 
+/** UI 선호 JSON 문자열: 파스텔·라이트·목록 보기·필터 없음이 기본이고 `prefs`로 덮는다. */
+export function prefsJson(prefs: PrefsSeed = {}): string {
+  return JSON.stringify({
+    theme: 'pastel',
+    mode: 'light',
+    libraryView: 'list',
+    query: {
+      labelIds: [],
+      mode: 'any',
+      unlabeled: false,
+      regions: [],
+      text: '',
+      sort: 'recent',
+    },
+    ...prefs,
+  });
+}
+
 /**
  * 첫 로드 전에 localStorage에 보관함 시드(와 UI 선호)를 심는다. 이미 값이 있으면 건드리지 않아서
  * 새로고침 후에도 앱이 저장한 값이 유지된다.
@@ -49,23 +67,7 @@ export async function seedStorage(
   options: { library?: boolean; prefs?: PrefsSeed } = {},
 ): Promise<void> {
   const { library = true, prefs } = options;
-  const prefsJson =
-    prefs === undefined
-      ? null
-      : JSON.stringify({
-          theme: 'pastel',
-          mode: 'light',
-          libraryView: 'list',
-          query: {
-            labelIds: [],
-            mode: 'any',
-            unlabeled: false,
-            regions: [],
-            text: '',
-            sort: 'recent',
-          },
-          ...prefs,
-        });
+  const prefsValue = prefs === undefined ? null : prefsJson(prefs);
   await page.addInitScript(
     ({ libraryKey, prefsKey, libraryJson, prefsValue }) => {
       if (libraryJson !== null && localStorage.getItem(libraryKey) === null) {
@@ -79,7 +81,7 @@ export async function seedStorage(
       libraryKey: LIBRARY_KEY,
       prefsKey: PREFS_KEY,
       libraryJson: library ? seedJson : null,
-      prefsValue: prefsJson,
+      prefsValue,
     },
   );
 }

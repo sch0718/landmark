@@ -50,9 +50,11 @@ describe('parseShareDoc', () => {
   });
 
   it.each(['kakaoId', 'googleId'])('%s가 문자열이 아니면 null', (key) => {
-    const doc = validDoc();
-    (doc.places[0] as unknown as Record<string, unknown>)[key] = 123;
-    expect(parseShareDoc(doc)).toBeNull();
+    for (const bad of [123, null, {}]) {
+      const doc = validDoc();
+      (doc.places[0] as unknown as Record<string, unknown>)[key] = bad;
+      expect(parseShareDoc(doc)).toBeNull();
+    }
   });
 
   it('JSON을 거친 값도 통과한다', () => {

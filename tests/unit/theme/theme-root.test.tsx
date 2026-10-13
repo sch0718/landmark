@@ -2,7 +2,7 @@ import { act, cleanup, render, screen } from '@testing-library/react';
 import { Layer, ManagedRuntime } from 'effect';
 import { createStore, Provider } from 'jotai';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { setAppRuntimeForTest } from 'src/lib/effect/runtime';
+import { setAppRuntimeForTest, type AppRuntime } from 'src/lib/effect/runtime';
 import { createMemoryStorage } from 'src/repositories/edit-layer-repo';
 import { DEFAULT_PREFS, type Prefs } from 'src/schema/prefs';
 import { IdGen } from 'src/services/id-gen';
@@ -45,23 +45,25 @@ function mockSystemDark(initial: boolean) {
   };
 }
 
+// 진짜 `RouteLookup.layer`가 창 이벤트 구독을 걸므로 테스트가 끝나면 런타임을 닫는다.
+let runtime: AppRuntime | undefined;
+
 function setup(saved?: Partial<Prefs>) {
   const storage = createMemoryStorage();
   if (saved) storage.setItem(PREFS_KEY, JSON.stringify({ ...DEFAULT_PREFS, ...saved }));
-  setAppRuntimeForTest(
-    ManagedRuntime.make(
-      Layer.mergeAll(
-        LibraryStore.layerWith({ storage, events: new EventTarget() }),
-        PrefsStore.layerWith({ storage }),
-        IdGen.layerSequence([]),
-        LegacyTripSource.layerWith({ storage, fetch: (...args) => globalThis.fetch(...args) }),
-        ShareTemplate.layer,
-        PlaceLookup.layer,
-        ReverseGeocoder.layer,
-        RouteLookup.layer,
-      ),
+  runtime = ManagedRuntime.make(
+    Layer.mergeAll(
+      LibraryStore.layerWith({ storage, events: new EventTarget() }),
+      PrefsStore.layerWith({ storage }),
+      IdGen.layerSequence([]),
+      LegacyTripSource.layerWith({ storage, fetch: (...args) => globalThis.fetch(...args) }),
+      ShareTemplate.layer,
+      PlaceLookup.layer,
+      ReverseGeocoder.layer,
+      RouteLookup.layer,
     ),
   );
+  setAppRuntimeForTest(runtime);
   const store = createStore();
   const renderRoot = async () => {
     await act(async () => {
@@ -83,8 +85,11 @@ beforeEach(() => {
   fonts.loadDisplayFont.mockClear();
 });
 
-afterEach(() => {
+afterEach(async () => {
+  cleanup();
   setAppRuntimeForTest(null);
+  await runtime?.dispose();
+  runtime = undefined;
   vi.unstubAllGlobals();
 });
 
