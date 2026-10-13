@@ -97,6 +97,20 @@ describe('run', () => {
     expect(result.initial.gzipBytes).toBe(initialGzip);
   });
 
+  it.each([
+    ['키가 없다', '{}', 'initialJsGzipMax'],
+    ['키 이름이 틀렸다', '{"initialJsGzipmax": 100000}', 'initialJsGzipMax'],
+    ['값이 문자열이다', '{"initialJsGzipMax": "100000"}', 'initialJsGzipMax'],
+    ['값이 null이다', '{"initialJsGzipMax": null}', 'initialJsGzipMax'],
+    ['JSON이 아니다', '{ not json', 'JSON'],
+  ])('예산 파일이 있는데 %s: 실패', async (_name, body, reason) => {
+    const path = join(dir, 'bad-budget.json');
+    await writeFile(path, body);
+    const { result, failure } = await run(['--dist', dir, '--budget', path]);
+    expect(failure).toContain(reason);
+    expect(result.initial.gzipBytes).toBe(initialGzip);
+  });
+
   it('--forbid: 첫 화면에 없는 이름은 통과, 있는 이름은 실패', async () => {
     const none = join(dir, 'none.json');
     expect(
@@ -121,6 +135,13 @@ describe('스크립트로 실행', () => {
     ]).catch((error) => error as { code: number; stderr: string });
     expect(over).toMatchObject({ code: 1 });
     expect((over as { stderr: string }).stderr).toContain('예산');
+
+    const bad = join(dir, 'bad-budget.json');
+    await writeFile(bad, '{"initialJsGzipMax": "1000000"}');
+    const invalid = await exec('node', [script, '--dist', dir, '--budget', bad]).catch(
+      (error) => error as { code: number },
+    );
+    expect(invalid).toMatchObject({ code: 1 });
 
     const ok = await exec('node', [script, '--dist', dir, '--budget', await writeBudget(1e6)]);
     expect(JSON.parse(ok.stdout).initial.gzipBytes).toBe(initialGzip);

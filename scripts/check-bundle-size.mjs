@@ -64,10 +64,17 @@ export async function measureBundle(dist = 'dist') {
   };
 }
 
-/** 예산 검사. 통과면 `undefined`, 아니면 한 줄 이유. */
+/**
+ * 예산 검사. 통과면 `undefined`, 아니면 한 줄 이유.
+ * `budget`이 `undefined`(예산 파일 없음)면 통과하고, 파일이 있는데 값이 잘못되면 실패한다.
+ */
 export function budgetFailure(result, budget) {
+  if (budget === undefined) return undefined;
   const max = budget?.initialJsGzipMax;
-  if (typeof max !== 'number' || result.initial.gzipBytes <= max) return undefined;
+  if (typeof max !== 'number' || !Number.isFinite(max)) {
+    return `예산 파일의 initialJsGzipMax가 유한한 숫자가 아닙니다: ${JSON.stringify(max) ?? '없음'}`;
+  }
+  if (result.initial.gzipBytes <= max) return undefined;
   return `첫 화면 JS gzip ${result.initial.gzipBytes}B가 예산 ${max}B를 넘었습니다.`;
 }
 
@@ -94,12 +101,19 @@ function parseArgs(argv) {
   return options;
 }
 
+/** 예산 파일을 읽는다. 파일이 없으면 `{}`, 읽기·파싱에 실패하면 `{ failure }`. */
 async function readBudget(path) {
+  let text;
   try {
-    return JSON.parse(await readFile(path, 'utf8'));
+    text = await readFile(path, 'utf8');
   } catch (error) {
-    if (error?.code === 'ENOENT') return undefined; // 예산 파일이 없으면 출력만 한다.
-    throw error;
+    if (error?.code === 'ENOENT') return {}; // 예산 파일이 없으면 출력만 한다.
+    return { failure: `예산 파일을 읽지 못했습니다(${path}): ${error?.message ?? error}` };
+  }
+  try {
+    return { budget: JSON.parse(text) };
+  } catch {
+    return { failure: `예산 파일이 올바른 JSON이 아닙니다: ${path}` };
   }
 }
 
@@ -107,9 +121,9 @@ async function readBudget(path) {
 export async function run(argv = []) {
   const options = parseArgs(argv);
   const result = await measureBundle(options.dist);
+  const { budget, failure: budgetReadFailure } = await readBudget(options.budget);
   const failure =
-    budgetFailure(result, await readBudget(options.budget)) ??
-    forbiddenFailure(result, options.forbid);
+    budgetReadFailure ?? budgetFailure(result, budget) ?? forbiddenFailure(result, options.forbid);
   return { result, failure };
 }
 
