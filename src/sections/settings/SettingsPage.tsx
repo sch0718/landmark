@@ -122,7 +122,8 @@ export function SettingsPage() {
           </Button>
           <Button
             variant="outlined"
-            onClick={() => void navigate(paths.importShare)}
+            // `/import`는 곧바로 `/`로 바뀌는 진입 경로라 방문 기록을 남기지 않는다.
+            onClick={() => void navigate(paths.importShare, { replace: true })}
             sx={{ minHeight: 44 }}
           >
             공유 파일 가져오기

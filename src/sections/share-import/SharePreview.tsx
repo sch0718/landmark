@@ -6,7 +6,12 @@ import Typography from '@mui/material/Typography';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { defaultTitleLabel, importShare, planShareImport } from 'src/domain/library/import-share';
+import {
+  defaultTitleLabel,
+  importShare,
+  planShareImport,
+  shareTitle,
+} from 'src/domain/library/import-share';
 import { LIBRARY_LIMITS } from 'src/schema/library';
 import type { ShareDoc } from 'src/schema/share';
 import { FIELD_SX, resultMessage } from 'src/sections/add-place/FolderPreview';
@@ -111,7 +116,7 @@ export function SharePreview({ doc }: { doc: ShareDoc }) {
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
       <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto', p: 2 }}>
         <Typography variant="h6" component="h2" sx={{ fontWeight: 800, wordBreak: 'break-word' }}>
-          {`${doc.title} · ${doc.places.length}곳`}
+          {`${shareTitle(doc.title)} · ${doc.places.length}곳`}
         </Typography>
         <Typography variant="body2" sx={{ color: 'var(--tm-text-secondary)' }}>
           {`${localDate(doc.createdAt)} 만든 파일`}

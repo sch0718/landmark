@@ -97,6 +97,12 @@ describe('entry points', () => {
     await waitFor(() => expect(store.get(addFlowAtom)).toEqual({ step: 'share-pick' }));
     expect(router.state.location.pathname).toBe('/');
     await waitFor(() => expect(screen.queryByText('받은 Landmark 공유 파일(.html)')).toBeNull());
+    // 잠깐 거친 `/import`가 방문 기록을 하나 더 남기지 않는다(뒤로 가도 같은 자리).
+    const { key } = router.state.location;
+    await act(async () => {
+      await router.navigate(-1);
+    });
+    expect(router.state.location.key).toBe(key);
   });
 
   it('add sheet hides the item when a trip target is attached', async () => {
@@ -113,5 +119,11 @@ describe('entry points', () => {
     await user.click(screen.getByRole('button', { name: '공유 파일 가져오기' }));
     await waitFor(() => expect(store.get(addFlowAtom)).toEqual({ step: 'share-pick' }));
     expect(router.state.location.pathname).toBe('/');
+    // `/import`로도 바꿔치기로 가서 방문 기록이 늘지 않는다(뒤로 가도 같은 자리).
+    const { key } = router.state.location;
+    await act(async () => {
+      await router.navigate(-1);
+    });
+    expect(router.state.location.key).toBe(key);
   });
 });

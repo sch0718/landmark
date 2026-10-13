@@ -41,6 +41,11 @@ export function cutLabelName(name: string): string {
   return cutPrefix(name.trim(), LIBRARY_LIMITS.labelNameChars);
 }
 
+/** 미리보기 머리글과 메모 머리 줄에 쓰는 파일 제목. 앞뒤 공백을 지우고, 비면 `받은 장소`. */
+export function shareTitle(title: string): string {
+  return title.trim() || UNTITLED;
+}
+
 /** 제목 라벨 입력의 기본값. 제목이 비면 `받은 장소`. */
 export function defaultTitleLabel(title: string): string {
   return cutLabelName(title) || UNTITLED;
@@ -297,7 +302,7 @@ export function importShare(
   const base = labels.lib;
   const finder = placeFinder(base);
   const outcomes = new Map<string, Outcome>();
-  const memo = { title: doc.title.trim() || UNTITLED, append: input.appendMemo };
+  const memo = { title: shareTitle(doc.title), append: input.appendMemo };
   for (const item of doc.places) {
     if (!selected.has(item.id)) continue;
     const received = item.labelIds.flatMap((id) => labels.byShareId.get(id) ?? []);

@@ -175,12 +175,12 @@ describe('공유 파일 미리보기', () => {
     expect(labelRows()).toEqual(['바다새로 만듦']);
   });
 
-  it('제목이 빈 파일은 제목 라벨 기본값이 받은 장소다', async () => {
+  it('제목이 빈 파일은 머리글과 제목 라벨 기본값이 받은 장소다', async () => {
     const rendered = await renderLibrary(baseLibrary(), { prefs: { libraryView: 'list' } });
     act(() =>
       rendered.store.set(addFlowAtom, { step: 'share', doc: { ...makeDoc(), title: '  ' } }),
     );
-    await within(panel()).findByRole('heading', { name: '· 3곳' });
+    await within(panel()).findByRole('heading', { name: '받은 장소 · 3곳' });
     expect(titleInput()).toHaveValue('받은 장소');
   });
 

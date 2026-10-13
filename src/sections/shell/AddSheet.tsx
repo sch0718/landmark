@@ -99,7 +99,8 @@ export function AddSheet({ open, onClose }: { open: boolean; onClose: () => void
               onClick={() => {
                 if (flow !== undefined) setFlow(flow);
                 onClose();
-                if (to !== undefined) void navigate(to);
+                // 경로 항목은 곧바로 다른 주소로 바뀌는 진입 경로(`/import`)라 방문 기록을 남기지 않는다.
+                if (to !== undefined) void navigate(to, { replace: true });
               }}
               sx={{
                 width: '100%',
