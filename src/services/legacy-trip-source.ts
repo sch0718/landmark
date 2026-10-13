@@ -11,8 +11,8 @@ import { LegacyImportInvalid } from 'src/services/errors';
 const NOT_FOUND = '여행 데이터를 찾지 못했어요';
 
 /**
- * 같은 브라우저에 저장된 옛 편집 레이어를 **읽기만** 한다. 기존 `readEditLayer`는 무효 원문을
- * 백업하고 원래 키를 지우므로 쓰지 않는다. 키가 없거나 읽기·해석·검증에 실패하거나
+ * 같은 브라우저에 저장된 옛 편집 레이어를 **읽기만** 한다. 옛 코드가 하던 것처럼 무효 원문을
+ * 백업하고 원래 키를 지우지 않는다. 키가 없거나 읽기·해석·검증에 실패하거나
  * 아는 것보다 새 `schemaVersion`이면 `null`이고, 저장소는 그대로 둔다.
  */
 function readEditLayerReadOnly(storage: Storage | undefined, publicId: string): EditLayer | null {

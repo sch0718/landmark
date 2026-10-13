@@ -6,7 +6,7 @@ import { StrictMode, Suspense, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { importFolder } from 'src/domain/library/add-place';
 import { createLabel, setPlaceMemo, type OpCtx } from 'src/domain/library/ops';
-import { forkEffect, setAppRuntimeForTest } from 'src/lib/effect/runtime';
+import { forkEffect, setAppRuntimeForTest, type AppRuntime } from 'src/lib/effect/runtime';
 import { createMemoryStorage } from 'src/repositories/edit-layer-repo';
 import { emptyLibrary, type Library, type Place } from 'src/schema/library';
 import { StorageQuotaExceeded } from 'src/services/errors';
@@ -112,6 +112,7 @@ function setup(
   const runtime = ManagedRuntime.make(
     options.clock === true ? Layer.mergeAll(layers, TestClock.layer()) : layers,
   );
+  runtimes.push(runtime);
   setAppRuntimeForTest(runtime);
   const store = createStore();
   const Mode =
@@ -152,12 +153,15 @@ async function renderAction(s: ReturnType<typeof setup>) {
 }
 
 let consoleError: ReturnType<typeof vi.spyOn>;
+// 진짜 `RouteLookup.layer`가 창 이벤트 구독을 걸므로 테스트마다 런타임을 닫아 구독이 쌓이지 않게 한다.
+const runtimes: AppRuntime[] = [];
 beforeEach(() => {
   toastMock.error.mockClear();
   consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
 });
-afterEach(() => {
+afterEach(async () => {
   setAppRuntimeForTest(null);
+  await Promise.all(runtimes.splice(0).map((runtime) => runtime.dispose()));
   consoleError.mockRestore();
 });
 
