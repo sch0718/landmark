@@ -1,4 +1,5 @@
 import { act, cleanup, createEvent, fireEvent, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setAppRuntimeForTest } from 'src/lib/effect/runtime';
 import { addFlowAtom, openAddSheetAtom } from 'src/stores/add-place';
@@ -193,5 +194,78 @@ describe('ShareDropOverlay', () => {
     expect(screen.getByText(OVERLAY)).toBeInTheDocument();
     act(() => store.set(addFlowAtom, { step: 'share-pick' }));
     expect(screen.queryByText(OVERLAY)).toBeNull();
+  });
+});
+
+/** `File.text()`를 신호가 올 때까지 붙잡아 두어 느린 읽기를 흉내 낸다. */
+function delayedFile(file: File = shareFile()) {
+  const realText = file.text.bind(file);
+  let finish: () => void = () => undefined;
+  const gate = new Promise<void>((resolve) => (finish = resolve));
+  vi.spyOn(file, 'text').mockImplementation(async () => {
+    await gate;
+    return realText();
+  });
+  return { file, finish: () => act(async () => finish()) };
+}
+
+const dropOnOverlay = (file: File) => {
+  dragEnter();
+  act(() => {
+    fireEvent.drop(window, { dataTransfer: { ...FILES, files: [file] } });
+  });
+};
+
+describe('ShareDropOverlay — 늦게 끝난 읽기', () => {
+  it('opens the preview as usual when nothing else changed meanwhile', async () => {
+    const { store } = await renderLibrary(sampleLibrary());
+    const slow = delayedFile();
+    dropOnOverlay(slow.file);
+    expect(store.get(addFlowAtom)).toEqual({ step: 'closed' });
+    await slow.finish();
+    await waitFor(() => expect(store.get(addFlowAtom)).toEqual({ step: 'share', doc: SHARE_DOC }));
+    expect(toastMock).not.toHaveBeenCalled();
+  });
+
+  it('does not override a link flow opened while the file was being read', async () => {
+    const { store } = await renderLibrary(sampleLibrary());
+    const slow = delayedFile();
+    dropOnOverlay(slow.file);
+    act(() => store.set(addFlowAtom, { step: 'link', hint: 'place' }));
+    await slow.finish();
+    await act(async () => undefined);
+    expect(store.get(addFlowAtom)).toEqual({ step: 'link', hint: 'place' });
+    expect(toastMock).not.toHaveBeenCalled();
+  });
+
+  it('does not toast a late error over a flow opened meanwhile', async () => {
+    const { store } = await renderLibrary(sampleLibrary());
+    const bad = delayedFile(plainHtmlFile());
+    dropOnOverlay(bad.file);
+    act(() => store.set(addFlowAtom, { step: 'link', hint: 'place' }));
+    await bad.finish();
+    await act(async () => undefined);
+    expect(store.get(addFlowAtom)).toEqual({ step: 'link', hint: 'place' });
+    expect(toastMock).not.toHaveBeenCalled();
+  });
+
+  it('keeps the preview of a file picked in the pick panel when an earlier drop finishes late', async () => {
+    const user = userEvent.setup();
+    const { store } = await renderLibrary(sampleLibrary());
+    const slowA = delayedFile(shareFile(SHARE_DOC, 'a.html')); // 2곳
+    dropOnOverlay(slowA.file);
+    act(() => store.set(addFlowAtom, { step: 'share-pick' }));
+    const panel = await screen.findByRole('region', { name: '공유 파일 가져오기' });
+    const onlyOne = { ...SHARE_DOC, title: 'B 모음', places: [SHARE_DOC.places[0]!] };
+    await user.upload(
+      panel.querySelector('input[type="file"]') as HTMLInputElement,
+      shareFile(onlyOne, 'b.html'),
+    );
+    await waitFor(() => expect(store.get(addFlowAtom)).toEqual({ step: 'share', doc: onlyOne }));
+    expect(await screen.findByText('B 모음 · 1곳')).toBeInTheDocument();
+    await slowA.finish();
+    await act(async () => undefined);
+    expect(store.get(addFlowAtom)).toEqual({ step: 'share', doc: onlyOne });
+    expect(screen.getByText('B 모음 · 1곳')).toBeInTheDocument();
   });
 });

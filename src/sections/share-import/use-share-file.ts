@@ -1,4 +1,4 @@
-import { useSetAtom } from 'jotai';
+import { useSetAtom, useStore } from 'jotai';
 import { useEffect, useRef, useState } from 'react';
 import { readShareFile, SHARE_READ_MESSAGES } from 'src/domain/share/read-share';
 import { addFlowAtom } from 'src/stores/add-place';
@@ -6,7 +6,8 @@ import { addFlowAtom } from 'src/stores/add-place';
 /**
  * 고른(끌어 놓은) 공유 파일을 읽는다. 성공하면 흐름을 미리보기(`share`)로 옮기고,
  * 실패하면 `error`에 오류 문구(스펙 §2.5)를 담는다. 새로 읽기 시작하면 이전 오류는 지운다.
- * 읽는 사이 칸이 닫혔으면(언마운트) 늦은 결과는 버린다.
+ * 읽는 사이 칸이 닫혔으면(언마운트) 늦은 결과는 버린다. 읽는 사이 다른 흐름이 열렸어도 버린다
+ * (끌어 놓기 덮개는 흐름이 바뀌어도 계속 떠 있어서, 늦게 끝난 읽기가 새 흐름을 덮을 수 있다).
  * `read`는 오류 문구(성공하거나 결과를 버렸으면 `null`)로도 끝나서, 칸 없이 쓰는 쪽이 토스트로 알릴 수 있다.
  */
 export function useShareFile(): {
@@ -14,6 +15,7 @@ export function useShareFile(): {
   reading: boolean;
   error: string | null;
 } {
+  const store = useStore();
   const setFlow = useSetAtom(addFlowAtom);
   const [reading, setReading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -28,11 +30,15 @@ export function useShareFile(): {
 
   const read = async (file: File): Promise<string | null> => {
     const run = ++seq.current;
+    const before = store.get(addFlowAtom);
     setError(null);
     setReading(true);
     const result = await readShareFile(file);
     if (seq.current !== run) return null;
     setReading(false);
+    // 읽는 사이 흐름이 바뀌었다면(값이 달라졌다면) 결과를 버린다. 같은 모양이어도 새로 열린 것은 버리는 쪽으로
+    // 일부러 객체 동일성으로 본다(`use-import-entry.ts`와 같은 보수적 판정).
+    if (store.get(addFlowAtom) !== before) return null;
     if (result.ok) {
       setFlow({ step: 'share', doc: result.doc });
       return null;
