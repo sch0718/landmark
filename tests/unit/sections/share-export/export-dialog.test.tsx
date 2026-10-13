@@ -67,7 +67,8 @@ function savedDoc(): { title: string; places: Array<{ id: string; memo?: string 
 
 async function openFromToolbar(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole('button', { name: '내보내기' }));
-  return dialog();
+  // 대화상자는 처음 열 때 받으므로 한 박자 늦게 나타난다.
+  return screen.findByRole('dialog', { name: '내보내기' });
 }
 
 describe('export html dialog', () => {

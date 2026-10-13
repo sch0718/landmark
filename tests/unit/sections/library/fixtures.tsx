@@ -120,6 +120,8 @@ export async function renderLibrary(
     routeLookup?: NonNullable<Parameters<typeof renderApp>[0]>['routeLookup'];
     /** `renderApp`의 `reverseGeocoder`를 그대로 넘긴다. */
     reverseGeocoder?: NonNullable<Parameters<typeof renderApp>[0]>['reverseGeocoder'];
+    /** `renderApp`의 `preloadPanels`를 그대로 넘긴다. */
+    preloadPanels?: boolean;
   } = {},
 ) {
   const {
@@ -131,6 +133,7 @@ export async function renderLibrary(
     placeLookup,
     routeLookup,
     reverseGeocoder,
+    preloadPanels,
   } = options;
   const storage = options.storage ?? createMemoryStorage();
   storage.setItem(LIBRARY_KEY, JSON.stringify(library));
@@ -146,6 +149,7 @@ export async function renderLibrary(
     placeLookup,
     routeLookup,
     reverseGeocoder,
+    preloadPanels,
   });
   return { ...rendered, storage, setWidth: viewport.setWidth };
 }

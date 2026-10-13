@@ -29,7 +29,7 @@ import { candidatesNotice } from 'src/sections/trips/candidate-notice';
 import { TripFormDialog } from 'src/sections/trips/TripFormDialog';
 import { TripPickerDialog } from 'src/sections/trips/TripPickerDialog';
 import type { Trip } from 'src/schema/trip';
-import { ExportHtmlDialog } from 'src/sections/share-export/ExportHtmlDialog';
+import { ExportHtmlDialogHost } from 'src/sections/share-export/ExportHtmlDialogHost';
 import { exportTargets } from 'src/sections/share-export/export-targets';
 import { libraryAtom, useLibraryAction } from 'src/stores/library-state';
 import { focusPlaceAtom } from 'src/stores/library-ui';
@@ -229,7 +229,11 @@ export function LibraryPage() {
         onClose={() => setNewTrip(null)}
         onDone={(id) => void navigate(paths.trip(id))}
       />
-      <ExportHtmlDialog open={exporting} onClose={() => setExporting(false)} targets={targets} />
+      <ExportHtmlDialogHost
+        open={exporting}
+        onClose={() => setExporting(false)}
+        targets={targets}
+      />
     </Box>
   );
 }

@@ -2,16 +2,21 @@ import Box from '@mui/material/Box';
 import Drawer from '@mui/material/Drawer';
 import IconButton from '@mui/material/IconButton';
 import { useAtom, useSetAtom } from 'jotai';
-import { useEffect, useRef } from 'react';
+import { Suspense, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router';
+import { ChunkErrorBoundary } from 'src/components/ChunkErrorBoundary';
+import { ChunkErrorNotice } from 'src/components/ChunkErrorNotice';
 import { XIcon } from 'src/components/icons';
+import { LoadingNotice } from 'src/components/LoadingNotice';
+import {
+  CandidateCard,
+  FolderPreview,
+  LinkInputPanel,
+  PinCard,
+  SharePickPanel,
+  SharePreview,
+} from 'src/routes/lazy-routes';
 import { paths } from 'src/routes/paths';
-import { CandidateCard } from 'src/sections/add-place/CandidateCard';
-import { FolderPreview } from 'src/sections/add-place/FolderPreview';
-import { LinkInputPanel } from 'src/sections/add-place/LinkInputPanel';
-import { PinCard } from 'src/sections/add-place/PinCard';
-import { SharePickPanel } from 'src/sections/share-import/SharePickPanel';
-import { SharePreview } from 'src/sections/share-import/SharePreview';
 import { ADD_LABEL } from 'src/sections/shell/nav-items';
 import { DETAIL_WIDTH } from 'src/sections/shell/pane-widths';
 import { useLayout } from 'src/sections/shell/use-layout';
@@ -38,7 +43,7 @@ const stepKey = (flow: AddFlow): string => {
 };
 
 /** 단계별 칸 내용. 핀 모드(`pin`)는 칸이 아니라 지도 위 오버레이다(`PinModeOverlay`). */
-function StepContent({ flow }: { flow: AddFlow }) {
+function StepView({ flow }: { flow: AddFlow }) {
   switch (flow.step) {
     case 'link':
       return <LinkInputPanel hint={flow.hint} />;
@@ -55,6 +60,21 @@ function StepContent({ flow }: { flow: AddFlow }) {
     default:
       return null;
   }
+}
+
+/**
+ * 단계 화면 파일은 그 단계가 열릴 때 받는다. 받는 동안은 칸 안에 기다림 표시를, 받지 못하면(새 배포 뒤 옛 파일 없음)
+ * 칸 안에 새 버전 안내를 보인다. 칸 닫기는 칸 바깥(`AddPlaceHost`)에 있어 그대로 된다.
+ * 단계가 바뀌면 호출하는 쪽이 `key`로 이 컴포넌트를 새로 만들어 오류 경계도 풀린다.
+ */
+function StepContent({ flow }: { flow: AddFlow }) {
+  return (
+    <ChunkErrorBoundary fallback={<ChunkErrorNotice />}>
+      <Suspense fallback={<LoadingNotice />}>
+        <StepView flow={flow} />
+      </Suspense>
+    </ChunkErrorBoundary>
+  );
 }
 
 /**

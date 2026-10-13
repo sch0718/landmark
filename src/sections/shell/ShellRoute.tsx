@@ -2,7 +2,7 @@ import { useSetAtom } from 'jotai';
 import { Component, Suspense, useEffect, type ReactNode } from 'react';
 import { LoadingNotice } from 'src/components/LoadingNotice';
 import { prefetchWhenIdle } from 'src/lib/prefetch';
-import { ROUTE_CHUNKS } from 'src/routes/lazy-routes';
+import { PANEL_CHUNKS, ROUTE_CHUNKS } from 'src/routes/lazy-routes';
 import { LibraryCorrupt } from 'src/services/errors';
 import { CorruptScreen } from 'src/sections/shell/CorruptScreen';
 import { AppShell } from 'src/sections/shell/AppShell';
@@ -36,7 +36,7 @@ class CorruptBoundary extends Component<BoundaryProps, BoundaryState> {
 }
 
 /** 셸이 처음 그려진 뒤 한가할 때 미리 받을 단위들. 한 곳에서 모은다. */
-export const PREFETCH_CHUNKS = [...ROUTE_CHUNKS];
+export const PREFETCH_CHUNKS = [...ROUTE_CHUNKS, ...PANEL_CHUNKS];
 
 /** 보관함을 읽고(`useLibrarySync`, 앱에서 한 번) 셸을 그린다. 읽는 동안은 Suspense가 멈춘다. */
 function LibraryShell() {

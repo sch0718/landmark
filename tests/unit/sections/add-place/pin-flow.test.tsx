@@ -135,7 +135,8 @@ describe('핀 모드', () => {
     });
     expect(crosshair()).not.toBeInTheDocument();
     expect(screen.queryByText(GUIDE)).not.toBeInTheDocument();
-    expect(within(panel()).getByRole('textbox', { name: '이름' })).toHaveValue('');
+    // 단계 화면은 처음 열 때 받으므로 한 박자 늦게 나타난다.
+    expect(await within(panel()).findByRole('textbox', { name: '이름' })).toHaveValue('');
     // 고른 위치에는 임시 마커가 남는다.
     expect(await screen.findByTestId('marker-candidate')).toBeInTheDocument();
   });

@@ -239,7 +239,8 @@ async function startAdd(user: ReturnType<typeof userEvent.setup>, item: string) 
 }
 
 async function submitLink(user: ReturnType<typeof userEvent.setup>, text: string) {
-  await user.click(within(panel()).getByRole('textbox', { name: '링크' }));
+  // 단계 화면은 처음 열 때 받으므로 한 박자 늦게 나타난다.
+  await user.click(await within(panel()).findByRole('textbox', { name: '링크' }));
   await user.paste(text);
   await user.click(within(panel()).getByRole('button', { name: '확인' }));
 }

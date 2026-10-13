@@ -5,7 +5,7 @@ import { RouterProvider, createMemoryRouter } from 'react-router';
 import { vi } from 'vitest';
 import { SHARE_DATA_PLACEHOLDER } from 'src/domain/share/inject';
 import { setAppRuntimeForTest } from 'src/lib/effect/runtime';
-import { ROUTE_CHUNKS } from 'src/routes/lazy-routes';
+import { PANEL_CHUNKS, ROUTE_CHUNKS } from 'src/routes/lazy-routes';
 import { routes } from 'src/routes/router';
 import { IdGen } from 'src/services/id-gen';
 import { LegacyTripSource } from 'src/services/legacy-trip-source';
@@ -97,6 +97,11 @@ export async function renderApp(
      * 같은 효과라 `React.lazy`가 첫 그림에서 바로 풀린다. 받는 동안의 화면이나 받기 실패를 볼 때만 끈다.
      */
     preloadRoutes?: boolean;
+    /**
+     * 추가 칸 단계·내보내기 대화상자 파일을 그리기 전에 미리 받아 둔다(기본 true). `preloadRoutes`와 같은 뜻이다.
+     * 단계를 기다리는 동안의 칸이나 받기 실패를 볼 때만 끈다.
+     */
+    preloadPanels?: boolean;
   } = {},
 ) {
   const {
@@ -108,8 +113,10 @@ export async function renderApp(
     routeLookup = OFFLINE_ROUTE_LOOKUP,
     reverseGeocoder = NULL_REVERSE_GEOCODER,
     preloadRoutes = true,
+    preloadPanels = true,
   } = options;
   if (preloadRoutes) await Promise.all(ROUTE_CHUNKS.map((load) => load()));
+  if (preloadPanels) await Promise.all(PANEL_CHUNKS.map((load) => load()));
   setAppRuntimeForTest(
     ManagedRuntime.make(
       Layer.mergeAll(

@@ -28,11 +28,59 @@ export const LegacyImportPage = lazy(() =>
   loadLegacyImportPage().then((m) => ({ default: m.LegacyImportPage })),
 );
 
-/** 첫 화면을 그린 뒤 한가할 때 미리 받는 단위들. 추가 칸 단계·대화상자 목록은 여기에 더한다. */
+/**
+ * 추가 칸의 단계 화면과 공유 내보내기 대화상자도 열 때 받는다. 핀 찍기 덮개(`PinModeOverlay`)는 지도 위에 바로
+ * 떠야 해서 나누지 않는다. 받기가 실패하면 쓰는 쪽(`AddPlaceHost`·`ExportHtmlDialogHost`)의 `ChunkErrorBoundary`가
+ * 그 칸·대화상자 안에 새 버전 안내를 보인다.
+ */
+export const loadLinkInputPanel = lazyChunk(() => import('src/sections/add-place/LinkInputPanel'));
+export const loadCandidateCard = lazyChunk(() => import('src/sections/add-place/CandidateCard'));
+export const loadFolderPreview = lazyChunk(() => import('src/sections/add-place/FolderPreview'));
+export const loadPinCard = lazyChunk(() => import('src/sections/add-place/PinCard'));
+export const loadSharePickPanel = lazyChunk(
+  () => import('src/sections/share-import/SharePickPanel'),
+);
+export const loadSharePreview = lazyChunk(() => import('src/sections/share-import/SharePreview'));
+export const loadExportHtmlDialog = lazyChunk(
+  () => import('src/sections/share-export/ExportHtmlDialog'),
+);
+
+export const LinkInputPanel = lazy(() =>
+  loadLinkInputPanel().then((m) => ({ default: m.LinkInputPanel })),
+);
+export const CandidateCard = lazy(() =>
+  loadCandidateCard().then((m) => ({ default: m.CandidateCard })),
+);
+export const FolderPreview = lazy(() =>
+  loadFolderPreview().then((m) => ({ default: m.FolderPreview })),
+);
+export const PinCard = lazy(() => loadPinCard().then((m) => ({ default: m.PinCard })));
+export const SharePickPanel = lazy(() =>
+  loadSharePickPanel().then((m) => ({ default: m.SharePickPanel })),
+);
+export const SharePreview = lazy(() =>
+  loadSharePreview().then((m) => ({ default: m.SharePreview })),
+);
+export const ExportHtmlDialog = lazy(() =>
+  loadExportHtmlDialog().then((m) => ({ default: m.ExportHtmlDialog })),
+);
+
+/** 첫 화면을 그린 뒤 한가할 때 미리 받는 화면 단위들. */
 export const ROUTE_CHUNKS: readonly (() => Promise<unknown>)[] = [
   loadTripsPage,
   loadTripPlannerPage,
   loadSettingsPage,
   loadLabelsPage,
   loadLegacyImportPage,
+];
+
+/** 같은 때 미리 받는 추가 칸 단계와 내보내기 대화상자 단위들. */
+export const PANEL_CHUNKS: readonly (() => Promise<unknown>)[] = [
+  loadLinkInputPanel,
+  loadCandidateCard,
+  loadFolderPreview,
+  loadPinCard,
+  loadSharePickPanel,
+  loadSharePreview,
+  loadExportHtmlDialog,
 ];

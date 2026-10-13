@@ -131,7 +131,8 @@ describe('링크 입력', () => {
 
     await openFrom(user, '링크 붙여넣기');
     expect(store.get(addFlowAtom)).toEqual({ step: 'link', hint: 'place' });
-    expect(within(panel()).getByText('링크를 붙여 넣어 주세요')).toBeInTheDocument();
+    // 단계 화면은 처음 열 때 받으므로 한 박자 늦게 나타난다.
+    expect(await within(panel()).findByText('링크를 붙여 넣어 주세요')).toBeInTheDocument();
     const confirm = within(panel()).getByRole('button', { name: '확인' });
     expect(confirm).toBeDisabled();
 
