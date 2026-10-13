@@ -18,7 +18,7 @@
 - 파일에 U+2028/U+2029 원문자 금지. 커밋 전 `grep -rnP '[\x{2028}\x{2029}]' src functions tests` 출력 없음.
 - 보기 화면(`src/share-viewer/*`)은 `src/schema/*`에서 **`import type`만** 한다. `src/domain/codec.ts`·`src/schema/common.ts` 등 Effect를 끌고 오는 모듈을 import하지 않는다.
 - `schemaVersion`은 2, 저장 키 `tripmap:library:v2`, 공유 형식 `format: 'tripmap-share'`·`version: 1` 그대로.
-- E2E는 `E2E_PORT=5174`로 돌린다. 5173은 다른 프로젝트(`stock-trade`)의 개발 서버이므로 **절대 끄지 않는다**.
+- E2E는 `E2E_PORT=5175`로 돌린다. 5173은 다른 프로젝트(`stock-trade`)의 개발 서버이므로 **절대 끄지 않는다**. 5174는 Playwright가 직접 띄우는 지도 미리보기 서버(`playwright.config.ts`의 `MAP_PORT`)라 앱 포트로 쓰지 않는다.
 - 한도: 파일 5,242,880바이트, 장소 1,000곳, 해시 값 32,000자, 풀린 해시 5,242,880바이트, 같은 장소 거리 50m, 라벨 이름 30자, 메모 10,000자.
 - 앱 주소 기본값 `https://landmark-c5f.pages.dev`(빌드 변수 `VITE_APP_URL`이 있으면 그것). 진입 경로 `/import`, 해시 접두사 `#d=`.
 - 고정 문구(스펙 §2·§4):
@@ -298,7 +298,7 @@
   - 내보내기로 파일을 받음 → 보관함을 비우거나 라벨 하나를 지운 상태로 만듦 → ＋ → `공유 파일 가져오기` → `파일 고르기`에 `setInputFiles` → 미리보기 → `<N>곳 가져오기` → 토스트와 목록(제목 라벨 필터).
   - 받은 파일을 `file://`로 연 보기 화면에서 `Landmark에 담기`의 `href`를 읽어 앞부분을 테스트 앱 주소(`baseURL`)로 바꿔 이동 → 주소가 `/` → 미리보기 → 가져오기. 같은 파일을 한 번 더 → `<N>곳은 라벨만 더했어요`.
   - desktop만: 보관함 위에 파일을 끌어 놓기(`DataTransfer`를 페이지에서 만들어 `dispatchEvent`) → 미리보기.
-- [ ] **Step 2:** `E2E_PORT=5174 yarn test:e2e tests/e2e/share-import.spec.ts` → PASS(세 프로젝트). 기존 E2E 전체도 `E2E_PORT=5174 yarn test:e2e` PASS.
+- [ ] **Step 2:** `E2E_PORT=5175 yarn test:e2e tests/e2e/share-import.spec.ts` → PASS(세 프로젝트). 기존 E2E 전체도 `E2E_PORT=5175 yarn test:e2e` PASS.
 - [ ] **Step 3:** `yarn build:ci` PASS, `grep -rnP '[\x{2028}\x{2029}]' src functions tests` 출력 없음
 - [ ] **Step 4:** 커밋 `test(share-import): 공유 파일 가져오기 E2E`
 - [ ] **Step 5: 배포 확인**(PR 미리보기 배포 후): 미리보기 주소에서 내보낸 파일 → 앱 `공유 파일 가져오기`로 가져오기. 병합 뒤 운영(`https://landmark-c5f.pages.dev`)에서 내보낸 파일의 `Landmark에 담기` → 운영 앱 미리보기가 열리는지 확인하고 결과를 PR에 적는다.
