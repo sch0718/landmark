@@ -24,6 +24,7 @@ vi.mock('src/theme/fonts', () => ({ loadDisplayFont: vi.fn(() => Promise.resolve
 beforeEach(() => {
   toastMock.mockClear();
   toastMock.error.mockClear();
+  vi.mocked(readShareHash).mockClear();
 });
 afterEach(() => {
   cleanup();
@@ -61,15 +62,26 @@ describe('/import entry', () => {
     expect(await screen.findByRole('heading', { name: '공유 파일 가져오기' })).toBeInTheDocument();
   });
 
-  it('does not reopen after the address is already /', async () => {
+  it('does not reopen after closing, even when the same router moves or goes back', async () => {
     const value = await shareHashValue();
-    const first = await renderLibrary(sampleLibrary(), { path: `/import#d=${value}` });
-    await waitFor(() => expect(first.store.get(addFlowAtom).step).toBe('share'));
-    const url = first.router.state.location;
-    cleanup();
+    const { router, store } = await renderLibrary(sampleLibrary(), { path: `/import#d=${value}` });
+    await waitFor(() => expect(store.get(addFlowAtom).step).toBe('share'));
+    expect(readShareHash).toHaveBeenCalledTimes(1);
+    act(() => store.set(addFlowAtom, { step: 'closed' }));
 
-    const second = await renderLibrary(sampleLibrary(), { path: url.pathname + url.hash });
-    expect(second.store.get(addFlowAtom)).toEqual({ step: 'closed' });
+    // 같은 라우터에서 뒤로 가 보고(`/import`를 `replace`로 지웠으므로 진입 주소로 돌아가지 않는다),
+    // `/`로 다시 가 본다(효과가 다시 돈다). 어느 쪽도 다시 열지 않는다.
+    await act(async () => {
+      await router.navigate(-1);
+    });
+    expect(router.state.location.pathname).toBe('/');
+    expect(router.state.location.hash).toBe('');
+    await act(async () => {
+      await router.navigate('/');
+    });
+    expect(router.state.location.pathname).toBe('/');
+    expect(readShareHash).toHaveBeenCalledTimes(1);
+    expect(store.get(addFlowAtom)).toEqual({ step: 'closed' });
     expect(toastMock).not.toHaveBeenCalled();
   });
 

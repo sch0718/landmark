@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { CodecError, decodeEditLayer, encodeEditLayer } from 'src/domain/codec';
+import {
+  CodecError,
+  decodeCompressedJson,
+  decodeEditLayer,
+  encodeCompressedJson,
+  encodeEditLayer,
+} from 'src/domain/codec';
 import { LIMITS } from 'src/schema/common';
 import { makeEdit } from '../../fixtures/builders';
 
@@ -60,5 +66,30 @@ describe('편집 코덱', () => {
   it('압축이 아닌 데이터와 JSON이 아닌 내용은 corrupt', async () => {
     expect(await codeOf(decodeEditLayer('AAAAAAAA'))).toBe('corrupt');
     expect(await codeOf(decodeEditLayer(await deflateRawBase64Url('not json')))).toBe('corrupt');
+  });
+});
+
+describe('압축 JSON 코덱의 한도 지정', () => {
+  it('maxChars를 넘는 한 글자부터 too-long, 딱 맞으면 해독한다', async () => {
+    const encoded = await encodeCompressedJson({ a: 1 });
+    const limits = { maxChars: encoded.length, maxBytes: 1000 };
+    expect(await decodeCompressedJson(encoded, limits)).toEqual({ a: 1 });
+    expect(
+      await codeOf(decodeCompressedJson(encoded, { ...limits, maxChars: encoded.length - 1 })),
+    ).toBe('too-long');
+    expect(
+      await codeOf(decodeCompressedJson('A'.repeat(101), { maxChars: 100, maxBytes: 1000 })),
+    ).toBe('too-long');
+  });
+
+  it('풀린 결과가 maxBytes를 넘으면 too-large', async () => {
+    const json = 'a'.repeat(10_000);
+    const encoded = await encodeCompressedJson(json);
+    // 압축이 잘 되어 글자 한도에는 걸리지 않는다.
+    expect(encoded.length).toBeLessThan(200);
+    expect(await codeOf(decodeCompressedJson(encoded, { maxChars: 200, maxBytes: 1000 }))).toBe(
+      'too-large',
+    );
+    expect(await decodeCompressedJson(encoded, { maxChars: 200, maxBytes: 10_002 })).toBe(json);
   });
 });

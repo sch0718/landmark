@@ -118,6 +118,12 @@ test.describe('공유 파일 가져오기', () => {
     await importPreview(page, SEA_COUNT, `${SEA_COUNT}곳을 새로 넣었어요`);
     await expectTitleFiltered(page, SEA_COUNT);
 
+    // 새로고침해도 미리보기가 다시 열리지 않는다(주소는 그대로 `/`).
+    await page.reload();
+    await expect(rowsOf(page)).toHaveCount(SEA_COUNT);
+    await expect(page).toHaveURL(new RegExp(`^${baseURL!.replace(/\/$/, '')}/$`));
+    await expect(page.getByRole('button', { name: /곳 가져오기$/ })).toHaveCount(0);
+
     // 같은 파일을 한 번 더: 모두 이미 있으니 라벨만 더한다.
     await page.goto(url);
     await expect(page).toHaveURL(new RegExp(`^${baseURL!.replace(/\/$/, '')}/$`));
