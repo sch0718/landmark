@@ -129,6 +129,64 @@ describe('ShareDropOverlay', () => {
     expect(screen.queryByText(OVERLAY)).toBeNull();
   });
 
+  it('keeps the browser from opening a file dropped during the share preview', async () => {
+    const { store } = await renderLibrary(sampleLibrary());
+    act(() => store.set(addFlowAtom, { step: 'share', doc: SHARE_DOC }));
+    const before = store.get(addFlowAtom);
+    const over = createEvent.dragOver(document.body, { dataTransfer: FILES });
+    fireEvent(document.body, over);
+    expect(over.defaultPrevented).toBe(true);
+    const drop = createEvent.drop(document.body, {
+      dataTransfer: { ...FILES, files: [plainHtmlFile()] },
+    });
+    act(() => {
+      fireEvent(document.body, drop);
+    });
+    expect(drop.defaultPrevented).toBe(true);
+    await act(async () => undefined);
+    expect(store.get(addFlowAtom)).toBe(before);
+    expect(screen.queryByText(OVERLAY)).toBeNull();
+    expect(toastMock).not.toHaveBeenCalled();
+  });
+
+  it('keeps the browser from opening a file dropped on a place detail', async () => {
+    const { store } = await renderLibrary(sampleLibrary(), { path: '/place/place00001' });
+    const drop = createEvent.drop(document.body, {
+      dataTransfer: { ...FILES, files: [shareFile()] },
+    });
+    act(() => {
+      fireEvent(document.body, drop);
+    });
+    expect(drop.defaultPrevented).toBe(true);
+    await act(async () => undefined);
+    expect(store.get(addFlowAtom)).toEqual({ step: 'closed' });
+  });
+
+  it('does not intercept dragged text outside the active state', async () => {
+    const { store } = await renderLibrary(sampleLibrary());
+    act(() => store.set(addFlowAtom, { step: 'share', doc: SHARE_DOC }));
+    const TEXT = { types: ['text/plain'] };
+    const over = createEvent.dragOver(document.body, { dataTransfer: TEXT });
+    fireEvent(document.body, over);
+    expect(over.defaultPrevented).toBe(false);
+    const drop = createEvent.drop(document.body, { dataTransfer: TEXT });
+    fireEvent(document.body, drop);
+    expect(drop.defaultPrevented).toBe(false);
+  });
+
+  it('does not intercept file drags on the compact layout', async () => {
+    const { store } = await renderLibrary(sampleLibrary(), { width: 390 });
+    act(() => store.set(addFlowAtom, { step: 'share', doc: SHARE_DOC }));
+    const over = createEvent.dragOver(document.body, { dataTransfer: FILES });
+    fireEvent(document.body, over);
+    expect(over.defaultPrevented).toBe(false);
+    const drop = createEvent.drop(document.body, {
+      dataTransfer: { ...FILES, files: [shareFile()] },
+    });
+    fireEvent(document.body, drop);
+    expect(drop.defaultPrevented).toBe(false);
+  });
+
   it('hides the overlay when an add flow opens during a drag', async () => {
     const { store } = await renderLibrary(sampleLibrary());
     dragEnter();

@@ -92,12 +92,47 @@ describe('SharePickPanel', () => {
     await waitFor(() => expect(store.get(addFlowAtom)).toEqual({ step: 'share', doc: SHARE_DOC }));
   });
 
+  it('reads a file dropped outside the panel too, once per drop', async () => {
+    const { store } = await openPick(1280);
+    const file = shareFile();
+    const text = vi.spyOn(file, 'text');
+    const outside = screen.getByRole('list', { name: '장소 목록' });
+    const drop = createEvent.drop(outside, {
+      dataTransfer: { types: ['Files'], files: [file] },
+    });
+    fireEvent(outside, drop);
+    expect(drop.defaultPrevented).toBe(true);
+    await waitFor(() => expect(store.get(addFlowAtom)).toEqual({ step: 'share', doc: SHARE_DOC }));
+    expect(text).toHaveBeenCalledTimes(1);
+  });
+
+  it('reads a file dropped on the panel only once', async () => {
+    const { panel, store } = await openPick(1280);
+    const file = shareFile();
+    const text = vi.spyOn(file, 'text');
+    fireEvent.drop(panel, { dataTransfer: { types: ['Files'], files: [file] } });
+    await waitFor(() => expect(store.get(addFlowAtom)).toEqual({ step: 'share', doc: SHARE_DOC }));
+    expect(text).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the error inside the panel for a bad file dropped outside it', async () => {
+    const { panel, store } = await openPick(1280);
+    fireEvent.drop(document.body, { dataTransfer: { types: ['Files'], files: [plainHtmlFile()] } });
+    expect(await within(panel).findByText(NOT_SHARE)).toBeInTheDocument();
+    expect(store.get(addFlowAtom)).toEqual({ step: 'share-pick' });
+  });
+
   it('ignores drops on the compact layout', async () => {
     const { panel, store } = await openPick(390);
     const over = createEvent.dragOver(panel, { dataTransfer: { files: [] } });
     fireEvent(panel, over);
     expect(over.defaultPrevented).toBe(false);
     fireEvent.drop(panel, { dataTransfer: { files: [shareFile()] } });
+    const outside = createEvent.drop(document.body, {
+      dataTransfer: { types: ['Files'], files: [shareFile()] },
+    });
+    fireEvent(document.body, outside);
+    expect(outside.defaultPrevented).toBe(false);
     await act(async () => undefined);
     expect(store.get(addFlowAtom)).toEqual({ step: 'share-pick' });
   });
