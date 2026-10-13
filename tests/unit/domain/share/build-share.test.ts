@@ -74,6 +74,27 @@ describe('buildShareDoc', () => {
     expect('naverSid' in doc.places[1]!).toBe(false);
   });
 
+  it('카카오·구글 장소는 자기 id만 담고, 핀은 id 키가 없다', () => {
+    const lib = withPlaces(sampleLibrary(), [
+      { ...makePlace(7), source: { kind: 'kakao', kakaoId: '2345678' } },
+      { ...makePlace(8), source: { kind: 'google', googleId: '0x1a2b:0x3c4d' } },
+      { ...makePlace(9), source: { kind: 'pin' } },
+    ]);
+    const doc = buildShareDoc(lib, [id(7), id(8), id(9)], opts);
+    const [kakao, google, pin] = doc.places;
+    expect(kakao!.kakaoId).toBe('2345678');
+    expect('naverSid' in kakao!).toBe(false);
+    expect('googleId' in kakao!).toBe(false);
+    expect(google!.googleId).toBe('0x1a2b:0x3c4d');
+    expect('naverSid' in google!).toBe(false);
+    expect('kakaoId' in google!).toBe(false);
+    for (const key of ['naverSid', 'kakaoId', 'googleId']) expect(key in pin!).toBe(false);
+    // 모르는 필드를 거절하는 검증을 그대로 통과해야 한다.
+    expect(() =>
+      Schema.decodeUnknownSync(ShareDocSchema, { onExcessProperty: 'error' })(doc),
+    ).not.toThrow();
+  });
+
   it('copies name, address and coordinates', () => {
     const doc = buildShareDoc(sampleLibrary(), [id(3)], opts);
     expect(doc.places[0]).toMatchObject({
