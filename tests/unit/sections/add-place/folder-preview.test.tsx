@@ -118,7 +118,8 @@ describe('폴더 미리보기', () => {
   it('폴더를 찾는 동안 안내하고, 머리글·목록·이미 있음 표시를 보인다', async () => {
     const pending = deferred<Reply>();
     const { lookup } = await openFolder(() => pending.promise);
-    expect(within(panel()).getByText('장소를 찾는 중…')).toBeInTheDocument();
+    // 단계 화면은 처음 열 때 받으므로 한 박자 늦게 나타난다.
+    expect(await within(panel()).findByText('장소를 찾는 중…')).toBeInTheDocument();
     await act(async () => pending.resolve(threePlaces()));
 
     expect(lookup.calls).toEqual([SHARE_ID]);

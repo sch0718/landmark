@@ -358,3 +358,42 @@ node scripts/measure-ui-assets.mjs dist/assets > .cache/bundle-after.json
 - **JS는 gzip 20369B 줄었다**(316323B → 295954B). 옛 `TripPage` 청크(168654B)와 MDI 아이콘이 빠지고, 새 화면(보관함·지도·라벨·설정·가져오기)과 Effect 런타임이 들어왔다. 옛 `TripPage` 지연 로드 청크는 없어졌고 라우트는 한 `index` 청크에 묶여 있다.
 - **합계는 gzip 36874B 늘었다.** 늘어난 것은 전부 CSS다. 기준선 때는 CSS가 0이었고, 이번에는 본문 글꼴 Pretendard의 부분 집합 CSS(`index` 청크 쪽)와 수첩 테마 제목 글꼴 고운바탕의 `@font-face` CSS(`400`·`700`)가 dist에 들어온다. 이 CSS는 글자 범위(`unicode-range`)별 선언이라 브라우저는 화면에 쓰는 범위의 `.woff2`만 내려받는다. 폰트 파일은 이 측정 대상이 아니다(스크립트가 `.js`·`.css`만 센다). 고운바탕 CSS는 수첩 테마를 고를 때만 지연 로드된다(`src/theme/fonts.ts`).
 - 초기 진입 네트워크·상호작용 지연·수명은 이번에 다시 재지 않았다. 위 수치를 그런 값으로 해석하지 않는다.
+
+## 2026-10-13 D2 첫 로딩
+
+다듬기 2 첫 로딩(스펙 `docs/superpowers/specs/2026-10-13-first-load-design.md` §6)의 전후 기록이다. 첫 화면(보관함·지도·장소 상세)이 아닌 화면·추가 칸 단계·공유 내보내기 대화상자를 들어갈 때 받게 나누고, 첫 화면 JS를 라이브러리 세 묶음(`react`·`mui`·`effect`)과 앱 코드로 묶었다(`vite.config.ts`의 `build.rolldownOptions.output.codeSplitting.groups`). 전(before)은 나누기 전 `feat/first-load`(`76666f7`)에서, 후(after)는 이번 묶음 설정까지 넣은 뒤 같은 명령으로 2026-10-14에 쟀다.
+
+측정 명령:
+
+```bash
+yarn build
+yarn size --require-lazy TripsPage --require-lazy TripPlannerPage --require-lazy SettingsPage --require-lazy LabelsPage --require-lazy LegacyImportPage
+```
+
+`yarn size`(`scripts/check-bundle-size.mjs`)는 `dist/index.html`이 처음에 받는 JS(`<script type="module" src>`·`<link rel="modulepreload" href>`)를 **첫 화면 JS**로, `dist/assets`의 모든 JS를 **전체 JS**로 재고(gzip은 Node `zlib` 기본 수준), 첫 화면 JS gzip이 `perf-budget.json`의 `initialJsGzipMax`를 넘거나, 첫 화면 파일 이름에 `--forbid` 이름이 들어 있거나, `--require-lazy <이름>`을 준 이름의 `dist/assets/<이름>-*.js`가 없거나 첫 화면 목록에 있으면 종료 코드 1이다. `yarn build:ci`가 `build` 다음에 `--require-lazy`로 나눠 받는 화면 12곳(아래)을 검사한다.
+
+| **구분** | **전 원본 B** | **전 gzip B** | **후 원본 B** | **후 gzip B** | **gzip 차이 B** |
+| :--- | ---: | ---: | ---: | ---: | ---: |
+| 첫 화면 JS | 1205053 | 385718 | 942231 | 297769 | **-87949**(-22.8%) |
+| 전체 JS | 1205053 | 385718 | 1221750 | 405316 | +19598(+5.1%) |
+
+| **첫 화면 파일(후)** | **원본 B** | **gzip B** | **내용** |
+| :--- | ---: | ---: | :--- |
+| `assets/index-Du0euDnB.js` | 294958 | 95254 | 진입(모듈 158개). 첫 화면 앱 코드와 sonner·jotai·dayjs·es-toolkit·@tanstack/react-virtual·supercluster |
+| `assets/rolldown-runtime-CbXtAM7H.js` | 589 | 368 | rolldown 모듈 런타임 |
+| `assets/react-B8ULpOQS.js` | 312105 | 97621 | react·react-dom·react-router·scheduler |
+| `assets/mui-CzzHduHx.js` | 223151 | 67958 | @mui/*·@emotion/*와 그 의존(react-transition-group·clsx·stylis 등) |
+| `assets/effect-V7nwq0yb.js` | 111428 | 36568 | effect |
+| **합(5개)** | 942231 | 297769 | |
+
+읽는 법:
+
+- **첫 화면 JS는 gzip 87949B(22.8%) 줄었다.** 전에는 JS가 파일 하나(`index`)라 첫 화면 = 전체였다.
+- **전체 JS는 gzip 19598B 늘었다.** 파일이 28개로 나뉘면서 파일마다 압축이 따로 되고 파일 사이 가져오기 코드가 생긴 몫이다. 나눠 받는 파일은 첫 화면을 그린 뒤 한가할 때 미리 받는다(스펙 §4).
+- 중간 값(같은 명령): 라우트만 나눴을 때 첫 화면 3개 파일 1007494B / gzip 323742B(전체 gzip 398127B), 추가 칸 단계·대화상자까지 나눴을 때 첫 화면 gzip 307800B지만 rolldown의 자동 공유 파일로 첫 화면 파일이 20개(전체 gzip 416233B)였다. 묶음 설정으로 첫 화면 파일을 5개로 줄였고, 묶음마다 첫 화면이 정적으로 받는 모듈(`$initial`)만 잡게 해 나눠 받는 화면만 쓰는 MUI 부품(`Checkbox`·`FormControlLabel`·`DialogContentText`)과 @dnd-kit은 그 화면 쪽 파일에 남는다.
+- 나눠 받는 화면 파일은 화면 이름이 드러난다(`TripsPage-*.js`·`TripPlannerPage-*.js`·`SettingsPage-*.js`·`LabelsPage-*.js`·`LegacyImportPage-*.js`, 추가 칸 단계 `LinkInputPanel-*.js`·`CandidateCard-*.js`·`FolderPreview-*.js`·`PinCard-*.js`·`SharePickPanel-*.js`·`SharePreview-*.js`, `ExportHtmlDialog-*.js`). `yarn build:ci`의 `--require-lazy`가 이 열두 이름 각각의 파일이 `dist/assets`에 있고 첫 화면 목록에는 없음을 검사한다. `--forbid`만으로는 부족하다: 나눠 받는 화면을 어딘가에서 다시 정적으로 가져오면 그 코드가 진입 파일(`index-*.js`)에 합쳐져 화면 이름의 파일 자체가 사라지므로 `--forbid`가 아무것도 못 찾고 통과한다(`SettingsPage`를 `router.tsx`에서 정적으로 가져와 확인했다). 그래서 파일이 없어도 실패하게 했고, 빌드 설정(`vite.config.ts`의 `build.rolldownOptions.onLog`)도 rolldown의 `INEFFECTIVE_DYNAMIC_IMPORT` 경고(`import()`한 모듈을 다른 곳이 정적으로 가져옴)를 빌드 실패로 올린다. 이 둘은 메인 앱 빌드(`yarn build`)에만 걸려 있다(`vite.viewer`·`vite.map` 설정은 해당 없음).
+- **측정 조건:** 위 수치는 `VITE_NAVER_MAP_CLIENT_ID`를 설정한 빌드에서 쟀다(첫 화면에 네이버 지도 어댑터와 supercluster가 들어간다). 키 없이 빌드하면 첫 화면 JS가 gzip 약 7KB 더 작다(CI 빌드는 키 없이 돈다).
+
+첫 화면에 남은 여행 기능(스펙 §2 경계, source map으로 어림한 원본 약 27KB): 보관함 화면(`LibraryPage`)이 직접 쓰는 `여행에 넣기`(`TripPickerDialog`)·`이 지역으로 여행 만들기`(`TripFormDialog`와 그 안의 `PlacePickerDialog`)·후보 안내(`candidate-notice`)와 이들이 쓰는 여행 조작이다. 추가 흐름의 여행 대상(`add-place/trip-target`)은 추가 칸 단계와 함께 나눠 받는다. 모듈로는 `src/sections/trips/`의 `TripPickerDialog`·`TripFormDialog`·`PlacePickerDialog`·`trip-dates`·`candidate-notice`·`planner/use-trip-undo`, `src/domain/trips/`의 `ops`·`query`·`undo`·`geo`, `src/schema/trip.ts`다. 여행 목록·계획 화면(`TripsPage`·`TripPlannerPage`)과 계획 화면의 나머지(`use-trip-undo` 밖의 `planner/*`, `domain/trips/optimize`·`schedule`, @dnd-kit)는 나눠 받는다. 이 경계를 맞추려고 기능을 바꾸지 않았다.
+
+예산: `perf-budget.json`은 `{ "initialJsGzipMax": 327680, "measuredAt": "2026-10-14", "measuredInitialJsGzip": 297769 }`이다. 상한은 잰 첫 화면 JS gzip × 1.10(327545.9)을 1024바이트 단위로 올린 값이다. 이 상한을 넘으면 `yarn build:ci`(CI·배포 빌드)가 실패한다. 상한을 올려야 하면 `perf-budget.json`을 고치고 그 이유를 이 절에 적는다(스크립트가 자동으로 고치지 않는다).
