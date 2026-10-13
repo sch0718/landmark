@@ -106,9 +106,9 @@
 
 **Interfaces:**
 - Consumes: Task 2의 `lazyChunk`, `prefetchWhenIdle`.
-- Produces: `lazy-routes.ts` — 각 화면의 `lazyChunk(() => import('…'))` 로더(`loadTripsPage`, `loadTripPlannerPage`, `loadSettingsPage`, `loadLabelsPage`, `loadLegacyImportPage`)와 미리 받기 목록 `ROUTE_CHUNKS`. `router.tsx`는 그 라우트에 `lazy: async () => ({ Component: (await loadX()).X })`를 쓰고, 셸 라우트의 `errorElement`(`RouteErrorScreen`)가 받기 실패를 처리한다. 기다리는 동안 셸의 `Outlet` 자리에 `불러오는 중…`(react-router `HydrateFallback`이 아니라 `useNavigation().state === 'loading'` 또는 `Suspense`로 — 어느 쪽이든 기존 문구·모양).
+- Produces: `lazy-routes.ts` — 각 화면의 `lazyChunk(() => import('…'))` 로더(`loadTripsPage`, `loadTripPlannerPage`, `loadSettingsPage`, `loadLabelsPage`, `loadLegacyImportPage`), 그것으로 만든 `React.lazy` 컴포넌트, 미리 받기 목록 `ROUTE_CHUNKS`. `router.tsx`는 그 라우트의 `element`를 `<Suspense fallback={<기존 '불러오는 중…' 표시/>}><LazyX /></Suspense>`로 둔다. **react-router의 라우트 `lazy`는 쓰지 않는다**(직접 진입·새로고침 때 셸까지 그리지 않아 빈 화면이 된다 — 스펙 §2). 받기 실패는 렌더 중 오류라 셸 라우트의 `errorElement`(`RouteErrorScreen`)가 처리한다.
 
-- [ ] **Step 1: 실패하는 테스트** — `createMemoryRouter(routes)`로 `/trips`·`/settings`·`/labels`·`/trips/<id>`에 가면 각 화면 제목/주요 요소가 나타난다(`findBy`). 로더가 실패하도록 모의하면 새 버전 안내. 셸이 처음 그려진 뒤 `prefetchWhenIdle`이 `ROUTE_CHUNKS`(와 Task 4가 더할 목록)로 한 번 불린다.
+- [ ] **Step 1: 실패하는 테스트** — `createMemoryRouter(routes, { initialEntries: ['/trips'] })`처럼 **처음부터** 그 주소로 시작해도 셸(메뉴)이 먼저 그려지고 화면 자리에 `불러오는 중…`, 받은 뒤 각 화면 제목/주요 요소가 나타난다(`findBy`). `/settings`·`/labels`·`/trips/<id>`도. 앱 안에서 이동해도 나타난다. 로더가 실패하도록 모의하면 새 버전 안내. 셸이 처음 그려진 뒤 `prefetchWhenIdle`이 `ROUTE_CHUNKS`(와 Task 4가 더할 목록)로 한 번 불린다.
 - [ ] **Step 2:** FAIL 확인
 - [ ] **Step 3:** 구현. 기존 테스트가 화면을 동기로 기대하던 곳은 `findBy`로 고친다(동작은 그대로).
 - [ ] **Step 4:** PASS + `yarn test` + `yarn typecheck` + `yarn lint` + `yarn build && yarn size`(첫 화면 JS가 줄었는지 보고서에) + `E2E_PORT=5175 yarn test:e2e`
@@ -124,9 +124,9 @@
 
 **Interfaces:**
 - Consumes: Task 2의 `lazyChunk`·`ChunkErrorNotice`, Task 3의 `ROUTE_CHUNKS`.
-- Produces: `StepContent`의 여섯 단계 컴포넌트를 `React.lazy(lazyChunk(() => import(…).then(m => ({ default: m.X }))))`로, 칸 안에 `Suspense`(`불러오는 중…`)와 받기 실패용 오류 경계(`ChunkLoadError`면 `<ChunkErrorNotice />`, 아니면 다시 던짐). `pin` 단계(`PinModeOverlay`)는 그대로. `ExportHtmlDialog`도 같은 방식(대화상자 열 때만 그림). 미리 받기 목록 `PANEL_CHUNKS`를 `lazy-routes.ts`에 두고 Task 3의 예약에 합친다.
+- Produces: `StepContent`의 여섯 단계 컴포넌트를 `React.lazy(lazyChunk(() => import(…).then(m => ({ default: m.X }))))`로, 칸 안에 `Suspense`(`불러오는 중…`)와 받기 실패용 오류 경계(`ChunkLoadError`면 `<ChunkErrorNotice />`, 아니면 다시 던짐). `pin` 단계(`PinModeOverlay`)는 그대로. `ExportHtmlDialog`는 **처음 열 때 받고 그 뒤로는 계속 마운트**(`everOpened` 상태 — 한 번 `true`가 되면 유지 — 일 때 `<Suspense><LazyExportHtmlDialog open={open} … /></Suspense>`). 닫을 때 마운트를 지우면 `open=false`로 진행 중 저장을 무효화하는 지금 동작이 돌지 않는다(스펙 §2). 미리 받기 목록 `PANEL_CHUNKS`를 `lazy-routes.ts`에 두고 Task 3의 예약에 합친다.
 
-- [ ] **Step 1: 실패하는 테스트** — 각 단계가 열리면 그 화면이 나타난다(`findBy`). 단계 로더 실패 → 칸 안에 새 버전 안내, 칸 닫기 버튼으로 닫힘. 받는 중에 흐름을 닫으면 늦게 온 모듈이 칸을 다시 열지 않는다. 내보내기 대화상자: 열면 나타나고, 로더 실패 시 대화상자 안 안내.
+- [ ] **Step 1: 실패하는 테스트** — 각 단계가 열리면 그 화면이 나타난다(`findBy`). 단계 로더 실패 → 칸 안에 새 버전 안내, 칸 닫기 버튼으로 닫힘. 받는 중에 흐름을 닫으면 늦게 온 모듈이 칸을 다시 열지 않는다. 내보내기 대화상자: 열면 나타나고, 로더 실패 시 대화상자 안 안내. 보관함 화면에서 연 대화상자로 기존 `export-dialog.test.tsx`의 재열기·저장 취소 시나리오(템플릿을 기다리는 동안 `파일 저장` → 닫기 → 다시 열기 → 이전 요청 완료 시 내려받기 0회, 새 창이 닫히지 않음)가 통과한다.
 - [ ] **Step 2:** FAIL 확인
 - [ ] **Step 3:** 구현.
 - [ ] **Step 4:** PASS + `yarn test` + `yarn typecheck` + `yarn lint` + `yarn build && yarn size` + `E2E_PORT=5175 yarn test:e2e`
@@ -146,7 +146,7 @@
 
 - [ ] **Step 1:** 묶음 설정 후 `yarn build && yarn size --forbid TripPlannerPage --forbid TripsPage --forbid SettingsPage --forbid LabelsPage --forbid LegacyImportPage` 통과, 첫 화면 파일 4~6개, 빌드 경고 없음.
 - [ ] **Step 2:** 잰 첫 화면 JS로 `perf-budget.json`을 만든다(Global Constraints의 식). `build:ci`를 `… && yarn build && yarn size --forbid …(위 다섯) && yarn build:map`으로.
-- [ ] **Step 3: E2E** `tests/e2e/first-load.spec.ts`(세 프로젝트): 첫 화면을 열고 `/trips`·`/settings`·`/labels`로 이동(메뉴)해 각 화면이 나타남. `page.route('**/assets/TripsPage-*.js', r => r.fulfill({ status: 404 }))`을 **첫 이동 전에** 걸고 `/trips`로 가면 `새 버전이 나왔어요. 새로고침해 주세요`. 
+- [ ] **Step 3: E2E** `tests/e2e/first-load.spec.ts`(세 프로젝트): 첫 화면을 열고 `/trips`·`/settings`·`/labels`로 이동(메뉴)해 각 화면이 나타남. `/trips`를 주소로 바로 열면 셸(메뉴)이 먼저 보이고 여행 화면이 나타난다. E2E 앱은 Vite **개발 서버**라 모듈 주소가 `/src/sections/trips/TripsPage.tsx`이므로 `page.route('**/src/sections/trips/TripsPage.tsx*', r => { blocked += 1; return r.fulfill({ status: 404 }); })`를 **`page.goto` 전에** 걸고 첫 화면을 연 뒤 메뉴로 `/trips`에 가면 `새 버전이 나왔어요. 새로고침해 주세요`, 그리고 `expect(blocked).toBeGreaterThan(0)`(차단이 실제로 일어났는지).
 - [ ] **Step 4:** `docs/ui-performance.md`에 `2026-10-13 D2 첫 로딩` 절(스펙 §6: Task 1이 잰 전 값, 지금 값, 첫 화면 파일 목록, 첫 화면에 남은 여행 기능 경계, 명령). README 스크립트 표에 `size`.
 - [ ] **Step 5:** `yarn build:ci` 통과, `E2E_PORT=5175 yarn test:e2e` 전체 통과.
 - [ ] **Step 6:** 커밋 `perf: 라이브러리 묶음 분리와 첫 화면 JS 예산`
