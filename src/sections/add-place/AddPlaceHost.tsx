@@ -1,7 +1,6 @@
 import Box from '@mui/material/Box';
 import Drawer from '@mui/material/Drawer';
 import IconButton from '@mui/material/IconButton';
-import Typography from '@mui/material/Typography';
 import { useAtom, useSetAtom } from 'jotai';
 import { useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router';
@@ -12,6 +11,7 @@ import { FolderPreview } from 'src/sections/add-place/FolderPreview';
 import { LinkInputPanel } from 'src/sections/add-place/LinkInputPanel';
 import { PinCard } from 'src/sections/add-place/PinCard';
 import { SharePickPanel } from 'src/sections/share-import/SharePickPanel';
+import { SharePreview } from 'src/sections/share-import/SharePreview';
 import { ADD_LABEL } from 'src/sections/shell/nav-items';
 import { DETAIL_WIDTH } from 'src/sections/shell/pane-widths';
 import { useLayout } from 'src/sections/shell/use-layout';
@@ -45,14 +45,7 @@ function StepContent({ flow }: { flow: AddFlow }) {
     case 'share-pick':
       return <SharePickPanel />;
     case 'share':
-      // 임시 자리표시자. 실제 미리보기는 이어지는 작업이 바꾼다.
-      return (
-        <Box sx={{ p: 2 }}>
-          <Typography variant="subtitle1" component="h2" sx={{ fontWeight: 800 }}>
-            {`${flow.doc.title} · ${flow.doc.places.length}곳`}
-          </Typography>
-        </Box>
-      );
+      return <SharePreview doc={flow.doc} />;
     default:
       return null;
   }

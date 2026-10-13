@@ -1,4 +1,5 @@
 import Box from '@mui/material/Box';
+import type { ReactNode } from 'react';
 import type { FolderResult } from 'src/server/resolve';
 
 type FolderPlace = FolderResult['places'][number];
@@ -55,26 +56,31 @@ export function FolderPlaceRows({
                 {place.address}
               </Box>
             </Box>
-            {existingSids.has(place.sid) && (
-              <Box
-                component="span"
-                sx={{
-                  flex: 'none',
-                  px: 1,
-                  py: 0.25,
-                  borderRadius: 'var(--tm-radius-sm)',
-                  border: '1px solid var(--tm-border)',
-                  fontSize: 12,
-                  fontWeight: 700,
-                  color: 'var(--tm-text-secondary)',
-                }}
-              >
-                이미 있음
-              </Box>
-            )}
+            {existingSids.has(place.sid) && <RowMark>이미 있음</RowMark>}
           </Box>
         </Box>
       ))}
+    </Box>
+  );
+}
+
+/** 행 오른쪽의 작은 표시(`이미 있음`·`메모`). */
+export function RowMark({ children }: { children: ReactNode }) {
+  return (
+    <Box
+      component="span"
+      sx={{
+        flex: 'none',
+        px: 1,
+        py: 0.25,
+        borderRadius: 'var(--tm-radius-sm)',
+        border: '1px solid var(--tm-border)',
+        fontSize: 12,
+        fontWeight: 700,
+        color: 'var(--tm-text-secondary)',
+      }}
+    >
+      {children}
     </Box>
   );
 }
