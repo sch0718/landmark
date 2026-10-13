@@ -12,6 +12,7 @@ import { LibraryStore } from 'src/services/library-store';
 import { PlaceLookup } from 'src/services/place-lookup';
 import { PREFS_KEY, PrefsStore } from 'src/services/prefs-store';
 import { ReverseGeocoder } from 'src/services/reverse-geocoder';
+import { RouteLookup } from 'src/services/route-lookup';
 import { ShareTemplate } from 'src/services/share-template';
 import { libraryAtom } from 'src/stores/library-state';
 import { prefsAtom } from 'src/stores/prefs-state';
@@ -29,6 +30,7 @@ function setup() {
         ShareTemplate.layer,
         PlaceLookup.layer,
         ReverseGeocoder.layer,
+        RouteLookup.layer,
       ),
     ),
   );

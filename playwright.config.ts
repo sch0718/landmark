@@ -43,6 +43,7 @@ export default defineConfig({
         'themes.spec.ts',
         'share-export.spec.ts',
         'place-adding.spec.ts',
+        'trip-planning.spec.ts',
       ],
       use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 } },
     },
@@ -54,13 +55,14 @@ export default defineConfig({
         'themes.spec.ts',
         'share-export.spec.ts',
         'place-adding.spec.ts',
+        'trip-planning.spec.ts',
       ],
       use: { ...devices['iPhone 13'], viewport: { width: 390, height: 844 } },
     },
     {
       name: 'galaxy',
       grepInvert: /@desktop/,
-      testMatch: ['library.spec.ts', 'place-adding.spec.ts'],
+      testMatch: ['library.spec.ts', 'place-adding.spec.ts', 'trip-planning.spec.ts'],
       use: {
         ...devices['Galaxy S9+'],
         browserName: 'chromium',

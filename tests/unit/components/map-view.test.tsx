@@ -169,6 +169,21 @@ describe('MapView fitKey', () => {
       [128.005, 37.005],
     ]);
   });
+
+  it('fitPoints: `fit: false` 마커는 빼고, 그것뿐이면 그 마커들로 맞춘다', () => {
+    const day = mk('a', { lng: 128, lat: 37 });
+    const other = { ...mk('b', { lng: 126, lat: 35 }), fit: false as const };
+    const dim = { ...mk('c', { lng: 129, lat: 38 }), fit: false as const, dimmed: true };
+    expect(fitPoints([day, mk('d', { lng: 128.5, lat: 37.5 }), other, dim])).toEqual([
+      [128, 37],
+      [128.5, 37.5],
+    ]);
+    // 맞출 마커가 없으면 `fit: false` 중 흐리지 않은 것으로.
+    expect(fitPoints([other, { ...other, id: 'e', lng: 127 }, dim])).toEqual([
+      [126, 35],
+      [127, 35],
+    ]);
+  });
 });
 
 describe('지도 사용 불가', () => {

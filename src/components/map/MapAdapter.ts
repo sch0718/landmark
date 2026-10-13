@@ -17,6 +17,11 @@ export type MapMarker = {
   dimmed?: boolean;
   selected?: boolean;
   clusterable: boolean;
+  /**
+   * `false`면 지도 맞추기(`fitKey`)에서 뺀다. 맞출 마커가 하나도 없을 때만 이 마커들로 맞춘다.
+   * 예: 계획 화면의 후보·다른 Day 핀은 빼고 고른 Day에만 맞춘다. 없으면 맞추기 대상이다.
+   */
+  fit?: false;
 };
 
 /** 클러스터(묶음) 마커의 바탕색과 글자색. */

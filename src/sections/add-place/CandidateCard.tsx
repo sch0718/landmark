@@ -14,6 +14,11 @@ import {
   useAliveRef,
   useCardLabels,
 } from 'src/sections/add-place/card-parts';
+import {
+  SaveToLibraryOption,
+  thenAddCandidates,
+  useTripTarget,
+} from 'src/sections/add-place/trip-target';
 import { LabelPicker } from 'src/sections/place/LabelPicker';
 import { addFlowAtom } from 'src/stores/add-place';
 import { libraryAtom, useLibraryAction } from 'src/stores/library-state';
@@ -33,6 +38,7 @@ const PROVIDER_LABEL: Record<PlaceSource['kind'], string> = {
  * 링크로 찾은 장소의 확인 카드(스펙 §2.2·§3.4). 주소는 추가 전 여기서만 고칠 수 있다.
  * 같은 출처의 살아 있는 장소가 있으면 새로 만들지 않고 고른 라벨(과 메모)만 더한다.
  * 지운 장소는 `addPlace`가 되살리므로 보통의 `추가`로 다룬다.
+ * 여행 대상이 붙은 흐름이면 `보관함에도 저장`을 고를 수 있고, 같은 연산에서 그 여행의 후보에 넣은 뒤 계획 화면으로 간다.
  */
 export function CandidateCard({ candidate }: { candidate: PlaceCandidate }) {
   const library = useAtomValue(libraryAtom);
@@ -40,6 +46,8 @@ export function CandidateCard({ candidate }: { candidate: PlaceCandidate }) {
   const { run } = useLibraryAction();
   const navigate = useNavigate();
   const { labels, labelIds, shownIds, toggle, createAndSelect, creating } = useCardLabels();
+  const { tripId, notify, backToTrip } = useTripTarget();
+  const [keepInLibrary, setKeepInLibrary] = useState(true);
 
   // 이름 없는 결과(좌표만 있는 구글 지도 주소 등)는 카드에서 이름을 받는다. 출처·좌표는 그대로라
   // 같은 구글 ID 장소와의 중복 판단과 지도 이동이 이름 있는 후보와 같다.
@@ -63,24 +71,34 @@ export function CandidateCard({ candidate }: { candidate: PlaceCandidate }) {
     if (savingRef.current) return;
     savingRef.current = true;
     setSaving(true);
-    const result = await run((lib, ctx) =>
-      addPlace(
+    const result = await run((lib, ctx) => {
+      const added = addPlace(
         lib,
         { ...candidate, name: askName ? name.trim() : candidate.name, address: address.trim() },
         {
           // 다른 탭이 그사이 지운 라벨은 빼고 넣는다(최신본 기준).
           labelIds: labelIds.filter((id) => lib.labels[id]?.deletedAt === null),
           memo,
+          saved: tripId === null || keepInLibrary,
         },
         ctx,
-      ),
-    );
+      );
+      return tripId === null
+        ? added
+        : thenAddCandidates(added, tripId, (done) => [done.createdId!], ctx);
+    });
     savingRef.current = false;
     setSaving(false);
     // 저장소 오류는 앱 오류 보고자(ErrorReporter)가 `userMessage`로 토스트를 띄운다. 라벨 id를 최신본 기준으로
     // 다시 거르므로 연산 거절(OpRejected)은 생기지 않는다. 어느 쪽이든 카드와 입력은 그대로 둔다.
     if (!result.ok) return;
     // 칸이 닫힌 뒤에도 저장은 이미 반영됐으므로 알린다. 흐름 닫기·이동은 새 흐름을 닫을 수 있어 하지 않는다.
+    // 여행 대상이면 후보에 넣은 결과를 알리고 계획 화면으로 간다(그사이 여행이 지워졌으면 보통의 추가로 끝낸다).
+    if (tripId !== null && result.summary !== undefined) {
+      notify(tripId, result.summary.created, [result.createdId!]);
+      if (aliveRef.current) backToTrip(tripId);
+      return;
+    }
     toast('추가했어요');
     if (!aliveRef.current) return;
     setFlow({ step: 'closed' });
@@ -175,6 +193,9 @@ export function CandidateCard({ candidate }: { candidate: PlaceCandidate }) {
           onCreate={createAndSelect}
         />
       </CardSection>
+      {tripId !== null && (
+        <SaveToLibraryOption checked={keepInLibrary} onChange={setKeepInLibrary} />
+      )}
       <CardSection title="메모">
         <Box
           component="textarea"

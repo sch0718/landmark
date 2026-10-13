@@ -2,7 +2,7 @@ import Box from '@mui/material/Box';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import { useState, type MouseEvent, type ReactNode } from 'react';
-import { LabelGlyph, ShareIcon, TagsIcon, TrashIcon, XIcon } from 'src/components/icons';
+import { LabelGlyph, RouteIcon, ShareIcon, TagsIcon, TrashIcon, XIcon } from 'src/components/icons';
 import type { Label } from 'src/schema/library';
 import { labelColors } from 'src/sections/library/label-style';
 
@@ -17,6 +17,8 @@ type Props = {
   onDelete(): void;
   /** 고른 장소로 내보내기 창을 연다. */
   onExport(): void;
+  /** 고른 장소를 넣을 여행 고르기 창을 연다. */
+  onAddToTrip(): void;
   onClear(): void;
 };
 
@@ -107,7 +109,7 @@ function BarButton({
   );
 }
 
-/** 선택 모드의 하단 바: 선택 수와 라벨 붙이기·떼기·내보내기·삭제. */
+/** 선택 모드의 하단 바: 선택 수와 라벨 붙이기·떼기·여행에 넣기·내보내기·삭제. */
 export function BulkBar({
   count,
   labels,
@@ -116,6 +118,7 @@ export function BulkBar({
   onRemove,
   onDelete,
   onExport,
+  onAddToTrip,
   onClear,
 }: Props) {
   const [menu, setMenu] = useState<{ kind: 'add' | 'remove'; anchor: HTMLElement } | null>(null);
@@ -152,6 +155,10 @@ export function BulkBar({
         onClick={(event) => setMenu({ kind: 'remove', anchor: event.currentTarget })}
       >
         라벨 떼기
+      </BarButton>
+      <BarButton onClick={onAddToTrip}>
+        <RouteIcon aria-hidden="true" />
+        여행에 넣기
       </BarButton>
       <BarButton onClick={onExport}>
         <ShareIcon aria-hidden="true" />

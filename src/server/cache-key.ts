@@ -2,7 +2,7 @@
 // 키는 요청 입력 하나에서만 만들어 조회·저장에 같은 키를 쓴다. 네트워크 요청은 하지 않는다.
 import { classifyLink } from './links';
 
-const CACHE_ORIGIN = 'https://cache.landmark';
+export const CACHE_ORIGIN = 'https://cache.landmark';
 
 /**
  * - 장소: 네트워크 없이 ID를 알 수 있는 링크(네이버 웹 주소·카카오 장소 주소)는 `place/<서비스>/<ID>`,
@@ -18,4 +18,9 @@ export function cacheKey(kind: 'place' | 'folder', input: string): string {
   if (link.kind === 'kakao-place') return `${CACHE_ORIGIN}/place/kakao/${link.kakaoId}`;
   const url = new URL(input.trim());
   return `${CACHE_ORIGIN}/link/${url.hostname}${url.pathname}`;
+}
+
+/** 경로 입력 키(`routeInputKey`)로 만든 캐시 키. 자동차·도보와 좌표 소수 5자리가 키에 들어 있다. */
+export function routeCacheKey(input: string): string {
+  return `${CACHE_ORIGIN}/route/${encodeURIComponent(input)}`;
 }

@@ -10,8 +10,10 @@ import { importFolder, planFolderImport } from 'src/domain/library/add-place';
 import type { OpSummary } from 'src/domain/library/ops';
 import { liveLabels } from 'src/domain/library/query';
 import { startEffect } from 'src/lib/effect/runtime';
-import { LIBRARY_LIMITS } from 'src/schema/library';
+import { LIBRARY_LIMITS, type Library } from 'src/schema/library';
 import type { FolderResult } from 'src/server/resolve';
+import { FolderPlaceRows } from 'src/sections/add-place/FolderPlaceRows';
+import { thenAddCandidates, useTripTarget } from 'src/sections/add-place/trip-target';
 import { ChipButton } from 'src/sections/library/ChipButton';
 import { labelColors } from 'src/sections/library/label-style';
 import { useLibraryQuery } from 'src/sections/library/use-library-query';
@@ -59,6 +61,20 @@ function uniqueBySid(places: readonly FolderPlace[]): FolderPlace[] {
     if (seen.has(place.sid)) return false;
     seen.add(place.sid);
     return true;
+  });
+}
+
+/** 가져온 뒤의 문서에서 폴더 항목들의 장소 id(같은 네이버 `sid`의 살아 있는 장소). 여행 후보에 넣을 때 쓴다. */
+function importedPlaceIds(lib: Library, items: readonly FolderPlace[]): string[] {
+  const bySid = new Map<string, string>();
+  for (const place of Object.values(lib.places)) {
+    if (place.source.kind === 'naver' && place.deletedAt === null) {
+      bySid.set(place.source.sid, place.id);
+    }
+  }
+  return items.flatMap((item) => {
+    const id = bySid.get(item.sid);
+    return id === undefined ? [] : [id];
   });
 }
 
@@ -155,12 +171,15 @@ export function FolderPreview({ shareId }: { shareId: string }) {
  * 조회가 끝난 미리보기. 머리글, 붙일 라벨(이름 입력 또는 기존 라벨), 장소 목록(체크박스), 가져오기.
  * 가져오기는 `LibraryStore.update` 한 번으로 최신본에 적용하고, 토스트 개수는 그 결과(`summary`)에서 센다.
  * `이미 있음` 표시는 화면에 보이는 보관함 기준의 안내일 뿐이다.
+ * 여행 대상이 붙은 흐름이면 같은 연산에서 가져온 장소를 모두 그 여행의 후보에 넣고 계획 화면으로 간다
+ * (폴더는 라벨이 붙으므로 늘 보관함에 저장한다).
  */
 function FolderList({ folderName, places }: { folderName: string; places: FolderPlace[] }) {
   const library = useAtomValue(libraryAtom);
   const setFlow = useSetAtom(addFlowAtom);
   const { run } = useLibraryAction();
   const [, patchQuery] = useLibraryQuery();
+  const { tripId, notify, backToTrip } = useTripTarget();
   const labels = useMemo(() => liveLabels(library), [library]);
   const existingSids = useMemo(
     () => new Set(planFolderImport(library, places).merge.map(({ item }) => item.sid)),
@@ -211,20 +230,36 @@ function FolderList({ folderName, places }: { folderName: string; places: Folder
     const items = places.filter((place) => selected.has(place.sid));
     // 고른 라벨의 이름(렌더 시점). 그사이 다른 탭이 그 라벨을 지웠다면 같은 이름으로 다시 쓰거나 만든다.
     const pickedName = labelId === null ? null : labels.find((l) => l.id === labelId)!.name.value;
-    const result = await run((lib, ctx) =>
-      importFolder(
+    // 연산 안에서 채운다. 저장소가 다시 시도하면 다시 채운다.
+    const box: { imported?: OpSummary; placeIds: string[] } = { placeIds: [] };
+    const result = await run((lib, ctx) => {
+      const imported = importFolder(
         lib,
         items,
         labelId !== null && lib.labels[labelId]?.deletedAt === null
           ? { labelId }
           : { newLabelName: pickedName ?? name },
         ctx,
-      ),
-    );
+      );
+      box.imported = imported.ok ? imported.summary : undefined;
+      if (tripId === null) return imported;
+      return thenAddCandidates(
+        imported,
+        tripId,
+        (done) => {
+          box.placeIds = importedPlaceIds(done.lib, items);
+          return box.placeIds;
+        },
+        ctx,
+      );
+    });
+    // 여행 후보까지 넣었는가(그사이 여행이 지워졌으면 보통의 가져오기로 끝낸다).
+    const toTrip = tripId !== null && result.ok && result.summary !== undefined;
     // 칸이 닫힌 뒤에도 가져오기는 이미 저장소에 반영됐으므로 결과는 알린다.
     if (result.ok) {
-      const message = result.summary === undefined ? null : resultMessage(result.summary);
+      const message = box.imported === undefined ? null : resultMessage(box.imported);
       if (message !== null) toast(message);
+      if (toTrip) notify(tripId, result.summary!.created, box.placeIds);
     }
     // 칸이 닫혔다면 잠금 해제·필터·흐름 닫기는 건드리지 않는다(새 흐름을 닫을 수 있다).
     if (!aliveRef.current) return;
@@ -234,6 +269,10 @@ function FolderList({ folderName, places }: { folderName: string; places: Folder
     // 라벨은 위에서 최신본 기준으로 다시 정하므로 거절은 드물고, 그때는 안내 문구 없이
     // 미리보기와 선택을 그대로 두고 버튼만 다시 켠다.
     if (!result.ok) return;
+    if (toTrip) {
+      backToTrip(tripId);
+      return;
+    }
     // 방금 가져온 장소가 모두 보이도록 검색어·지역 필터도 비운다.
     patchQuery({ labelIds: [result.createdId!], unlabeled: false, text: '', regions: [] });
     setFlow({ step: 'closed' });
@@ -307,66 +346,12 @@ function FolderList({ folderName, places }: { folderName: string; places: Folder
             가져올 장소가 없는 폴더예요
           </Typography>
         )}
-        <Box
-          component="ul"
-          aria-label="가져올 장소"
-          sx={{ listStyle: 'none', m: 0, p: 0, borderTop: '1px solid var(--tm-border)' }}
-        >
-          {places.map((place) => (
-            <Box component="li" key={place.sid} sx={{ borderBottom: '1px solid var(--tm-border)' }}>
-              <Box
-                component="label"
-                sx={{
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: 1.25,
-                  minHeight: 44,
-                  py: 1,
-                  cursor: 'pointer',
-                }}
-              >
-                <Box
-                  component="input"
-                  type="checkbox"
-                  checked={selected.has(place.sid)}
-                  onChange={() => toggle(place.sid)}
-                  sx={{ flex: 'none', width: 20, height: 20, m: 0, mt: '2px' }}
-                />
-                <Box sx={{ minWidth: 0, flex: 1 }}>
-                  <Box sx={{ fontSize: 15, fontWeight: 700, wordBreak: 'break-word' }}>
-                    {place.name}
-                  </Box>
-                  <Box
-                    sx={{
-                      fontSize: 13,
-                      color: 'var(--tm-text-secondary)',
-                      wordBreak: 'break-word',
-                    }}
-                  >
-                    {place.address}
-                  </Box>
-                </Box>
-                {existingSids.has(place.sid) && (
-                  <Box
-                    component="span"
-                    sx={{
-                      flex: 'none',
-                      px: 1,
-                      py: 0.25,
-                      borderRadius: 'var(--tm-radius-sm)',
-                      border: '1px solid var(--tm-border)',
-                      fontSize: 12,
-                      fontWeight: 700,
-                      color: 'var(--tm-text-secondary)',
-                    }}
-                  >
-                    이미 있음
-                  </Box>
-                )}
-              </Box>
-            </Box>
-          ))}
-        </Box>
+        <FolderPlaceRows
+          places={places}
+          selected={selected}
+          existingSids={existingSids}
+          onToggle={toggle}
+        />
       </Box>
       <Box
         sx={{

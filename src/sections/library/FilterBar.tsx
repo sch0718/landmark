@@ -23,6 +23,8 @@ type Props = {
   onViewChange(view: LibraryView): void;
   /** 내보내기 창을 연다. 0곳이어도 누를 수 있다(창에서 이유를 보여 준다). */
   onExport(): void;
+  /** 지역을 하나만 골랐을 때 칩 줄 끝의 `이 지역으로 여행 만들기`. */
+  onCreateRegionTrip?(region: string): void;
 };
 
 /** 검색·정렬·보기 방식·내보내기와 라벨·지역 칩. */
@@ -35,6 +37,7 @@ export function FilterBar({
   view,
   onViewChange,
   onExport,
+  onCreateRegionTrip,
 }: Props) {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, pt: 1.5, pb: 0.5 }}>
@@ -101,6 +104,7 @@ export function FilterBar({
         regions={regions}
         selected={query.regions}
         onChange={(next) => onChange({ regions: next })}
+        onCreateTrip={onCreateRegionTrip}
       />
     </Box>
   );

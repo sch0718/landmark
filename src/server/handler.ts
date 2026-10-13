@@ -1,4 +1,4 @@
-// Pages Functions GET 진입점의 공통 순서: 출처 검사 → 입력 검사 → 캐시 조회 → 해석 → 캐시 저장 → 응답.
+// Pages Functions GET 진입점의 공통 순서: 출처 검사 → 입력 검사 → 캐시 조회(우회 가능) → 해석 → 캐시 저장 → 응답.
 // Cloudflare 서버 함수에서 쓰므로 상대 경로 import와 웹 표준 API만 쓴다.
 import { ApiError, errorResponse, isAllowedOrigin, jsonResponse } from './http';
 
@@ -6,13 +6,17 @@ import { ApiError, errorResponse, isAllowedOrigin, jsonResponse } from './http';
 export type FunctionContext = { request: Request; waitUntil(p: Promise<unknown>): void };
 
 export type GetHandlerOptions = {
-  /** 입력을 담은 쿼리 이름(`url`·`share`). 없거나 비면 UNSUPPORTED_LINK. */
-  param: string;
-  missingMessage: string;
-  /** 성공 결과를 Cache API에 둘 시간(초). */
-  maxAgeSeconds: number;
+  /** 요청 주소에서 입력을 읽는다. 없거나 틀리면 ApiError를 던진다. */
+  readInput(url: URL): string;
+  /** 성공 결과를 Cache API에 둘 시간(초). 입력에 따라 다르면 함수로 준다. */
+  maxAgeSeconds: number | ((input: string) => number);
   /** 입력으로 캐시 키를 만든다. null이면 캐시를 건너뛴다. */
   cacheKey(input: string): string | null;
+  /**
+   * 요청이 캐시 조회를 건너뛰라고 하는가(예: 경로 `다시 계산`의 `fresh=1`). 건너뛰어도 새 결과는 같은 키에 저장해
+   * 다른 요청이 쓰게 한다. 없으면 늘 캐시를 본다.
+   */
+  bypassCache?(url: URL): boolean;
   resolve(input: string): Promise<unknown>;
 };
 
@@ -60,19 +64,23 @@ export async function handleGet(
     if (!isAllowedOrigin(requestOrigin(request))) {
       throw new ApiError('FORBIDDEN_ORIGIN', '허용하지 않는 요청 출처');
     }
-    const input = new URL(request.url).searchParams.get(options.param) ?? '';
-    if (input.trim() === '') throw new ApiError('UNSUPPORTED_LINK', options.missingMessage);
+    const url = new URL(request.url);
+    const input = options.readInput(url);
 
     const cache = defaultCache();
     const key = cache ? options.cacheKey(input) : null;
-    if (cache && key !== null) {
+    if (cache && key !== null && options.bypassCache?.(url) !== true) {
       const hit = await cache.match(key).catch(() => undefined);
       if (hit) return toBrowserResponse(hit);
     }
 
     const result = await options.resolve(input);
+    const maxAge =
+      typeof options.maxAgeSeconds === 'function'
+        ? options.maxAgeSeconds(input)
+        : options.maxAgeSeconds;
     const stored = jsonResponse(result, {
-      headers: { 'Cache-Control': `max-age=${options.maxAgeSeconds}` },
+      headers: { 'Cache-Control': `max-age=${maxAge}` },
     });
     if (cache && key !== null) {
       // 저장 실패는 응답에 영향을 주지 않는다.

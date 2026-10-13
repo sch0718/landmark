@@ -24,10 +24,15 @@ export function focusCamera(point: [number, number], padding: MapPadding): MapCa
   };
 }
 
-/** 흐린(후보) 마커를 뺀 마커 좌표. 모두 흐리면 전부. 점이 하나뿐이면 그 근처(약 1km)로 넓힌다. */
+/**
+ * 맞출 마커 좌표. `fit: false` 마커를 빼고(그것뿐이면 그 마커들로), 그중 흐린(후보) 마커를 뺀다(모두 흐리면 전부).
+ * 점이 하나뿐이면 그 근처(약 1km)로 넓힌다.
+ */
 export function fitPoints(markers: MapMarker[]): [number, number][] {
-  const strong = markers.filter((m) => !m.dimmed);
-  const pts = (strong.length > 0 ? strong : markers).map((m): [number, number] => [m.lng, m.lat]);
+  const wanted = markers.filter((m) => m.fit !== false);
+  const pool = wanted.length > 0 ? wanted : markers;
+  const strong = pool.filter((m) => !m.dimmed);
+  const pts = (strong.length > 0 ? strong : pool).map((m): [number, number] => [m.lng, m.lat]);
   const unique = new Set(pts.map(([lng, lat]) => `${lng},${lat}`));
   if (unique.size !== 1) return pts;
   const [lng, lat] = pts[0]!;

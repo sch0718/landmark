@@ -101,6 +101,8 @@ const API_ERROR_CODES = [
   'TOO_MANY_PLACES',
   'UPSTREAM_ERROR',
   'TIMEOUT',
+  'BAD_REQUEST',
+  'NO_ROUTE',
 ] as const satisfies readonly ApiErrorCode[];
 // 서버 코드가 늘면 여기서 컴파일 오류가 난다(위 목록에 더하고 `userMessage`도 고친다).
 const _allCodesListed: [Exclude<ApiErrorCode, (typeof API_ERROR_CODES)[number]>] extends [never]
@@ -116,6 +118,7 @@ export type PlaceLookupErrorCode = (typeof PLACE_LOOKUP_ERROR_CODES)[number];
 export const isApiErrorCode = (value: unknown): value is ApiErrorCode =>
   (API_ERROR_CODES as readonly unknown[]).includes(value);
 
+// BAD_REQUEST·NO_ROUTE는 경로 조회 전용 코드라 장소 조회는 만들지 않는다. 오면 같은 안내를 보인다.
 const UNAVAILABLE_MESSAGE = '지금은 장소 정보를 가져오지 못했어요. 잠시 뒤 다시 해 주세요';
 
 /**
@@ -142,7 +145,44 @@ export class PlaceLookupError extends Schema.TaggedError<PlaceLookupError>()('Pl
       case 'FORBIDDEN_ORIGIN':
       case 'UPSTREAM_ERROR':
       case 'TIMEOUT':
+      case 'BAD_REQUEST':
+      case 'NO_ROUTE':
         return UNAVAILABLE_MESSAGE;
+    }
+  }
+}
+
+export const ROUTE_LOOKUP_ERROR_CODES = [
+  'NO_ROUTE',
+  'UPSTREAM_ERROR',
+  'TIMEOUT',
+  'OFFLINE',
+  'BAD_REQUEST',
+  'FORBIDDEN_ORIGIN',
+] as const;
+export type RouteLookupErrorCode = (typeof ROUTE_LOOKUP_ERROR_CODES)[number];
+
+/**
+ * 구간 경로 조회 실패(스펙 §4.2). 호출한 쪽은 실패한 구간을 직선 추정으로 채우고
+ * `userMessage`를 구간 옆에 보인다. `seq`는 실패한 서버 요청의 순서 번호(`RouteAnswer.seq`와 같은 차례),
+ * `fresh`는 그 요청이 `다시 계산`이었는가다(호출한 쪽의 `refresh`가 아니라 실제로 나간 요청의 종류).
+ */
+export class RouteLookupError extends Schema.TaggedError<RouteLookupError>()('RouteLookupError', {
+  code: Schema.Literals(ROUTE_LOOKUP_ERROR_CODES),
+  seq: Schema.Number,
+  fresh: Schema.Boolean,
+}) {
+  get userMessage(): string {
+    switch (this.code) {
+      case 'NO_ROUTE':
+        return '경로 없음 · 직선 추정';
+      case 'OFFLINE':
+        return '인터넷에 연결되지 않아 이동 시간은 어림값이에요';
+      case 'UPSTREAM_ERROR':
+      case 'TIMEOUT':
+      case 'BAD_REQUEST':
+      case 'FORBIDDEN_ORIGIN':
+        return '경로를 못 가져왔어요';
     }
   }
 }

@@ -1,7 +1,7 @@
 import Box from '@mui/material/Box';
 import Drawer from '@mui/material/Drawer';
 import IconButton from '@mui/material/IconButton';
-import { useAtom } from 'jotai';
+import { useAtom, useSetAtom } from 'jotai';
 import { useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { XIcon } from 'src/components/icons';
@@ -13,7 +13,7 @@ import { PinCard } from 'src/sections/add-place/PinCard';
 import { ADD_LABEL } from 'src/sections/shell/nav-items';
 import { DETAIL_WIDTH } from 'src/sections/shell/pane-widths';
 import { useLayout } from 'src/sections/shell/use-layout';
-import { addFlowAtom, showsAddPanel, type AddFlow } from 'src/stores/add-place';
+import { addFlowAtom, addTargetAtom, showsAddPanel, type AddFlow } from 'src/stores/add-place';
 
 /** 단계마다(링크 창은 안내 종류, 폴더는 공유 ID까지) 내용을 새로 만든다. */
 const stepKey = (flow: AddFlow): string => {
@@ -52,10 +52,12 @@ function StepContent({ flow }: { flow: AddFlow }) {
  *   좁은 화면은 지도 탭(`/map`)으로, 그 밖은 지도가 있는 보관함(`/`)으로 간다(예: 넓은 화면의 `/labels`).
  * - 핀 모드 중에 경로가 바뀌면(뒤로 가기·목록에서 장소 고르기·다른 메뉴) 지도가 계속 보여도 핀 모드를
  *   끝낸다(스펙 §2.4). 이 훅이 지도로 옮긴 이동은 예외다.
+ * 흐름이 끝나면(`closed`가 되면, 어느 길로든) 붙여 둔 여행 대상(`addTargetAtom`)을 버린다.
  * `mapShown`은 지금 경로·폭에서 지도가 가려지지 않고 보이는가다.
  */
 export function useAddFlowRoute(mapShown: boolean) {
   const [flow, setFlow] = useAtom(addFlowAtom);
+  const setTarget = useSetAtom(addTargetAtom);
   const layout = useLayout();
   const navigate = useNavigate();
   const { pathname } = useLocation();
@@ -69,6 +71,8 @@ export function useAddFlowRoute(mapShown: boolean) {
     const before = prev.current;
     prev.current = { step, pathname };
     if (before.step !== step) movingToMap.current = false;
+    // 흐름이 막 끝났다. 대상을 열어 두기만 한 시트(아직 `closed`)는 시트가 닫힐 때 따로 버린다.
+    if (before.step !== 'closed' && step === 'closed') setTarget(null);
     const routeChanged = before.step === step && before.pathname !== pathname;
     if (routeChanged && movingToMap.current) {
       movingToMap.current = false;
@@ -81,7 +85,7 @@ export function useAddFlowRoute(mapShown: boolean) {
     // 단계에 막 들어왔거나(폭이 바뀌어) 지도가 안 보이게 됐다.
     movingToMap.current = true;
     void navigate(compact ? paths.map : paths.library);
-  }, [step, pathname, needsMap, mapShown, compact, navigate, setFlow]);
+  }, [step, pathname, needsMap, mapShown, compact, navigate, setFlow, setTarget]);
 }
 
 /**

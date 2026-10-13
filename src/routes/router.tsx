@@ -6,7 +6,8 @@ import { LabelsPage } from 'src/sections/labels/LabelsPage';
 import { LegacyImportPage } from 'src/sections/settings/LegacyImportPage';
 import { SettingsPage } from 'src/sections/settings/SettingsPage';
 import { ShellRoute } from 'src/sections/shell/ShellRoute';
-import { TripsPlaceholder } from 'src/sections/shell/TripsPlaceholder';
+import { TripPlannerPage } from 'src/sections/trips/planner/TripPlannerPage';
+import { TripsPage } from 'src/sections/trips/TripsPage';
 
 export const routes: RouteObject[] = [
   {
@@ -20,7 +21,8 @@ export const routes: RouteObject[] = [
       { path: paths.labels, element: <LabelsPage /> },
       { path: paths.settings, element: <SettingsPage /> },
       { path: paths.legacyTrip(':publicId'), element: <LegacyImportPage /> },
-      { path: paths.trips, element: <TripsPlaceholder /> },
+      { path: paths.trips, element: <TripsPage /> },
+      { path: paths.trip(':id'), element: <TripPlannerPage /> },
     ],
   },
   { path: '*', element: <ErrorScreen title="페이지를 찾을 수 없어요" /> },

@@ -1,0 +1,292 @@
+{
+  "code": 0,
+  "message": "길찾기를 성공하였습니다.",
+  "currentDateTime": "2026-10-13T00:32:53",
+  "currentDateTimeZ": "2026-10-13T00:32:53+09:00",
+  "dataTimestampMilli": 1791438957271,
+  "dataVersion": 1127,
+  "imageJunctionViewVersion": "2026100600",
+  "guideImage": {
+    "laneImageVersion": "10",
+    "lanesImageVersion": "55",
+    "tbtImageVersion": "23",
+    "laneMidNormalIds": ["lane_bg_mid_normal", "lane_arr_mid_normal"],
+    "laneMidTollgateIds": ["lane_bg_mid_tollgate", "lane_arr_mid_tollgate"]
+  },
+  "route": {
+    "3,0,0,0,0,0": [
+      {
+        "summary": {
+          "start": {
+            "location": [128.8960996, 37.7952995]
+          },
+          "goal": {
+            "location": [128.9005992, 37.7929992],
+            "dir": 1
+          },
+          "distance": 408,
+          "duration": 48636,
+          "departureTime": "2026-10-13T00:32:53",
+          "departureTimeZ": "2026-10-13T00:32:53+09:00",
+          "bbox": [
+            [128.8960996, 37.7926707],
+            [128.9005992, 37.7955575]
+          ],
+          "eye": [128.8961544, 37.7952574],
+          "lookAt": [128.8962743, 37.7952911],
+          "currencyCode": "KRW",
+          "label": "경포로",
+          "mainOption": 3,
+          "subOption": 0,
+          "staticDuration": 48636,
+          "routeAttrs": 0,
+          "etaServiceType": 0,
+          "etaType": 0,
+          "etaEmbedding": 0,
+          "tollFare": 0,
+          "tollFareNanos": 0,
+          "taxiFare": 5980,
+          "taxiFareNanos": 0,
+          "goalAdminTaxiFare": 5980,
+          "goalAdminTaxiFareNanos": 0,
+          "fuelPrice": 63,
+          "fuelPriceNanos": 0
+        },
+        "path": [
+          [128.8961959, 37.7952262],
+          [128.8962743, 37.7952911],
+          [128.8964373, 37.7954415],
+          [128.8966871, 37.7955575],
+          [128.8967429, 37.7955046],
+          [128.8968121, 37.7954415],
+          [128.8969041, 37.7953828],
+          [128.8970567, 37.79528],
+          [128.896858, 37.7946191],
+          [128.8966623, 37.7939409],
+          [128.896633, 37.7938286],
+          [128.8965919, 37.7936984],
+          [128.8965058, 37.7932894],
+          [128.8964008, 37.7930175],
+          [128.8964662, 37.7929942],
+          [128.8965122, 37.7929621],
+          [128.896562, 37.792894],
+          [128.8966168, 37.7926707]
+        ],
+        "section": [
+          {
+            "pointIndex": 0,
+            "pointCount": 4,
+            "distance": 58,
+            "name": "저동길100번길",
+            "congestion": 0,
+            "speed": 16
+          },
+          {
+            "pointIndex": 3,
+            "pointCount": 5,
+            "distance": 46,
+            "name": "경포로371번길",
+            "congestion": 0,
+            "speed": 14
+          },
+          {
+            "pointIndex": 7,
+            "pointCount": 7,
+            "distance": 258,
+            "name": "경포로",
+            "congestion": 0,
+            "speed": 54
+          }
+        ],
+        "traffic": [
+          {
+            "pointIndex": 0,
+            "pointCount": 18,
+            "startDist": 0,
+            "sectionLength": 408,
+            "congestion": 0
+          }
+        ],
+        "guide": [
+          {
+            "pointIndex": 3,
+            "type": 3,
+            "instructions": "'경포로371번길' 방면으로 우회전",
+            "congestion": 0,
+            "nextRoadName": "경포로371번길",
+            "nextRoadNameVoice": "경포로371번길",
+            "viewPoint": [128.8965404, 37.7954889],
+            "eye": [128.8965404, 37.7954889],
+            "lookAt": [128.8967596, 37.795489],
+            "tbtBaseIds": ["tbt_guide3_color0"],
+            "tbtFullIds": ["tbt_guide3_color0"]
+          },
+          {
+            "pointIndex": 7,
+            "type": 3,
+            "instructions": "'경포로' 방면으로 우회전",
+            "congestion": 0,
+            "nextRoadName": "경포로",
+            "nextRoadNameVoice": "경포로",
+            "viewPoint": [128.8969266, 37.7953672],
+            "eye": [128.8969266, 37.7953672],
+            "lookAt": [128.89703, 37.795192],
+            "tbtBaseIds": ["tbt_guide3_color0"],
+            "tbtFullIds": ["tbt_guide3_color0"]
+          },
+          {
+            "pointIndex": 13,
+            "type": 2,
+            "instructions": "좌회전",
+            "congestion": 0,
+            "viewPoint": [128.8964509, 37.7931467],
+            "eye": [128.8964509, 37.7931467],
+            "lookAt": [128.8964976, 37.7929722],
+            "tbtBaseIds": ["tbt_guide2_color0"],
+            "tbtFullIds": ["tbt_guide2_color0"]
+          },
+          {
+            "pointIndex": 17,
+            "type": 88,
+            "instructions": "목적지",
+            "congestion": 0,
+            "viewPoint": [128.8965841, 37.7928036],
+            "eye": [128.8965841, 37.7928036],
+            "lookAt": [128.8966168, 37.7926707],
+            "tbtBaseIds": ["tbt_guide88_color0"],
+            "tbtFullIds": ["tbt_guide88_color0"]
+          }
+        ],
+        "link": [
+          {
+            "seq": 3498590,
+            "dir": 1,
+            "pointIndex": 0,
+            "pointCount": 4,
+            "distance": 58,
+            "duration": 13049,
+            "staticDuration": 13049,
+            "extraAttr": 0,
+            "attrType": 0,
+            "maxSpeed": 30,
+            "linkKind": 1,
+            "roadKind": 6,
+            "length": 145
+          },
+          {
+            "seq": 3502788,
+            "dir": 0,
+            "pointIndex": 3,
+            "pointCount": 2,
+            "distance": 8,
+            "duration": 1799,
+            "staticDuration": 1799,
+            "extraAttr": 0,
+            "attrType": 0,
+            "maxSpeed": 30,
+            "linkKind": 1,
+            "roadKind": 6
+          },
+          {
+            "seq": 3502790,
+            "dir": 1,
+            "pointIndex": 4,
+            "pointCount": 3,
+            "distance": 20,
+            "duration": 5142,
+            "staticDuration": 5142,
+            "extraAttr": 0,
+            "attrType": 0,
+            "maxSpeed": 30,
+            "linkKind": 1,
+            "roadKind": 6
+          },
+          {
+            "seq": 3500973,
+            "dir": 1,
+            "pointIndex": 6,
+            "pointCount": 2,
+            "distance": 18,
+            "duration": 4628,
+            "staticDuration": 4628,
+            "extraAttr": 0,
+            "attrType": 0,
+            "maxSpeed": 30,
+            "linkKind": 1,
+            "roadKind": 6
+          },
+          {
+            "seq": 3498995,
+            "dir": 0,
+            "pointIndex": 7,
+            "pointCount": 4,
+            "distance": 165,
+            "duration": 10999,
+            "staticDuration": 10999,
+            "extraAttr": 0,
+            "attrType": 0,
+            "maxSpeed": 50,
+            "linkKind": 1,
+            "roadKind": 6
+          },
+          {
+            "seq": 3502047,
+            "dir": 0,
+            "pointIndex": 10,
+            "pointCount": 3,
+            "distance": 61,
+            "duration": 4066,
+            "staticDuration": 4066,
+            "extraAttr": 0,
+            "attrType": 0,
+            "maxSpeed": 50,
+            "linkKind": 1,
+            "roadKind": 6
+          },
+          {
+            "seq": 3500092,
+            "dir": 1,
+            "pointIndex": 12,
+            "pointCount": 2,
+            "distance": 32,
+            "duration": 2133,
+            "staticDuration": 2133,
+            "extraAttr": 0,
+            "attrType": 0,
+            "maxSpeed": 50,
+            "linkKind": 1,
+            "roadKind": 6
+          },
+          {
+            "seq": 3500090,
+            "dir": 0,
+            "pointIndex": 13,
+            "pointCount": 4,
+            "distance": 21,
+            "duration": 2907,
+            "staticDuration": 2907,
+            "extraAttr": 0,
+            "attrType": 0,
+            "maxSpeed": 50,
+            "linkKind": 1,
+            "roadKind": 6
+          },
+          {
+            "seq": 3502011,
+            "dir": 0,
+            "pointIndex": 16,
+            "pointCount": 2,
+            "distance": 25,
+            "duration": 3913,
+            "staticDuration": 3913,
+            "extraAttr": 0,
+            "attrType": 0,
+            "maxSpeed": 50,
+            "linkKind": 1,
+            "roadKind": 6
+          }
+        ]
+      }
+    ]
+  }
+}

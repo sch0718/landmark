@@ -102,6 +102,7 @@ function newPlace(
   labelIds: readonly string[],
   memo: string,
   now: string,
+  saved = true,
 ): Place {
   return {
     id,
@@ -113,7 +114,7 @@ function newPlace(
     category: { value: base.category, updatedAt: now },
     labelIds: { value: [...labelIds], updatedAt: now },
     memo: { value: truncateMemo(memo), updatedAt: now },
-    saved: { value: true, updatedAt: now },
+    saved: { value: saved, updatedAt: now },
     createdAt: now,
     deletedAt: null,
   };
@@ -135,6 +136,7 @@ function appendMemo(current: string, added: string): string {
 /**
  * 이미 있는 장소(지운 것이면 되살린다)에 라벨을 더하고, `memo`가 있으면 덧붙인다.
  * 이름·주소·분류는 바꾸지 않는다. 되살릴 때는 그사이 지워진 라벨을 뗀다(살아 있는 장소의 불변식).
+ * `save`가 거짓이면(여행에만 넣기) `saved`는 지금 값 그대로 둔다.
  */
 function mergeInto(
   lib: Library,
@@ -142,12 +144,13 @@ function mergeInto(
   labelIds: readonly string[],
   memo: string,
   now: string,
+  save = true,
 ): Place {
   const kept = place.labelIds.value.filter((id) => isLiveLabel(lib, id));
   const labels = setField(place.labelIds, [...new Set([...kept, ...labelIds])], now);
   const memoField = setField(place.memo, appendMemo(place.memo.value, memo), now);
   // 여행에서만 쓰던 장소(`saved: false`)도 보관함에 넣는 것이므로 보이게 한다.
-  const saved = setField(place.saved, true, now);
+  const saved = save ? setField(place.saved, true, now) : place.saved;
   const unchanged =
     labels === place.labelIds &&
     memoField === place.memo &&
@@ -166,13 +169,14 @@ function putPlace(
   labelIds: readonly string[],
   memo: { forNew: string; forExisting: string },
   ctx: OpCtx,
+  saved = true,
 ): { place: Place; outcome: Outcome } {
   if (existing === undefined) {
-    const place = newPlace(ctx.newId('place'), candidate, labelIds, memo.forNew, ctx.now);
+    const place = newPlace(ctx.newId('place'), candidate, labelIds, memo.forNew, ctx.now, saved);
     return { place, outcome: 'created' };
   }
   return {
-    place: mergeInto(lib, existing, labelIds, memo.forExisting, ctx.now),
+    place: mergeInto(lib, existing, labelIds, memo.forExisting, ctx.now, saved),
     outcome: existing.deletedAt === null ? 'merged' : 'restored',
   };
 }
@@ -180,11 +184,13 @@ function putPlace(
 /**
  * 링크·핀 후보를 넣는다. 같은 출처의 장소가 있으면 새로 만들지 않고 라벨을 더하고 메모를 덧붙인다(지운 것이면 되살린다).
  * `createdId`는 결과 장소 id다(새로 만든 것·합친 것·되살린 것 모두).
+ * `saved`(기본 참)가 거짓이면 새 장소는 보관함 목록에서 숨긴 장소(`saved: false`)로 만들고,
+ * 이미 있는 장소는 `saved`를 바꾸지 않는다(보이던 장소를 숨기지도, 숨긴 장소를 보이게 하지도 않는다).
  */
 export function addPlace(
   lib: Library,
   candidate: PlaceCandidate,
-  input: { labelIds: string[]; memo: string },
+  input: { labelIds: string[]; memo: string; saved?: boolean },
   ctx: OpCtx,
 ): OpResult {
   const missing = input.labelIds.find((id) => !isLiveLabel(lib, id));
@@ -199,6 +205,7 @@ export function addPlace(
     labelIds,
     { forNew: memo, forExisting: memo },
     ctx,
+    input.saved ?? true,
   );
   return {
     ok: true,

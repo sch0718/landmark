@@ -226,6 +226,10 @@ describe('constants', () => {
       memoChars: 10_000,
       labelNameChars: 30,
       libraryChars: 4_000_000,
+      tripTitleChars: 60,
+      tripMaxDays: 30,
+      stopNoteChars: 500,
+      stayMaxMin: 1440,
     });
   });
 });

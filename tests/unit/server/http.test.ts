@@ -51,6 +51,8 @@ describe('STATUS', () => {
       TOO_MANY_PLACES: 413,
       UPSTREAM_ERROR: 502,
       TIMEOUT: 504,
+      BAD_REQUEST: 400,
+      NO_ROUTE: 404,
     });
   });
 });

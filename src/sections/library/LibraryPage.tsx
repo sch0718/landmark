@@ -1,6 +1,6 @@
 import Box from '@mui/material/Box';
 import { useAtomValue, useSetAtom } from 'jotai';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import {
@@ -8,10 +8,12 @@ import {
   labelCounts,
   liveLabels,
   livePlaces,
+  placeIdsInRegion,
   queryPlaces,
   regionCounts,
 } from 'src/domain/library/query';
 import { addLabels, deletePlaces, removeLabels, restorePlaces } from 'src/domain/library/ops';
+import { addCandidates } from 'src/domain/trips/ops';
 import { paths } from 'src/routes/paths';
 import { BulkBar } from 'src/sections/library/BulkBar';
 import { EmptyState } from 'src/sections/library/EmptyState';
@@ -23,6 +25,10 @@ import { CardsView } from 'src/sections/library/views/CardsView';
 import { ListView } from 'src/sections/library/views/ListView';
 import { TilesView } from 'src/sections/library/views/TilesView';
 import type { LibraryView } from 'src/sections/library/ViewSwitcher';
+import { candidatesNotice } from 'src/sections/trips/candidate-notice';
+import { TripFormDialog } from 'src/sections/trips/TripFormDialog';
+import { TripPickerDialog } from 'src/sections/trips/TripPickerDialog';
+import type { Trip } from 'src/schema/trip';
 import { ExportHtmlDialog } from 'src/sections/share-export/ExportHtmlDialog';
 import { exportTargets } from 'src/sections/share-export/export-targets';
 import { libraryAtom, useLibraryAction } from 'src/stores/library-state';
@@ -54,6 +60,9 @@ export function LibraryPage() {
   const [scrollElement, setScrollElement] = useState<HTMLElement | null>(null);
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [exporting, setExporting] = useState(false);
+  // `여행에 넣기`의 여행 고르기 창, 그리고 새 여행 대화상자(제목·처음 후보).
+  const [pickingTrip, setPickingTrip] = useState(false);
+  const [newTrip, setNewTrip] = useState<{ title?: string; candidates: string[] } | null>(null);
 
   const view = prefs.libraryView;
   const labels = useMemo(() => liveLabels(library), [library]);
@@ -115,6 +124,30 @@ export function LibraryPage() {
     });
   };
   const clearFilters = () => patch({ ...DEFAULT_QUERY, sort: query.sort });
+  // 고른 장소를 기존 여행의 후보에 더한다. 이미 그 여행에 있는 곳은 건너뛰고 새로 넣은 수만 알린다.
+  // 저장이 끝나기 전에 또 누르면(두 번 탭) 무시한다. 토스트가 두 번 뜨지 않게.
+  const addingToTrip = useRef(false);
+  const addToTrip = async (tripId: string) => {
+    if (addingToTrip.current) return;
+    addingToTrip.current = true;
+    try {
+      const ids = selectedIds;
+      const box: { trip?: Trip } = {};
+      const result = await run((lib, ctx) => {
+        const out = addCandidates(lib, tripId, ids, ctx);
+        box.trip = out.ok ? out.lib.trips[tripId] : undefined;
+        return out;
+      });
+      if (!result.ok) return;
+      setPickingTrip(false);
+      toast(candidatesNotice(result.summary?.created ?? 0, box.trip, ids));
+    } finally {
+      addingToTrip.current = false;
+    }
+  };
+  // 지역 칩 하나 → 그 지역의 보관함 장소 전부(다른 필터와 상관없이)를 후보로 새 여행.
+  const createRegionTrip = (region: string) =>
+    setNewTrip({ title: `${region} 여행`, candidates: placeIdsInRegion(library, region) });
 
   const listProps = {
     places,
@@ -148,6 +181,7 @@ export function LibraryPage() {
           view={view}
           onViewChange={changeView}
           onExport={() => setExporting(true)}
+          onCreateRegionTrip={createRegionTrip}
         />
       </Box>
       <Box ref={setScrollElement} sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
@@ -174,9 +208,27 @@ export function LibraryPage() {
           onRemove={detach}
           onDelete={() => void remove()}
           onExport={() => setExporting(true)}
+          onAddToTrip={() => setPickingTrip(true)}
           onClear={() => setSelected(new Set())}
         />
       )}
+      <TripPickerDialog
+        open={pickingTrip}
+        onPick={(tripId) => void addToTrip(tripId)}
+        onCreateNew={() => {
+          setPickingTrip(false);
+          setNewTrip({ candidates: selectedIds });
+        }}
+        onClose={() => setPickingTrip(false)}
+      />
+      <TripFormDialog
+        open={newTrip !== null}
+        mode="create"
+        initial={{ title: newTrip?.title ?? '' }}
+        candidates={newTrip?.candidates ?? []}
+        onClose={() => setNewTrip(null)}
+        onDone={(id) => void navigate(paths.trip(id))}
+      />
       <ExportHtmlDialog open={exporting} onClose={() => setExporting(false)} targets={targets} />
     </Box>
   );

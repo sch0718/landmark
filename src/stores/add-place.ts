@@ -21,6 +21,30 @@ export type AddFlow =
 export const addFlowAtom: PrimitiveAtom<AddFlow> = atom<AddFlow>({ step: 'closed' });
 
 /**
+ * 추가 흐름이 넣을 여행(스펙 §2.2의 4). 계획 화면의 `링크·핀으로 새로 추가`가 정한다.
+ * 있으면 카드에 `보관함에도 저장`이 생기고, 추가가 끝나면 그 여행의 후보에 넣고 계획 화면으로 돌아온다.
+ * 흐름이 `closed`가 되면(추가·취소·Esc·뒤로 가기 무엇이든) `useAddFlowRoute`가 `null`로 되돌린다.
+ */
+export const addTargetAtom: PrimitiveAtom<{ tripId: string } | null> = atom<{
+  tripId: string;
+} | null>(null);
+
+/** ＋추가 시트(`AddSheet`)가 열려 있는가. 셸 밖(계획 화면)에서도 열 수 있게 atom에 둔다. */
+export const addSheetOpenAtom: PrimitiveAtom<boolean> = atom(false);
+
+/** ＋추가 시트를 연다. `target`이 있으면 이번 흐름이 그 여행에 후보를 더하고, 없으면 보통의 추가다. */
+export const openAddSheetAtom = atom(null, (_get, set, target: { tripId: string } | null) => {
+  set(addTargetAtom, target);
+  set(addSheetOpenAtom, true);
+});
+
+/** 시트를 닫는다. 항목을 고르지 않고 닫았다면(흐름이 아직 `closed`) 붙여 둔 여행 대상도 버린다. */
+export const closeAddSheetAtom = atom(null, (get, set) => {
+  set(addSheetOpenAtom, false);
+  if (get(addFlowAtom).step === 'closed') set(addTargetAtom, null);
+});
+
+/**
  * 추가 칸(넓은 화면의 오른쪽 칸·좁은 화면의 아래 시트)을 쓰는 단계인가.
  * 셸은 이 단계 동안 상세 자리에 추가 칸을 놓고, 지도는 그만큼 가려지는 것으로 본다.
  * 핀 모드(`pin`)는 칸을 쓰지 않는 지도 위 오버레이라서 여기에 들지 않는다(지도를 가리지 않는다).

@@ -1,7 +1,7 @@
 import Box from '@mui/material/Box';
 import IconButton from '@mui/material/IconButton';
 import type { SxProps, Theme } from '@mui/material/styles';
-import { useAtomValue } from 'jotai';
+import { useAtomValue, useSetAtom } from 'jotai';
 import { useState, type ReactNode } from 'react';
 import { matchPath, Outlet, useLocation, useNavigate } from 'react-router';
 import { ChevronLeftIcon, XIcon } from 'src/components/icons';
@@ -14,7 +14,13 @@ import { DETAIL_WIDTH, LIST_WIDTH } from 'src/sections/shell/pane-widths';
 import { DetailSlot, ListSlot, MapSlot } from 'src/sections/shell/ShellSlots';
 import { StorageBanner } from 'src/sections/shell/StorageBanner';
 import { useLayout } from 'src/sections/shell/use-layout';
-import { addFlowAtom, showsAddPanel } from 'src/stores/add-place';
+import {
+  addFlowAtom,
+  addSheetOpenAtom,
+  closeAddSheetAtom,
+  openAddSheetAtom,
+  showsAddPanel,
+} from 'src/stores/add-place';
 
 /** 슬롯 하나. 랜드마크(`aria-label`)와 스크롤을 맡는다. */
 function Pane({
@@ -114,7 +120,10 @@ export function AppShell() {
   const location = useLocation();
   const { pathname } = location;
   const navigate = useNavigate();
-  const [addOpen, setAddOpen] = useState(false);
+  // ＋추가 시트. 계획 화면도 여행 대상을 붙여 열 수 있도록 atom에 둔다. 레일·탭의 ＋는 대상 없이 연다.
+  const addOpen = useAtomValue(addSheetOpenAtom);
+  const openAdd = useSetAtom(openAddSheetAtom);
+  const closeAdd = useSetAtom(closeAddSheetAtom);
   // 추가 흐름의 칸은 상세 칸 자리를 쓴다(상세가 열려 있어도 추가 흐름이 우선).
   const flow = useAtomValue(addFlowAtom);
   const adding = showsAddPanel(flow);
@@ -208,13 +217,13 @@ export function AppShell() {
         color: 'var(--tm-text-primary)',
       }}
     >
-      {layout !== 'compact' && <NavRail onAdd={() => setAddOpen(true)} />}
+      {layout !== 'compact' && <NavRail onAdd={() => openAdd(null)} />}
       <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
         <StorageBanner />
         {body}
-        {layout === 'compact' && <BottomTabs onAdd={() => setAddOpen(true)} />}
+        {layout === 'compact' && <BottomTabs onAdd={() => openAdd(null)} />}
       </Box>
-      <AddSheet open={addOpen} onClose={() => setAddOpen(false)} />
+      <AddSheet open={addOpen} onClose={closeAdd} />
       {layout === 'compact' && <AddPlaceHost />}
     </Box>
   );

@@ -14,10 +14,12 @@ type Props = {
   labels: Label[];
   /** `labelCounts` 결과. 라벨 없음은 `'unlabeled'` 키. */
   counts: ReadonlyMap<string, number>;
+  /** 끝에 `라벨 관리` 링크를 둔다(기본 켬). 다른 화면 위의 창(보관함 고르기)에서는 끈다. */
+  manageLink?: boolean;
 };
 
 /** 한 줄로 가로 스크롤되는 라벨 필터 칩 줄(모두 포함 · 미분류 · 라벨들 · 라벨 관리). */
-export function LabelChips({ query, onChange, labels, counts }: Props) {
+export function LabelChips({ query, onChange, labels, counts, manageLink = true }: Props) {
   const toggleLabel = (id: string) =>
     onChange({
       unlabeled: false,
@@ -67,27 +69,29 @@ export function LabelChips({ query, onChange, labels, counts }: Props) {
           </Box>
         </ChipButton>
       ))}
-      <Box
-        component={Link}
-        to={paths.labels}
-        sx={{
-          flex: 'none',
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 0.5,
-          minHeight: 44,
-          px: 1.5,
-          color: 'var(--tm-text-secondary)',
-          fontSize: 14,
-          fontWeight: 700,
-          textDecoration: 'none',
-          whiteSpace: 'nowrap',
-          '&:focus-visible': { outline: '2px solid var(--tm-accent-main)', outlineOffset: -2 },
-        }}
-      >
-        <TagsIcon aria-hidden="true" width={14} height={14} />
-        라벨 관리
-      </Box>
+      {manageLink && (
+        <Box
+          component={Link}
+          to={paths.labels}
+          sx={{
+            flex: 'none',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 0.5,
+            minHeight: 44,
+            px: 1.5,
+            color: 'var(--tm-text-secondary)',
+            fontSize: 14,
+            fontWeight: 700,
+            textDecoration: 'none',
+            whiteSpace: 'nowrap',
+            '&:focus-visible': { outline: '2px solid var(--tm-accent-main)', outlineOffset: -2 },
+          }}
+        >
+          <TagsIcon aria-hidden="true" width={14} height={14} />
+          라벨 관리
+        </Box>
+      )}
     </Box>
   );
 }
