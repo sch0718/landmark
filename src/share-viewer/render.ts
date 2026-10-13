@@ -238,7 +238,12 @@ export function renderViewer(
         importAnchor.href = link.href;
       } else if (link.kind === 'too-big') {
         importSlot.replaceChildren(
-          el(d, 'p', '링크로 보내기에는 너무 커요. 앱을 열고 이 파일을 가져오세요', 'import-note'),
+          el(
+            d,
+            'p',
+            '장소가 많아 바로 담을 수 없어요. Landmark에서 이 파일을 가져와 주세요',
+            'import-note',
+          ),
           newTabLink('Landmark 열기', link.href),
         );
       }

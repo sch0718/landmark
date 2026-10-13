@@ -327,7 +327,9 @@ describe('Landmark에 담기', () => {
     handle.setImportLink({ kind: 'too-big', href: `${APP}/import` });
     expect(importAnchor()).toBeUndefined();
     const header = root.querySelector('header')!;
-    expect(header.textContent).toContain('링크로 보내기에는 너무 커요');
+    expect(header.querySelector('.import-note')!.textContent).toBe(
+      '장소가 많아 바로 담을 수 없어요. Landmark에서 이 파일을 가져와 주세요',
+    );
     const open = [...header.querySelectorAll('a')].find((a) => a.textContent === 'Landmark 열기')!;
     expect(open.getAttribute('href')).toBe(`${APP}/import`);
     expect(open.target).toBe('_blank');

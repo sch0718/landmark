@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { readShareHash } from 'src/domain/share/read-share';
+import { readShareHash, SHARE_IMPORT_LIMITS } from 'src/domain/share/read-share';
 import type { ShareDoc, SharePlace } from 'src/schema/share';
 import {
   appUrl,
@@ -49,6 +49,10 @@ function seeded(seed: number): () => number {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+});
+
+it('MAX_HASH_CHARS는 앱의 해시 한도와 같다', () => {
+  expect(MAX_HASH_CHARS).toBe(SHARE_IMPORT_LIMITS.hashChars);
 });
 
 describe('appUrl', () => {
