@@ -27,10 +27,18 @@ export type ShareReadResult = { ok: true; doc: ShareDoc } | { ok: false; error: 
 
 const fail = (error: ShareReadError): ShareReadResult => ({ ok: false, error });
 
-/** 파일·해시 공통 검사: 스키마(모르는 필드 거절) → 장소 0곳 → 장소 한도 초과. */
+const hasDuplicateId = (items: readonly { id: string }[]): boolean =>
+  new Set(items.map((item) => item.id)).size !== items.length;
+
+/**
+ * 파일·해시 공통 검사: 스키마(모르는 필드 거절) → 장소·라벨 id 겹침 → 장소 0곳 → 장소 한도 초과.
+ * 내보내기는 id가 겹치는 파일을 만들지 않으므로, 겹치면 손상된 파일로 본다.
+ */
 function validate(value: unknown): ShareReadResult {
   const parsed = safeParse(ShareDocSchema, value, { onExcessProperty: 'error' });
   if (!parsed.success) return fail('corrupt');
+  if (hasDuplicateId(parsed.data.places) || hasDuplicateId(parsed.data.labels))
+    return fail('corrupt');
   if (parsed.data.places.length === 0) return fail('empty');
   if (parsed.data.places.length > SHARE_IMPORT_LIMITS.places) return fail('too-many');
   return { ok: true, doc: parsed.data };

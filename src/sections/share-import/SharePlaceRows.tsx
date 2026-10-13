@@ -25,7 +25,7 @@ export function SharePlaceRows({
     const byId = new Map<string, { label: ShareLabel; name: string }>();
     for (const label of doc.labels) {
       const name = cutLabelName(label.name);
-      if (name !== '' && !byId.has(label.id)) byId.set(label.id, { label, name });
+      if (name !== '') byId.set(label.id, { label, name });
     }
     return byId;
   }, [doc]);
@@ -36,11 +36,10 @@ export function SharePlaceRows({
       aria-label="가져올 장소"
       sx={{ listStyle: 'none', m: 0, p: 0, borderTop: '1px solid var(--tm-border)' }}
     >
-      {/* 받은 파일의 id는 겹칠 수 있어 행 순서로 구분한다(목록은 바뀌지 않는다). */}
-      {doc.places.map((place, index) => {
+      {doc.places.map((place) => {
         const chips = [...new Set(place.labelIds)].flatMap((id) => labelsById.get(id) ?? []);
         return (
-          <Box component="li" key={index} sx={{ borderBottom: '1px solid var(--tm-border)' }}>
+          <Box component="li" key={place.id} sx={{ borderBottom: '1px solid var(--tm-border)' }}>
             <Box
               component="label"
               sx={{

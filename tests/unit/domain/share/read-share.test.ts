@@ -96,6 +96,27 @@ describe('readShareFile', () => {
     expect(await readShareFile(htmlBlob(doc))).toEqual({ ok: false, error: 'corrupt' });
   });
 
+  it('returns corrupt for places that share an id', async () => {
+    const doc = makeDoc([place(1), place(2, { id: 'p1' })]);
+    expect(await readShareFile(htmlBlob(doc))).toEqual({ ok: false, error: 'corrupt' });
+  });
+
+  it('returns corrupt for labels that share an id', async () => {
+    const doc = {
+      ...makeDoc(),
+      labels: [
+        { id: 'l1', name: '맛집', color: 'red', order: 0 },
+        { id: 'l1', name: '카페', color: 'blue', order: 1 },
+      ],
+    };
+    expect(await readShareFile(htmlBlob(doc))).toEqual({ ok: false, error: 'corrupt' });
+  });
+
+  it('checks duplicate ids before the empty and too-many limits', async () => {
+    const dup = manyPlaces(1001).map((p) => ({ ...p, id: 'same' }));
+    expect(await readShareFile(htmlBlob(makeDoc(dup)))).toEqual({ ok: false, error: 'corrupt' });
+  });
+
   it('returns empty for zero places', async () => {
     expect(await readShareFile(htmlBlob(makeDoc([])))).toEqual({ ok: false, error: 'empty' });
   });
@@ -137,6 +158,28 @@ describe('readShareHash', () => {
       .replace(/\//g, '_')
       .replace(/=+$/, '');
     expect(await readShareHash(plain)).toEqual({ ok: false, error: 'corrupt' });
+  });
+
+  it('returns corrupt for places that share an id', async () => {
+    const doc = makeDoc([place(1), place(2, { id: 'p1' })]);
+    expect(await readShareHash(await encodeCompressedJson(doc))).toEqual({
+      ok: false,
+      error: 'corrupt',
+    });
+  });
+
+  it('returns corrupt for labels that share an id', async () => {
+    const doc = {
+      ...makeDoc(),
+      labels: [
+        { id: 'l1', name: '맛집', color: 'red' as const, order: 0 },
+        { id: 'l1', name: '카페', color: 'blue' as const, order: 1 },
+      ],
+    };
+    expect(await readShareHash(await encodeCompressedJson(doc))).toEqual({
+      ok: false,
+      error: 'corrupt',
+    });
   });
 
   it('returns empty for a compressed doc with zero places', async () => {
