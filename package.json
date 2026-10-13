@@ -24,6 +24,7 @@
     "apply-edit": "tsx pipeline/cli/apply-edit.ts",
     "validate": "tsx pipeline/cli/validate.ts",
     "effect:source": "node scripts/effect-source.mjs",
+    "orphans": "node scripts/find-orphans.mjs",
     "build:ci": "yarn validate && yarn typecheck && yarn test && yarn build && yarn build:map",
     "prepare": "husky"
   },

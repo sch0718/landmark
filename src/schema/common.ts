@@ -5,16 +5,13 @@ import { Schema } from 'effect';
 dayjs.extend(customParseFormat);
 
 export const LIMITS = {
-  linkChars: 16000,
   fileBytes: 1048576,
-  decodedBytes: 1048576,
   memoChars: 2000,
   tagsPerPlace: 20,
   tagChars: 30,
   categoryChars: 30,
   stopsPerDay: 50,
   authors: 50,
-  exportLinkWarnChars: 8000,
 } as const;
 
 const ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
