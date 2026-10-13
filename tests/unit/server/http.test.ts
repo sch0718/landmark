@@ -82,6 +82,19 @@ describe('errorResponse', () => {
     },
   );
 
+  it.each(['NOT_FOUND', 'UPSTREAM_ERROR', 'TIMEOUT'] as const)(
+    '%s 오류 응답은 Cache-Control: private, no-store',
+    (code) => {
+      expect(errorResponse(new ApiError(code, '메시지')).headers.get('Cache-Control')).toBe(
+        'private, no-store',
+      );
+    },
+  );
+
+  it('ApiError가 아닌 오류 응답도 Cache-Control: private, no-store', () => {
+    expect(errorResponse(new Error('x')).headers.get('Cache-Control')).toBe('private, no-store');
+  });
+
   it('no-location이면 reason·placeName을 담는다', async () => {
     const res = errorResponse(
       new ApiError('NOT_FOUND', '위치 없음', {

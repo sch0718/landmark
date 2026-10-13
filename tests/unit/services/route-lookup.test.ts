@@ -48,7 +48,7 @@ type RunOptions = {
   base?: string;
   /** 기본은 마이크로태스크에 저장한다(테스트가 300ms를 기다리지 않게). */
   schedule?: (flush: () => void) => void;
-  onLeave?: (flush: () => void) => void;
+  onLeave?: (flush: () => void) => () => void;
   maxChars?: number;
 };
 
@@ -407,6 +407,7 @@ describe('RouteLookup 캐시 저장 공간', () => {
           schedule: timer.schedule,
           onLeave: (flush) => {
             leave = flush;
+            return () => {};
           },
         },
         leg('car', A, B),
@@ -461,9 +462,9 @@ describe('RouteLookup 캐시 저장 공간', () => {
     }),
   );
 
-  it('listenPageLeave: pagehide와 숨김(visibilitychange)에 flush를 부른다', () => {
+  it('listenPageLeave: pagehide와 숨김(visibilitychange)에 flush를 부르고, 돌려준 함수로 뗀다', () => {
     const flush = vi.fn();
-    listenPageLeave(flush);
+    const stop = listenPageLeave(flush);
     window.dispatchEvent(new Event('pagehide'));
     expect(flush).toHaveBeenCalledTimes(1);
 
@@ -474,7 +475,55 @@ describe('RouteLookup 캐시 저장 공간', () => {
     visibility.mockReturnValue('hidden');
     document.dispatchEvent(new Event('visibilitychange'));
     expect(flush).toHaveBeenCalledTimes(2);
+
+    stop();
+    window.dispatchEvent(new Event('pagehide'));
+    document.dispatchEvent(new Event('visibilitychange'));
+    expect(flush).toHaveBeenCalledTimes(2);
+    visibility.mockRestore();
   });
+
+  it.effect('Layer의 scope가 닫히면 페이지 이탈 리스너를 뗀다', () =>
+    Effect.gen(function* () {
+      const winAdd = vi.spyOn(window, 'addEventListener');
+      const winRemove = vi.spyOn(window, 'removeEventListener');
+      const docAdd = vi.spyOn(document, 'addEventListener');
+      const docRemove = vi.spyOn(document, 'removeEventListener');
+      const countOf = (spy: typeof winAdd, type: string) =>
+        spy.mock.calls.filter((call) => call[0] === type);
+      try {
+        yield* Effect.scoped(
+          Effect.gen(function* () {
+            yield* RouteLookup;
+            expect(countOf(winAdd, 'pagehide')).toHaveLength(1);
+            expect(countOf(docAdd, 'visibilitychange')).toHaveLength(1);
+            expect(countOf(winRemove, 'pagehide')).toHaveLength(0);
+          }).pipe(
+            Effect.provide(
+              RouteLookup.layerWith({
+                fetch: vi.fn() as never,
+                storage: null,
+                onLeave: listenPageLeave,
+              }),
+            ),
+          ),
+        );
+        const added = countOf(winAdd, 'pagehide')[0]![1];
+        const removed = countOf(winRemove, 'pagehide');
+        expect(removed).toHaveLength(1);
+        expect(removed[0]![1]).toBe(added);
+        const docAdded = countOf(docAdd, 'visibilitychange')[0]![1];
+        const docRemoved = countOf(docRemove, 'visibilitychange');
+        expect(docRemoved).toHaveLength(1);
+        expect(docRemoved[0]![1]).toBe(docAdded);
+      } finally {
+        winAdd.mockRestore();
+        winRemove.mockRestore();
+        docAdd.mockRestore();
+        docRemove.mockRestore();
+      }
+    }),
+  );
 });
 
 describe('RouteLookup 동시 요청', () => {
