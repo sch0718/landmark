@@ -29,7 +29,16 @@ type Json = Record<string, unknown>;
 const isObject = (value: unknown): value is Json =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
-type CachedRoute = RouteResult & { usedAt: string };
+/**
+ * `leg`가 돌려주는 경로. `seq`는 이 답을 만든 서버 요청의 순서 번호(요청을 시작할 때 1부터 하나씩 올린다).
+ * 진행 중인 요청에 합류한 호출, 그 요청이 남긴 캐시를 읽은 호출도 같은 번호를 받는다. 저장소에서 읽은
+ * 캐시와 서버에 묻지 않는 답(직선 10m 미만)은 0이다. 실패는 `RouteLookupError.seq`에 같은 번호를 싣는다.
+ * 같은 구간의 답이 엇갈려 와도 번호가 큰 쪽이 나중에 시작한 요청의 답이다.
+ */
+export type RouteAnswer = RouteResult & { seq: number };
+
+/** 메모리 캐시 항목. `seq`는 메모리에만 두고 저장하지 않는다(새 페이지의 요청 번호는 다시 1부터다). */
+type CachedRoute = RouteResult & { usedAt: string; seq: number };
 type LngLat = [number, number];
 
 const isLngLat = (value: unknown): value is LngLat =>
@@ -51,10 +60,10 @@ function toRouteResult(value: unknown): RouteResult | null {
   return { mode, distanceM, durationS, tollFare, path, queriedAt };
 }
 
-const stripUsedAt = (cached: CachedRoute): RouteResult => {
-  const { usedAt, ...route } = cached;
+const toAnswer = (cached: CachedRoute): RouteAnswer => {
+  const { usedAt, ...answer } = cached;
   void usedAt;
-  return route;
+  return answer;
 };
 
 /** 서버가 준 오류 본문(`{ error: { code, … } }`)에서 코드를 뽑는다. 알아볼 수 없으면 null. */
@@ -100,7 +109,8 @@ function readCache(storage: Storage | null): Map<string, CachedRoute> {
   for (const [key, value] of Object.entries(doc.entries)) {
     const route = toRouteResult(value);
     if (route === null || !isObject(value) || typeof value.usedAt !== 'string') continue;
-    loaded.push([key, { ...route, usedAt: value.usedAt }]);
+    // 저장소에서 읽은 항목은 이 세션의 어떤 요청보다 먼저다.
+    loaded.push([key, { ...route, usedAt: value.usedAt, seq: 0 }]);
   }
   // 오래된 것이 앞에 오도록 맞춰 둔다(Map 삽입 순서 = 오래된 순).
   loaded.sort((a, b) => (a[1].usedAt < b[1].usedAt ? -1 : a[1].usedAt > b[1].usedAt ? 1 : 0));
@@ -123,6 +133,7 @@ export function listenPageLeave(flush: () => void): void {
  *   오래 안 쓴 것부터 지운다. 경로선 좌표는 소수 5자리로 줄여 저장하고, 저장은 300ms 간격으로 모아서 한다.
  * - 직선 10m 미만은 같은 지점으로 보고 서버에 묻지 않는다.
  * - 같은 키 요청이 진행 중이면 합치고, 동시에 나가는 요청은 최대 4개다.
+ * - 답(성공·실패)마다 그 답을 만든 서버 요청의 순서 번호(`seq`)를 붙인다(`RouteAnswer`).
  * - 서버 응답 처리는 `PlaceLookup`과 같다(HTML·`error` 없는 404·네트워크 실패는 `OFFLINE`).
  */
 export class RouteLookup extends Context.Service<
@@ -133,7 +144,7 @@ export class RouteLookup extends Context.Service<
       from: LngLat,
       to: LngLat,
       options?: { refresh?: boolean },
-    ): Effect.Effect<RouteResult, RouteLookupError>;
+    ): Effect.Effect<RouteAnswer, RouteLookupError>;
   }
 >()('tripmap/RouteLookup') {
   static layerWith(options: {
@@ -164,7 +175,9 @@ export class RouteLookup extends Context.Service<
       let flushScheduled = false;
       let offlineWarned = false;
       let forbiddenWarned = false;
-      const inflight = new Map<string, Deferred.Deferred<RouteResult, RouteLookupError>>();
+      // 마지막으로 시작한 서버 요청의 번호. 저장소에서 읽은 항목(0)보다 항상 크다.
+      let requestSeq = 0;
+      const inflight = new Map<string, Deferred.Deferred<RouteAnswer, RouteLookupError>>();
       const slots = Semaphore.makeUnsafe(ROUTE_MAX_CONCURRENT);
 
       /** `usedAt`이 오래된 것부터 `count`개를 지운다(Map은 오래된 순). */
@@ -172,7 +185,16 @@ export class RouteLookup extends Context.Service<
         for (const key of [...entries.keys()].slice(0, count)) entries.delete(key);
       };
 
-      const serialize = () => JSON.stringify({ entries: Object.fromEntries(entries) });
+      // 요청 번호(`seq`)는 이 세션에서만 뜻이 있어 저장하지 않는다.
+      const serialize = () =>
+        JSON.stringify({
+          entries: Object.fromEntries(
+            [...entries].map(([key, { seq, ...stored }]) => {
+              void seq;
+              return [key, stored];
+            }),
+          ),
+        });
 
       /** 글자 수 한도를 넘으면 넘친 비율만큼 오래된 것부터 지우며 다시 맞춘다. 한도 안의 문서를 돌려준다. */
       const fitted = (): string => {
@@ -233,40 +255,47 @@ export class RouteLookup extends Context.Service<
       };
 
       /**
-       * 받은 경로를 캐시에 넣고, 캐시에 실제로 남은 경로를 돌려준다. 같은 구간의 보통 요청과 `refresh`는
-       * 따로 돌아 끝나는 순서가 뒤바뀔 수 있다. 늦게 온 오래된 응답(엣지 캐시)이 먼저 끝난 새 결과를
-       * 덮지 않게, 캐시에 더 새 항목이 있으면 그것을 지키고 호출한 쪽에도 그것을 돌려준다.
+       * 요청 `seq`가 받은 경로를 캐시에 넣고, 캐시에 실제로 남은 경로를 돌려준다. 같은 구간의 보통 요청과
+       * `refresh`는 따로 돌아 끝나는 순서가 뒤바뀔 수 있다. 늦게 온 오래된 응답(엣지 캐시)이 먼저 끝난 새
+       * 결과를 덮지 않게, 캐시에 더 새 항목이 있으면 그것을 지키고 호출한 쪽에도 그것을(그 항목을 남긴
+       * 요청의 번호와 함께) 돌려준다.
        */
-      const remember = (key: string, route: RouteResult): RouteResult => {
+      const remember = (key: string, route: RouteResult, seq: number): RouteAnswer => {
         const existing = entries.get(key);
         entries.delete(key);
         if (existing !== undefined && isNewerThan(existing, route)) {
           // 새 항목은 그대로 두고, 쓴 것으로만 친다(맨 뒤로 옮기고 `usedAt` 갱신).
           entries.set(key, { ...existing, usedAt: now().toISOString() });
           persistSoon();
-          return stripUsedAt(existing);
+          return toAnswer(existing);
         }
-        entries.set(key, { ...route, path: roundPath(route.path), usedAt: now().toISOString() });
+        entries.set(key, {
+          ...route,
+          path: roundPath(route.path),
+          usedAt: now().toISOString(),
+          seq,
+        });
         if (entries.size > ROUTE_CACHE_MAX) dropOldest(entries.size - ROUTE_CACHE_MAX);
         persistSoon();
-        return route;
+        return { ...route, seq };
       };
 
-      const offline = (cause: unknown) =>
+      const offline = (seq: number) => (cause: unknown) =>
         Effect.sync(() => {
           if (offlineWarned) return;
           offlineWarned = true;
           console.warn(OFFLINE_WARNING, cause);
-        }).pipe(Effect.andThen(Effect.fail(new RouteLookupError({ code: 'OFFLINE' }))));
+        }).pipe(Effect.andThen(Effect.fail(new RouteLookupError({ code: 'OFFLINE', seq }))));
 
-      const upstream = () => new RouteLookupError({ code: 'UPSTREAM_ERROR' });
-
+      /** 요청 `seq`가 받은 응답을 경로로 읽는다. 실패에도 그 요청의 번호를 싣는다. */
       const request = Effect.fnUntraced(function* (
+        seq: number,
         mode: RouteMode,
         from: LngLat,
         to: LngLat,
         fresh: boolean,
       ) {
+        const upstream = () => new RouteLookupError({ code: 'UPSTREAM_ERROR', seq });
         // `다시 계산`(fresh)은 서버의 엣지 캐시도 건너뛰게 한다(스펙 §4.2). 보통 요청은 엣지 캐시를 함께 쓴다.
         const path = `/api/route?mode=${mode}&from=${coordinate(from)}&to=${coordinate(to)}${fresh ? '&fresh=1' : ''}`;
         // 서버 시한(8초)보다 조금 길게 기다리고, 그래도 안 오면 중단한다. 중단하면 대기 칸과 진행 중 표가 풀린다.
@@ -274,15 +303,15 @@ export class RouteLookup extends Context.Service<
           const res = yield* Effect.tryPromise({
             try: (signal) => options.fetch(`${base}${path}`, { signal }),
             catch: (e) => e,
-          }).pipe(Effect.catch(offline));
+          }).pipe(Effect.catch(offline(seq)));
           const body = yield* Effect.tryPromise({ try: () => res.text(), catch: (e) => e }).pipe(
-            Effect.catch(offline),
+            Effect.catch(offline(seq)),
           );
           return { status: res.status, ok: res.ok, text: body };
         }).pipe(
           Effect.timeoutOrElse({
             duration: ROUTE_TIMEOUT_MS,
-            orElse: () => Effect.fail(new RouteLookupError({ code: 'TIMEOUT' })),
+            orElse: () => Effect.fail(new RouteLookupError({ code: 'TIMEOUT', seq })),
           }),
         );
         const text = response.text;
@@ -292,7 +321,7 @@ export class RouteLookup extends Context.Service<
         } catch {
           // 서버 함수가 있는 환경의 5xx(예: Cloudflare 오류 HTML 페이지)는 서버 문제이지 서버 함수 부재가 아니다.
           if (response.status >= 500) return yield* upstream();
-          return yield* offline(`JSON이 아닌 응답(HTTP ${response.status})`);
+          return yield* offline(seq)(`JSON이 아닌 응답(HTTP ${response.status})`);
         }
         const errorCode = readApiErrorCode(body);
         if (errorCode !== null) {
@@ -301,37 +330,44 @@ export class RouteLookup extends Context.Service<
             forbiddenWarned = true;
             console.warn(FORBIDDEN_ORIGIN_WARNING);
           }
-          return yield* new RouteLookupError({ code });
+          return yield* new RouteLookupError({ code, seq });
         }
-        if (response.status === 404) return yield* offline('error 본문이 없는 404');
+        if (response.status === 404) return yield* offline(seq)('error 본문이 없는 404');
         if (!response.ok) return yield* upstream();
         const route = toRouteResult(body);
         if (route === null) return yield* upstream();
         return route;
       });
 
-      /** 한 구간을 서버에서 받아 캐시에 넣고, 캐시에 남은 경로를 돌려준다. 동시 요청 수는 `slots`가 제한한다. */
-      const fetchLeg = (key: string, mode: RouteMode, from: LngLat, to: LngLat, fresh: boolean) =>
-        slots
-          .withPermits(1)(request(mode, from, to, fresh))
-          .pipe(Effect.map((route) => remember(key, route)));
+      /**
+       * 한 구간을 서버에서 받아 캐시에 넣고, 캐시에 남은 경로를 돌려준다. 동시 요청 수는 `slots`가 제한한다.
+       * 부를 때(진행 중 표에 올릴 때) 이 요청의 순서 번호를 매기고, 성공·실패 모두에 싣는다.
+       */
+      const fetchLeg = (key: string, mode: RouteMode, from: LngLat, to: LngLat, fresh: boolean) => {
+        const seq = ++requestSeq;
+        return slots
+          .withPermits(1)(request(seq, mode, from, to, fresh))
+          .pipe(Effect.map((route) => remember(key, route, seq)));
+      };
 
       const leg = (
         mode: RouteMode,
         from: LngLat,
         to: LngLat,
         legOptions?: { refresh?: boolean },
-      ): Effect.Effect<RouteResult, RouteLookupError> =>
+      ): Effect.Effect<RouteAnswer, RouteLookupError> =>
         Effect.suspend(() => {
           // NaN 좌표도 여기서 거리 0으로 답해, 서버로 보내거나 계산에 NaN이 번지지 않게 한다.
+          // 서버 요청이 없으니 번호는 0(이 구간은 늘 같은 답이라 순서를 가릴 일이 없다).
           if (!(haversineM(from, to) >= SAME_POINT_M)) {
-            return Effect.succeed<RouteResult>({
+            return Effect.succeed<RouteAnswer>({
               mode,
               distanceM: 0,
               durationS: 0,
               tollFare: mode === 'car' ? 0 : null,
               path: [from, to],
               queriedAt: now().toISOString(),
+              seq: 0,
             });
           }
           const key = routeInputKey({ mode, from, to });
@@ -342,16 +378,21 @@ export class RouteLookup extends Context.Service<
               entries.delete(key);
               entries.set(key, { ...cached, usedAt: now().toISOString() });
               persistSoon();
-              return Effect.succeed(stripUsedAt(cached));
+              // 그 캐시를 남긴 요청의 번호를 그대로 준다.
+              return Effect.succeed(toAnswer(cached));
             }
           }
           // 진행 중 표는 (경로, fresh 여부)별로 둔다: `다시 계산`이 엣지 캐시를 쓰는 보통 요청에 합쳐지면
-          // 오래된 답을 받고 `fresh=1`도 못 보낸다. refresh끼리는 합쳐도 된다.
+          // 오래된 답을 받고 `fresh=1`도 못 보낸다. refresh끼리는 합쳐도 된다. 보통 호출은 진행 중인
+          // refresh에 먼저 합류한다: 그 뒤에 보통 요청을 새로 시작하면 엣지 캐시의 오래된 답이 더 큰 번호를
+          // 달고 와 refresh의 새 답을 이긴다.
           const fresh = legOptions?.refresh === true;
           const flightKey = fresh ? `${key}|fresh` : key;
-          const running = inflight.get(flightKey);
+          const running = fresh
+            ? inflight.get(flightKey)
+            : (inflight.get(`${key}|fresh`) ?? inflight.get(flightKey));
           if (running !== undefined) return Deferred.await(running);
-          const pending = Deferred.makeUnsafe<RouteResult, RouteLookupError>();
+          const pending = Deferred.makeUnsafe<RouteAnswer, RouteLookupError>();
           inflight.set(flightKey, pending);
           // 기다리는 쪽이 중단돼도 같은 키를 기다리는 다른 호출이 있을 수 있으니 요청은 따로 돌린다.
           return Effect.forkDetach(

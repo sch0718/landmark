@@ -120,9 +120,13 @@ export function route(
   };
 }
 
-/** 구간을 출발·도착 이름으로 받아 답하는 가짜. 부른 기록을 남긴다. */
+/**
+ * 구간을 출발·도착 이름으로 받아 답하는 가짜. 부른 기록을 남긴다. 부를 때마다 서버 요청 하나로 보고
+ * 순서 번호(`seq`)를 1부터 매긴다(가짜는 바로 답하니 부른 순서 = 시작한 순서).
+ */
 export function fakeRoutes(answer: (call: Call, nth: number) => Answer) {
   const calls: Call[] = [];
+  let seq = 0;
   const layer = Layer.succeed(
     RouteLookup,
     RouteLookup.of({
@@ -137,9 +141,10 @@ export function fakeRoutes(answer: (call: Call, nth: number) => Answer) {
           calls.push(call);
           const nth = calls.filter((c) => c.from === call.from && c.to === call.to).length;
           const out = answer(call, nth);
+          seq += 1;
           return typeof out === 'string'
-            ? Effect.fail(new RouteLookupError({ code: out }))
-            : Effect.succeed(out);
+            ? Effect.fail(new RouteLookupError({ code: out, seq }))
+            : Effect.succeed({ ...out, seq });
         }),
     }),
   );

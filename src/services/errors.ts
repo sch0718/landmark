@@ -164,10 +164,11 @@ export type RouteLookupErrorCode = (typeof ROUTE_LOOKUP_ERROR_CODES)[number];
 
 /**
  * 구간 경로 조회 실패(스펙 §4.2). 호출한 쪽은 실패한 구간을 직선 추정으로 채우고
- * `userMessage`를 구간 옆에 보인다.
+ * `userMessage`를 구간 옆에 보인다. `seq`는 실패한 서버 요청의 순서 번호(`RouteAnswer.seq`와 같은 차례)다.
  */
 export class RouteLookupError extends Schema.TaggedError<RouteLookupError>()('RouteLookupError', {
   code: Schema.Literals(ROUTE_LOOKUP_ERROR_CODES),
+  seq: Schema.Number,
 }) {
   get userMessage(): string {
     switch (this.code) {

@@ -7,7 +7,7 @@ import { computeSchedule, type DaySchedule, type LegTime } from 'src/domain/trip
 import { forkEffect } from 'src/lib/effect/runtime';
 import type { Library } from 'src/schema/library';
 import type { Trip } from 'src/schema/trip';
-import { parseRouteInputKey, routeInputKey, type RouteResult } from 'src/server/route';
+import { parseRouteInputKey, routeInputKey } from 'src/server/route';
 import { RouteLookup, ROUTE_MAX_CONCURRENT } from 'src/services/route-lookup';
 import { libraryAtom } from 'src/stores/library-state';
 import { routeStatesAtom, type RouteState } from 'src/stores/trip-planner';
@@ -49,53 +49,51 @@ const liveTrip = (lib: Library, tripId: string): Trip | null => {
   return trip !== undefined && trip.deletedAt === null ? trip : null;
 };
 
-/** `known`의 조회 시각이 `incoming`보다 확실히 늦은가. 시각을 읽을 수 없으면 아니다(들어온 값이 이긴다). */
-const isNewerRoute = (known: RouteResult, incoming: RouteResult): boolean => {
-  const knownAt = Date.parse(known.queriedAt);
-  const incomingAt = Date.parse(incoming.queriedAt);
-  return Number.isFinite(knownAt) && Number.isFinite(incomingAt) && knownAt > incomingAt;
-};
-
-/** 조회를 시작할 때마다 하나씩 올리는 번호(화면·훅 인스턴스와 상관없이 하나). 끝나는 순서가 아니라 시작 순서다. */
-let lookupSeq = 0;
-
 /**
- * 들어온 조회 결과를 이미 있는 상태에 쓸지 정한다. 같은 구간의 두 조회(보통·`다시 계산`)가 뒤바뀐 순서로
- * 끝나도 오래된 쪽이 새 경로를 덮지 않게 한다.
- * - 경로: 이미 받은 경로의 조회 시각이 더 늦으면 지킨다.
- * - 실패(경로 없음·연결 실패·서버 문제): 이미 받은 경로가 *나중에 시작한* 요청의 것이면 지킨다.
- *   먼저 시작한 경로 위에 나중에 시작한 요청이 실패하면 실패를 보인다.
+ * 한 구간을 묻고 결과를 `routeStatesAtom`에 쓴다. 실패도 상태로 남기므로 이 효과는 실패하지 않는다.
+ * 같은 구간의 답이 어떤 순서로 끝나든, 답을 만든 서버 요청의 번호(`seq`)가 지금 상태의 번호보다 작으면
+ * 버린다: 나중에 시작한 요청의 답(성공·실패)이 이긴다. 번호는 조회 계층이 요청마다 매기므로 화면을 옮겨
+ * 진행 중인 요청에 다시 합류해도 그 요청의 번호를 받는다.
  */
-const shouldWrite = (known: RouteState | undefined, incoming: RouteState): boolean => {
-  if (known?.status !== 'routed') return true;
-  if (incoming.status === 'routed') return !isNewerRoute(known.result, incoming.result);
-  return known.seq < incoming.seq;
-};
-
-/** 한 구간을 묻고 결과를 `routeStatesAtom`에 쓴다. 실패도 상태로 남기므로 이 효과는 실패하지 않는다. */
 function lookupLeg(store: Store, key: string, refresh: boolean) {
   const { mode, from, to } = parseRouteInputKey(key);
   return Effect.gen(function* () {
-    const seq = ++lookupSeq;
     const lookup = yield* RouteLookup;
     const result = yield* Effect.result(lookup.leg(mode, from, to, { refresh }));
     let state: RouteState;
-    if (Result.isSuccess(result)) state = { seq, status: 'routed', result: result.success };
-    else if (result.failure.code === 'NO_ROUTE') state = { seq, status: 'no-route' };
-    else if (result.failure.code === 'OFFLINE') state = { seq, status: 'offline' };
-    else state = { seq, status: 'failed', code: result.failure.code };
-    store.set(routeStatesAtom, (prev) =>
-      shouldWrite(prev[key], state) ? { ...prev, [key]: state } : prev,
-    );
+    if (Result.isSuccess(result)) {
+      const { seq, ...route } = result.success;
+      state = { seq, status: 'routed', result: route };
+    } else {
+      const { code, seq } = result.failure;
+      if (code === 'NO_ROUTE') state = { seq, status: 'no-route' };
+      else if (code === 'OFFLINE') state = { seq, status: 'offline', refresh };
+      else state = { seq, status: 'failed', code };
+    }
+    store.set(routeStatesAtom, (prev) => {
+      const known = prev[key];
+      return known === undefined || state.seq >= known.seq ? { ...prev, [key]: state } : prev;
+    });
   });
 }
 
+/** 다시 물을 구간(연결 실패였던 구간은 실패한 요청과 같은 종류로). */
+type LegRequest = { key: string; refresh: boolean };
+
 /** 여러 구간을 차례로(동시 4개까지) 묻는다. 목록 앞쪽이 먼저 나간다. */
-const lookupAll = (store: Store, keys: string[], refresh: boolean) =>
-  Effect.forEach(keys, (key) => Effect.suspend(() => lookupLeg(store, key, refresh)), {
-    concurrency: ROUTE_MAX_CONCURRENT,
-    discard: true,
-  });
+const lookupAll = (store: Store, requests: LegRequest[]) =>
+  Effect.forEach(
+    requests,
+    ({ key, refresh }) => Effect.suspend(() => lookupLeg(store, key, refresh)),
+    { concurrency: ROUTE_MAX_CONCURRENT, discard: true },
+  );
+
+/**
+ * 연결 실패였던 구간을 다시 물을 요청. 실패한 요청과 같은 종류(`다시 계산` 여부)로 보낸다: `다시 계산`이
+ * 연결 실패했는데 보통 요청으로 다시 물으면 캐시의 이전 경로(먼저 시작한 요청의 답)가 답해 순서에서 진다.
+ */
+const offlineRetry = (key: string, known: RouteState | undefined): LegRequest[] =>
+  known?.status === 'offline' ? [{ key, refresh: known.refresh }] : [];
 
 const straightPath = (leg: Leg): [number, number][] => [
   [leg.from.lng, leg.from.lat],
@@ -195,12 +193,13 @@ export function useDayPlan(tripId: string, dayIndex: number): DayPlan {
 
   useEffect(() => {
     if (requestKeys === '') return;
-    const pending = requestKeys.split('\n').filter((key) => {
-      const known = store.get(routeStatesAtom)[key];
-      return known === undefined || known.status === 'offline';
+    const states = store.get(routeStatesAtom);
+    const pending = requestKeys.split('\n').flatMap((key) => {
+      const known = states[key];
+      return known === undefined ? [{ key, refresh: false }] : offlineRetry(key, known);
     });
     if (pending.length === 0) return;
-    return forkEffect(lookupAll(store, pending, false));
+    return forkEffect(lookupAll(store, pending));
   }, [requestKeys, store]);
 
   // 인터넷이 돌아오면 연결 실패로 어림값을 쓰던 구간만 다시 묻는다.
@@ -209,10 +208,10 @@ export function useDayPlan(tripId: string, dayIndex: number): DayPlan {
     let cancel: (() => void) | null = null;
     const onOnline = () => {
       const states = store.get(routeStatesAtom);
-      const offline = requestKeys.split('\n').filter((key) => states[key]?.status === 'offline');
+      const offline = requestKeys.split('\n').flatMap((key) => offlineRetry(key, states[key]));
       if (offline.length === 0) return;
       cancel?.();
-      cancel = forkEffect(lookupAll(store, offline, false));
+      cancel = forkEffect(lookupAll(store, offline));
     };
     window.addEventListener('online', onOnline);
     return () => {
@@ -249,14 +248,16 @@ export function useDayPlan(tripId: string, dayIndex: number): DayPlan {
 
   // 다시 요청은 화면이 사라져도 끝까지 돌게 둔다(결과는 공용 atom에 남아 다음에 쓴다).
   const refresh = useCallback(() => {
-    const keys = legs.filter((leg) => !isSamePointLeg(leg)).map(routeKeyOf);
-    if (keys.length > 0) forkEffect(lookupAll(store, keys, true));
+    const requests = legs
+      .filter((leg) => !isSamePointLeg(leg))
+      .map((leg) => ({ key: routeKeyOf(leg), refresh: true }));
+    if (requests.length > 0) forkEffect(lookupAll(store, requests));
   }, [legs, store]);
   const retryLeg = useCallback(
     (key: string) => {
       const leg = legs.find((l) => l.key === key);
       if (leg === undefined || isSamePointLeg(leg)) return;
-      forkEffect(lookupAll(store, [routeKeyOf(leg)], true));
+      forkEffect(lookupAll(store, [{ key: routeKeyOf(leg), refresh: true }]));
     },
     [legs, store],
   );

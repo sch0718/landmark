@@ -224,12 +224,12 @@ describe('구간과 경로 상태', () => {
   });
 
   it('다시 계산이 먼저 끝나고 오래된 처음 응답이 늦게 와도 화면은 새 시간·조회 시각을 지킨다', async () => {
-    // 처음 요청(보통)은 늦게 끝나고, 그사이 `다시 계산`이 새 답을 먼저 준다. 조회 계층이 어떤 순서로
-    // 답하든(가짜는 순서를 지키지 않는다) 화면 상태가 오래된 값으로 돌아가면 안 된다.
+    // 처음 요청(보통, 번호 1)은 늦게 끝나고, 그사이 `다시 계산`(번호 2)이 새 답을 먼저 준다. 조회 계층이
+    // 어떤 순서로 답하든(가짜는 캐시로 순서를 맞추지 않는다) 먼저 시작한 요청의 답이 화면을 되돌리면 안 된다.
     const calls: { refresh: boolean }[] = [];
     let releaseStale: () => void = () => {};
-    const stale = route(20, 5000, { queriedAt: '2026-10-12T03:00:00.000Z' });
-    const newer = route(45, 9000, { queriedAt: '2026-10-13T03:00:00.000Z' });
+    const stale = { ...route(20, 5000, { queriedAt: '2026-10-12T03:00:00.000Z' }), seq: 1 };
+    const newer = { ...route(45, 9000, { queriedAt: '2026-10-13T03:00:00.000Z' }), seq: 2 };
     const layer = Layer.succeed(
       RouteLookup,
       RouteLookup.of({
@@ -351,6 +351,168 @@ describe('구간과 경로 상태', () => {
       expect(await within(leg()).findByText('경로 없음 · 직선 추정')).toBeInTheDocument();
       expect(within(leg()).queryByText('20분 · 5km')).not.toBeInTheDocument();
       expect(ctl.state.fresh).toBe(1);
+    });
+
+    /** 중앙시장 닭강정 → 안목 카페거리 구간의 요청 주소(좌표 소수 5자리). */
+    const P1_P2 = 'from=128.90000,37.75000&to=128.94700,37.77200';
+
+    /**
+     * 중앙시장 닭강정 → 안목 카페거리 구간의 요청을 붙잡아 두는 fetch. 보통 요청과 `다시 계산`을 따로,
+     * 시작한 차례대로 쥐고 있다가 `answer`·`fail`로 하나씩 답한다. 다른 구간은 바로 답한다.
+     */
+    function holdingFetch() {
+      type Kind = 'plain' | 'fresh';
+      type Held = { resolve(res: Response): void; reject(cause: unknown): void };
+      const held: Record<Kind, Held[]> = { plain: [], fresh: [] };
+      const count = { plain: 0, fresh: 0, other: 0 };
+      const fetchFn = vi.fn((input: RequestInfo | URL) => {
+        const url = String(input);
+        if (!url.includes(P1_P2)) {
+          count.other += 1;
+          return Promise.resolve(json(route(30, 24_000)));
+        }
+        const kind: Kind = url.includes('fresh=1') ? 'fresh' : 'plain';
+        count[kind] += 1;
+        return new Promise<Response>((resolve, reject) => held[kind].push({ resolve, reject }));
+      });
+      const take = (kind: Kind) => {
+        const next = held[kind].shift();
+        expect(next, `붙잡아 둔 ${kind} 요청`).toBeDefined();
+        return next!;
+      };
+      return {
+        count,
+        total: () => fetchFn.mock.calls.length,
+        fetch: fetchFn as unknown as typeof fetch,
+        answer: (kind: Kind, res: Response) =>
+          act(async () => {
+            take(kind).resolve(res);
+          }),
+        fail: (kind: Kind, cause: unknown) =>
+          act(async () => {
+            take(kind).reject(cause);
+          }),
+      };
+    }
+
+    type Moves = {
+      user: ReturnType<typeof userEvent.setup>;
+      router: { navigate(to: string): unknown };
+    };
+    const rejoins: [string, (m: Moves) => Promise<void>][] = [
+      [
+        'Day 2로 갔다가 돌아와도',
+        async ({ user }) => {
+          await user.click(screen.getByRole('tab', { name: 'Day 2 10.24(토)' }));
+          await user.click(screen.getByRole('tab', { name: 'Day 1 10.23(금)' }));
+        },
+      ],
+      [
+        '계획 화면을 나갔다가 다시 들어와도',
+        async ({ router }) => {
+          await act(async () => {
+            await router.navigate('/trips');
+          });
+          await act(async () => {
+            await router.navigate(`/trips/${TRIP}`);
+          });
+        },
+      ],
+    ];
+
+    it.each(rejoins)(
+      '보통 요청·다시 계산이 진행 중일 때 %s, 먼저 시작한 보통 요청의 늦은 실패가 다시 계산 결과를 덮지 않는다',
+      async (_name, move) => {
+        const ctl = holdingFetch();
+        const lib = withTrip(
+          plannerLibrary(),
+          makeTrip({
+            stops: [
+              [P1, P2],
+              [P3, P5],
+            ],
+          }),
+        );
+        const { router } = await open(lib, { routes: { layer: layerOf(ctl.fetch), calls: [] } });
+        const user = userEvent.setup();
+
+        await waitFor(() => expect(ctl.count.plain).toBe(1));
+        await user.click(within(timeline()).getByRole('button', { name: '다시 계산' }));
+        await waitFor(() => expect(ctl.count.fresh).toBe(1));
+        // 화면을 옮기면 기다리던 조회가 취소되고, 새 조회가 진행 중인 요청에 합류한다.
+        await move({ user, router });
+        await act(async () => {});
+        const fetched = ctl.total();
+
+        await ctl.answer('fresh', json(newerBody()));
+        expect(await within(leg()).findByText('45분 · 9km')).toBeInTheDocument();
+        expect(within(timeline()).getByText('10월 13일 조회')).toBeInTheDocument();
+
+        await ctl.answer('plain', errorBody('NO_ROUTE', 404));
+        await act(async () => {});
+        expect(within(leg()).getByText('45분 · 9km')).toBeInTheDocument();
+        expect(within(leg()).queryByText(/직선 추정/)).not.toBeInTheDocument();
+        expect(within(timeline()).getByText('10월 13일 조회')).toBeInTheDocument();
+        // 다시 합류해도 서버 요청은 늘지 않는다(보통 1 · 다시 계산 1 · Day 2 구간 1).
+        expect(ctl.total()).toBe(fetched);
+        expect(ctl.count).toEqual({ plain: 1, fresh: 1, other: 1 });
+      },
+    );
+
+    const newerFailures: [string, () => Response, string, boolean][] = [
+      ['TIMEOUT(504)', () => errorBody('TIMEOUT', 504), '경로를 못 가져왔어요', true],
+      ['NO_ROUTE(404 본문)', () => errorBody('NO_ROUTE', 404), '경로 없음 · 직선 추정', false],
+    ];
+
+    it.each(newerFailures)(
+      '나중에 시작한 다시 계산이 %s로 실패한 뒤 먼저 시작한 보통 요청이 성공해도 그 실패를 보인다',
+      async (_name, failure, text, retry) => {
+        const ctl = holdingFetch();
+        const lib = withTrip(plannerLibrary(), makeTrip({ stops: [[P1, P2]] }));
+        await open(lib, { routes: { layer: layerOf(ctl.fetch), calls: [] } });
+        const user = userEvent.setup();
+        const retryButton = () => within(leg()).queryByRole('button', { name: '다시 시도' });
+
+        await waitFor(() => expect(ctl.count.plain).toBe(1));
+        await user.click(within(timeline()).getByRole('button', { name: '다시 계산' }));
+        await waitFor(() => expect(ctl.count.fresh).toBe(1));
+        await ctl.answer('fresh', failure());
+        expect(await within(leg()).findByText(text)).toBeInTheDocument();
+        expect(retryButton() !== null).toBe(retry);
+
+        await ctl.answer('plain', json(route(20, 5000, { queriedAt: '2026-10-12T03:00:00.000Z' })));
+        await act(async () => {});
+        expect(within(leg()).getByText(text)).toBeInTheDocument();
+        expect(retryButton() !== null).toBe(retry);
+        expect(within(leg()).queryByText('20분 · 5km')).not.toBeInTheDocument();
+        expect(within(timeline()).queryByText(/조회$/)).not.toBeInTheDocument();
+      },
+    );
+
+    it('다시 계산이 연결 실패로 끝나면, 인터넷이 돌아올 때 캐시의 이전 경로가 아니라 다시 계산으로 묻는다', async () => {
+      const ctl = holdingFetch();
+      const lib = withTrip(plannerLibrary(), makeTrip({ stops: [[P1, P2]] }));
+      await open(lib, { routes: { layer: layerOf(ctl.fetch), calls: [] } });
+      const user = userEvent.setup();
+      const notice = '인터넷에 연결되지 않아 이동 시간은 어림값이에요';
+
+      await waitFor(() => expect(ctl.count.plain).toBe(1));
+      await ctl.answer('plain', json(route(20, 5000, { queriedAt: '2026-10-12T03:00:00.000Z' })));
+      expect(await within(leg()).findByText('20분 · 5km')).toBeInTheDocument();
+
+      await user.click(within(timeline()).getByRole('button', { name: '다시 계산' }));
+      await waitFor(() => expect(ctl.count.fresh).toBe(1));
+      await ctl.fail('fresh', new TypeError('Failed to fetch'));
+      expect(await screen.findByText(notice)).toBeInTheDocument();
+
+      await act(async () => {
+        window.dispatchEvent(new Event('online'));
+      });
+      await waitFor(() => expect(ctl.count.fresh).toBe(2));
+      await ctl.answer('fresh', json(newerBody()));
+      expect(await within(leg()).findByText('45분 · 9km')).toBeInTheDocument();
+      expect(screen.queryByText(notice)).not.toBeInTheDocument();
+      expect(ctl.count.plain).toBe(1);
     });
   });
 

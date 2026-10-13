@@ -28,16 +28,19 @@ export const splitPreviewAtom: PrimitiveAtom<SplitPreview | null> = atom<SplitPr
  * - `routed`: 받은 경로
  * - `no-route`: 네이버가 경로 없음(`NO_ROUTE`)
  * - `failed`: 서버 문제·시한 초과 등(`다시 시도` 대상)
- * - `offline`: 연결 실패. 다음 요청 때 다시 묻는다.
+ * - `offline`: 연결 실패. 다음 요청 때 다시 묻는다. `refresh`는 실패한 요청이 `다시 계산`이었는가로,
+ *   다시 물을 때 같은 요청을 보낸다(보통 요청이면 캐시의 이전 경로가 답하는데, 그 경로는 실패한 요청보다
+ *   먼저 시작한 요청의 것이라 순서에서 진다).
  *
- * `seq`는 그 조회를 *시작한* 순서(앞서 시작한 조회일수록 작다). 늦게 끝난 먼저 시작한 요청의 실패가
- * 나중에 시작한 요청이 받은 경로를 덮지 않게 가리는 데 쓴다.
+ * `seq`는 이 상태를 만든 서버 요청의 순서 번호(`RouteAnswer.seq`·`RouteLookupError.seq`). 합류한 호출과
+ * 캐시 읽기도 그 답을 만든 요청의 번호를 받는다. 번호가 같거나 큰 답만 쓴다: 나중에 *시작한* 요청의 답이
+ * 이긴다(성공·실패 모두, 끝난 순서와 상관없이).
  */
 export type RouteState = { seq: number } & (
   | { status: 'routed'; result: RouteResult }
   | { status: 'no-route' }
   | { status: 'failed'; code: RouteLookupErrorCode }
-  | { status: 'offline' }
+  | { status: 'offline'; refresh: boolean }
 );
 
 export const routeStatesAtom: PrimitiveAtom<Record<string, RouteState>> = atom<
