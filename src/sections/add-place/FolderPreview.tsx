@@ -22,7 +22,7 @@ import { PlaceLookup } from 'src/services/place-lookup';
 import { addFlowAtom } from 'src/stores/add-place';
 import { libraryAtom, useLibraryAction } from 'src/stores/library-state';
 
-const FIELD_SX = {
+export const FIELD_SX = {
   boxSizing: 'border-box',
   display: 'block',
   width: '100%',
@@ -79,7 +79,7 @@ function importedPlaceIds(lib: Library, items: readonly FolderPlace[]): string[]
 }
 
 /** 가져온 결과를 세 문장 중 하나로 말한다. 되살린 장소는 새로 넣은 것에 센다. */
-function resultMessage(summary: OpSummary): string | null {
+export function resultMessage(summary: OpSummary): string | null {
   const added = summary.created + summary.restored;
   const merged = summary.merged;
   if (added > 0 && merged > 0) return `${added}곳을 새로 넣고, ${merged}곳은 라벨만 더했어요`;

@@ -40,6 +40,33 @@ header p {
   font-size: 0.875rem;
 }
 
+.import {
+  margin-top: 8px;
+}
+
+header .import-note {
+  margin: 0 0 4px;
+}
+
+.import-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--tm-border);
+  border-radius: 999px;
+  background: var(--tm-bg-surface);
+  color: var(--tm-accent-text);
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.import-link:focus-visible {
+  outline: 2px solid var(--tm-accent-main);
+  outline-offset: 2px;
+}
+
 .filters {
   display: flex;
   gap: 8px;

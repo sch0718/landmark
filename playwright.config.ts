@@ -42,6 +42,7 @@ export default defineConfig({
         'legacy-import.spec.ts',
         'themes.spec.ts',
         'share-export.spec.ts',
+        'share-import.spec.ts',
         'place-adding.spec.ts',
         'trip-planning.spec.ts',
       ],
@@ -54,6 +55,7 @@ export default defineConfig({
         'library.spec.ts',
         'themes.spec.ts',
         'share-export.spec.ts',
+        'share-import.spec.ts',
         'place-adding.spec.ts',
         'trip-planning.spec.ts',
       ],
@@ -62,7 +64,12 @@ export default defineConfig({
     {
       name: 'galaxy',
       grepInvert: /@desktop/,
-      testMatch: ['library.spec.ts', 'place-adding.spec.ts', 'trip-planning.spec.ts'],
+      testMatch: [
+        'library.spec.ts',
+        'place-adding.spec.ts',
+        'trip-planning.spec.ts',
+        'share-import.spec.ts',
+      ],
       use: {
         ...devices['Galaxy S9+'],
         browserName: 'chromium',

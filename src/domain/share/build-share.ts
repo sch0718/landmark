@@ -37,6 +37,8 @@ export function buildShareDoc(
     };
     if (opts.includeMemo && place.memo.value !== '') out.memo = place.memo.value;
     if (place.source.kind === 'naver') out.naverSid = place.source.sid;
+    else if (place.source.kind === 'kakao') out.kakaoId = place.source.kakaoId;
+    else if (place.source.kind === 'google') out.googleId = place.source.googleId;
     places.push(out);
   }
 

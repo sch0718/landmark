@@ -2,6 +2,7 @@ import { LABEL_COLORS } from 'src/schema/label-colors';
 import type { ShareDoc, ShareLabel, SharePlace } from 'src/schema/share';
 import { pastel } from 'src/theme/tokens/pastel';
 import type { Tokens } from 'src/theme/tokens';
+import type { ImportLink } from './encode';
 
 /**
  * 보기 화면 그리기. 사용자 문자열은 `textContent`·속성 값으로만 DOM에 넣는다(`innerHTML` 금지).
@@ -91,7 +92,8 @@ export function renderViewer(
   root: HTMLElement,
   doc: ShareDoc,
   map: MapPort,
-): { highlight(placeId: string): void } {
+  opts: { app: string },
+): { highlight(placeId: string): void; setImportLink(link: ImportLink): void } {
   const d = root.ownerDocument;
   d.title = doc.title;
   root.replaceChildren();
@@ -106,6 +108,18 @@ export function renderViewer(
   header.append(
     el(d, 'p', date === '' ? `${doc.places.length}곳` : `${date} · ${doc.places.length}곳`),
   );
+  // 앱으로 가져가는 링크. 해시 없는 주소로 먼저 그리고, 압축이 끝나면 `setImportLink`가 바꾼다.
+  const importSlot = el(d, 'div', undefined, 'import');
+  const newTabLink = (text: string, href: string) => {
+    const a = el(d, 'a', text, 'import-link');
+    a.href = href;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    return a;
+  };
+  const importAnchor = newTabLink('Landmark에 담기', `${opts.app}/import`);
+  importSlot.append(importAnchor);
+  header.append(importSlot);
   root.append(header);
 
   // 지도 자리와 목록
@@ -218,6 +232,21 @@ export function renderViewer(
     highlight(placeId: string) {
       const card = mark(placeId);
       if (card !== null) card.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    },
+    setImportLink(link) {
+      if (link.kind === 'direct') {
+        importAnchor.href = link.href;
+      } else if (link.kind === 'too-big') {
+        importSlot.replaceChildren(
+          el(
+            d,
+            'p',
+            '장소가 많아 바로 담을 수 없어요. Landmark에서 이 파일을 가져와 주세요',
+            'import-note',
+          ),
+          newTabLink('Landmark 열기', link.href),
+        );
+      }
     },
   };
 }

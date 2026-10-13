@@ -10,6 +10,8 @@ import { AddPlaceHost, useAddFlowRoute } from 'src/sections/add-place/AddPlaceHo
 import { AddSheet } from 'src/sections/shell/AddSheet';
 import { BottomTabs } from 'src/sections/shell/BottomTabs';
 import { NavRail } from 'src/sections/shell/NavRail';
+import { ShareDropOverlay } from 'src/sections/share-import/ShareDropOverlay';
+import { useImportEntry } from 'src/sections/share-import/use-import-entry';
 import { DETAIL_WIDTH, LIST_WIDTH } from 'src/sections/shell/pane-widths';
 import { DetailSlot, ListSlot, MapSlot } from 'src/sections/shell/ShellSlots';
 import { StorageBanner } from 'src/sections/shell/StorageBanner';
@@ -142,6 +144,8 @@ export function AppShell() {
   const sheetOnMap = placeId !== null && origin === 'map';
   // 좁은 화면은 지도 탭에서만 지도가 가리지 않고 보인다(장소 시트는 지도를 덮는다).
   useAddFlowRoute(layout === 'compact' ? isMap : isLibraryView);
+  // `/import`로 들어오면 주소를 `/`로 바꾸고 공유 파일 가져오기 흐름을 연다.
+  useImportEntry();
 
   const closeDetail = () => {
     // 좁은 화면은 시트를 연 기록을 되감아 모바일 뒤로가기와 어긋나지 않게 한다. 앱 안에서 연
@@ -225,6 +229,7 @@ export function AppShell() {
       </Box>
       <AddSheet open={addOpen} onClose={closeAdd} />
       {layout === 'compact' && <AddPlaceHost />}
+      <ShareDropOverlay />
     </Box>
   );
 }

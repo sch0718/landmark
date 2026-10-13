@@ -28,16 +28,20 @@ function parseLabel(x: unknown): ShareLabel | null {
 
 function parsePlace(x: unknown): SharePlace | null {
   if (!isRecord(x)) return null;
-  const { id, name, address, lng, lat, labelIds, memo, naverSid } = x;
+  const { id, name, address, lng, lat, labelIds, memo, naverSid, kakaoId, googleId } = x;
   if (typeof id !== 'string' || typeof name !== 'string' || typeof address !== 'string')
     return null;
   if (!isFiniteNumber(lng) || !isFiniteNumber(lat)) return null;
   if (!Array.isArray(labelIds) || !labelIds.every((v) => typeof v === 'string')) return null;
   if (memo !== undefined && typeof memo !== 'string') return null;
   if (naverSid !== undefined && typeof naverSid !== 'string') return null;
+  if (kakaoId !== undefined && typeof kakaoId !== 'string') return null;
+  if (googleId !== undefined && typeof googleId !== 'string') return null;
   const place: SharePlace = { id, name, address, lng, lat, labelIds: [...(labelIds as string[])] };
   if (memo !== undefined) place.memo = memo;
   if (naverSid !== undefined) place.naverSid = naverSid;
+  if (kakaoId !== undefined) place.kakaoId = kakaoId;
+  if (googleId !== undefined) place.googleId = googleId;
   return place;
 }
 

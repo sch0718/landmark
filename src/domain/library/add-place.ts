@@ -76,7 +76,7 @@ function preferred(a: Place, b: Place): boolean {
 }
 
 /** 출처 키 → 그 출처의 기존 장소(`findExisting`과 같은 우선순위). 폴더처럼 여러 번 찾을 때 한 번만 훑는다. */
-function indexBySource(lib: Library): Map<string, Place> {
+export function indexBySource(lib: Library): Map<string, Place> {
   const index = new Map<string, Place>();
   for (const place of Object.values(lib.places)) {
     const key = sourceKey(place.source);
@@ -96,7 +96,7 @@ export function findExisting(lib: Library, source: PlaceSource): Place | undefin
   return key === null ? undefined : indexBySource(lib).get(key);
 }
 
-function newPlace(
+export function newPlace(
   id: string,
   base: PlaceCandidate,
   labelIds: readonly string[],
@@ -120,7 +120,7 @@ function newPlace(
   };
 }
 
-const isLiveLabel = (lib: Library, id: string): boolean => {
+export const isLiveLabel = (lib: Library, id: string): boolean => {
   const label = lib.labels[id];
   return label !== undefined && label.deletedAt === null;
 };
@@ -137,18 +137,21 @@ function appendMemo(current: string, added: string): string {
  * 이미 있는 장소(지운 것이면 되살린다)에 라벨을 더하고, `memo`가 있으면 덧붙인다.
  * 이름·주소·분류는 바꾸지 않는다. 되살릴 때는 그사이 지워진 라벨을 뗀다(살아 있는 장소의 불변식).
  * `save`가 거짓이면(여행에만 넣기) `saved`는 지금 값 그대로 둔다.
+ * `memo`가 함수면 지금 메모를 받아 새 메모를 돌려준다(공유 파일 가져오기의 덧붙이기 규칙).
  */
-function mergeInto(
+export function mergeInto(
   lib: Library,
   place: Place,
   labelIds: readonly string[],
-  memo: string,
+  memo: string | ((current: string) => string),
   now: string,
   save = true,
 ): Place {
   const kept = place.labelIds.value.filter((id) => isLiveLabel(lib, id));
   const labels = setField(place.labelIds, [...new Set([...kept, ...labelIds])], now);
-  const memoField = setField(place.memo, appendMemo(place.memo.value, memo), now);
+  const nextMemo =
+    typeof memo === 'string' ? appendMemo(place.memo.value, memo) : memo(place.memo.value);
+  const memoField = setField(place.memo, nextMemo, now);
   // 여행에서만 쓰던 장소(`saved: false`)도 보관함에 넣는 것이므로 보이게 한다.
   const saved = save ? setField(place.saved, true, now) : place.saved;
   const unchanged =
@@ -245,7 +248,7 @@ export function planFolderImport(lib: Library, items: FolderItem[]): FolderPlan 
 }
 
 /** 살아 있는 라벨이 쓰지 않은 첫 색. 모두 쓰였으면 순서가 가장 뒤인 라벨 색의 다음 색. */
-function nextLabelColor(lib: Library): Label['color']['value'] {
+export function nextLabelColor(lib: Library): Label['color']['value'] {
   const live = liveLabels(lib);
   const used = new Set(live.map((l) => l.color.value));
   const unused = LABEL_COLORS.find((c) => !used.has(c));
@@ -254,27 +257,29 @@ function nextLabelColor(lib: Library): Label['color']['value'] {
   return LABEL_COLORS[(LABEL_COLORS.indexOf(last.color.value) + 1) % LABEL_COLORS.length]!;
 }
 
-/** 폴더 라벨을 정한다. 이름이면 정규형이 같은 살아 있는 라벨을 쓰고, 없으면 만든다. */
-function resolveFolderLabel(
+/** 정규형이 같은 살아 있는 라벨. */
+export function findLiveLabel(lib: Library, name: string): Label | undefined {
+  const wanted = normalizeLabelName(name);
+  return liveLabels(lib).find((l) => normalizeLabelName(l.name.value) === wanted);
+}
+
+/**
+ * 이름으로 라벨을 정한다. 정규형이 같은 살아 있는 라벨이 있으면 그것을 쓰고(색·순서 그대로),
+ * 없으면 `color`로 맨 뒤에 만든다. 다듬은 이름이 1–30자가 아니면 `LabelNameInvalid`다.
+ */
+export function reuseOrCreateLabel(
   lib: Library,
-  label: { labelId: string } | { newLabelName: string },
+  name: string,
+  color: Label['color']['value'],
   ctx: OpCtx,
 ): { ok: true; lib: Library; labelId: string } | Extract<OpResult, { ok: false }> {
-  if ('labelId' in label) {
-    return isLiveLabel(lib, label.labelId)
-      ? { ok: true, lib, labelId: label.labelId }
-      : fail({ _tag: 'NotFound', id: label.labelId });
-  }
-  const name = label.newLabelName;
   const trimmed = name.trim();
   if (trimmed.length < 1 || trimmed.length > LIBRARY_LIMITS.labelNameChars) {
     return fail({ _tag: 'LabelNameInvalid', name });
   }
-  const wanted = normalizeLabelName(trimmed);
-  const reused = liveLabels(lib).find((l) => normalizeLabelName(l.name.value) === wanted);
+  const reused = findLiveLabel(lib, trimmed);
   if (reused !== undefined) return { ok: true, lib, labelId: reused.id };
 
-  const color = nextLabelColor(lib);
   const created = createLabel(lib, trimmed, ctx);
   if (!created.ok) return created;
   const id = created.createdId!;
@@ -290,6 +295,20 @@ function resolveFolderLabel(
     },
     labelId: id,
   };
+}
+
+/** 폴더 라벨을 정한다. 이름이면 정규형이 같은 살아 있는 라벨을 쓰고, 없으면 만든다. */
+function resolveFolderLabel(
+  lib: Library,
+  label: { labelId: string } | { newLabelName: string },
+  ctx: OpCtx,
+): { ok: true; lib: Library; labelId: string } | Extract<OpResult, { ok: false }> {
+  if ('labelId' in label) {
+    return isLiveLabel(lib, label.labelId)
+      ? { ok: true, lib, labelId: label.labelId }
+      : fail({ _tag: 'NotFound', id: label.labelId });
+  }
+  return reuseOrCreateLabel(lib, label.newLabelName, nextLabelColor(lib), ctx);
 }
 
 /**

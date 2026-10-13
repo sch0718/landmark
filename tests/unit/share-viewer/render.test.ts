@@ -39,6 +39,8 @@ function makeDoc(over: Partial<ShareDoc> = {}): ShareDoc {
   };
 }
 
+const APP = 'https://x.test';
+
 let root: HTMLElement;
 let map: { focus: ReturnType<typeof vi.fn>; filter: ReturnType<typeof vi.fn> };
 
@@ -50,7 +52,7 @@ beforeEach(() => {
 });
 
 function mount(doc: ShareDoc) {
-  return renderViewer(root, doc, map as unknown as MapPort);
+  return renderViewer(root, doc, map as unknown as MapPort, { app: APP });
 }
 
 const card = (id: string) => root.querySelector<HTMLElement>(`article[data-place-id="${id}"]`)!;
@@ -295,5 +297,48 @@ describe('styles.css', () => {
 
   it('토큰 값을 복제하지 않고 변수만 읽는다', () => {
     expect(css).not.toMatch(/#[0-9a-fA-F]{6}\b/);
+  });
+});
+
+describe('Landmark에 담기', () => {
+  const importAnchor = () =>
+    [...root.querySelectorAll<HTMLAnchorElement>('header a')].find(
+      (a) => a.textContent === 'Landmark에 담기',
+    );
+
+  it('처음에는 해시 없는 import 주소', () => {
+    mount(makeDoc());
+    const a = importAnchor()!;
+    expect(a.getAttribute('href')).toBe(`${APP}/import`);
+    expect(a.target).toBe('_blank');
+    expect(a.rel).toBe('noopener noreferrer');
+  });
+
+  it('setImportLink(direct)는 href만 바꾼다', () => {
+    const handle = mount(makeDoc());
+    const before = importAnchor()!;
+    handle.setImportLink({ kind: 'direct', href: `${APP}/import#d=abc` });
+    expect(importAnchor()).toBe(before);
+    expect(before.getAttribute('href')).toBe(`${APP}/import#d=abc`);
+  });
+
+  it('setImportLink(too-big)은 안내 문구와 Landmark 열기 링크로 바꾼다', () => {
+    const handle = mount(makeDoc());
+    handle.setImportLink({ kind: 'too-big', href: `${APP}/import` });
+    expect(importAnchor()).toBeUndefined();
+    const header = root.querySelector('header')!;
+    expect(header.querySelector('.import-note')!.textContent).toBe(
+      '장소가 많아 바로 담을 수 없어요. Landmark에서 이 파일을 가져와 주세요',
+    );
+    const open = [...header.querySelectorAll('a')].find((a) => a.textContent === 'Landmark 열기')!;
+    expect(open.getAttribute('href')).toBe(`${APP}/import`);
+    expect(open.target).toBe('_blank');
+    expect(open.rel).toBe('noopener noreferrer');
+  });
+
+  it('setImportLink(unsupported)는 그대로 둔다', () => {
+    const handle = mount(makeDoc());
+    handle.setImportLink({ kind: 'unsupported' });
+    expect(importAnchor()!.getAttribute('href')).toBe(`${APP}/import`);
   });
 });

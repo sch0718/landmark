@@ -18,6 +18,10 @@ export type SharePlace = {
   memo?: string;
   /** 네이버 장소일 때만 있다. */
   naverSid?: string;
+  /** 카카오 장소일 때만 있다. */
+  kakaoId?: string;
+  /** 구글 장소일 때만 있다. */
+  googleId?: string;
 };
 export type ShareDoc = {
   format: 'tripmap-share';
@@ -44,6 +48,8 @@ const SharePlaceSchema = Schema.Struct({
   labelIds: Schema.mutable(Schema.Array(Schema.String)),
   memo: Schema.optionalKey(Schema.String),
   naverSid: Schema.optionalKey(Schema.String),
+  kakaoId: Schema.optionalKey(Schema.String),
+  googleId: Schema.optionalKey(Schema.String),
 });
 
 /** 검증할 때는 `onExcessProperty: 'error'`로 모르는 필드를 거절한다. */

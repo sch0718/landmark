@@ -36,6 +36,25 @@ describe('parseShareDoc', () => {
     expect(parseShareDoc(doc)).not.toBeNull();
   });
 
+  it('kakaoId·googleId가 있으면 그대로 남는다', () => {
+    const doc = validDoc();
+    doc.places[0]!.kakaoId = '2345678';
+    doc.places[0]!.googleId = '0x1a2b:0x3c4d';
+    expect(parseShareDoc(doc)).toEqual(doc);
+  });
+
+  it('kakaoId·googleId가 없으면 키가 생기지 않는다', () => {
+    const parsed = parseShareDoc(validDoc())!;
+    expect('kakaoId' in parsed.places[0]!).toBe(false);
+    expect('googleId' in parsed.places[0]!).toBe(false);
+  });
+
+  it.each(['kakaoId', 'googleId'])('%s가 문자열이 아니면 null', (key) => {
+    const doc = validDoc();
+    (doc.places[0] as unknown as Record<string, unknown>)[key] = 123;
+    expect(parseShareDoc(doc)).toBeNull();
+  });
+
   it('JSON을 거친 값도 통과한다', () => {
     expect(parseShareDoc(JSON.parse(JSON.stringify(validDoc())))).not.toBeNull();
   });

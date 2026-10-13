@@ -1,5 +1,6 @@
 import { atom, type PrimitiveAtom } from 'jotai';
 import type { PlaceCandidate } from 'src/domain/library/add-place';
+import type { ShareDoc } from 'src/schema/share';
 
 /**
  * 장소 추가 흐름(스펙 §2). ＋추가 시트에서 항목을 고르면 시작하고, 추가·취소하면 `closed`로 돌아간다.
@@ -9,6 +10,8 @@ import type { PlaceCandidate } from 'src/domain/library/add-place';
  * - `pin`: 지도에서 위치를 고르는 핀 모드. `name`은 미리 채울 이름, `start`는 시작 좌표(경도, 위도).
  *   `start`는 스펙 §2.4.4(대략적인 위치를 아는 실패 경로)를 위해 남겨 둔 값이라 아직 채우는 호출이 없다.
  * - `pin-card`: 핀으로 고른 위치의 입력 카드.
+ * - `share-pick`: 받은 공유 파일 고르기(`/import`).
+ * - `share`: 읽은 공유 문서의 미리보기.
  */
 export type AddFlow =
   | { step: 'closed' }
@@ -16,7 +19,9 @@ export type AddFlow =
   | { step: 'candidate'; candidate: PlaceCandidate }
   | { step: 'folder'; shareId: string }
   | { step: 'pin'; name: string; start: [number, number] | null }
-  | { step: 'pin-card'; name: string; lng: number; lat: number };
+  | { step: 'pin-card'; name: string; lng: number; lat: number }
+  | { step: 'share-pick' }
+  | { step: 'share'; doc: ShareDoc };
 
 export const addFlowAtom: PrimitiveAtom<AddFlow> = atom<AddFlow>({ step: 'closed' });
 
@@ -54,6 +59,8 @@ export function showsAddPanel(flow: AddFlow): boolean {
     flow.step === 'link' ||
     flow.step === 'candidate' ||
     flow.step === 'folder' ||
-    flow.step === 'pin-card'
+    flow.step === 'pin-card' ||
+    flow.step === 'share-pick' ||
+    flow.step === 'share'
   );
 }

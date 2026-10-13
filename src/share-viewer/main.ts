@@ -1,4 +1,5 @@
 import './styles.css';
+import { appUrl, importLink } from './encode';
 import { connectMapFrame, shareMapUrl, toMapPlaces } from './map-frame';
 import { readShareDoc } from './parse';
 import { applyTheme, renderBroken, renderViewer, type MapPort } from './render';
@@ -21,10 +22,18 @@ if (doc === null) {
   renderBroken(root);
 } else {
   let map: MapPort = { focus() {}, filter() {} };
-  const handle = renderViewer(root, doc, {
-    focus: (placeId) => map.focus(placeId),
-    filter: (placeIds) => map.filter(placeIds),
-  });
+  const app = appUrl(import.meta.env.VITE_APP_URL);
+  const handle = renderViewer(
+    root,
+    doc,
+    {
+      focus: (placeId) => map.focus(placeId),
+      filter: (placeIds) => map.filter(placeIds),
+    },
+    { app },
+  );
+  // 압축은 비동기라 링크는 먼저 해시 없이 그려 두고, 끝나면 바꾼다.
+  void importLink(doc, app).then(handle.setImportLink);
   const slot = root.querySelector<HTMLElement>('#map');
   if (slot !== null) {
     map = connectMapFrame(slot, {

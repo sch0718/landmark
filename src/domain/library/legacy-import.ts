@@ -84,7 +84,7 @@ export const TRUNCATION_MARK = '…(원문 일부 생략)';
 const isHighSurrogate = (code: number): boolean => code >= 0xd800 && code <= 0xdbff;
 
 /** 앞 `length`개 코드 단위. 자르는 곳이 서로게이트 쌍의 가운데면 한 단위 앞에서 자른다. */
-function cutPrefix(text: string, length: number): string {
+export function cutPrefix(text: string, length: number): string {
   if (length <= 0) return '';
   const end = isHighSurrogate(text.charCodeAt(length - 1)) ? length - 1 : length;
   return text.slice(0, end);
