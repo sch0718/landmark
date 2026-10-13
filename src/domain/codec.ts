@@ -32,8 +32,9 @@ function fromBase64Url(value: string): Uint8Array<ArrayBuffer> {
   }
 }
 
-export async function encodeEditLayer(edit: EditLayer): Promise<string> {
-  const input = bytesStream(new TextEncoder().encode(JSON.stringify(edit)));
+/** 값을 JSON → deflate-raw → base64url로 만든다. 길이 한도는 두지 않는다(호출자 몫). */
+export async function encodeCompressedJson(value: unknown): Promise<string> {
+  const input = bytesStream(new TextEncoder().encode(JSON.stringify(value)));
   const reader = input.pipeThrough(new CompressionStream('deflate-raw')).getReader();
   const parts: Uint8Array[] = [];
   let size = 0;
@@ -65,9 +66,19 @@ function concat(parts: Uint8Array[], size: number): Uint8Array {
   return merged;
 }
 
-/** 스키마 검증은 하지 않는다(호출자 몫). */
-export async function decodeEditLayer(value: string): Promise<unknown> {
-  if (value.length > LIMITS.linkChars) throw new CodecError('too-long');
+export async function encodeEditLayer(edit: EditLayer): Promise<string> {
+  return encodeCompressedJson(edit);
+}
+
+/**
+ * `encodeCompressedJson`의 역. 한도를 넘으면 `CodecError('too-long' | 'too-large')`, 그 밖의 실패는 `'corrupt'`.
+ * 스키마 검증은 하지 않는다(호출자 몫).
+ */
+export async function decodeCompressedJson(
+  value: string,
+  limits: { maxChars: number; maxBytes: number },
+): Promise<unknown> {
+  if (value.length > limits.maxChars) throw new CodecError('too-long');
   const bytes = fromBase64Url(value);
 
   const stream = bytesStream(bytes).pipeThrough(new DecompressionStream('deflate-raw'));
@@ -79,7 +90,7 @@ export async function decodeEditLayer(value: string): Promise<unknown> {
       const { done, value: chunk } = await reader.read();
       if (done) break;
       total += chunk.byteLength;
-      if (total > LIMITS.decodedBytes) {
+      if (total > limits.maxBytes) {
         await reader.cancel().catch(() => undefined);
         throw new CodecError('too-large');
       }
@@ -95,4 +106,9 @@ export async function decodeEditLayer(value: string): Promise<unknown> {
   } catch {
     throw new CodecError('corrupt', 'JSON 해석에 실패했습니다');
   }
+}
+
+/** 스키마 검증은 하지 않는다(호출자 몫). */
+export async function decodeEditLayer(value: string): Promise<unknown> {
+  return decodeCompressedJson(value, { maxChars: LIMITS.linkChars, maxBytes: LIMITS.decodedBytes });
 }
