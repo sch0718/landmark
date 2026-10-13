@@ -18,6 +18,8 @@ export const routes: RouteObject[] = [
       { path: paths.library, element: null },
       { path: paths.map, element: null },
       { path: paths.place(':id'), element: null },
+      // 진입만 하는 경로다. `useImportEntry`가 곧바로 보관함(`/`)으로 바꾸고 추가 흐름을 연다.
+      { path: paths.importShare, element: null },
       { path: paths.labels, element: <LabelsPage /> },
       { path: paths.settings, element: <SettingsPage /> },
       { path: paths.legacyTrip(':publicId'), element: <LegacyImportPage /> },

@@ -1,18 +1,26 @@
 import Box from '@mui/material/Box';
 import Drawer from '@mui/material/Drawer';
 import Typography from '@mui/material/Typography';
-import { useSetAtom } from 'jotai';
+import { useAtomValue, useSetAtom } from 'jotai';
 import type { ComponentType, SVGProps } from 'react';
-import { FolderInputIcon, LinkIcon, MapPinIcon } from 'src/components/icons';
+import { useNavigate } from 'react-router';
+import { FolderInputIcon, LinkIcon, MapPinIcon, ShareIcon } from 'src/components/icons';
+import { paths } from 'src/routes/paths';
 import { ADD_LABEL } from 'src/sections/shell/nav-items';
-import { addFlowAtom, type AddFlow } from 'src/stores/add-place';
+import { addFlowAtom, addTargetAtom, type AddFlow } from 'src/stores/add-place';
 
-const OPTIONS: readonly {
+/**
+ * 항목은 추가 흐름을 바로 열거나(`flow`), 경로로 보낸다(`to`).
+ * `onlyWithoutTarget`인 항목은 여행 대상이 붙은 시트(계획 화면에서 연 시트)에는 보이지 않는다.
+ */
+type Option = {
   label: string;
   description: string;
   Icon: ComponentType<SVGProps<SVGSVGElement>>;
-  flow: AddFlow;
-}[] = [
+  onlyWithoutTarget?: boolean;
+} & ({ flow: AddFlow; to?: never } | { to: string; flow?: never });
+
+const OPTIONS: readonly Option[] = [
   {
     label: '링크 붙여넣기',
     description: '네이버·카카오·구글 지도의 장소 링크',
@@ -31,11 +39,21 @@ const OPTIONS: readonly {
     Icon: FolderInputIcon,
     flow: { step: 'link', hint: 'folder' },
   },
+  {
+    label: '공유 파일 가져오기',
+    description: '받은 Landmark 공유 파일(.html)',
+    Icon: ShareIcon,
+    to: paths.importShare,
+    onlyWithoutTarget: true,
+  },
 ];
 
 /** ＋ 버튼이 여는 추가 시트(스펙 §2.1). 항목을 고르면 추가 흐름을 시작하고 시트를 닫는다. */
 export function AddSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const setFlow = useSetAtom(addFlowAtom);
+  const navigate = useNavigate();
+  const hasTarget = useAtomValue(addTargetAtom) !== null;
+  const options = OPTIONS.filter((option) => !(option.onlyWithoutTarget && hasTarget));
   return (
     <Drawer
       anchor="bottom"
@@ -73,14 +91,15 @@ export function AddSheet({ open, onClose }: { open: boolean; onClose: () => void
         {ADD_LABEL}
       </Typography>
       <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0 }}>
-        {OPTIONS.map(({ label, description, Icon, flow }) => (
+        {options.map(({ label, description, Icon, flow, to }) => (
           <li key={label}>
             <Box
               component="button"
               type="button"
               onClick={() => {
-                setFlow(flow);
+                if (flow !== undefined) setFlow(flow);
                 onClose();
+                if (to !== undefined) void navigate(to);
               }}
               sx={{
                 width: '100%',

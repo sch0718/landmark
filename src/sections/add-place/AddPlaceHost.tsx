@@ -1,6 +1,7 @@
 import Box from '@mui/material/Box';
 import Drawer from '@mui/material/Drawer';
 import IconButton from '@mui/material/IconButton';
+import Typography from '@mui/material/Typography';
 import { useAtom, useSetAtom } from 'jotai';
 import { useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router';
@@ -10,6 +11,7 @@ import { CandidateCard } from 'src/sections/add-place/CandidateCard';
 import { FolderPreview } from 'src/sections/add-place/FolderPreview';
 import { LinkInputPanel } from 'src/sections/add-place/LinkInputPanel';
 import { PinCard } from 'src/sections/add-place/PinCard';
+import { SharePickPanel } from 'src/sections/share-import/SharePickPanel';
 import { ADD_LABEL } from 'src/sections/shell/nav-items';
 import { DETAIL_WIDTH } from 'src/sections/shell/pane-widths';
 import { useLayout } from 'src/sections/shell/use-layout';
@@ -40,6 +42,17 @@ function StepContent({ flow }: { flow: AddFlow }) {
       return <FolderPreview shareId={flow.shareId} />;
     case 'pin-card':
       return <PinCard name={flow.name} lng={flow.lng} lat={flow.lat} />;
+    case 'share-pick':
+      return <SharePickPanel />;
+    case 'share':
+      // 임시 자리표시자. 실제 미리보기는 이어지는 작업이 바꾼다.
+      return (
+        <Box sx={{ p: 2 }}>
+          <Typography variant="subtitle1" component="h2" sx={{ fontWeight: 800 }}>
+            {`${flow.doc.title} · ${flow.doc.places.length}곳`}
+          </Typography>
+        </Box>
+      );
     default:
       return null;
   }
@@ -113,8 +126,11 @@ export function AddPlaceHost({ floating = false }: { floating?: boolean }) {
               maxWidth: 480,
               width: '100%',
               maxHeight: '90vh',
-              // 폴더 미리보기는 긴 목록이라 늘 90vh로 열어 목록 칸이 흔들리지 않게 한다.
-              ...(flow.step === 'folder' ? { height: '90vh' } : {}),
+              // 폴더·공유 파일 미리보기는 긴 목록이라 늘 90vh로 열어 목록 칸이 흔들리지 않게 한다.
+              // 파일 고르기(`share-pick`)도 미리보기로 바뀔 때 시트가 출렁이지 않게 같은 높이다.
+              ...(flow.step === 'folder' || flow.step === 'share-pick' || flow.step === 'share'
+                ? { height: '90vh' }
+                : {}),
               mx: 'auto',
               borderRadius: 'var(--tm-radius-xl) var(--tm-radius-xl) 0 0',
               bgcolor: 'var(--tm-bg-surface)',

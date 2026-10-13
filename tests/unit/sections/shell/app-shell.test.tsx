@@ -227,7 +227,7 @@ describe('AppShell layout', () => {
 });
 
 describe('AddSheet', () => {
-  it('add sheet lists three enabled options', async () => {
+  it('add sheet lists four enabled options', async () => {
     mockViewport(390);
     await renderApp();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
@@ -239,6 +239,7 @@ describe('AddSheet', () => {
       '링크 붙여넣기',
       '지도에서 핀 찍기',
       '네이버 폴더 가져오기',
+      '공유 파일 가져오기',
     ]);
     for (const option of options) expect(option).toBeEnabled();
     expect(sheet).not.toHaveTextContent('곧 제공돼요');

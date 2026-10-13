@@ -3,10 +3,11 @@ import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { useSearchParams } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 import { MonitorIcon, MoonIcon, SunIcon } from 'src/components/icons';
 import { liveLabels, livePlaces } from 'src/domain/library/query';
 import type { Prefs } from 'src/schema/prefs';
+import { paths } from 'src/routes/paths';
 import { LegacyImportDialog } from 'src/sections/settings/LegacyImportDialog';
 import { OptionGroup, type Option } from 'src/sections/settings/OptionGroup';
 import { ThemePicker } from 'src/sections/settings/ThemePicker';
@@ -53,6 +54,7 @@ export function SettingsPage() {
   const prefs = useAtomValue(prefsAtom);
   const setPrefs = useSetAtom(setPrefsAtom);
   const library = useAtomValue(libraryAtom);
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [importOpen, setImportOpen] = useState(() => searchParams.has(IMPORT_PARAM));
 
@@ -114,9 +116,16 @@ export function SettingsPage() {
         <Typography variant="body2" sx={{ color: 'var(--tm-text-secondary)' }}>
           예전 여행 데이터의 장소와 라벨을 보관함으로 가져와요.
         </Typography>
-        <Box>
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
           <Button variant="outlined" onClick={() => setImportOpen(true)} sx={{ minHeight: 44 }}>
             옛 여행 가져오기
+          </Button>
+          <Button
+            variant="outlined"
+            onClick={() => void navigate(paths.importShare)}
+            sx={{ minHeight: 44 }}
+          >
+            공유 파일 가져오기
           </Button>
         </Box>
       </Section>
