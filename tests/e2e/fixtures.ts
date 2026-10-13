@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import type { Page } from '@playwright/test';
+import { expect, type Page, type TestInfo } from '@playwright/test';
 
 /** 옛 여행 가져오기 시험용 fixture(`global-setup`이 `public/data/`로 복사한다). */
 export const E2E_PUBLIC_ID = 'e2etest000001';
@@ -89,4 +89,34 @@ export function placeIdByName(name: string): string {
   const found = Object.values(seed.places).find((p) => p.name.value === name);
   if (found === undefined) throw new Error(`시드에 없는 장소: ${name}`);
   return found.id;
+}
+
+/** 시드에서 "바다" 라벨이 붙은 장소 수. 이 장소들에는 바다·카페·산책·숙소·맛집 라벨이 함께 쓰인다. */
+export const SEA_COUNT = 9;
+
+/** 보관함에서 "바다"로 거른 뒤 내보내기 → 파일 저장. 받은 파일을 `.html` 이름으로 옮겨 그 경로를 준다. */
+export async function exportSeaPlaces(page: Page, testInfo: TestInfo): Promise<string> {
+  await seedStorage(page, { prefs: { libraryView: 'list' } });
+  await page.goto('/');
+
+  const chip = page.getByRole('group', { name: '라벨' }).getByRole('button', { name: /^바다/ });
+  await chip.click();
+  await expect(chip).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('list', { name: '장소 목록' }).getByRole('listitem')).toHaveCount(
+    SEA_COUNT,
+  );
+
+  await page.getByRole('button', { name: '내보내기', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: '내보내기' });
+  await expect(dialog).toContainText(`지금 보이는 ${SEA_COUNT}곳을 내보냅니다 (라벨: 바다)`);
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    dialog.getByRole('button', { name: '파일 저장' }).click(),
+  ]);
+  expect(await download.failure()).toBeNull();
+  // `download.path()`의 임시 파일은 확장자가 없어 브라우저가 HTML로 열지 않는다. 받은 이름 그대로 옮긴다.
+  const file = testInfo.outputPath(download.suggestedFilename());
+  expect(file.endsWith('.html')).toBe(true);
+  await download.saveAs(file);
+  return file;
 }

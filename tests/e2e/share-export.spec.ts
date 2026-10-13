@@ -1,7 +1,7 @@
 import { statSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
-import { expect, test, type Locator, type Page, type TestInfo } from '@playwright/test';
-import { SHARE_MAP_URL, SHARE_VIEWER_FILE, seedStorage } from './fixtures';
+import { expect, test, type Locator, type Page } from '@playwright/test';
+import { exportSeaPlaces, SEA_COUNT, SHARE_MAP_URL, SHARE_VIEWER_FILE } from './fixtures';
 
 /**
  * 내보낸 HTML 파일을 `file://`로 열어 확인한다(spec §6.2–§6.3).
@@ -14,37 +14,8 @@ import { SHARE_MAP_URL, SHARE_VIEWER_FILE, seedStorage } from './fixtures';
 const MAP_FAILED = '지도를 불러오지 못했어요. 목록과 네이버 지도 링크는 그대로 쓸 수 있어요';
 /** 보기 화면 틀(데이터 제외) 크기 한도. */
 const TEMPLATE_LIMIT = 51_200;
-/** 시드에서 "바다" 라벨이 붙은 장소 수. 이 장소들에는 바다·카페·산책·숙소·맛집 라벨이 함께 쓰인다. */
-const SEA_COUNT = 9;
 /** 그중 "카페" 라벨도 붙은 곳: 강릉(안목)과 제주(애월)라 처음 맞춘 지도에서 마커가 겹치지 않는다. */
 const SEA_CAFES = ['안목해변 커피거리', '애월 카페거리'];
-
-/** 보관함에서 "바다"로 거른 뒤 내보내기 → 파일 저장. 받은 파일을 `.html` 이름으로 옮겨 그 경로를 준다. */
-async function exportSeaPlaces(page: Page, testInfo: TestInfo): Promise<string> {
-  await seedStorage(page, { prefs: { libraryView: 'list' } });
-  await page.goto('/');
-
-  const chip = page.getByRole('group', { name: '라벨' }).getByRole('button', { name: /^바다/ });
-  await chip.click();
-  await expect(chip).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.getByRole('list', { name: '장소 목록' }).getByRole('listitem')).toHaveCount(
-    SEA_COUNT,
-  );
-
-  await page.getByRole('button', { name: '내보내기', exact: true }).click();
-  const dialog = page.getByRole('dialog', { name: '내보내기' });
-  await expect(dialog).toContainText(`지금 보이는 ${SEA_COUNT}곳을 내보냅니다 (라벨: 바다)`);
-  const [download] = await Promise.all([
-    page.waitForEvent('download'),
-    dialog.getByRole('button', { name: '파일 저장' }).click(),
-  ]);
-  expect(await download.failure()).toBeNull();
-  // `download.path()`의 임시 파일은 확장자가 없어 브라우저가 HTML로 열지 않는다. 받은 이름 그대로 옮긴다.
-  const file = testInfo.outputPath(download.suggestedFilename());
-  expect(file.endsWith('.html')).toBe(true);
-  await download.saveAs(file);
-  return file;
-}
 
 const cardsOf = (page: Page): Locator =>
   page.getByRole('list', { name: '장소 목록' }).locator('article[data-place-id]');
