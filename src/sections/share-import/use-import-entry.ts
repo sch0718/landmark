@@ -36,6 +36,8 @@ export function useImportEntry(): void {
     }
     const before = store.get(addFlowAtom);
     void readShareHash(hash.slice(SHARE_HASH_PREFIX.length)).then((result) => {
+      // 해독하는 사이 흐름이 바뀌었다면(값이 달라졌다면) 결과를 버린다. 같은 모양이어도 새로 열린 것은 버리는 쪽으로
+      // 일부러 객체 동일성으로 본다(`use-share-file.ts`와 같은 보수적 판정).
       if (store.get(addFlowAtom) !== before) return;
       if (result.ok) setFlow({ step: 'share', doc: result.doc });
       else toast(SHARE_READ_MESSAGES[result.error]);

@@ -46,7 +46,10 @@ function validate(value: unknown): ShareReadResult {
 
 /** 공유 파일(HTML)의 텍스트에서 `#tripmap-share` 데이터 블록을 읽는다. 스크립트는 실행되지 않는다. */
 export function readShareHtml(text: string): ShareReadResult {
-  const block = new DOMParser().parseFromString(text, 'text/html').getElementById('tripmap-share');
+  // 같은 id의 다른 요소(예: 앞에 놓인 `<div>`)가 아니라 데이터 스크립트만 본다.
+  const block = new DOMParser()
+    .parseFromString(text, 'text/html')
+    .querySelector('script[type="application/json"]#tripmap-share');
   if (!block) return fail('not-share');
   let json: unknown;
   try {

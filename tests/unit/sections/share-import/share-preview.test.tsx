@@ -19,9 +19,17 @@ vi.mock('sonner', async (importOriginal) => ({
   toast: toastMock,
 }));
 vi.mock('src/theme/fonts', () => ({ loadDisplayFont: vi.fn(() => Promise.resolve()) }));
+// 같은 장소 찾기를 몇 번 했는지 센다(동작은 그대로 실제 구현).
+const findExisting = vi.hoisted(() => ({ spy: vi.fn() }));
+vi.mock('src/domain/library/import-share', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('src/domain/library/import-share')>();
+  findExisting.spy.mockImplementation(actual.existingShareIds);
+  return { ...actual, existingShareIds: findExisting.spy };
+});
 
 afterEach(() => {
   cleanup();
+  findExisting.spy.mockClear();
   toastMock.mockClear();
   toastMock.error.mockClear();
   setAppRuntimeForTest(null);
@@ -270,6 +278,20 @@ describe('공유 파일 미리보기', () => {
     expect(Object.keys(store.get(libraryAtom).places)).toHaveLength(8);
   });
 
+  it('다시 그리기 전에 같은 틱에 두 번 눌러도 한 번만 넣는다', async () => {
+    const { store } = await openShare();
+    const button = importButton(3);
+    // 바깥 act 안이라 첫 클릭의 `saving`이 아직 그려지지 않았다: 버튼은 켜진 채이고 `savingRef`만 막는다.
+    act(() => {
+      fireEvent.click(button);
+      expect(button).toBeEnabled();
+      fireEvent.click(button);
+    });
+    await waitFor(() => expect(store.get(addFlowAtom)).toEqual({ step: 'closed' }));
+    expect(toastMock).toHaveBeenCalledTimes(1);
+    expect(Object.keys(store.get(libraryAtom).places)).toHaveLength(8);
+  });
+
   it('저장 중에 흐름이 닫혀도 토스트는 띄우되 필터는 건드리지 않는다', async () => {
     const { store } = await openShare();
     fireEvent.click(importButton(3));
@@ -288,5 +310,24 @@ describe('공유 파일 미리보기', () => {
     expect(Object.keys(store.get(libraryAtom).places)).toHaveLength(6);
     expect(Object.keys(store.get(libraryAtom).labels)).toHaveLength(3);
     expect(toastMock).not.toHaveBeenCalled();
+  });
+
+  it('받은 메모 스위치가 설명 문구를 aria-describedby로 가리킨다', async () => {
+    await openShare();
+    expect(memoSwitch()).toHaveAccessibleDescription(
+      '이미 있는 장소에만 해당해요. 새로 넣는 장소에는 받은 메모가 그대로 들어가요',
+    );
+  });
+
+  it('이름 입력을 바꾸거나 장소를 고르고 풀어도 같은 장소 찾기를 다시 하지 않는다', async () => {
+    const { user } = await openShare();
+    expect(findExisting.spy).toHaveBeenCalledTimes(1);
+    await user.clear(titleInput());
+    await user.type(titleInput(), '새 이름');
+    await user.click(row('경포 해변'));
+    await user.click(titleSwitch());
+    expect(findExisting.spy).toHaveBeenCalledTimes(1);
+    // 표시는 그대로 맞다.
+    expect(within(panel()).getAllByText('이미 있음')).toHaveLength(1);
   });
 });

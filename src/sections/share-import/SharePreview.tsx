@@ -8,8 +8,9 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import {
   defaultTitleLabel,
+  existingShareIds,
   importShare,
-  planShareImport,
+  planShareLabels,
   shareTitle,
 } from 'src/domain/library/import-share';
 import { labelNameIssue } from 'src/schema/library';
@@ -60,6 +61,7 @@ export function SharePreview({ doc }: { doc: ShareDoc }) {
     };
   }, []);
   const nameErrorId = useId();
+  const memoNoteId = useId();
 
   const trimmed = name.trim();
   const nameIssue = labelNameIssue(name);
@@ -68,13 +70,15 @@ export function SharePreview({ doc }: { doc: ShareDoc }) {
   // 제목 라벨을 붙이지 않거나 이름이 잘못됐으면 `null`(잘못된 이름은 버튼이 막는다).
   const titleLabel = titleOn && nameValid ? trimmed : null;
   const selectedIds = useMemo(() => [...selected], [selected]);
+  // `이미 있음`은 보관함과 문서에만 달려 있다: 이름 입력·선택이 바뀔 때마다 같은 장소 찾기를 다시 하지 않는다.
+  const existing = useMemo(() => existingShareIds(library, doc), [library, doc]);
   const plan = useMemo(
-    () => planShareImport(library, doc, selectedIds, titleLabel),
+    () => planShareLabels(library, doc, selectedIds, titleLabel),
     [library, doc, selectedIds, titleLabel],
   );
   // 고른 장소 중 이미 있고 받은 메모가 있는 곳이 없으면 스위치를 끈 채 비활성으로 둔다.
   const memoApplies = doc.places.some(
-    (place) => selected.has(place.id) && plan.existing.has(place.id) && (place.memo ?? '') !== '',
+    (place) => selected.has(place.id) && existing.has(place.id) && (place.memo ?? '') !== '',
   );
   const appendMemo = memoApplies && memoOn;
   const count = selected.size;
@@ -166,13 +170,14 @@ export function SharePreview({ doc }: { doc: ShareDoc }) {
               <Switch
                 checked={appendMemo}
                 disabled={!memoApplies}
+                slotProps={{ input: { 'aria-describedby': memoNoteId } }}
                 onChange={(event) => setMemoOn(event.target.checked)}
               />
             }
             label="받은 메모도 덧붙이기"
             sx={{ minHeight: 44 }}
           />
-          <Box sx={{ ...NOTE_SX, mt: 0 }}>
+          <Box id={memoNoteId} sx={{ ...NOTE_SX, mt: 0 }}>
             이미 있는 장소에만 해당해요. 새로 넣는 장소에는 받은 메모가 그대로 들어가요
           </Box>
         </Box>
@@ -195,7 +200,7 @@ export function SharePreview({ doc }: { doc: ShareDoc }) {
             모두 해제
           </Button>
         </Box>
-        <SharePlaceRows doc={doc} selected={selected} existing={plan.existing} onToggle={toggle} />
+        <SharePlaceRows doc={doc} selected={selected} existing={existing} onToggle={toggle} />
       </Box>
       <Box
         sx={{

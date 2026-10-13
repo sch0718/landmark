@@ -249,6 +249,34 @@ describe('ShareDropOverlay — 늦게 끝난 읽기', () => {
     expect(toastMock).not.toHaveBeenCalled();
   });
 
+  it('ignores a second file dropped while the first is still being read', async () => {
+    const { store } = await renderLibrary(sampleLibrary());
+    const first = delayedFile(shareFile(SHARE_DOC, 'a.html'));
+    dropOnOverlay(first.file);
+    await act(async () => undefined); // `reading`이 그려져 이벤트 쪽 ref에 닿는다
+    const second = delayedFile(shareFile({ ...SHARE_DOC, title: '두 번째' }, 'b.html'));
+    dropOnOverlay(second.file);
+    await first.finish();
+    await second.finish();
+    await waitFor(() => expect(store.get(addFlowAtom)).toEqual({ step: 'share', doc: SHARE_DOC }));
+    expect(second.file.text).not.toHaveBeenCalled();
+    expect(toastMock).not.toHaveBeenCalled();
+  });
+
+  it('does nothing for a Files drop that carries no file', async () => {
+    const { store } = await renderLibrary(sampleLibrary());
+    dragEnter();
+    expect(screen.getByText(OVERLAY)).toBeInTheDocument();
+    const drop = createEvent.drop(window, { dataTransfer: { ...FILES, files: [] } });
+    act(() => {
+      fireEvent(window, drop);
+    });
+    await act(async () => undefined);
+    expect(screen.queryByText(OVERLAY)).toBeNull();
+    expect(store.get(addFlowAtom)).toEqual({ step: 'closed' });
+    expect(toastMock).not.toHaveBeenCalled();
+  });
+
   it('keeps the preview of a file picked in the pick panel when an earlier drop finishes late', async () => {
     const user = userEvent.setup();
     const { store } = await renderLibrary(sampleLibrary());

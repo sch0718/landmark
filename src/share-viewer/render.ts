@@ -74,6 +74,15 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
+/** 새 탭에서 앱을 여는 링크(`Landmark에 담기`·`Landmark 열기`). */
+function newTabLink(doc: Document, text: string, href: string): HTMLAnchorElement {
+  const a = el(doc, 'a', text, 'import-link');
+  a.href = href;
+  a.target = '_blank';
+  a.rel = 'noopener noreferrer';
+  return a;
+}
+
 function labelChip(doc: Document, label: ShareLabel): HTMLSpanElement {
   const chip = el(doc, 'span', label.name, 'chip');
   chip.dataset.color = label.color;
@@ -110,14 +119,7 @@ export function renderViewer(
   );
   // 앱으로 가져가는 링크. 해시 없는 주소로 먼저 그리고, 압축이 끝나면 `setImportLink`가 바꾼다.
   const importSlot = el(d, 'div', undefined, 'import');
-  const newTabLink = (text: string, href: string) => {
-    const a = el(d, 'a', text, 'import-link');
-    a.href = href;
-    a.target = '_blank';
-    a.rel = 'noopener noreferrer';
-    return a;
-  };
-  const importAnchor = newTabLink('Landmark에 담기', `${opts.app}/import`);
+  const importAnchor = newTabLink(d, 'Landmark에 담기', `${opts.app}/import`);
   importSlot.append(importAnchor);
   header.append(importSlot);
   root.append(header);
@@ -244,7 +246,7 @@ export function renderViewer(
             '장소가 많아 바로 담을 수 없어요. Landmark에서 이 파일을 가져와 주세요',
             'import-note',
           ),
-          newTabLink('Landmark 열기', link.href),
+          newTabLink(d, 'Landmark 열기', link.href),
         );
       }
     },

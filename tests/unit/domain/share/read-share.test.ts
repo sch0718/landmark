@@ -53,6 +53,21 @@ describe('readShareHtml', () => {
     expect(result).toEqual({ ok: true, doc });
   });
 
+  it('같은 id의 다른 요소가 앞에 있어도 진짜 데이터 블록을 읽는다', () => {
+    const doc = makeDoc();
+    const decoy = '<div id="tripmap-share">가짜 블록</div>';
+    const decoyFirst = injectShareDoc(TEMPLATE, doc).replace('<head>', `<head>${decoy}`);
+    expect(decoyFirst.indexOf(decoy)).toBeLessThan(decoyFirst.indexOf('<script'));
+    expect(readShareHtml(decoyFirst)).toEqual({ ok: true, doc });
+  });
+
+  it('데이터 블록이 script가 아니면 not-share', () => {
+    expect(readShareHtml('<html><body><div id="tripmap-share">{}</div></body></html>')).toEqual({
+      ok: false,
+      error: 'not-share',
+    });
+  });
+
   it('returns not-share without a data block', () => {
     expect(readShareHtml('<html><body>hi</body></html>')).toEqual({
       ok: false,

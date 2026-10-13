@@ -5,13 +5,10 @@ import { useEffect, useRef, useState } from 'react';
 import { matchPath, useLocation } from 'react-router';
 import { toast } from 'sonner';
 import { paths } from 'src/routes/paths';
+import { hasFiles } from 'src/sections/share-import/drag-files';
 import { useShareFile } from 'src/sections/share-import/use-share-file';
 import { useLayout } from 'src/sections/shell/use-layout';
 import { addFlowAtom } from 'src/stores/add-place';
-
-/** 끌어 온 것에 파일이 들어 있는가(텍스트·링크 끌기는 거른다). */
-export const hasFiles = (event: DragEvent): boolean =>
-  Array.from(event.dataTransfer?.types ?? []).includes('Files');
 
 /**
  * PC 끌어 놓기 덮개(스펙 §2.1-4). 넓은·중간 화면의 보관함(`/`, `/map`)에서 추가 흐름이 닫혀 있을 때만

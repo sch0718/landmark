@@ -32,8 +32,10 @@ if (doc === null) {
     },
     { app },
   );
-  // 압축은 비동기라 링크는 먼저 해시 없이 그려 두고, 끝나면 바꾼다.
-  void importLink(doc, app).then(handle.setImportLink);
+  // 압축은 비동기라 링크는 먼저 해시 없이 그려 두고, 끝나면 바꾼다. 실패하면 해시 없는 기본 링크(`/import`)를 둔다.
+  void importLink(doc, app)
+    .then(handle.setImportLink)
+    .catch(() => undefined);
   const slot = root.querySelector<HTMLElement>('#map');
   if (slot !== null) {
     map = connectMapFrame(slot, {

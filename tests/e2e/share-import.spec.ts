@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { exportSeaPlaces, LIBRARY_KEY, PREFS_KEY, SEA_COUNT } from './fixtures';
+import { exportSeaPlaces, LIBRARY_KEY, PREFS_KEY, prefsJson, SEA_COUNT } from './fixtures';
 
 /**
  * 받은 공유 파일 가져오기(스펙 §2). 내보내기 시험과 같은 방법으로 "바다" 9곳을 파일로 받고,
@@ -23,29 +23,14 @@ const rowsOf = (page: Page): Locator =>
  */
 async function emptyLibrary(page: Page): Promise<void> {
   await page.evaluate(
-    ({ libraryKey, prefsKey }) => {
+    ({ libraryKey, prefsKey, prefs }) => {
       localStorage.setItem(
         libraryKey,
         JSON.stringify({ schemaVersion: 2, places: {}, labels: {}, trips: {} }),
       );
-      localStorage.setItem(
-        prefsKey,
-        JSON.stringify({
-          theme: 'pastel',
-          mode: 'light',
-          libraryView: 'list',
-          query: {
-            labelIds: [],
-            mode: 'any',
-            unlabeled: false,
-            regions: [],
-            text: '',
-            sort: 'recent',
-          },
-        }),
-      );
+      localStorage.setItem(prefsKey, prefs);
     },
-    { libraryKey: LIBRARY_KEY, prefsKey: PREFS_KEY },
+    { libraryKey: LIBRARY_KEY, prefsKey: PREFS_KEY, prefs: prefsJson() },
   );
   await page.goto('/');
   await expect(rowsOf(page)).toHaveCount(0);
@@ -82,14 +67,15 @@ async function expectTitleFiltered(page: Page, count: number): Promise<void> {
   await expect(rowsOf(page)).toHaveCount(count);
 }
 
-/** 받은 파일을 `file://`로 연 보기 화면의 `Landmark에 담기` 링크를, 테스트 앱 주소로 바꾼 이동 주소를 준다. */
-async function viewerImportUrl(page: Page, file: string, baseURL: string): Promise<string> {
+/** 받은 파일을 `file://`로 연 보기 화면의 `Landmark에 담기` 링크를, 테스트 앱 주소(`base`, 끝 `/` 없음)로 바꾼 이동 주소를 준다. */
+async function viewerImportUrl(page: Page, file: string, base: string): Promise<string> {
   const viewer = await page.context().newPage();
   await viewer.goto(pathToFileURL(file).href);
   const href = await viewer.getByRole('link', { name: 'Landmark에 담기' }).getAttribute('href');
   await viewer.close();
-  expect(href).toMatch(new RegExp(`^${BUILD_APP_ORIGIN}/import#d=.+`));
-  return href!.replace(BUILD_APP_ORIGIN, baseURL.replace(/\/$/, ''));
+  expect(href).not.toBeNull();
+  expect(String(href).startsWith(`${BUILD_APP_ORIGIN}/import#d=`)).toBe(true);
+  return String(href).replace(BUILD_APP_ORIGIN, base);
 }
 
 test.describe('공유 파일 가져오기', () => {
@@ -110,23 +96,25 @@ test.describe('공유 파일 가져오기', () => {
   }, testInfo) => {
     const file = await exportSeaPlaces(page, testInfo);
     await emptyLibrary(page);
-    const url = await viewerImportUrl(page, file, baseURL!);
+    const base = baseURL!.replace(/\/$/, '');
+    const url = await viewerImportUrl(page, file, base);
 
     await page.goto(url);
     // `/import#d=…`는 곧 `/`로 바뀌고 해시는 사라진다(새로고침해도 다시 열리지 않는다).
-    await expect(page).toHaveURL(new RegExp(`^${baseURL!.replace(/\/$/, '')}/$`));
+    await expect(page).toHaveURL(`${base}/`);
     await importPreview(page, SEA_COUNT, `${SEA_COUNT}곳을 새로 넣었어요`);
     await expectTitleFiltered(page, SEA_COUNT);
 
-    // 새로고침해도 미리보기가 다시 열리지 않는다(주소는 그대로 `/`).
+    // 새로고침해도 미리보기가 다시 열리지 않는다(주소는 그대로 `/`). 장소 목록이 다시 그려진 뒤에 본다.
     await page.reload();
     await expect(rowsOf(page)).toHaveCount(SEA_COUNT);
-    await expect(page).toHaveURL(new RegExp(`^${baseURL!.replace(/\/$/, '')}/$`));
+    await expect(page).toHaveURL(`${base}/`);
+    await expect(page.getByText(`${TITLE} · ${SEA_COUNT}곳`)).toHaveCount(0);
     await expect(page.getByRole('button', { name: /곳 가져오기$/ })).toHaveCount(0);
 
     // 같은 파일을 한 번 더: 모두 이미 있으니 라벨만 더한다.
     await page.goto(url);
-    await expect(page).toHaveURL(new RegExp(`^${baseURL!.replace(/\/$/, '')}/$`));
+    await expect(page).toHaveURL(`${base}/`);
     await importPreview(page, SEA_COUNT, `${SEA_COUNT}곳은 라벨만 더했어요`);
     await expectTitleFiltered(page, SEA_COUNT);
   });

@@ -104,7 +104,9 @@ function placeFinder(lib: Library): PlaceFinder {
   const byName = new Map<string, string[]>();
   const addName = (place: Place) => {
     const key = normalizeLabelName(place.name.value);
-    byName.set(key, [...(byName.get(key) ?? []), place.id]);
+    const ids = byName.get(key);
+    if (ids === undefined) byName.set(key, [place.id]);
+    else ids.push(place.id);
   };
   Object.values(places).forEach(addName);
 
@@ -229,6 +231,26 @@ function planLabels(
   });
 }
 
+/** 살아 있는 내 장소와 같은 받은 장소 id. 보관함과 문서에만 달려 있어 고른 장소·제목 라벨이 바뀌어도 같다. */
+export function existingShareIds(lib: Library, doc: ShareDoc): ReadonlySet<string> {
+  const finder = placeFinder(lib);
+  return new Set(
+    doc.places.filter((p) => finder.find(p, shareSource(p))?.deletedAt === null).map((p) => p.id),
+  );
+}
+
+/** 미리보기의 받은 라벨 줄과 제목 라벨 합침 표시(`SharePlan`에서 `existing`을 뺀 것). */
+export function planShareLabels(
+  lib: Library,
+  doc: ShareDoc,
+  selected: readonly string[],
+  titleLabel: string | null,
+): Pick<SharePlan, 'labels' | 'titleReuse'> {
+  const labels = planLabels(lib, usedLabels(doc, new Set(selected)), titleLabel);
+  const titleReuse = titleLabel !== null && findLiveLabel(lib, titleLabel) !== undefined;
+  return { labels, titleReuse };
+}
+
 /** 미리보기의 `이미 있음`·`내 라벨에 합침` 표시용. 실제 처리는 `importShare`가 최신본으로 다시 판단한다. */
 export function planShareImport(
   lib: Library,
@@ -236,13 +258,10 @@ export function planShareImport(
   selected: readonly string[],
   titleLabel: string | null,
 ): SharePlan {
-  const finder = placeFinder(lib);
-  const existing = new Set(
-    doc.places.filter((p) => finder.find(p, shareSource(p))?.deletedAt === null).map((p) => p.id),
-  );
-  const labels = planLabels(lib, usedLabels(doc, new Set(selected)), titleLabel);
-  const titleReuse = titleLabel !== null && findLiveLabel(lib, titleLabel) !== undefined;
-  return { existing, labels, titleReuse };
+  return {
+    existing: existingShareIds(lib, doc),
+    ...planShareLabels(lib, doc, selected, titleLabel),
+  };
 }
 
 // ---------- 가져오기 ----------

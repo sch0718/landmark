@@ -36,10 +36,10 @@ export async function encodeCompressedJson(value: unknown): Promise<string> {
   const parts: Uint8Array[] = [];
   let size = 0;
   for (;;) {
-    const { done, value } = await reader.read();
+    const { done, value: chunk } = await reader.read();
     if (done) break;
-    parts.push(value);
-    size += value.byteLength;
+    parts.push(chunk);
+    size += chunk.byteLength;
   }
   return toBase64Url(concat(parts, size));
 }
