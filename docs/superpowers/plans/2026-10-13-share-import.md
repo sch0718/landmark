@@ -26,7 +26,7 @@
   - 고르기 칸: 제목 `공유 파일 가져오기`, 설명 `받은 Landmark 공유 파일(.html)을 고르면 장소를 미리 보고 내 보관함에 넣어요`, 버튼 `파일 고르기`, 읽는 중 `읽는 중…`, PC 안내 `여기로 끌어 놓아도 돼요`. 끌어 놓기 덮개 `여기에 놓으면 가져와요`.
   - 미리보기: `<제목> · <N>곳`, `<YYYY.MM.DD> 만든 파일`, `모두 선택`, `모두 해제`, `메모`, `이미 있음`, `내 라벨에 합침`, `새로 만듦`, `파일 제목 라벨도 붙이기`, `받은 메모도 덧붙이기`, `이미 있는 장소에만 해당해요. 새로 넣는 장소에는 받은 메모가 그대로 들어가요`, `<N>곳 가져오기`, `라벨 이름은 30자까지예요`, 제목이 빌 때 기본 라벨 `받은 장소`.
   - 결과: `<새 수>곳을 새로 넣고, <합친 수>곳은 라벨만 더했어요` / `<새 수>곳을 새로 넣었어요` / `<합친 수>곳은 라벨만 더했어요`(되살린 장소는 새 수에 센다).
-  - 메모 블록: `— 받은 메모 (<파일 제목>):` + 줄바꿈 + 받은 메모. 기존 메모 뒤에는 빈 줄 하나(`\n\n`)로 잇는다.
+  - 메모 블록: `— 받은 메모 (<파일 제목>):` + 줄바꿈 + 받은 메모. 기존 메모 뒤에는 빈 줄 하나(`\n\n`)로 잇는다. 받은 메모 원문이 기존 메모 어디에든 있으면 덧붙이지 않는다. 길이 규칙은 스펙 §3.4.
   - 오류: `파일이 너무 커요` / `Landmark 공유 파일이 아니에요` / `공유 파일을 읽지 못했어요. 파일이나 링크가 손상됐을 수 있어요` / `가져올 장소가 없는 파일이에요` / `장소가 너무 많은 파일이에요(최대 1,000곳)`.
   - 보기 화면: 링크 `Landmark에 담기`, 큰 파일 `장소가 많아 바로 담을 수 없어요. Landmark에서 이 파일을 가져와 주세요` + 링크 `Landmark 열기`.
 
@@ -167,7 +167,7 @@
   export function cutLabelName(name: string): string; // trim 후 30자(UTF-16), 서로게이트 쌍 안 깨짐
   export function defaultTitleLabel(title: string): string; // cutLabelName(title) || '받은 장소'
   export function shareSource(place: SharePlace): PlaceSource; // naverSid → kakaoId → googleId, 형식 틀리면 건너뜀, 없으면 { kind: 'pin' }
-  export function appendReceivedMemo(current: string, title: string, memo: string): string; // 스펙 §3.4
+  export function appendReceivedMemo(current: string, title: string, memo: string): string; // 스펙 §3.4: 원문 포함이면 그대로, 길이 규칙 세 갈래
   export type ShareLabelPlan = { shareLabelId: string; name: string; color: LabelColor; reuse: boolean };
   export type SharePlan = {
     existing: ReadonlySet<string>; // 살아 있는 내 장소와 같은 받은 장소 id
@@ -188,8 +188,8 @@
   - 새 장소: 이름·주소·좌표·메모 그대로, 카카오 → `{ kind: 'kakao', kakaoId }`, 없음 → `{ kind: 'pin' }`, `category.value === null`, `saved.value === true`, 메모 10,001자 → 10,000자이고 `…`로 끝남.
   - 라벨: 정규형 같은 살아 있는 라벨 재사용(색 그대로), 없으면 받은 색으로 새로 만듦, 31자 이름 → 30자, 빈 이름 라벨 무시, 받은 라벨 `Cafe`·`cafe` → 한 라벨, 파일 `labels`에 없는 id 무시, 고르지 않은 장소만 쓰는 라벨은 만들지 않음, 제목 라벨 켬 → 모든 결과 장소에 붙고 `createdId`, 끔 → 없음, 새 제목 라벨 색 = `nextLabelColor`.
   - 합치기: 라벨은 기존 뒤에 중복 없이, 되살릴 때 지워진 라벨 뗌, `saved: false` → `true`, 이름·주소·좌표·분류 그대로.
-  - 메모(`appendReceivedMemo` + 연산): 빈 메모 → 블록만; 있으면 `기존\n\n— 받은 메모 (강릉 모음):\n받은`; 이미 그 블록으로 끝나면 그대로; 기존 9,990자 + 받은 100자 → 10,000자, `…`로 끝남; 머리 줄도 안 들어가면 그대로; `appendMemo: false` → 그대로; 받은 메모가 빈 문자열이면 그대로; 새 장소에는 토글과 상관없이 받은 메모.
-  - 같은 파일 두 번: 두 번째 `summary`가 `{ created: 0, merged: N, restored: 0 }`, 장소 수·라벨 수·메모 그대로.
+  - 메모(`appendReceivedMemo` + 연산): 빈 메모 → 블록만; 있으면 `기존\n\n— 받은 메모 (강릉 모음):\n받은`; 받은 메모 원문이 기존 메모 어디에든 있으면 그대로(원문과 같은 메모, 블록 뒤에 다른 블록이 붙은 메모); 제목 `강릉 모음`(머리 17자) 기준 — 기존 9,900자 + 받은 200자 → 정확히 10,000자이고 `…`로 끝남, 기존 9,980자 → 9,980 + 2 + 17 + 1 = 10,000이므로 머리 줄 + `…`만 붙어 10,000자, 기존 9,981자 → 그대로(9,981자), 기존 9,990자 → 그대로; 빈 기존 메모 + 받은 10,000자 → 정확히 10,000자이고 `…`로 끝남; `appendMemo: false` → 그대로; 받은 메모가 빈 문자열이면 그대로; 새 장소에는 토글과 상관없이 받은 메모.
+  - 같은 파일 두 번: 두 번째 `summary`가 `{ created: 0, merged: N, restored: 0 }`, 장소 수·라벨 수·메모 그대로(첫 번째에 **새로 넣은** 장소와 **합친** 장소 모두). 파일 A → B → A: 세 번째 뒤의 메모가 두 번째 뒤와 같음.
   - 동시성: 미리보기 뒤 다른 탭이 같은 `naverSid` 장소를 넣은 문서에 적용 → 그 장소에 합치고 `merged`로 셈.
   - `planShareImport`: `existing`에 살아 있는 것만(지운 것은 없음), `labels[].reuse`, `titleReuse`.
   - 모든 결과 문서가 `safeParse(LibrarySchema, …)`를 통과.
