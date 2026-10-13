@@ -25,7 +25,9 @@ const NOTICE = '새 버전이 나왔어요. 새로고침해 주세요';
 async function openExport(user: ReturnType<typeof userEvent.setup>) {
   await renderLibrary(sampleLibrary(), { prefs: { libraryView: 'list' }, preloadPanels: false });
   await user.click(screen.getByRole('button', { name: '내보내기' }));
-  return screen.findByRole('dialog', { name: '내보내기' });
+  // 기다림 틀이 먼저 뜨고 받기 실패 안내가 그것을 바꿔 놓는다.
+  await screen.findByText(NOTICE);
+  return screen.getByRole('dialog', { name: '내보내기' });
 }
 
 describe('내보내기 대화상자 받기 실패', () => {

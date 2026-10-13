@@ -60,4 +60,29 @@ describe('추가 칸 단계 받기 실패', () => {
     expect(screen.queryByRole('region', { name: '장소 추가' })).not.toBeInTheDocument();
     expect(store.get(addFlowAtom)).toEqual({ step: 'closed' });
   });
+
+  // 좁은 화면 시트에는 닫기 버튼이 없고 단계의 `취소`는 파일이 와야 보이므로, 안내 아래에 `취소`를 둔다.
+  it('좁은 화면은 새로고침과 취소 버튼이 있고 취소가 흐름을 닫는다', async () => {
+    const user = userEvent.setup();
+    mockViewport(390);
+    const { store } = await renderApp({ preloadPanels: false });
+    await act(async () => {
+      store.set(addFlowAtom, { step: 'link', hint: 'place' });
+    });
+    const sheet = await screen.findByRole('dialog', { name: '장소 추가' });
+    await within(sheet).findByText(NOTICE);
+    expect(
+      within(sheet)
+        .getAllByRole('button')
+        .map((b) => b.textContent),
+    ).toEqual(['새로고침', '취소']);
+    await user.click(within(sheet).getByRole('button', { name: '취소' }));
+    expect(store.get(addFlowAtom)).toEqual({ step: 'closed' });
+  });
+
+  it('넓은 화면은 취소 버튼 없이 새로고침만 있다', async () => {
+    await openLink();
+    await within(panel()).findByText(NOTICE);
+    expect(within(panel()).queryByRole('button', { name: '취소' })).not.toBeInTheDocument();
+  });
 });

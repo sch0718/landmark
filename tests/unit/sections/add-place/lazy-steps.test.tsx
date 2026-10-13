@@ -18,7 +18,7 @@ const gates = vi.hoisted(() => {
     });
     return { open, opened };
   };
-  return { link: make(), sharePick: make() };
+  return { link: make(), sharePick: make(), folder: make() };
 });
 vi.mock('src/sections/add-place/LinkInputPanel', async (importOriginal) => {
   await gates.link.opened;
@@ -26,6 +26,11 @@ vi.mock('src/sections/add-place/LinkInputPanel', async (importOriginal) => {
 });
 vi.mock('src/sections/share-import/SharePickPanel', async (importOriginal) => {
   await gates.sharePick.opened;
+  return importOriginal();
+});
+
+vi.mock('src/sections/add-place/FolderPreview', async (importOriginal) => {
+  await gates.folder.opened;
   return importOriginal();
 });
 
@@ -80,6 +85,30 @@ describe('추가 칸 단계 나눠 받기', () => {
     expect(await within(panel()).findByLabelText('공유 파일 선택')).toBeInTheDocument();
   });
 
+  // 좁은 화면 시트에는 닫기 버튼이 없고 단계의 `취소`는 파일이 와야 보이므로, 받는 동안에도 `취소`가 있어야 한다.
+  it('좁은 화면은 받는 동안 시트에 취소 버튼이 있고 누르면 흐름이 닫힌다', async () => {
+    const user = userEvent.setup();
+    mockViewport(390);
+    const { store } = await renderApp({ preloadPanels: false });
+    await act(async () => {
+      store.set(addFlowAtom, { step: 'folder', shareId: 'abc123' });
+    });
+    const sheet = await screen.findByRole('dialog', { name: '장소 추가' });
+    expect(within(sheet).getByText('불러오는 중…')).toBeInTheDocument();
+    await user.click(within(sheet).getByRole('button', { name: '취소' }));
+    expect(store.get(addFlowAtom)).toEqual({ step: 'closed' });
+  });
+
+  it('넓은 화면은 받는 동안 따로 취소 버튼을 두지 않는다(닫기가 칸 머리에 있다)', async () => {
+    mockViewport(1280);
+    const { store } = await renderApp({ preloadPanels: false });
+    await act(async () => {
+      store.set(addFlowAtom, { step: 'folder', shareId: 'abc123' });
+    });
+    expect(within(panel()).getByText('불러오는 중…')).toBeInTheDocument();
+    expect(within(panel()).queryByRole('button', { name: '취소' })).not.toBeInTheDocument();
+  });
+
   it('확인 카드·폴더 미리보기·핀 카드·공유 미리보기도 열리면 그 화면이 나타난다', async () => {
     const candidate = {
       source: { kind: 'naver' as const, sid: '1958911015' },
@@ -89,6 +118,7 @@ describe('추가 칸 단계 나눠 받기', () => {
       lat: 37.546,
       category: null,
     };
+    gates.folder.open();
     const { store } = await openStep({ step: 'candidate', candidate });
     expect(await within(panel()).findByRole('heading', { name: '콤포트' })).toBeInTheDocument();
 

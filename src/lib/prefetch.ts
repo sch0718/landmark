@@ -2,12 +2,11 @@
 export type IdleScheduler = (run: () => void) => void;
 
 const FALLBACK_DELAY_MS = 2000;
-// 한가해지지 않는 페이지(계속 움직이는 지도 등)도 이 시간 안에는 미리 받는다.
-const IDLE_TIMEOUT_MS = 5000;
 
 const defaultScheduler: IdleScheduler = (run) => {
   if (typeof requestIdleCallback === 'function') {
-    requestIdleCallback(() => run(), { timeout: IDLE_TIMEOUT_MS });
+    // 시한(timeout)을 주지 않는다: 한가할 때만 받고, 바쁜 페이지에서는 강제로 받지 않는다.
+    requestIdleCallback(() => run());
   } else {
     setTimeout(run, FALLBACK_DELAY_MS);
   }

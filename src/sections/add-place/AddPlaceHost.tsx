@@ -1,4 +1,5 @@
 import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
 import Drawer from '@mui/material/Drawer';
 import IconButton from '@mui/material/IconButton';
 import { useAtom, useSetAtom } from 'jotai';
@@ -65,12 +66,36 @@ function StepView({ flow }: { flow: AddFlow }) {
 /**
  * 단계 화면 파일은 그 단계가 열릴 때 받는다. 받는 동안은 칸 안에 기다림 표시를, 받지 못하면(새 배포 뒤 옛 파일 없음)
  * 칸 안에 새 버전 안내를 보인다. 칸 닫기는 칸 바깥(`AddPlaceHost`)에 있어 그대로 된다.
+ * 좁은 화면 시트에는 닫기 버튼이 없고 단계의 `취소`는 파일이 와야 보이므로, 그 두 경우에만(`withCancel`)
+ * 단계와 같은 모양의 `취소`를 안내 아래에 둔다.
  * 단계가 바뀌면 호출하는 쪽이 `key`로 이 컴포넌트를 새로 만들어 오류 경계도 풀린다.
  */
-function StepContent({ flow }: { flow: AddFlow }) {
+function StepContent({ flow, withCancel = false }: { flow: AddFlow; withCancel?: boolean }) {
+  const setFlow = useSetAtom(addFlowAtom);
+  const cancel = withCancel ? (
+    <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, px: 2, pb: 2 }}>
+      <Button onClick={() => setFlow({ step: 'closed' })} sx={{ minHeight: 44 }}>
+        취소
+      </Button>
+    </Box>
+  ) : null;
   return (
-    <ChunkErrorBoundary fallback={<ChunkErrorNotice />}>
-      <Suspense fallback={<LoadingNotice />}>
+    <ChunkErrorBoundary
+      fallback={
+        <>
+          <ChunkErrorNotice />
+          {cancel}
+        </>
+      }
+    >
+      <Suspense
+        fallback={
+          <>
+            <LoadingNotice />
+            {cancel}
+          </>
+        }
+      >
         <StepView flow={flow} />
       </Suspense>
     </ChunkErrorBoundary>
@@ -175,7 +200,7 @@ export function AddPlaceHost({ floating = false }: { floating?: boolean }) {
           },
         }}
       >
-        {open && <StepContent key={stepKey(flow)} flow={flow} />}
+        {open && <StepContent key={stepKey(flow)} flow={flow} withCancel />}
       </Drawer>
     );
   }
