@@ -4,9 +4,9 @@
 
 **Goal:** 첫 화면(보관함·지도·장소 상세)에 필요 없는 화면을 나중에 받게 하고, 큰 라이브러리를 따로 묶고, 첫 화면 JS 크기에 예산 검사를 둔다.
 
-**Architecture:** 나눠 받기는 한 도우미(`src/lib/lazy-chunk.ts`의 `lazyChunk`)를 거친다. 실패는 `ChunkLoadError`로 바꿔 오류 화면이 새 버전 안내를 고르게 하고, 같은 import 함수 목록을 한가할 때 미리 받는다. 라우트는 react-router `lazy`, 추가 칸 단계·내보내기 대화상자는 `React.lazy` + `Suspense`. 크기는 `dist/index.html`이 처음 받는 JS를 세는 스크립트(`yarn size`)와 `perf-budget.json`으로 지킨다.
+**Architecture:** 나눠 받기는 한 도우미(`src/lib/lazy-chunk.ts`의 `lazyChunk`)를 거친다. 실패는 `ChunkLoadError`로 바꿔 오류 화면이 새 버전 안내를 고르게 하고, 같은 import 함수 목록을 한가할 때 미리 받는다. 라우트 화면·추가 칸 단계·내보내기 대화상자 모두 `React.lazy` + `Suspense`(라우트에 react-router의 `lazy`는 쓰지 않는다 — 직접 진입 때 셸까지 비기 때문, 스펙 §2). 크기는 `dist/index.html`이 처음 받는 JS를 세는 스크립트(`yarn size`)와 `perf-budget.json`으로 지킨다.
 
-**Tech Stack:** React 19, react-router 7(data router `lazy`), Vite 8(rolldown), Vitest 5, Playwright, Node 24 스크립트.
+**Tech Stack:** React 19, react-router 7(data router, 라우트 `element`에 `Suspense`), Vite 8(rolldown), Vitest 5, Playwright, Node 24 스크립트.
 
 **Spec:** `docs/superpowers/specs/2026-10-13-first-load-design.md`
 
