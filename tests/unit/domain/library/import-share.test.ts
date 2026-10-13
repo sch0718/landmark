@@ -226,6 +226,18 @@ describe('importShare — 같은 장소 찾기', () => {
     expect(r.lib.places[P3]!.labelIds.value).toEqual([]);
   });
 
+  it('같은 거리의 지운 후보끼리는 늦게 지운 것을 되살린다', () => {
+    const name = f('테라로사');
+    const before = lib([
+      place(P1, { name, deletedAt: '2026-10-09T00:00:00.000Z' }),
+      place(P2, { name, deletedAt: '2026-10-10T00:00:00.000Z' }),
+    ]);
+    const r = run(before, doc([sp('s', { name: '테라로사' })]));
+    expect(r.lib.places[P2]!.deletedAt).toBeNull();
+    expect(r.lib.places[P1]!.deletedAt).toBe('2026-10-09T00:00:00.000Z');
+    expect(r.summary).toEqual({ created: 0, merged: 0, restored: 1 });
+  });
+
   it('id가 있는 받은 장소는 이름이 같은 핀이 옆에 있어도 새로 만든다', () => {
     const before = lib([place(P1, { name: f('테라로사') })]);
     const r = run(before, doc([sp('s', { name: '테라로사', naverSid: '7' })]));
@@ -498,6 +510,24 @@ describe('importShare — 메모', () => {
     expect(r.lib.places[P1]!.memo).toEqual(f('기존'));
   });
 
+  it('기존 9,980자면 머리 줄과 …만 붙어 10,000자', () => {
+    const current = 'a'.repeat(9_980);
+    const before = lib([place(P1, { source: { kind: 'naver', sid: '7' }, memo: f(current) })]);
+    const r = run(before, doc([sp('s', { naverSid: '7', memo: 'b'.repeat(200) })]));
+    expect(r.lib.places[P1]!.memo.value).toBe(`${current}\n\n${HEAD}…`);
+    expect(r.lib.places[P1]!.memo.value).toHaveLength(10_000);
+  });
+
+  it('파일 제목이 비면 머리 줄의 제목은 받은 장소', () => {
+    const r = run(before(), doc([sp('s', { naverSid: '7', memo: '받은' })], [], '   '));
+    expect(r.lib.places[P1]!.memo.value).toBe('기존\n\n— 받은 메모 (받은 장소):\n받은');
+  });
+
+  it('머리 줄의 제목은 앞뒤 공백을 지운 파일 제목', () => {
+    const r = run(before(), doc([sp('s', { naverSid: '7', memo: '받은' })], [], ' 강릉 모음 '));
+    expect(r.lib.places[P1]!.memo.value).toBe(`기존\n\n${HEAD}받은`);
+  });
+
   it('새 장소에는 토글과 상관없이 받은 메모', () => {
     const r = run(lib([]), doc([sp('s', { memo: '받은' })]), { appendMemo: false });
     expect(Object.values(r.lib.places)[0]!.memo.value).toBe('받은');
@@ -534,6 +564,26 @@ describe('importShare — 같은 파일을 다시 가져오기', () => {
       '기존\n\n— 받은 메모 (A):\n에이\n\n— 받은 메모 (B):\n비',
     );
   });
+});
+
+describe('importShare — 고른 장소가 없을 때', () => {
+  it.each([[[]], [['없는 id']]])(
+    'selected %j → 그대로, 개수 0, 제목 라벨도 만들지 않음',
+    (selected) => {
+      const before = lib([place(P1)], [label(A, '하나', 0)]);
+      const r = ok(
+        importShare(
+          before,
+          doc([sp('a')]),
+          { selected, titleLabel: '강릉 모음', appendMemo: true },
+          makeCtx(),
+        ),
+      );
+      expect(r.lib).toBe(before);
+      expect(r.createdId).toBeUndefined();
+      expect(r.summary).toEqual({ created: 0, merged: 0, restored: 0 });
+    },
+  );
 });
 
 describe('importShare — 동시성', () => {
@@ -579,6 +629,34 @@ describe('planShareImport', () => {
       { shareLabelId: 'y', name: '산', color: 'green', reuse: false },
       { shareLabelId: 'x', name: '바다', color: 'teal', reuse: true },
     ]);
+  });
+
+  it('labels: 정규형이 같은 받은 라벨은 첫 것 한 줄', () => {
+    const d = doc(
+      [sp('a', { labelIds: ['x', 'y'] })],
+      [sl('x', 'Cafe', 0, 'teal'), sl('y', ' cafe ', 1, 'green')],
+    );
+    expect(planShareImport(lib([]), d, ['a'], null).labels).toEqual([
+      { shareLabelId: 'x', name: 'Cafe', color: 'teal', reuse: false },
+    ]);
+    const mine = lib([], [label(A, 'CAFE', 0)]);
+    expect(planShareImport(mine, d, ['a'], null).labels).toEqual([
+      { shareLabelId: 'x', name: 'Cafe', color: 'teal', reuse: true },
+    ]);
+  });
+
+  it('labels: 제목 라벨과 이름이 같은 받은 라벨은 빠진다(제목 라벨에 합쳐짐)', () => {
+    const d = doc(
+      [sp('a', { labelIds: ['x', 'y'] })],
+      [sl('x', '강릉 모음', 0), sl('y', '바다', 1, 'teal')],
+    );
+    expect(planShareImport(lib([]), d, ['a'], ' 강릉  모음').labels).toEqual([
+      { shareLabelId: 'y', name: '바다', color: 'teal', reuse: false },
+    ]);
+    expect(planShareImport(lib([]), d, ['a'], null).labels).toHaveLength(2);
+    // 실제 가져오기도 같은 결과: 제목 라벨 하나와 바다.
+    const r = run(lib([]), d, { titleLabel: '강릉 모음' });
+    expect(Object.values(r.lib.labels).map((l) => l.name.value)).toEqual(['강릉 모음', '바다']);
   });
 
   it('titleReuse', () => {

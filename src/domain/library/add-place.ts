@@ -257,27 +257,29 @@ export function nextLabelColor(lib: Library): Label['color']['value'] {
   return LABEL_COLORS[(LABEL_COLORS.indexOf(last.color.value) + 1) % LABEL_COLORS.length]!;
 }
 
-/** 폴더 라벨을 정한다. 이름이면 정규형이 같은 살아 있는 라벨을 쓰고, 없으면 만든다. */
-function resolveFolderLabel(
+/** 정규형이 같은 살아 있는 라벨. */
+export function findLiveLabel(lib: Library, name: string): Label | undefined {
+  const wanted = normalizeLabelName(name);
+  return liveLabels(lib).find((l) => normalizeLabelName(l.name.value) === wanted);
+}
+
+/**
+ * 이름으로 라벨을 정한다. 정규형이 같은 살아 있는 라벨이 있으면 그것을 쓰고(색·순서 그대로),
+ * 없으면 `color`로 맨 뒤에 만든다. 다듬은 이름이 1–30자가 아니면 `LabelNameInvalid`다.
+ */
+export function reuseOrCreateLabel(
   lib: Library,
-  label: { labelId: string } | { newLabelName: string },
+  name: string,
+  color: Label['color']['value'],
   ctx: OpCtx,
 ): { ok: true; lib: Library; labelId: string } | Extract<OpResult, { ok: false }> {
-  if ('labelId' in label) {
-    return isLiveLabel(lib, label.labelId)
-      ? { ok: true, lib, labelId: label.labelId }
-      : fail({ _tag: 'NotFound', id: label.labelId });
-  }
-  const name = label.newLabelName;
   const trimmed = name.trim();
   if (trimmed.length < 1 || trimmed.length > LIBRARY_LIMITS.labelNameChars) {
     return fail({ _tag: 'LabelNameInvalid', name });
   }
-  const wanted = normalizeLabelName(trimmed);
-  const reused = liveLabels(lib).find((l) => normalizeLabelName(l.name.value) === wanted);
+  const reused = findLiveLabel(lib, trimmed);
   if (reused !== undefined) return { ok: true, lib, labelId: reused.id };
 
-  const color = nextLabelColor(lib);
   const created = createLabel(lib, trimmed, ctx);
   if (!created.ok) return created;
   const id = created.createdId!;
@@ -293,6 +295,20 @@ function resolveFolderLabel(
     },
     labelId: id,
   };
+}
+
+/** 폴더 라벨을 정한다. 이름이면 정규형이 같은 살아 있는 라벨을 쓰고, 없으면 만든다. */
+function resolveFolderLabel(
+  lib: Library,
+  label: { labelId: string } | { newLabelName: string },
+  ctx: OpCtx,
+): { ok: true; lib: Library; labelId: string } | Extract<OpResult, { ok: false }> {
+  if ('labelId' in label) {
+    return isLiveLabel(lib, label.labelId)
+      ? { ok: true, lib, labelId: label.labelId }
+      : fail({ _tag: 'NotFound', id: label.labelId });
+  }
+  return reuseOrCreateLabel(lib, label.newLabelName, nextLabelColor(lib), ctx);
 }
 
 /**

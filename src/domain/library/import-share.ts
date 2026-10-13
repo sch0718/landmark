@@ -1,26 +1,21 @@
 import {
+  findLiveLabel,
   indexBySource,
   mergeInto,
   newPlace,
   nextLabelColor,
+  reuseOrCreateLabel,
   sourceKey,
   type PlaceCandidate,
 } from 'src/domain/library/add-place';
-import {
-  createLabel,
-  type OpCtx,
-  type OpError,
-  type OpResult,
-  type OpSummary,
-} from 'src/domain/library/ops';
-import { liveLabels } from 'src/domain/library/query';
+import { cutPrefix } from 'src/domain/library/legacy-import';
+import type { OpCtx, OpResult, OpSummary } from 'src/domain/library/ops';
 import { haversineM } from 'src/domain/trips/geo';
 import { is } from 'src/schema/parse';
 import {
   LIBRARY_LIMITS,
   normalizeLabelName,
   PlaceSource,
-  type Label,
   type LabelColor,
   type Library,
   type Place,
@@ -33,37 +28,27 @@ import type { ShareDoc, ShareLabel, SharePlace } from 'src/schema/share';
 /** 이름이 같은 핀을 같은 장소로 보는 직선거리(m). */
 export const SHARE_MATCH_RADIUS_M = 50;
 
-const DEFAULT_TITLE_LABEL = '받은 장소';
+/** 제목이 빈 파일의 제목 라벨 기본값이자 메모 머리 줄의 제목. */
+const UNTITLED = '받은 장소';
 const CUT_MARK = '…';
 const MEMO_MAX = LIBRARY_LIMITS.memoChars;
 
 type Outcome = keyof OpSummary;
 type Failure = Extract<OpResult, { ok: false }>;
 
-const fail = (error: OpError): Failure => ({ ok: false, error });
-
-const isHighSurrogate = (code: number): boolean => code >= 0xd800 && code <= 0xdbff;
-
-/** 앞 `length`개 코드 단위. 자르는 곳이 서로게이트 쌍의 가운데면 한 단위 앞에서 자른다. */
-function cutUnits(text: string, length: number): string {
-  if (text.length <= length) return text;
-  if (length <= 0) return '';
-  return text.slice(0, isHighSurrogate(text.charCodeAt(length - 1)) ? length - 1 : length);
-}
-
 /** 앞뒤 공백을 지우고 30자(UTF-16)로 자른다. */
 export function cutLabelName(name: string): string {
-  return cutUnits(name.trim(), LIBRARY_LIMITS.labelNameChars);
+  return cutPrefix(name.trim(), LIBRARY_LIMITS.labelNameChars);
 }
 
 /** 제목 라벨 입력의 기본값. 제목이 비면 `받은 장소`. */
 export function defaultTitleLabel(title: string): string {
-  return cutLabelName(title) || DEFAULT_TITLE_LABEL;
+  return cutLabelName(title) || UNTITLED;
 }
 
 /** 새로 넣는 장소의 받은 메모. 10,000자를 넘으면 잘라 `…`로 끝낸다. */
 function cutMemo(memo: string): string {
-  return memo.length <= MEMO_MAX ? memo : cutUnits(memo, MEMO_MAX - CUT_MARK.length) + CUT_MARK;
+  return memo.length <= MEMO_MAX ? memo : cutPrefix(memo, MEMO_MAX - CUT_MARK.length) + CUT_MARK;
 }
 
 /** 받은 장소의 출처. `naverSid` → `kakaoId` → `googleId` 중 형식이 맞는 첫 것, 없으면 핀. */
@@ -85,7 +70,7 @@ export function appendReceivedMemo(current: string, title: string, memo: string)
   const prefix = `${current}${current === '' ? '' : '\n\n'}— 받은 메모 (${title}):\n`;
   if (prefix.length + memo.length <= MEMO_MAX) return prefix + memo;
   if (prefix.length + CUT_MARK.length > MEMO_MAX) return current;
-  return prefix + cutUnits(memo, MEMO_MAX - prefix.length - CUT_MARK.length) + CUT_MARK;
+  return prefix + cutPrefix(memo, MEMO_MAX - prefix.length - CUT_MARK.length) + CUT_MARK;
 }
 
 // ---------- 같은 장소 찾기 ----------
@@ -158,11 +143,6 @@ function placeFinder(lib: Library): PlaceFinder {
 
 // ---------- 라벨 ----------
 
-function findLiveLabel(lib: Library, name: string): Label | undefined {
-  const wanted = normalizeLabelName(name);
-  return liveLabels(lib).find((l) => normalizeLabelName(l.name.value) === wanted);
-}
-
 /** 고른 장소가 쓰는 받은 라벨. 파일의 `order` 순이고, 다듬은 이름이 빈 것은 뺀다. */
 function usedLabels(
   doc: ShareDoc,
@@ -180,26 +160,6 @@ function usedLabels(
     });
 }
 
-/** 정규형이 같은 살아 있는 라벨을 쓰고(색·순서 그대로), 없으면 `color`로 맨 뒤에 만든다. */
-function resolveLabel(
-  lib: Library,
-  name: string,
-  color: LabelColor,
-  ctx: OpCtx,
-): { ok: true; lib: Library; labelId: string } | Failure {
-  const reused = findLiveLabel(lib, name);
-  if (reused !== undefined) return { ok: true, lib, labelId: reused.id };
-  const created = createLabel(lib, name, ctx);
-  if (!created.ok) return created;
-  const id = created.createdId!;
-  const made = created.lib.labels[id]!;
-  const labels = {
-    ...created.lib.labels,
-    [id]: { ...made, color: { value: color, updatedAt: ctx.now } },
-  };
-  return { ok: true, lib: { ...created.lib, labels }, labelId: id };
-}
-
 type ResolvedLabels = { lib: Library; titleId: string | undefined; byShareId: Map<string, string> };
 
 /** 제목 라벨을 먼저(새 색은 입력 문서의 `nextLabelColor`), 그다음 받은 라벨을 정한다(스펙 §3.3). */
@@ -213,18 +173,14 @@ function resolveLabels(
   let work = lib;
   let titleId: string | undefined;
   if (titleLabel !== null) {
-    const name = titleLabel.trim();
-    if (name.length < 1 || name.length > LIBRARY_LIMITS.labelNameChars) {
-      return fail({ _tag: 'LabelNameInvalid', name: titleLabel });
-    }
-    const r = resolveLabel(work, name, nextLabelColor(lib), ctx);
+    const r = reuseOrCreateLabel(work, titleLabel, nextLabelColor(lib), ctx);
     if (!r.ok) return r;
     work = r.lib;
     titleId = r.labelId;
   }
   const byShareId = new Map<string, string>();
   for (const { label, name } of usedLabels(doc, selected)) {
-    const r = resolveLabel(work, name, label.color, ctx);
+    const r = reuseOrCreateLabel(work, name, label.color, ctx);
     if (!r.ok) return r;
     work = r.lib;
     byShareId.set(label.id, r.labelId);
@@ -243,11 +199,30 @@ export type ShareLabelPlan = {
 export type SharePlan = {
   /** 살아 있는 내 장소와 같은 받은 장소 id. */
   existing: ReadonlySet<string>;
-  /** 고른 장소가 쓰는 받은 라벨. 파일의 `order` 순이고, 이름이 빈 것은 뺀다. */
+  /**
+   * 가져오면 생기거나 합쳐질 받은 라벨 한 줄씩. 파일의 `order` 순이고, 이름이 빈 것은 뺀다.
+   * 정규형이 같은 받은 라벨은 첫 것 한 줄로, 제목 라벨과 같은 것은 제목 라벨에 합쳐지므로 뺀다.
+   */
   labels: ShareLabelPlan[];
   /** 제목 라벨 이름이 살아 있는 내 라벨과 같은가(`titleLabel`이 `null`이면 거짓). */
   titleReuse: boolean;
 };
+
+/** 실제 가져오기의 결과 라벨 한 줄씩(`SharePlan.labels`). */
+function planLabels(
+  lib: Library,
+  used: readonly { label: ShareLabel; name: string }[],
+  titleLabel: string | null,
+): ShareLabelPlan[] {
+  const seen = new Set<string>(titleLabel === null ? [] : [normalizeLabelName(titleLabel)]);
+  return used.flatMap(({ label, name }) => {
+    const key = normalizeLabelName(name);
+    if (seen.has(key)) return [];
+    seen.add(key);
+    const reuse = findLiveLabel(lib, name) !== undefined;
+    return [{ shareLabelId: label.id, name, color: label.color, reuse }];
+  });
+}
 
 /** 미리보기의 `이미 있음`·`내 라벨에 합침` 표시용. 실제 처리는 `importShare`가 최신본으로 다시 판단한다. */
 export function planShareImport(
@@ -260,12 +235,7 @@ export function planShareImport(
   const existing = new Set(
     doc.places.filter((p) => finder.find(p, shareSource(p))?.deletedAt === null).map((p) => p.id),
   );
-  const labels = usedLabels(doc, new Set(selected)).map(({ label, name }) => ({
-    shareLabelId: label.id,
-    name,
-    color: label.color,
-    reuse: findLiveLabel(lib, name) !== undefined,
-  }));
+  const labels = planLabels(lib, usedLabels(doc, new Set(selected)), titleLabel);
   const titleReuse = titleLabel !== null && findLiveLabel(lib, titleLabel) !== undefined;
   return { existing, labels, titleReuse };
 }
@@ -309,7 +279,7 @@ const pick = ({ name, address, lng, lat }: SharePlace) => ({ name, address, lng,
 /**
  * 고른 받은 장소를 파일 순서대로 작업 중인 문서에 이어서 넣는다(스펙 §3).
  * `summary`는 결과 장소마다 처음 손댄 순간의 원래 상태로 한 번만 센다(스펙 §3.5).
- * `createdId`는 제목 라벨 id(없으면 `undefined`).
+ * `createdId`는 제목 라벨 id(없으면 `undefined`). 메모 머리 줄의 제목은 다듬은 파일 제목(비면 `받은 장소`)이다.
  */
 export function importShare(
   lib: Library,
@@ -318,12 +288,16 @@ export function importShare(
   ctx: OpCtx,
 ): OpResult {
   const selected = new Set(input.selected);
+  // 고른 장소가 없으면 제목 라벨도 만들지 않는다(화면이 막지만 연산도 지킨다).
+  if (!doc.places.some((p) => selected.has(p.id))) {
+    return { ok: true, lib, summary: { created: 0, merged: 0, restored: 0 } };
+  }
   const labels = resolveLabels(lib, doc, selected, input.titleLabel, ctx);
   if (!labels.ok) return labels;
   const base = labels.lib;
   const finder = placeFinder(base);
   const outcomes = new Map<string, Outcome>();
-  const memo = { title: doc.title, append: input.appendMemo };
+  const memo = { title: doc.title.trim() || UNTITLED, append: input.appendMemo };
   for (const item of doc.places) {
     if (!selected.has(item.id)) continue;
     const received = item.labelIds.flatMap((id) => labels.byShareId.get(id) ?? []);
