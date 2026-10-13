@@ -26,7 +26,7 @@
     "effect:source": "node scripts/effect-source.mjs",
     "orphans": "node scripts/find-orphans.mjs",
     "size": "node scripts/check-bundle-size.mjs",
-    "build:ci": "yarn validate && yarn typecheck && yarn test && yarn build && yarn build:map",
+    "build:ci": "yarn validate && yarn typecheck && yarn test && yarn build && yarn size --forbid TripPlannerPage --forbid TripsPage --forbid SettingsPage --forbid LabelsPage --forbid LegacyImportPage && yarn build:map",
     "prepare": "husky"
   },
   "lint-staged": {
