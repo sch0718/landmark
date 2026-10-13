@@ -117,6 +117,20 @@ describe('entry points', () => {
     expect(router.state.location.key).toBe(key);
   });
 
+  it('add sheet opened on another page keeps that page in history', async () => {
+    const user = userEvent.setup();
+    const { router, store } = await renderLibrary(sampleLibrary(), { width: 390, path: '/map' });
+    await user.click(screen.getByRole('button', { name: '장소 추가' }));
+    const sheet = await screen.findByRole('dialog');
+    await user.click(within(sheet).getByRole('button', { name: /공유 파일 가져오기/ }));
+    await waitFor(() => expect(store.get(addFlowAtom)).toEqual({ step: 'share-pick' }));
+    expect(router.state.location.pathname).toBe('/');
+    await act(async () => {
+      await router.navigate(-1);
+    });
+    expect(router.state.location.pathname).toBe('/map');
+  });
+
   it('add sheet hides the item when a trip target is attached', async () => {
     const { store } = await renderLibrary(sampleLibrary(), { width: 390 });
     act(() => store.set(openAddSheetAtom, { tripId: 'trip0001' }));
@@ -131,11 +145,10 @@ describe('entry points', () => {
     await user.click(screen.getByRole('button', { name: '공유 파일 가져오기' }));
     await waitFor(() => expect(store.get(addFlowAtom)).toEqual({ step: 'share-pick' }));
     expect(router.state.location.pathname).toBe('/');
-    // `/import`로도 바꿔치기로 가서 방문 기록이 늘지 않는다(뒤로 가도 같은 자리).
-    const { key } = router.state.location;
+    // `/import`는 `/`로 바꿔치기되므로 뒤로 가면 설정 화면으로 돌아간다.
     await act(async () => {
       await router.navigate(-1);
     });
-    expect(router.state.location.key).toBe(key);
+    expect(router.state.location.pathname).toBe('/settings');
   });
 });

@@ -3,7 +3,7 @@ import Drawer from '@mui/material/Drawer';
 import Typography from '@mui/material/Typography';
 import { useAtomValue, useSetAtom } from 'jotai';
 import type { ComponentType, SVGProps } from 'react';
-import { useNavigate } from 'react-router';
+import { matchPath, useLocation, useNavigate } from 'react-router';
 import { FolderInputIcon, LinkIcon, MapPinIcon, ShareIcon } from 'src/components/icons';
 import { paths } from 'src/routes/paths';
 import { ADD_LABEL } from 'src/sections/shell/nav-items';
@@ -52,6 +52,7 @@ const OPTIONS: readonly Option[] = [
 export function AddSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const setFlow = useSetAtom(addFlowAtom);
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const hasTarget = useAtomValue(addTargetAtom) !== null;
   const options = OPTIONS.filter((option) => !(option.onlyWithoutTarget && hasTarget));
   return (
@@ -99,8 +100,11 @@ export function AddSheet({ open, onClose }: { open: boolean; onClose: () => void
               onClick={() => {
                 if (flow !== undefined) setFlow(flow);
                 onClose();
-                // 경로 항목은 곧바로 다른 주소로 바뀌는 진입 경로(`/import`)라 방문 기록을 남기지 않는다.
-                if (to !== undefined) void navigate(to, { replace: true });
+                // 경로 항목(`/import`)은 곧바로 `/`로 바뀐다. 보관함(`/`)에서 열었으면 바꿔치기로 가서
+                // 같은 `/`가 기록에 두 번 남지 않게 하고, 다른 화면에서 열었으면 그 화면을 기록에 남긴다.
+                if (to !== undefined) {
+                  void navigate(to, { replace: matchPath(paths.library, pathname) !== null });
+                }
               }}
               sx={{
                 width: '100%',
