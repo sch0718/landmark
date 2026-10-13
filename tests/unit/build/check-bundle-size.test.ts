@@ -77,6 +77,11 @@ describe('measureBundle', () => {
       Object.values(contents).reduce((n, text) => n + text.length, 0),
     );
     expect(result.total.gzipBytes).toBe(totalGzip);
+    expect(result.assets).toEqual(
+      Object.keys(contents)
+        .map((n) => `assets/${n}`)
+        .sort(),
+    );
   });
 });
 
@@ -122,6 +127,48 @@ describe('run', () => {
   });
 });
 
+describe('--require-lazy', () => {
+  const none = () => join(dir, 'none.json');
+
+  it('assets에 있고 첫 화면에는 없는 이름은 통과', async () => {
+    const { failure } = await run(['--dist', dir, '--budget', none(), '--require-lazy', 'later']);
+    expect(failure).toBeUndefined();
+  });
+
+  it('첫 화면 목록에 있으면 실패하고 이유에 이름과 파일이 나온다', async () => {
+    const { failure } = await run(['--dist', dir, '--budget', none(), '--require-lazy', 'entry']);
+    expect(failure).toContain('entry');
+    expect(failure).toContain('assets/entry-AAA.js');
+  });
+
+  it('dist/assets에 그 이름의 파일이 없으면 실패한다(진입에 합쳐진 경우)', async () => {
+    const { failure } = await run(['--dist', dir, '--budget', none(), '--require-lazy', 'Missing']);
+    expect(failure).toContain('Missing');
+  });
+
+  it('이름 뒤에 해시 구분자(-)가 와야 한다: 접두어만 같은 파일은 인정하지 않는다', async () => {
+    await writeFile(join(dir, 'assets/laterOther-FFF.js'), 'export const x = 1;\n');
+    const { failure } = await run(['--dist', dir, '--budget', none(), '--require-lazy', 'lat']);
+    expect(failure).toContain('lat');
+  });
+
+  it('여러 번 줄 수 있고 하나라도 어기면 실패한다', async () => {
+    const ok = await run(['--dist', dir, '--budget', none(), '--require-lazy', 'later']);
+    expect(ok.failure).toBeUndefined();
+    const bad = await run([
+      '--dist',
+      dir,
+      '--budget',
+      none(),
+      '--require-lazy',
+      'later',
+      '--require-lazy',
+      'Missing',
+    ]);
+    expect(bad.failure).toContain('Missing');
+  });
+});
+
 describe('스크립트로 실행', () => {
   const exec = promisify(execFile);
 
@@ -145,5 +192,17 @@ describe('스크립트로 실행', () => {
 
     const ok = await exec('node', [script, '--dist', dir, '--budget', await writeBudget(1e6)]);
     expect(JSON.parse(ok.stdout).initial.gzipBytes).toBe(initialGzip);
+
+    const lazy = await exec('node', [
+      script,
+      '--dist',
+      dir,
+      '--budget',
+      join(dir, 'none.json'),
+      '--require-lazy',
+      'Missing',
+    ]).catch((error) => error as { code: number; stderr: string });
+    expect(lazy).toMatchObject({ code: 1 });
+    expect((lazy as { stderr: string }).stderr).toContain('Missing');
   });
 });

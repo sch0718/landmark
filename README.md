@@ -181,7 +181,7 @@ node scripts/measure-ui-assets.mjs dist/assets
 | 환경변수 `NODE_VERSION`             | `24` (engines 검사는 `.yarnrc`의 `ignore-engines true`로 건너뜀) |
 | 환경변수 `VITE_NAVER_MAP_CLIENT_ID` | NCP Client ID (Production·Preview 모두)                          |
 
-- `yarn build:ci`는 `yarn validate && yarn typecheck && yarn test && yarn build && yarn size --forbid … && yarn build:map`입니다. 검증이나 테스트가 실패하거나 첫 화면 JS가 예산(`perf-budget.json`)을 넘으면 배포되지 않습니다.
+- `yarn build:ci`는 `yarn validate && yarn typecheck && yarn test && yarn build && yarn size --require-lazy … && yarn build:map`입니다. 검증이나 테스트가 실패하거나, 첫 화면 JS가 예산(`perf-budget.json`)을 넘거나, 나눠 받아야 하는 화면(`--require-lazy`로 적은 열두 곳)이 첫 화면에 합쳐져 따로 나뉘지 않으면 배포되지 않습니다.
 - 저장소 루트의 `functions/`는 Pages가 자동으로 서버 함수(`/api/place`, `/api/naver-folder`, `/api/route`)로 배포합니다. 별도 설정은 없습니다. 결과는 Cloudflare Cache API에 장소 1일·폴더 10분·경로(자동차 1시간, 도보 7일) 동안 둡니다.
 - SPA 라우팅은 Pages 기본 동작(404.html이 없으면 index.html)을 씁니다.
 - `public/_headers`: 전체 `X-Robots-Tag: noindex`, `/data/*`는 `Cache-Control: public, max-age=60`.

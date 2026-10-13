@@ -8,6 +8,8 @@ export interface BundleSize {
   files: BundleFile[];
   initial: { bytes: number; gzipBytes: number; files: string[] };
   total: { bytes: number; gzipBytes: number };
+  /** `dist` 기준 `assets/…` 경로의 모든 JS(정렬됨). */
+  assets: string[];
 }
 export function initialScriptPaths(html: string): string[];
 export function measureBundle(dist?: string): Promise<BundleSize>;
@@ -16,4 +18,5 @@ export function budgetFailure(
   budget?: { initialJsGzipMax?: number },
 ): string | undefined;
 export function forbiddenFailure(result: BundleSize, names: string[]): string | undefined;
+export function lazyFailure(result: BundleSize, names: string[]): string | undefined;
 export function run(argv?: string[]): Promise<{ result: BundleSize; failure: string | undefined }>;

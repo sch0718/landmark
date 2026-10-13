@@ -19,6 +19,13 @@ export default defineConfig(({ command }) => ({
   },
   build: {
     rolldownOptions: {
+      // 나눠 받으려고 `import()`한 모듈을 다른 곳이 정적으로 가져오면 나뉘지 않고 진입 파일에 합쳐진다(파일도
+      // 사라져 크기 검사만으로는 못 잡는다). 그 경고를 빌드 실패로 올린다. Vite의 핸들러는 'error'로 넘겨도
+      // 메시지만 찍고 빌드를 이어 가므로, 직접 던져 멈춘다.
+      onLog(level, log, handler) {
+        if (log.code === 'INEFFECTIVE_DYNAMIC_IMPORT') throw new Error(log.message);
+        handler(level, log);
+      },
       output: {
         // 첫 화면 JS를 라이브러리 세 묶음(react·mui·effect)과 앱 코드로 묶는다. 앱 코드만 바뀐 배포 뒤에도
         // 라이브러리 묶음은 파일 이름(해시)이 그대로라 캐시를 쓴다. 모든 묶음은 첫 화면이 정적으로 받는

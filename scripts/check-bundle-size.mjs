@@ -61,6 +61,7 @@ export async function measureBundle(dist = 'dist') {
     files,
     initial: { ...sum(files), files: files.map((file) => file.name) },
     total: sum(all),
+    assets: all.map((file) => file.name),
   };
 }
 
@@ -87,8 +88,31 @@ export function forbiddenFailure(result, names) {
   return undefined;
 }
 
+/**
+ * 나눠 받는 화면이 실제로 따로 나뉘어 있는지 검사한다. `names` 각각에 대해 `assets/<이름>-*.js`가 있어야 하고
+ * 그 파일이 첫 화면 목록에 없어야 한다. 한 줄 이유 또는 `undefined`.
+ * 화면이 다시 정적으로 가져와지면 그 코드는 진입 파일에 합쳐져 이름 있는 파일이 사라지므로, `--forbid`로는
+ * 잡히지 않는 그 경우를 파일이 없다는 사실로 잡는다.
+ */
+export function lazyFailure(result, names) {
+  for (const name of names) {
+    const hits = result.assets.filter((file) => {
+      const base = posix.basename(file);
+      return base.startsWith(`${name}-`) && base.endsWith('.js');
+    });
+    if (hits.length === 0) {
+      return `나눠 받아야 하는 '${name}' 파일(assets/${name}-*.js)이 없습니다. 진입 파일에 합쳐졌을 수 있습니다.`;
+    }
+    const inInitial = hits.find((file) => result.initial.files.includes(file));
+    if (inInitial !== undefined) {
+      return `나눠 받아야 하는 '${name}'이 첫 화면에 들어왔습니다: ${inInitial}`;
+    }
+  }
+  return undefined;
+}
+
 function parseArgs(argv) {
-  const options = { dist: 'dist', budget: 'perf-budget.json', forbid: [] };
+  const options = { dist: 'dist', budget: 'perf-budget.json', forbid: [], requireLazy: [] };
   for (let i = 0; i < argv.length; i += 2) {
     const flag = argv[i];
     const value = argv[i + 1];
@@ -96,6 +120,7 @@ function parseArgs(argv) {
     if (flag === '--dist') options.dist = value;
     else if (flag === '--budget') options.budget = value;
     else if (flag === '--forbid') options.forbid.push(value);
+    else if (flag === '--require-lazy') options.requireLazy.push(value);
     else throw new Error(`알 수 없는 옵션: ${flag}`);
   }
   return options;
@@ -123,7 +148,10 @@ export async function run(argv = []) {
   const result = await measureBundle(options.dist);
   const { budget, failure: budgetReadFailure } = await readBudget(options.budget);
   const failure =
-    budgetReadFailure ?? budgetFailure(result, budget) ?? forbiddenFailure(result, options.forbid);
+    budgetReadFailure ??
+    budgetFailure(result, budget) ??
+    forbiddenFailure(result, options.forbid) ??
+    lazyFailure(result, options.requireLazy);
   return { result, failure };
 }
 

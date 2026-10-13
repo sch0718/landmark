@@ -76,7 +76,7 @@ describe('prefetchWhenIdle', () => {
   });
 
   it('기본 스케줄러는 requestIdleCallback이 있으면 그것을 쓴다', () => {
-    const ric = vi.fn((cb: () => void) => {
+    const ric = vi.fn<(cb: () => void, options?: { timeout: number }) => number>((cb) => {
       cb();
       return 1;
     });
@@ -84,6 +84,8 @@ describe('prefetchWhenIdle', () => {
     const load = vi.fn(() => Promise.resolve());
     prefetchWhenIdle([load]);
     expect(ric).toHaveBeenCalledTimes(1);
+    // 한가해지지 않는 페이지도 5초 안에는 미리 받는다.
+    expect(ric.mock.calls[0]?.[1]).toEqual({ timeout: 5000 });
     expect(load).toHaveBeenCalledTimes(1);
   });
 

@@ -26,7 +26,7 @@
     "effect:source": "node scripts/effect-source.mjs",
     "orphans": "node scripts/find-orphans.mjs",
     "size": "node scripts/check-bundle-size.mjs",
-    "build:ci": "yarn validate && yarn typecheck && yarn test && yarn build && yarn size --forbid TripPlannerPage --forbid TripsPage --forbid SettingsPage --forbid LabelsPage --forbid LegacyImportPage && yarn build:map",
+    "build:ci": "yarn validate && yarn typecheck && yarn test && yarn build && yarn size --require-lazy TripsPage --require-lazy TripPlannerPage --require-lazy SettingsPage --require-lazy LabelsPage --require-lazy LegacyImportPage --require-lazy LinkInputPanel --require-lazy CandidateCard --require-lazy FolderPreview --require-lazy PinCard --require-lazy SharePickPanel --require-lazy SharePreview --require-lazy ExportHtmlDialog && yarn build:map",
     "prepare": "husky"
   },
   "lint-staged": {
