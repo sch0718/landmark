@@ -5,6 +5,7 @@ import { RouterProvider, createMemoryRouter } from 'react-router';
 import { vi } from 'vitest';
 import { SHARE_DATA_PLACEHOLDER } from 'src/domain/share/inject';
 import { setAppRuntimeForTest } from 'src/lib/effect/runtime';
+import { ROUTE_CHUNKS } from 'src/routes/lazy-routes';
 import { routes } from 'src/routes/router';
 import { IdGen } from 'src/services/id-gen';
 import { LegacyTripSource } from 'src/services/legacy-trip-source';
@@ -91,6 +92,11 @@ export async function renderApp(
     routeLookup?: Layer.Layer<RouteLookup>;
     /** 주소 변환 가짜 레이어. 없으면 늘 null을 돌려준다. */
     reverseGeocoder?: Layer.Layer<ReverseGeocoder>;
+    /**
+     * 화면 파일(여행·설정·라벨·옛 여행 가져오기)을 그리기 전에 미리 받아 둔다(기본 true). 실제 앱의 미리 받기와
+     * 같은 효과라 `React.lazy`가 첫 그림에서 바로 풀린다. 받는 동안의 화면이나 받기 실패를 볼 때만 끈다.
+     */
+    preloadRoutes?: boolean;
   } = {},
 ) {
   const {
@@ -101,7 +107,9 @@ export async function renderApp(
     placeLookup = OFFLINE_PLACE_LOOKUP,
     routeLookup = OFFLINE_ROUTE_LOOKUP,
     reverseGeocoder = NULL_REVERSE_GEOCODER,
+    preloadRoutes = true,
   } = options;
+  if (preloadRoutes) await Promise.all(ROUTE_CHUNKS.map((load) => load()));
   setAppRuntimeForTest(
     ManagedRuntime.make(
       Layer.mergeAll(

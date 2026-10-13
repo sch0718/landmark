@@ -1,6 +1,8 @@
-import Box from '@mui/material/Box';
 import { useSetAtom } from 'jotai';
-import { Component, Suspense, type ReactNode } from 'react';
+import { Component, Suspense, useEffect, type ReactNode } from 'react';
+import { LoadingNotice } from 'src/components/LoadingNotice';
+import { prefetchWhenIdle } from 'src/lib/prefetch';
+import { ROUTE_CHUNKS } from 'src/routes/lazy-routes';
 import { LibraryCorrupt } from 'src/services/errors';
 import { CorruptScreen } from 'src/sections/shell/CorruptScreen';
 import { AppShell } from 'src/sections/shell/AppShell';
@@ -33,9 +35,16 @@ class CorruptBoundary extends Component<BoundaryProps, BoundaryState> {
   }
 }
 
+/** 셸이 처음 그려진 뒤 한가할 때 미리 받을 단위들. 한 곳에서 모은다. */
+const PREFETCH_CHUNKS = [...ROUTE_CHUNKS];
+
 /** 보관함을 읽고(`useLibrarySync`, 앱에서 한 번) 셸을 그린다. 읽는 동안은 Suspense가 멈춘다. */
 function LibraryShell() {
   useLibrarySync();
+  // 이 컴포넌트가 그려졌다는 건 보관함을 읽고 셸이 나왔다는 뜻이다. 미리 받기는 한 번만 예약된다.
+  useEffect(() => {
+    prefetchWhenIdle(PREFETCH_CHUNKS);
+  }, []);
   return <AppShell />;
 }
 
@@ -44,13 +53,7 @@ export function ShellRoute() {
   const reload = useSetAtom(libraryReloadAtom);
   return (
     <CorruptBoundary onRecovered={() => reload((n) => n + 1)}>
-      <Suspense
-        fallback={
-          <Box role="status" sx={{ p: 3, color: 'var(--tm-text-secondary)' }}>
-            불러오는 중…
-          </Box>
-        }
-      >
+      <Suspense fallback={<LoadingNotice />}>
         <LibraryShell />
       </Suspense>
     </CorruptBoundary>
