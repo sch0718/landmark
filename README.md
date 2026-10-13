@@ -2,12 +2,19 @@
 
 > 2026-10-11 저장소를 `sch0718/trip-map`에서 `sch0718/landmark`로 옮기며 이름을 바꿨습니다(옛 이름 trip-map). 기존 데이터와 이미 보낸 공유 파일이 계속 동작하도록 저장 키(`tripmap:*`)와 공유 파일 형식(`tripmap-share`)은 그대로 둡니다. 예전 landmark 저장소의 내용은 `archive/java-gradle-2025`(Java 코드), `archive/map-pages-2026-10`(이전 직전의 지도 페이지) 브랜치에 있습니다.
 
-평소에 모아 두고(보관함), 여행 때 꺼내 쓰는(계획) 장소 보관함 웹앱입니다. 맛집·가 보고 싶은 곳을 **라벨**(한 장소에 여러 개)로 모으고 메모를 남기며, 라벨·지역별로 나눠 보고 지도에서 확인합니다. 여행 계획(Day 배치·경로·이동 시간)은 이어지는 하위 프로젝트에서 붙습니다.
+평소에 모아 두고(보관함), 여행 때 꺼내 쓰는(계획) 장소 보관함 웹앱입니다. 맛집·가 보고 싶은 곳을 **라벨**(한 장소에 여러 개)로 모으고 메모를 남기며, 라벨·지역별로 나눠 보고 지도에서 확인합니다. 모은 장소로 **여행 계획**(후보 → Day 배치, 자동차·도보 경로와 이동 시간, 도착 시각)을 짜고, 장소를 **HTML 파일 하나로 내보내** 다른 사람에게 보내거나, 받은 공유 파일을 내 보관함에 **가져올** 수 있습니다.
 
 - 서버 DB와 로그인이 없습니다. 보관함은 **각 기기 브라우저의 localStorage**(`tripmap:library:v2`)에 저장되고, 화면 설정은 `tripmap:prefs`에 저장됩니다. 저장소를 쓸 수 없는 환경(예: 일부 사생활 보호 모드)에서는 메모리 모드로 동작하며 배너로 알립니다.
 - 옛 버전(정적 여행 뷰어)의 여행은 `/t/<publicId>`에서 **미리보기 → 결정 → 가져오기**로 새 보관함에 옮깁니다. 옛 편집 레이어(`tripmap:edit:<publicId>`)는 읽기만 하고 지우지 않습니다.
 - 앱은 Effect 4 기반입니다(`effect`·`@effect/vitest` 4.0.2 고정).
-- 하위 프로젝트 1(기반 + 보관함) 설계 문서: `docs/superpowers/specs/2026-10-08-place-library-design.md`. 옛 설계: `docs/superpowers/specs/2026-10-03-trip-map-design.md`
+- 설계 문서(`docs/superpowers/specs/`). 충돌하면 나중 문서가 우선합니다.
+  - 하위 프로젝트 1(기반 + 보관함): `2026-10-08-place-library-design.md`
+  - 하위 프로젝트 2(장소 추가: 링크·네이버 폴더·핀): `2026-10-12-place-adding-design.md`
+  - 하위 프로젝트 3(여행 계획): `2026-10-12-trip-planning-design.md`
+  - HTML 공유 내보내기(하위 프로젝트 4의 일부): `2026-10-11-html-share-export-design.md`
+  - 하위 프로젝트 C(받은 공유 파일 가져오기): `2026-10-13-share-import-design.md`
+  - 하위 프로젝트 D1(결함·코드 정리, README 최신화): `2026-10-13-polish-cleanup-design.md`
+  - 옛 설계: `2026-10-03-trip-map-design.md`
 
 ## 설치
 
@@ -56,7 +63,7 @@ yarn dev:full                      # http://localhost:8788 (Vite + 서버 함수
 
 ### 서버 함수 함께 띄우기 (`yarn dev:full`)
 
-링크·폴더로 장소를 추가하는 기능은 Cloudflare Pages Functions(`functions/api/place.ts`, `functions/api/naver-folder.ts`)를 부릅니다. `yarn dev`만 띄우면 `/api/*`가 없어 링크 추가가 `인터넷 연결을 확인하고 다시 시도해 주세요`로 끝납니다.
+링크·폴더로 장소를 추가하는 기능과 여행 경로 계산은 Cloudflare Pages Functions(`functions/api/place.ts`, `functions/api/naver-folder.ts`, `functions/api/route.ts`)를 부릅니다. `yarn dev`만 띄우면 `/api/*`가 없어 링크 추가가 `인터넷 연결을 확인하고 다시 시도해 주세요`로 끝나고, 여행 구간의 이동 시간은 직선 추정으로 표시됩니다.
 
 `yarn dev:full`은 `wrangler pages dev`가 Vite 개발 서버(5173)를 띄우고 그 앞에서 `http://localhost:8788`로 받습니다. `/api/*`는 함수가, 나머지는 Vite가 응답합니다(HMR 유지). **브라우저는 8788로 엽니다.**
 
@@ -70,32 +77,36 @@ curl -H 'Origin: http://localhost:8788' 'http://localhost:8788/api/place?url=htt
 
 ### 화면 경로
 
-| 경로           | 화면                                                                       |
-| -------------- | -------------------------------------------------------------------------- |
-| `/`            | 보관함(카드·타일·목록·벤토 보기, 라벨·지역 필터, 정렬, 선택 일괄 작업)     |
-| `/map`         | 보관함 지도(라벨 색 마커, 보관함과 같은 필터)                              |
-| `/place/:id`   | 장소 상세(이름·분류 편집, 라벨 붙이기·떼기, 메모 자동 저장, 삭제 되돌리기) |
-| `/labels`      | 라벨 관리(이름·색·아이콘·순서·병합·삭제)                                   |
-| `/settings`    | 설정(테마, 옛 여행 가져오기)                                               |
-| `/trips`       | 여행(자리 표시. 하위 프로젝트 3에서 채움)                                  |
-| `/t/:publicId` | 옛 여행 가져오기                                                           |
-| `/import`      | 받은 공유 파일 가져오기(`/`로 바뀌고 고르기·미리보기 칸이 열림)            |
+| 경로           | 화면                                                                           |
+| -------------- | ------------------------------------------------------------------------------ |
+| `/`            | 보관함(카드·타일·목록·벤토 보기, 라벨·지역 필터, 정렬, 선택 일괄 작업)         |
+| `/map`         | 보관함 지도(라벨 색 마커, 보관함과 같은 필터)                                  |
+| `/place/:id`   | 장소 상세(이름·분류 편집, 라벨 붙이기·떼기, 메모 자동 저장, 삭제 되돌리기)     |
+| `/labels`      | 라벨 관리(이름·색·아이콘·순서·병합·삭제)                                       |
+| `/settings`    | 설정(테마, 옛 여행 가져오기)                                                   |
+| `/trips`       | 여행 목록(카드, 새 여행, 이름 바꾸기·삭제)                                     |
+| `/trips/:id`   | 여행 계획(후보 · 지도 · Day 시간표, 경로·도착 시각, 순서 정리·Day 자동 나누기) |
+| `/t/:publicId` | 옛 여행 가져오기                                                               |
+| `/import`      | 받은 공유 파일 가져오기(`/`로 바뀌고 고르기·미리보기 칸이 열림)                |
 
 - 화면 폭에 따라 ≥1280px 3단, 768–1279px 2단 + 상세 오버레이, 768px 미만 하단 탭입니다.
 - **메모 자동 저장**: 입력을 멈춘 뒤 저장하고, 다른 화면으로 이동하거나 탭을 백그라운드로 보낼 때 대기 중인 초안을 먼저 저장합니다. 탭·브라우저를 바로 닫을 때는 저장이 비동기 Web Lock 안에서 실행되므로 **최선 노력(best-effort)** 입니다. 백그라운드 전환과 앱 안 이동에서는 안정적으로 저장됩니다.
 - 장소 상세에 **길찾기 링크는 아직 없습니다.** 네이버 지도 앱 길찾기 URL 형식을 근거 있게 확인하지 못해 일부러 뺐고, 확인되면 추가합니다. "네이버 지도에서 열기"는 있습니다.
 
-| 명령                 | 내용                                                                                |
-| -------------------- | ----------------------------------------------------------------------------------- |
-| `yarn lint`          | ESLint                                                                              |
-| `yarn fm:check`      | Prettier 포맷 검사                                                                  |
-| `yarn typecheck`     | `tsc -b --noEmit`                                                                   |
-| `yarn test`          | Vitest 단위·컴포넌트 테스트                                                         |
-| `yarn test:e2e`      | Playwright E2E(아래)                                                                |
-| `yarn validate`      | `trips/*.yaml`과 `public/data/*.json` 스키마 검증                                   |
-| `yarn effect:source` | `.reference/effect/`에 현재 `effect` 버전의 소스를 받습니다(API 확인용, 커밋 안 함) |
-| `yarn build`         | 타입 검사 + Vite 빌드 → `dist`                                                      |
-| `yarn build:ci`      | `validate → typecheck → test → build` (배포 빌드 명령)                              |
+| 명령                 | 내용                                                                                                          |
+| -------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `yarn lint`          | ESLint                                                                                                        |
+| `yarn fm:check`      | Prettier 포맷 검사                                                                                            |
+| `yarn typecheck`     | `tsc -b --noEmit`                                                                                             |
+| `yarn test`          | Vitest 단위·컴포넌트 테스트                                                                                   |
+| `yarn test:e2e`      | Playwright E2E(아래)                                                                                          |
+| `yarn validate`      | `trips/*.yaml`과 `public/data/*.json` 스키마 검증                                                             |
+| `yarn orphans`       | 앱 진입점에서 닿지 않는 `src/**` 파일(쓰지 않는 옛 코드) 찾기. 정상이면 `orphans: none`                       |
+| `yarn effect:source` | `.reference/effect/`에 현재 `effect` 버전의 소스를 받습니다(API 확인용, 커밋 안 함)                           |
+| `yarn build:viewer`  | 공유 파일의 보기 화면 틀을 `public/share-viewer.html`로 빌드(gitignore). `dev`·`dev:full`·`build`가 먼저 실행 |
+| `yarn build:map`     | 공유 파일 안 iframe이 띄우는 지도 페이지를 `dist-map/`으로 빌드(아래 "공유 파일과 지도 페이지")               |
+| `yarn build`         | 보기 화면 틀 + 타입 검사 + Vite 빌드 → `dist`                                                                 |
+| `yarn build:ci`      | `validate → typecheck → test → build → build:map` (배포 빌드 명령)                                            |
 
 ### E2E
 
@@ -103,13 +114,17 @@ curl -H 'Origin: http://localhost:8788' 'http://localhost:8788/api/place?url=htt
 yarn playwright install chromium webkit   # 처음 한 번
 yarn test:e2e:ci                          # CI 핵심 사용자 흐름
 yarn test:e2e                             # 전체
+E2E_PORT=5175 yarn test:e2e               # 5173을 다른 프로젝트가 쓰고 있을 때
 ```
 
+- `test:e2e`·`test:e2e:ci`는 먼저 `yarn build:map:e2e`(가짜 지도로 지도 페이지 빌드)를 돌립니다.
+- 앱 개발 서버 포트는 기본 5173이고 `E2E_PORT`로 바꿉니다. 5173을 남의 서버가 쓰고 있으면 `reuseExistingServer` 때문에 그것을 앱으로 착각하고 시험하므로 그럴 때 `E2E_PORT`를 씁니다. 내보낸 파일 안 지도 페이지(`dist-map/`)는 5174에서 `vite preview`로 띄웁니다(`SHARE_MAP_URL`, `tests/e2e/fixtures.ts`).
+
 - 프로젝트(`playwright.config.ts`): `desktop`(Chromium 1280×800, 3단), `iphone`(WebKit, iPhone 13 390×844), `galaxy`(Chromium 360×780, 터치). 핵심 흐름 테스트 제목에 `@smoke`가 붙어 있고 CI(`test:e2e:ci`)는 그것만 돌립니다.
-- spec: `library.spec.ts`(라벨 필터·목록·지도·상세, 모바일 시트·라벨·메모·새로고침, 두 탭 동시 메모), `legacy-import.spec.ts`(`/t/e2etest000001` 가져오기), `themes.spec.ts`(테마 3 × 라이트/다크 스크린샷), `share-import.spec.ts`(받은 공유 파일 가져오기: ＋ 시트·`Landmark에 담기` 링크·PC 끌어 놓기).
+- spec: `library.spec.ts`(라벨 필터·목록·지도·상세, 모바일 시트·라벨·메모·새로고침, 두 탭 동시 메모), `legacy-import.spec.ts`(`/t/e2etest000001` 가져오기), `themes.spec.ts`(테마 3 × 라이트/다크 스크린샷), `place-adding.spec.ts`(링크·폴더·핀으로 장소 추가), `trip-planning.spec.ts`(여행 만들기·후보·Day 배치·경로), `share-export.spec.ts`(HTML 파일 내보내기와 내보낸 파일 열기), `share-import.spec.ts`(받은 공유 파일 가져오기: ＋ 시트·`Landmark에 담기` 링크·PC 끌어 놓기).
 - 보관함 시드는 `tests/fixtures/library/seed.json`(장소 30·라벨 6)을 `page.addInitScript`로 `localStorage['tripmap:library:v2']`에 심습니다. 형식은 `tests/unit/schema/library-seed.test.ts`가 `LibrarySchema`로 검증합니다.
 - 스크린샷은 `test-results/screens/`(보관함·상세)와 `test-results/themes/<project>-<theme>-<mode>.png`에 남습니다. 비교 단언 없는 산출물이며, Playwright가 실행할 때마다 `test-results/`를 비우므로 전체 실행(`yarn test:e2e`) 뒤에 확인하세요.
-- 실물 iPhone·Android는 이 E2E로 대체되지 않습니다(에뮬레이션). 실물 기기 점검은 하위 프로젝트 5에서 하며 아직 하지 않았습니다.
+- 실물 iPhone·Android는 이 E2E로 대체되지 않습니다(에뮬레이션). 실물 기기 점검은 다듬기 D4에서 하며 아직 하지 않았습니다.
 - global setup이 `tests/fixtures/trips/e2e.json`을 `public/data/e2etest000001.json`으로 복사하고 teardown이 지웁니다. 이 파일은 커밋하지 않습니다(`.gitignore`). 옛 여행 가져오기(`/t/e2etest000001`) 시험에 쓰입니다.
 - 지도는 `VITE_MAP_ADAPTER=fake`로 DOM 가짜 지도를 씁니다. 유효 키의 실 SDK 및 실물 기기 테스트와 구분합니다.
 
@@ -132,9 +147,9 @@ node scripts/measure-ui-assets.mjs dist/assets
 
 최종 검증은 lint → typecheck → `yarn test` → validate → build → E2E 순서로 실행합니다. 기존 미추적 scratch 파일 `inspect-mobile.mjs`, `verify-concepts.mjs`가 있는 로컬 checkout에서는 `yarn lint --ignore-pattern inspect-mobile.mjs --ignore-pattern verify-concepts.mjs`로 검사하며 이 제외는 제품 코드 제외가 아닙니다.
 
-## 여행 추가 (옛 파이프라인 — 하위 프로젝트 2·3에서 대체 예정)
+## 옛 파이프라인 (새 화면에는 연결되지 않은 남은 도구)
 
-> 이 절과 아래 "일정 재계산 절차"는 옛 정적 뷰어의 데이터 파이프라인입니다. `yarn collect`/`yarn apply-edit`/`yarn validate`와 `pipeline/**`은 그대로 동작하지만, 새 보관함 화면에는 연결되어 있지 않습니다. 이 방식으로 만든 `public/data/<publicId>.json`은 `/t/<publicId>`에서 보관함으로 가져옵니다. 장소 추가(링크 붙여넣기·네이버 폴더 가져오기·핀 찍기)와 여행 계획은 하위 프로젝트 2·3에서 새로 만듭니다.
+> 옛 정적 뷰어의 데이터 파이프라인입니다. `yarn collect`/`yarn validate`와 `pipeline/**`(`yarn apply-edit` 포함)은 그대로 동작하지만, 새 앱 화면에는 연결되어 있지 않습니다. 이 방식으로 만든 `public/data/<publicId>.json`은 `/t/<publicId>`에서 보관함으로 가져옵니다. 지금 앱에서 장소를 모으는 길은 링크 붙여넣기·네이버 폴더 가져오기·핀 찍기이고, 여행은 `/trips`에서 만듭니다. `yarn apply-edit`이 읽는 옛 편집 내보내기 파일(`*.tripedit.json`)은 앱이 더는 만들지 않습니다.
 
 1. `trips/<여행>.yaml`을 작성합니다. 형식은 `trips/example.yaml` 참고.
    - `folders`에 네이버 지도 공유 폴더의 shareId를 적습니다(배포 JSON에는 들어가지 않음).
@@ -154,22 +169,6 @@ node scripts/measure-ui-assets.mjs dist/assets
 - **gitignore 대상**입니다. 다른 컴퓨터나 새 clone에서는 캐시가 비어 있어 첫 collect가 모든 구간을 다시 조회합니다.
 - 실패한 조회는 캐시하지 않습니다.
 
-## 일정 재계산 절차 (작성자, 옛 파이프라인)
-
-> 옛 편집 내보내기(설정 → 내보내기)와 가져오기·병합 대화상자(`src/sections/share/**`)는 코드로 남아 있지만 지금 라우트에는 연결되어 있지 않습니다. 아래 절차의 1–2단계는 하위 프로젝트 4(공유)에서 새 화면으로 다시 만들어질 때까지 앱에서 할 수 없습니다.
-
-앱에서 바꾼 일정(순서 변경·이동·추가)은 실경로가 없어 "직선 · 재계산 필요"로 표시됩니다. 실경로로 바꾸려면:
-
-1. 동행자 편집을 가져와 병합하고, 일정이 원하는 상태인지 앱에서 확인합니다.
-2. 앱에서 **파일로 내보내기**(설정 ⚙ → 내보내기 → 파일로 저장).
-3. `yarn apply-edit trips/<여행>.yaml <파일>.tripedit.json`
-   - 모든 검사를 통과했을 때만 yaml을 기록합니다. 하나라도 실패하면 yaml은 바뀌지 않습니다.
-   - 로컬이 `origin`보다 뒤처졌거나 편집 파일이 로컬 JSON보다 새 원본 기준이면 멈추고 "`git pull`로 최신 yaml과 JSON을 함께 받으세요"라고 안내합니다. **최신 기준을 확보하는 방법은 `git pull`뿐입니다.** `collect`를 다시 돌려도 `dataVersion`만 새로워질 뿐 오래된 yaml 내용은 그대로이므로 해결책이 아닙니다.
-   - 미해결 원본 변경, 정리 과정에서 사라질 방문, collect 이후 직접 고친 yaml이 있으면 목록을 출력하고 멈춥니다.
-   - 메모·태그·숨김·분류는 yaml로 옮기지 않습니다(편집 레이어에 남음).
-4. `yarn collect trips/<여행>.yaml` — 새 구간만 API를 호출하고 기존 구간은 캐시를 씁니다.
-5. 커밋·push → 배포. 다음에 앱을 열면 내 override가 새 원본과 같음을 확인하고 자동으로 정리합니다.
-
 ## 배포 (Cloudflare Pages)
 
 비공개 GitHub repo `sch0718/landmark`의 `main`을 Cloudflare Pages 프로젝트 `landmark`에 연결했습니다. 배포 주소는 **https://landmark-c5f.pages.dev**, 브랜치 미리보기는 `https://<이름>.landmark-c5f.pages.dev`입니다.
@@ -182,10 +181,17 @@ node scripts/measure-ui-assets.mjs dist/assets
 | 환경변수 `VITE_NAVER_MAP_CLIENT_ID` | NCP Client ID (Production·Preview 모두)                          |
 
 - `yarn build:ci`는 `yarn validate && yarn typecheck && yarn test && yarn build && yarn build:map`입니다. 검증이나 테스트가 실패하면 배포되지 않습니다.
-- 저장소 루트의 `functions/`는 Pages가 자동으로 서버 함수(`/api/place`, `/api/naver-folder`)로 배포합니다. 별도 설정은 없습니다. 결과는 Cloudflare Cache API에 장소 1일·폴더 10분 동안 둡니다.
+- 저장소 루트의 `functions/`는 Pages가 자동으로 서버 함수(`/api/place`, `/api/naver-folder`, `/api/route`)로 배포합니다. 별도 설정은 없습니다. 결과는 Cloudflare Cache API에 장소 1일·폴더 10분·경로(자동차 1시간, 도보 7일) 동안 둡니다.
 - SPA 라우팅은 Pages 기본 동작(404.html이 없으면 index.html)을 씁니다.
 - `public/_headers`: 전체 `X-Robots-Tag: noindex`, `/data/*`는 `Cache-Control: public, max-age=60`.
-- GitHub Actions(`.github/workflows/ci.yml`)는 push·PR마다 lint, `build:ci`, E2E를 돌리는 보조 검증입니다. 배포 여부는 Pages 빌드 명령이 결정합니다.
+- GitHub Actions(`.github/workflows/ci.yml`)는 push·PR마다 lint, `build:ci`, 핵심 E2E(`test:e2e:ci`)를 돌리는 보조 검증입니다(수동 실행에서 `full_e2e`를 고르면 전체 E2E). 배포 여부는 Pages 빌드 명령이 결정합니다.
+
+## 공유 파일과 지도 페이지
+
+- **내보내기**: 보관함에서 장소를 고르고(없으면 지금 보이는 목록) `내보내기`를 누르면 HTML 파일 하나가 만들어집니다. 받는 사람은 설치·로그인 없이 휴대폰·PC에서 열어 보기만 합니다. 파일은 미리 빌드한 보기 화면 틀(`public/share-viewer.html`, `yarn build:viewer`)에 데이터를 끼워 만듭니다.
+- **지도 페이지**: 내보낸 파일의 지도는 파일 안 iframe이 띄우는 별도 페이지(`https://sch0718.github.io/landmark/`, `yarn build:map` → `dist-map/`)입니다. 이 저장소의 `gh-pages` 브랜치(GitHub Pages)에 올라가며, 워크플로 `.github/workflows/deploy-share-map.yml`이 `main`에 지도 관련 파일(`src/share-map/**`, `src/components/map/**` 등)이 바뀔 때 자동으로, 또는 수동 실행으로 배포합니다. 저장소 변수 `NAVER_MAP_CLIENT_ID`가 비어 있으면 배포 전에 멈추고, NCP 콘솔 Web 서비스 URL에 `https://sch0718.github.io`가 등록돼 있어야 합니다.
+- **가져오기**: 받은 파일을 앱의 ＋ 시트에서 고르거나(PC는 끌어 놓기도), 보기 화면의 `Landmark에 담기`로 `/import`를 열어 미리보기에서 넣을 장소와 라벨을 정해 내 보관함에 합칩니다.
+- 설계: `docs/superpowers/specs/2026-10-11-html-share-export-design.md`, `2026-10-13-share-import-design.md`.
 
 ## 공개 범위 주의
 
@@ -198,7 +204,7 @@ node scripts/measure-ui-assets.mjs dist/assets
 | 집 등 사적 좌표     | customPlaces에 정확한 위치 대신 인근 역 등 대표 지점을 씁니다(구간 경로가 그 지점에서 시작하므로 좌표만 숨기는 방식은 쓰지 않음) |
 | 제목·일정·장소      | 공개를 전제로 합니다. 더 강한 보호는 PoC 이후 로그인 단계에서 다룹니다                                                           |
 
-보관함(장소·라벨·메모)은 각자 기기의 localStorage에만 있고 서버로 보내지 않습니다. 공유·내보내기 화면은 v2에 아직 없습니다(하위 프로젝트 4에서 새로 만듭니다).
+보관함(장소·라벨·메모)은 각자 기기의 localStorage에만 있고 서버로 보내지 않습니다. 장소 추가·경로 계산에 쓰는 서버 함수는 입력한 링크·좌표를 해석하려고 받을 뿐 저장하지 않습니다(결과만 캐시). 내보낸 HTML 파일에는 고른 장소(와 선택 시 메모)가 들어 있어, 그 파일을 받은 사람은 누구나 볼 수 있습니다. 기기 간 동기화는 없습니다.
 
 ## 알려진 한계
 
@@ -206,11 +212,11 @@ node scripts/measure-ui-assets.mjs dist/assets
 - **같은 필드를 두 탭에서 고칠 때는 최신 시각 우선(LWW)**: 이름·분류·메모·라벨 목록은 필드마다 `updatedAt`이 더 나중인 쪽이 이깁니다. 기기 시계가 틀리면 오래된 편집이 이길 수 있습니다.
 - **메모 자동 저장은 탭을 바로 닫을 때 최선 노력(best-effort)**: 입력을 멈추고 600ms 뒤 저장합니다. 다른 화면으로 이동하거나 탭을 백그라운드로 보낼 때는 대기 중인 초안을 먼저 저장해 안정적이지만, 탭·브라우저를 강제로 닫는 순간에는 저장이 비동기 Web Lock 안에서 실행되어 마지막 입력(최대 약 0.6초)을 잃을 수 있습니다.
 - **길찾기 링크 없음**: 장소 상세에 길찾기 링크가 없습니다. 네이버 지도 길찾기 URL 형식을 근거 있게 확인하지 못해 일부러 뺐고, 실기기에서 확인되면 추가합니다. "네이버 지도에서 열기"는 있습니다.
-- **localStorage 의존**: 보관함은 이 기기·이 브라우저에만 있습니다. 브라우저 데이터 정리나 일부 사생활 보호 모드(저장소 차단)에서는 사라지거나 메모리 모드(배너로 알림, 새로고침하면 사라짐)로 동작합니다. 저장된 문서가 손상됐으면 원문을 `tripmap:library:v2:corrupt-<시각>` 키에 남기고 복구 화면에서 "백업 파일 받기"를 안내합니다. 기기 간 동기화와 내보내기·공유는 아직 없습니다.
+- **localStorage 의존**: 보관함은 이 기기·이 브라우저에만 있습니다. 브라우저 데이터 정리나 일부 사생활 보호 모드(저장소 차단)에서는 사라지거나 메모리 모드(배너로 알림, 새로고침하면 사라짐)로 동작합니다. 저장된 문서가 손상됐으면 원문을 `tripmap:library:v2:corrupt-<시각>` 키에 남기고 복구 화면에서 "백업 파일 받기"를 안내합니다. 기기 간 동기화는 없고, 다른 기기로 옮기려면 HTML 공유 파일로 내보내 가져와야 합니다.
 - **옛 여행 가져오기**: 가져오기는 옛 여행 하나(`/t/<publicId>`)를 미리보기·결정 후 보관함에 합칩니다. 긴 라벨 이름(30자 초과)·긴 메모(10,000자 초과)는 조용히 자르지 않고 사용자가 고르거나 제외해야 적용됩니다. 옛 편집 레이어(`tripmap:edit:<publicId>`)는 읽기만 하고 지우지 않으며, 같은 여행을 다시 가져오면 이미 있는 장소(네이버 `sid` 기준)는 새로 만들지 않고 라벨만 합칩니다.
 - **네이버 비공식 API**: 저장 목록·길찾기 API는 공개 API가 아니어서 언제든 바뀌거나 막힐 수 있습니다. 옛 파이프라인의 수집은 로컬에서만 하고 결과를 커밋하므로 배포된 앱은 영향을 받지 않으며, 호출은 `pipeline/naver-client.ts` 한 파일에 모여 있습니다.
 - **NaverMapAdapter는 실제 키로 수동 확인 필요**: 자동 테스트는 가짜 SDK·가짜 지도로만 돌기 때문에, 실제 네이버 지도 렌더링(라벨 색 마커·영역 이동·선택 연동)은 실제 Client ID로 배포한 뒤 눈으로 확인해야 합니다.
-- **실물 기기 미확인**: E2E는 에뮬레이션(Chromium 1280×800·360×780, WebKit iPhone 13)입니다. 실제 iPhone·Android 점검은 하위 프로젝트 5에서 합니다.
+- **실물 기기 미확인**: E2E는 에뮬레이션(Chromium 1280×800·360×780, WebKit iPhone 13)입니다. 실제 iPhone·Android 점검은 다듬기 D4에서 합니다(아직 하지 않았습니다).
 
 ## 수동 확인 체크리스트 (배포 후)
 
@@ -228,7 +234,7 @@ node scripts/measure-ui-assets.mjs dist/assets
 - [ ] Pages 빌드 명령(`yarn build:ci`)·출력(`dist`)·`NODE_VERSION=24`·`VITE_NAVER_MAP_CLIENT_ID` 설정 확인
 - [ ] NCP 콘솔 Web 서비스 URL에 `https://landmark-c5f.pages.dev`·`http://localhost:5173`·`http://localhost:8788` 등록
 - [x] NCP Maps 애플리케이션에서 Reverse Geocoding 켜기(2026-10-12 확인)
-- [ ] 배포 주소에서 링크 추가(`/api/place`)·폴더 가져오기(`/api/naver-folder`) 동작 확인
+- [ ] 배포 주소에서 링크 추가(`/api/place`)·폴더 가져오기(`/api/naver-folder`)·여행 구간 경로(`/api/route`) 동작 확인
 - [ ] 실제 여행 yaml 작성 → `yarn collect` → 커밋·push → 배포 확인
 - [ ] 위 수동 확인 체크리스트 수행
 - [ ] NCP Maps 요금·무료 사용량을 확인해 이 README에 날짜와 함께 기록
