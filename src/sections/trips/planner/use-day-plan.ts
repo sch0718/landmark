@@ -7,7 +7,7 @@ import { computeSchedule, type DaySchedule, type LegTime } from 'src/domain/trip
 import { forkEffect } from 'src/lib/effect/runtime';
 import type { Library } from 'src/schema/library';
 import type { Trip } from 'src/schema/trip';
-import { parseRouteInputKey, routeInputKey } from 'src/server/route';
+import { parseRouteInputKey, routeInputKey, type RouteResult } from 'src/server/route';
 import { RouteLookup, ROUTE_MAX_CONCURRENT } from 'src/services/route-lookup';
 import { libraryAtom } from 'src/stores/library-state';
 import { routeStatesAtom, type RouteState } from 'src/stores/trip-planner';
@@ -49,6 +49,13 @@ const liveTrip = (lib: Library, tripId: string): Trip | null => {
   return trip !== undefined && trip.deletedAt === null ? trip : null;
 };
 
+/** `known`의 조회 시각이 `incoming`보다 확실히 늦은가. 시각을 읽을 수 없으면 아니다(들어온 값이 이긴다). */
+const isNewerRoute = (known: RouteResult, incoming: RouteResult): boolean => {
+  const knownAt = Date.parse(known.queriedAt);
+  const incomingAt = Date.parse(incoming.queriedAt);
+  return Number.isFinite(knownAt) && Number.isFinite(incomingAt) && knownAt > incomingAt;
+};
+
 /** 한 구간을 묻고 결과를 `routeStatesAtom`에 쓴다. 실패도 상태로 남기므로 이 효과는 실패하지 않는다. */
 function lookupLeg(store: Store, key: string, refresh: boolean) {
   const { mode, from, to } = parseRouteInputKey(key);
@@ -60,7 +67,18 @@ function lookupLeg(store: Store, key: string, refresh: boolean) {
     else if (result.failure.code === 'NO_ROUTE') state = { status: 'no-route' };
     else if (result.failure.code === 'OFFLINE') state = { status: 'offline' };
     else state = { status: 'failed', code: result.failure.code };
-    store.set(routeStatesAtom, (prev) => ({ ...prev, [key]: state }));
+    store.set(routeStatesAtom, (prev) => {
+      // 같은 구간의 두 조회가 뒤바뀐 순서로 끝나도 오래된 경로가 새 경로를 덮지 않게 한다.
+      const known = prev[key];
+      if (
+        known?.status === 'routed' &&
+        state.status === 'routed' &&
+        isNewerRoute(known.result, state.result)
+      ) {
+        return prev;
+      }
+      return { ...prev, [key]: state };
+    });
   });
 }
 

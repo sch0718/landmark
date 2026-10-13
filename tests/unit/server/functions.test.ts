@@ -523,7 +523,8 @@ describe('다시 계산 → 엣지 캐시 우회(RouteLookup + GET /api/route)',
       }).pipe(Effect.provide(RouteLookup.layerWith({ fetch: appFetch, storage: null }))),
     );
     expect(calls).toEqual([NAVER_CAR, NAVER_CAR]);
-    expect(plain.queriedAt).toBe('2026-10-13T01:00:00.000Z');
+    // 늦게 온 엣지 캐시의 오래된 답(01:00)은 먼저 끝난 refresh 결과(01:20)를 덮지 못하고, 보통 호출도 새 값을 받는다.
+    expect(plain.queriedAt).toBe('2026-10-13T01:20:00.000Z');
     expect(refreshed.queriedAt).toBe('2026-10-13T01:20:00.000Z');
   });
 });

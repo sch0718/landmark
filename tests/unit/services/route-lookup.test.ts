@@ -517,6 +517,107 @@ describe('RouteLookup 동시 요청', () => {
     }),
   );
 
+  describe('보통 요청과 refresh가 엇갈려 끝날 때', () => {
+    // 보통 요청은 엣지 캐시의 오래된 답(600초, 00:00)을, refresh는 새 답(900초, 00:05)을 받는다.
+    const STALE = { durationS: 600, queriedAt: '2026-10-13T00:00:00.000Z' };
+    const NEWER = { durationS: 900, queriedAt: '2026-10-13T00:05:00.000Z' };
+
+    /** 응답 시점을 테스트가 정한다: `finish('plain' | 'fresh')`를 불러야 해당 요청이 응답한다. */
+    const heldFetch = () => {
+      const gates: Record<'plain' | 'fresh', (() => void) | null> = { plain: null, fresh: null };
+      const fetchFn = vi.fn(
+        (url: unknown) =>
+          new Promise<Response>((resolve) => {
+            const fresh = String(url).includes('fresh=1');
+            gates[fresh ? 'fresh' : 'plain'] = () => resolve(json(result(fresh ? NEWER : STALE)));
+          }),
+      );
+      const finish = (which: 'plain' | 'fresh') =>
+        Effect.gen(function* () {
+          yield* settle;
+          gates[which]?.();
+          yield* settle;
+        });
+      return { fetchFn, finish };
+    };
+
+    it.effect('refresh가 먼저 끝나고 오래된 보통 응답이 늦게 와도 캐시와 반환값은 새 값이다', () =>
+      Effect.gen(function* () {
+        const storage = createMemoryStorage();
+        const { fetchFn, finish } = heldFetch();
+        const [plain, refreshed, later] = yield* run({ fetch: fetchFn, storage }, (l) =>
+          Effect.gen(function* () {
+            const [plain, refreshed] = yield* Effect.all(
+              [
+                l.leg('car', A, B),
+                l.leg('car', A, B, { refresh: true }),
+                Effect.andThen(finish('fresh'), finish('plain')),
+              ],
+              { concurrency: 'unbounded' },
+            );
+            return [plain, refreshed, yield* l.leg('car', A, B)] as const;
+          }),
+        );
+        expect(fetchFn).toHaveBeenCalledTimes(2);
+        expect(refreshed.durationS).toBe(900);
+        // 늦게 온 오래된 응답을 받은 보통 호출도 캐시에 남은 새 값을 돌려준다.
+        expect(plain.durationS).toBe(900);
+        expect(plain.queriedAt).toBe(NEWER.queriedAt);
+        // 이후 읽기(캐시)도 새 값이고, 서버에 다시 묻지 않는다.
+        expect(later.durationS).toBe(900);
+        expect(fetchFn).toHaveBeenCalledTimes(2);
+        expect(Object.values(readDoc(storage).entries)).toMatchObject([
+          { durationS: 900, queriedAt: NEWER.queriedAt },
+        ]);
+      }),
+    );
+
+    it.effect('보통 응답이 먼저 끝나고 refresh가 나중에 끝나면 refresh 값으로 바뀐다', () =>
+      Effect.gen(function* () {
+        const storage = createMemoryStorage();
+        const { fetchFn, finish } = heldFetch();
+        const [plain, refreshed, later] = yield* run({ fetch: fetchFn, storage }, (l) =>
+          Effect.gen(function* () {
+            const [plain, refreshed] = yield* Effect.all(
+              [
+                l.leg('car', A, B),
+                l.leg('car', A, B, { refresh: true }),
+                Effect.andThen(finish('plain'), finish('fresh')),
+              ],
+              { concurrency: 'unbounded' },
+            );
+            return [plain, refreshed, yield* l.leg('car', A, B)] as const;
+          }),
+        );
+        expect(plain.durationS).toBe(600);
+        expect(refreshed.durationS).toBe(900);
+        expect(later.durationS).toBe(900);
+        expect(Object.values(readDoc(storage).entries)).toMatchObject([
+          { durationS: 900, queriedAt: NEWER.queriedAt },
+        ]);
+      }),
+    );
+
+    it.effect('조회 시각을 읽을 수 없으면 들어온 값이 이긴다(기존 동작)', () =>
+      Effect.gen(function* () {
+        const storage = createMemoryStorage();
+        const bodies = [
+          result({ durationS: 900, queriedAt: NEWER.queriedAt }),
+          result({ durationS: 600, queriedAt: '읽을 수 없는 시각' }),
+        ];
+        const fetchFn = vi.fn(async () => json(bodies.shift()));
+        const second = yield* run({ fetch: fetchFn, storage }, (l) =>
+          Effect.gen(function* () {
+            yield* l.leg('car', A, B);
+            return yield* l.leg('car', A, B, { refresh: true });
+          }),
+        );
+        expect(second.durationS).toBe(600);
+        expect(Object.values(readDoc(storage).entries)[0]?.durationS).toBe(600);
+      }),
+    );
+  });
+
   it.effect('refresh끼리는 진행 중인 요청을 나눠 쓴다', () =>
     Effect.gen(function* () {
       const fetchFn = vi.fn(async () => {

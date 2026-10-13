@@ -1,9 +1,11 @@
 import { act, fireEvent, renderHook, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { Effect, Layer } from 'effect';
 import { Provider } from 'jotai';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setAppRuntimeForTest } from 'src/lib/effect/runtime';
+import { RouteLookup } from 'src/services/route-lookup';
 import { useDayPlan } from 'src/sections/trips/planner/use-day-plan';
 import { libraryAtom } from 'src/stores/library-state';
 import { selectedDayAtom } from 'src/stores/trip-planner';
@@ -219,6 +221,47 @@ describe('구간과 경로 상태', () => {
     expect(await within(timeline()).findByText('10월 13일 조회')).toBeInTheDocument();
     const refreshed = routes.calls.filter((c) => c.refresh);
     expect(refreshed.map((c) => c.to).sort()).toEqual(['속초 횟집', '안목 카페거리']);
+  });
+
+  it('다시 계산이 먼저 끝나고 오래된 처음 응답이 늦게 와도 화면은 새 시간·조회 시각을 지킨다', async () => {
+    // 처음 요청(보통)은 늦게 끝나고, 그사이 `다시 계산`이 새 답을 먼저 준다. 조회 계층이 어떤 순서로
+    // 답하든(가짜는 순서를 지키지 않는다) 화면 상태가 오래된 값으로 돌아가면 안 된다.
+    const calls: { refresh: boolean }[] = [];
+    let releaseStale: () => void = () => {};
+    const stale = route(20, 5000, { queriedAt: '2026-10-12T03:00:00.000Z' });
+    const newer = route(45, 9000, { queriedAt: '2026-10-13T03:00:00.000Z' });
+    const layer = Layer.succeed(
+      RouteLookup,
+      RouteLookup.of({
+        leg: (_mode, _from, _to, options) =>
+          Effect.suspend(() => {
+            const refresh = options?.refresh === true;
+            calls.push({ refresh });
+            if (refresh) return Effect.succeed(newer);
+            return Effect.promise(
+              () => new Promise<typeof stale>((resolve) => (releaseStale = () => resolve(stale))),
+            );
+          }),
+      }),
+    );
+    const lib = withTrip(plannerLibrary(), makeTrip({ stops: [[P1, P2]] }));
+    await open(lib, { routes: { layer, calls: [] } });
+    const user = userEvent.setup();
+    const leg = () => legRow('중앙시장 닭강정', '안목 카페거리');
+
+    await waitFor(() => expect(calls).toHaveLength(1));
+    // 처음 응답이 오기 전에도 합계 줄(다시 계산)은 보인다.
+    await user.click(within(timeline()).getByRole('button', { name: '다시 계산' }));
+    expect(await within(leg()).findByText('45분 · 9km')).toBeInTheDocument();
+    expect(within(timeline()).getByText('10월 13일 조회')).toBeInTheDocument();
+
+    await act(async () => {
+      releaseStale();
+    });
+    await act(async () => {});
+    expect(within(leg()).getByText('45분 · 9km')).toBeInTheDocument();
+    expect(within(timeline()).getByText('10월 13일 조회')).toBeInTheDocument();
+    expect(within(timeline()).queryByText('10월 12일 조회')).not.toBeInTheDocument();
   });
 
   it('고른 Day의 구간을 먼저 요청하고 다른 Day도 미리 요청한다', async () => {

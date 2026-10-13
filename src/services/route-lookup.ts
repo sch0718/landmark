@@ -225,11 +225,31 @@ export class RouteLookup extends Context.Service<
       };
       options.onLeave?.(flush);
 
-      const remember = (key: string, route: RouteResult) => {
+      /** 캐시에 있던 항목이 들어온 경로보다 확실히 새것인가(`queriedAt` 비교). 시각을 읽을 수 없으면 아니다. */
+      const isNewerThan = (cached: CachedRoute, incoming: RouteResult): boolean => {
+        const cachedAt = Date.parse(cached.queriedAt);
+        const incomingAt = Date.parse(incoming.queriedAt);
+        return Number.isFinite(cachedAt) && Number.isFinite(incomingAt) && cachedAt > incomingAt;
+      };
+
+      /**
+       * 받은 경로를 캐시에 넣고, 캐시에 실제로 남은 경로를 돌려준다. 같은 구간의 보통 요청과 `refresh`는
+       * 따로 돌아 끝나는 순서가 뒤바뀔 수 있다. 늦게 온 오래된 응답(엣지 캐시)이 먼저 끝난 새 결과를
+       * 덮지 않게, 캐시에 더 새 항목이 있으면 그것을 지키고 호출한 쪽에도 그것을 돌려준다.
+       */
+      const remember = (key: string, route: RouteResult): RouteResult => {
+        const existing = entries.get(key);
         entries.delete(key);
+        if (existing !== undefined && isNewerThan(existing, route)) {
+          // 새 항목은 그대로 두고, 쓴 것으로만 친다(맨 뒤로 옮기고 `usedAt` 갱신).
+          entries.set(key, { ...existing, usedAt: now().toISOString() });
+          persistSoon();
+          return stripUsedAt(existing);
+        }
         entries.set(key, { ...route, path: roundPath(route.path), usedAt: now().toISOString() });
         if (entries.size > ROUTE_CACHE_MAX) dropOldest(entries.size - ROUTE_CACHE_MAX);
         persistSoon();
+        return route;
       };
 
       const offline = (cause: unknown) =>
@@ -290,11 +310,11 @@ export class RouteLookup extends Context.Service<
         return route;
       });
 
-      /** 한 구간을 서버에서 받아 캐시에 넣는다. 동시 요청 수는 `slots`가 제한한다. */
+      /** 한 구간을 서버에서 받아 캐시에 넣고, 캐시에 남은 경로를 돌려준다. 동시 요청 수는 `slots`가 제한한다. */
       const fetchLeg = (key: string, mode: RouteMode, from: LngLat, to: LngLat, fresh: boolean) =>
         slots
           .withPermits(1)(request(mode, from, to, fresh))
-          .pipe(Effect.tap((route) => Effect.sync(() => remember(key, route))));
+          .pipe(Effect.map((route) => remember(key, route)));
 
       const leg = (
         mode: RouteMode,
