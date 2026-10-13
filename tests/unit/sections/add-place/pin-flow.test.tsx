@@ -352,6 +352,63 @@ describe('핀 입력 카드', () => {
   });
 });
 
+describe('주소 찾는 중 표시', () => {
+  const LOADING = '주소 찾는 중…';
+
+  /** 조회가 끝나지 않는 주소 변환(`resolve`로 끝낸다). */
+  function pendingReverse() {
+    let resolve!: (address: string | null) => void;
+    const promise = new Promise<string | null>((r) => (resolve = r));
+    const layer = Layer.succeed(
+      ReverseGeocoder,
+      ReverseGeocoder.of({ reverse: () => Effect.promise(() => promise) }),
+    );
+    return { layer, resolve };
+  }
+
+  async function openCardWith(layer: Layer.Layer<ReverseGeocoder>) {
+    const user = userEvent.setup();
+    const rendered = await renderLibrary(sampleLibrary(), {
+      ids: [NEW_ID],
+      reverseGeocoder: layer,
+    });
+    await mapReady();
+    await openFrom(user, '지도에서 핀 찍기');
+    pan([126.978, 37.5665]);
+    await user.click(screen.getByRole('button', { name: '여기에 추가' }));
+    await within(panel()).findByRole('textbox', { name: '이름' });
+    return { user, ...rendered };
+  }
+
+  it('찾는 동안 보이고, 찾으면 사라진다', async () => {
+    const pending = pendingReverse();
+    await openCardWith(pending.layer);
+    expect(within(panel()).getByRole('status')).toHaveTextContent(LOADING);
+    await act(async () => pending.resolve('서울특별시 중구 세종대로 110'));
+    await waitFor(() => expect(within(panel()).queryByText(LOADING)).not.toBeInTheDocument());
+    expect(within(panel()).getByRole('textbox', { name: '주소' })).toHaveValue(
+      '서울특별시 중구 세종대로 110',
+    );
+  });
+
+  it('못 찾아도 사라지고 안내로 바뀐다', async () => {
+    const pending = pendingReverse();
+    await openCardWith(pending.layer);
+    expect(within(panel()).getByText(LOADING)).toBeInTheDocument();
+    await act(async () => pending.resolve(null));
+    await waitFor(() => expect(within(panel()).queryByText(LOADING)).not.toBeInTheDocument());
+    expect(within(panel()).getByText(ADDRESS_MISSING)).toBeInTheDocument();
+  });
+
+  it('찾는 동안 사용자가 주소를 쓰면 사라진다', async () => {
+    const pending = pendingReverse();
+    const { user } = await openCardWith(pending.layer);
+    expect(within(panel()).getByText(LOADING)).toBeInTheDocument();
+    await user.type(within(panel()).getByRole('textbox', { name: '주소' }), '내가 쓴 주소');
+    expect(within(panel()).queryByText(LOADING)).not.toBeInTheDocument();
+  });
+});
+
 describe('링크 실패에서 핀으로', () => {
   it('위치 없는 링크는 이름을 채운 채 핀 모드로 들어오고, 카드에 그 이름이 있다', async () => {
     const user = userEvent.setup();

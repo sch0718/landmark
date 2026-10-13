@@ -2,7 +2,7 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import { Effect, Result } from 'effect';
-import { useSetAtom } from 'jotai';
+import { useAtom, useSetAtom } from 'jotai';
 import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { toast } from 'sonner';
 import type { PlaceCandidate } from 'src/domain/library/add-place';
@@ -13,7 +13,7 @@ import { extractUrl } from 'src/sections/add-place/extract-url';
 import { PlaceLookupError } from 'src/services/errors';
 import { PlaceLookup } from 'src/services/place-lookup';
 import { ReverseGeocoder } from 'src/services/reverse-geocoder';
-import { addFlowAtom, type AddFlow } from 'src/stores/add-place';
+import { addFlowAtom, linkDraftAtom, type AddFlow } from 'src/stores/add-place';
 
 const FIELD_SX = {
   boxSizing: 'border-box',
@@ -84,7 +84,7 @@ const PIN_CODES: readonly string[] = ['UPSTREAM_ERROR', 'TIMEOUT'];
  */
 export function LinkInputPanel({ hint }: { hint: 'place' | 'folder' }) {
   const setFlow = useSetAtom(addFlowAtom);
-  const [text, setText] = useState('');
+  const [text, setText] = useAtom(linkDraftAtom);
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
   const guideId = useId();
   // 실행 번호. 새로 조회하거나 창이 닫히면 올려서 지난 조회의 결과가 끼어들지 않게 한다.

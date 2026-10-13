@@ -66,6 +66,14 @@ export function CandidateCard({ candidate }: { candidate: PlaceCandidate }) {
   // 이미 있는 장소에 라벨만 더할 때는 이름이 필요 없다.
   const askName = needsName && !merging;
   const missingName = askName && name.trim() === '';
+  // 이미 있는 장소에 저장해도 아무것도 바뀌지 않을 때만 `라벨 더하기`를 막는다: 고른 라벨·메모가 없고,
+  // 여행 대상이 없고(있으면 그 여행의 후보에 넣는다), 장소가 이미 보관함에 보인다(`saved: false`면 보이게 바뀐다).
+  const nothingToSave =
+    merging &&
+    labelIds.length === 0 &&
+    memo.trim() === '' &&
+    tripId === null &&
+    existing.saved.value;
 
   const save = async () => {
     if (savingRef.current) return;
@@ -218,7 +226,7 @@ export function CandidateCard({ candidate }: { candidate: PlaceCandidate }) {
         </Button>
         <Button
           variant="contained"
-          disabled={saving || creating || missingName}
+          disabled={saving || creating || missingName || nothingToSave}
           onClick={() => void save()}
           sx={{ minHeight: 44 }}
         >
