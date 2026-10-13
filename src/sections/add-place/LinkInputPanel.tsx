@@ -10,6 +10,7 @@ import { startEffect } from 'src/lib/effect/runtime';
 import type { PlaceSource } from 'src/schema/library';
 import type { ResolvedPlace } from 'src/server/resolve';
 import { extractUrl } from 'src/sections/add-place/extract-url';
+import { RETRY_CODES } from 'src/sections/add-place/shared';
 import { PlaceLookupError } from 'src/services/errors';
 import { PlaceLookup } from 'src/services/place-lookup';
 import { ReverseGeocoder } from 'src/services/reverse-geocoder';
@@ -74,8 +75,7 @@ const resolveLink = (url: string) =>
 
 type Status = { kind: 'idle' } | { kind: 'loading' } | { kind: 'error'; error: PlaceLookupError };
 
-/** 다시 시도할 수 있는 오류와 핀으로 넘어갈 수 있는 오류(스펙 §5). */
-const RETRY_CODES: readonly string[] = ['UPSTREAM_ERROR', 'TIMEOUT', 'OFFLINE'];
+/** 핀으로 넘어갈 수 있는 오류(스펙 §5). 다시 시도할 수 있는 오류는 `RETRY_CODES`. */
 const PIN_CODES: readonly string[] = ['UPSTREAM_ERROR', 'TIMEOUT'];
 
 /**

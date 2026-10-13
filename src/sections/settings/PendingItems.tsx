@@ -8,7 +8,7 @@ import Typography from '@mui/material/Typography';
 import { useId } from 'react';
 import type { MemoDecision } from 'src/domain/library/legacy-import';
 import { downloadText } from 'src/lib/download-text';
-import { LIBRARY_LIMITS } from 'src/schema/library';
+import { LIBRARY_LIMITS, type LabelNameIssue } from 'src/schema/library';
 import type { LabelDraft, LabelItem, MemoItem } from 'src/sections/settings/import-decisions';
 
 const clip = (text: string, count: number): string => Array.from(text).slice(0, count).join('');
@@ -24,10 +24,10 @@ const ITEM_SX = {
   bgcolor: 'var(--tm-bg-raised)',
 } as const;
 
-const REASON = {
+const REASON: Record<LabelNameIssue, string> = {
   empty: '이름이 비어 있어요',
   'too-long': `이름이 ${LIBRARY_LIMITS.labelNameChars}자를 넘어요`,
-} as const;
+};
 
 type LabelProps = {
   item: LabelItem;

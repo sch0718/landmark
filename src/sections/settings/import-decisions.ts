@@ -5,7 +5,13 @@ import {
 } from 'src/domain/library/legacy-import';
 import type { LegacySource, MemoDecision, PendingDecision } from 'src/domain/library/legacy-import';
 import { liveLabels } from 'src/domain/library/query';
-import { LIBRARY_LIMITS, normalizeLabelName, type Library } from 'src/schema/library';
+import {
+  LABEL_NAME_RANGE_MESSAGE,
+  labelNameIssue,
+  type LabelNameIssue,
+  normalizeLabelName,
+  type Library,
+} from 'src/schema/library';
 
 /**
  * 라벨 이름 확인 항목 하나의 입력. `confirmed`는 이름을 확인했다는 뜻이고, 제외(`excluded`)는 그 자체로 결정이다.
@@ -20,7 +26,6 @@ export type Decisions = {
 
 export const NO_DECISIONS: Decisions = { labels: {}, memos: {} };
 
-export const NAME_LENGTH_MESSAGE = `1–${LIBRARY_LIMITS.labelNameChars}자로 입력하세요`;
 export const NAME_TAKEN_MESSAGE = '같은 이름의 라벨이 있어요';
 
 /** 확인 대상으로 나왔던 항목. 결정한 뒤에도 고칠 수 있게 계속 보여 준다. */
@@ -29,7 +34,7 @@ export type LabelItem = {
   key: string;
   rawName: string;
   suggested: string;
-  reason: 'empty' | 'too-long';
+  reason: LabelNameIssue;
 };
 export type MemoItem = {
   kind: 'memo-too-long';
@@ -76,8 +81,7 @@ const onlyExcludedPlaces = (placeKeys: readonly string[] | undefined, decisions:
   placeKeys.length > 0 &&
   placeKeys.every((placeKey) => decisions.memos[placeKey] === 'exclude-place');
 
-const lengthOk = (name: string): boolean =>
-  name !== '' && name.length <= LIBRARY_LIMITS.labelNameChars;
+const lengthOk = (name: string): boolean => labelNameIssue(name) === null;
 
 /**
  * 고른 라벨 이름의 오류 문구(없으면 `null`). 비었거나 30자 초과이거나, 보관함의 살아 있는 라벨 또는
@@ -95,7 +99,7 @@ export function labelNameError(
   // 이 출처를 쓰는 장소가 모두 제외됐다면 가져오지 않는 라벨이라 오류도 없다.
   if (onlyExcludedPlaces(placesOf.get(key), decisions)) return null;
   const name = draft.name.trim();
-  if (!lengthOk(name)) return NAME_LENGTH_MESSAGE;
+  if (!lengthOk(name)) return LABEL_NAME_RANGE_MESSAGE;
   const normalized = normalizeLabelName(name);
   if (liveLabels(library).some((l) => normalizeLabelName(l.name.value) === normalized)) {
     return NAME_TAKEN_MESSAGE;

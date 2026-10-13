@@ -12,9 +12,9 @@ import {
   planShareImport,
   shareTitle,
 } from 'src/domain/library/import-share';
-import { LIBRARY_LIMITS } from 'src/schema/library';
+import { labelNameIssue } from 'src/schema/library';
 import type { ShareDoc } from 'src/schema/share';
-import { FIELD_SX, resultMessage } from 'src/sections/add-place/FolderPreview';
+import { FIELD_SX, resultMessage } from 'src/sections/add-place/shared';
 import { useLibraryQuery } from 'src/sections/library/use-library-query';
 import { ShareLabelRows } from 'src/sections/share-import/ShareLabelRows';
 import { SharePlaceRows } from 'src/sections/share-import/SharePlaceRows';
@@ -62,8 +62,9 @@ export function SharePreview({ doc }: { doc: ShareDoc }) {
   const nameErrorId = useId();
 
   const trimmed = name.trim();
-  const nameTooLong = titleOn && trimmed.length > LIBRARY_LIMITS.labelNameChars;
-  const nameValid = trimmed.length > 0 && trimmed.length <= LIBRARY_LIMITS.labelNameChars;
+  const nameIssue = labelNameIssue(name);
+  const nameTooLong = titleOn && nameIssue === 'too-long';
+  const nameValid = nameIssue === null;
   // 제목 라벨을 붙이지 않거나 이름이 잘못됐으면 `null`(잘못된 이름은 버튼이 막는다).
   const titleLabel = titleOn && nameValid ? trimmed : null;
   const selectedIds = useMemo(() => [...selected], [selected]);

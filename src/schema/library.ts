@@ -106,6 +106,18 @@ export function normalizeLabelName(name: string): string {
   return name.trim().replace(/\s+/g, ' ').toLocaleLowerCase('ko-KR');
 }
 
+/** 라벨 이름의 문제. 앞뒤 공백을 지운 길이로 판단한다. */
+export type LabelNameIssue = 'empty' | 'too-long';
+
+export function labelNameIssue(name: string): LabelNameIssue | null {
+  const length = name.trim().length;
+  if (length === 0) return 'empty';
+  return length > LIBRARY_LIMITS.labelNameChars ? 'too-long' : null;
+}
+
+/** 라벨 이름이 1–최대 글자 수가 아닐 때 보일 문구. */
+export const LABEL_NAME_RANGE_MESSAGE = `1–${LIBRARY_LIMITS.labelNameChars}자로 입력하세요`;
+
 export const LibrarySchema = Schema.Struct({
   schemaVersion: Schema.Literal(2),
   // 키에 `PlaceId`/`LabelId`를 걸면 Effect가 형식이 틀린 항목을 오류 없이 버린다(데이터 손실).

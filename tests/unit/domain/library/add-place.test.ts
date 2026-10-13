@@ -5,6 +5,7 @@ import {
   importFolder,
   planFolderImport,
   sourceKey,
+  uniqueBySid,
   type FolderItem,
   type PlaceCandidate,
 } from 'src/domain/library/add-place';
@@ -364,6 +365,20 @@ function item(sid: string, over: Partial<FolderItem> = {}): FolderItem {
     ...over,
   };
 }
+
+describe('uniqueBySid', () => {
+  it('keeps the first of each sid and preserves order', () => {
+    const a = { sid: '1', name: 'a' };
+    const b = { sid: '2', name: 'b' };
+    const c = { sid: '1', name: 'c' };
+    expect(uniqueBySid([a, b, c])).toEqual([a, b]);
+    expect(uniqueBySid([b, a, c])).toEqual([b, a]);
+  });
+
+  it('works for folder items', () => {
+    expect(uniqueBySid([item('1'), item('2'), item('1')])).toEqual([item('1'), item('2')]);
+  });
+});
 
 describe('planFolderImport', () => {
   it('puts sids already in the library into merge and the rest into create', () => {
