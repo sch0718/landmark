@@ -62,12 +62,15 @@ function lookupLeg(store: Store, key: string, refresh: boolean) {
     const result = yield* Effect.result(lookup.leg(mode, from, to, { refresh }));
     let state: RouteState;
     if (Result.isSuccess(result)) {
-      const { seq, ...route } = result.success;
+      const { seq, fresh, ...route } = result.success;
+      void fresh; // 성공한 구간은 다시 묻는 종류를 기억할 일이 없다.
       state = { seq, status: 'routed', result: route };
     } else {
-      const { code, seq } = result.failure;
+      // 연결 실패는 호출한 쪽의 `refresh`가 아니라 실제로 실패한 요청의 종류(`fresh`)를 남긴다: 진행 중인
+      // 다시 계산에 보통 호출이 합류했다면 두 호출이 같은 실패를 받는데, 어느 쪽이 쓰여도 같아야 한다.
+      const { code, seq, fresh } = result.failure;
       if (code === 'NO_ROUTE') state = { seq, status: 'no-route' };
-      else if (code === 'OFFLINE') state = { seq, status: 'offline', refresh };
+      else if (code === 'OFFLINE') state = { seq, status: 'offline', refresh: fresh };
       else state = { seq, status: 'failed', code };
     }
     store.set(routeStatesAtom, (prev) => {

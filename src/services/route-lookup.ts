@@ -34,11 +34,13 @@ const isObject = (value: unknown): value is Json =>
  * 진행 중인 요청에 합류한 호출, 그 요청이 남긴 캐시를 읽은 호출도 같은 번호를 받는다. 저장소에서 읽은
  * 캐시와 서버에 묻지 않는 답(직선 10m 미만)은 0이다. 실패는 `RouteLookupError.seq`에 같은 번호를 싣는다.
  * 같은 구간의 답이 엇갈려 와도 번호가 큰 쪽이 나중에 시작한 요청의 답이다.
+ * `fresh`는 그 요청이 `다시 계산`(서버 캐시 건너뛰기)이었는가다. 호출한 쪽의 `refresh`가 아니라 실제로 나간
+ * 요청의 종류라, 합류한 호출·캐시 읽기도 만든 요청의 값을 받는다(서버에 묻지 않은 답은 false).
  */
-export type RouteAnswer = RouteResult & { seq: number };
+export type RouteAnswer = RouteResult & { seq: number; fresh: boolean };
 
-/** 메모리 캐시 항목. `seq`는 메모리에만 두고 저장하지 않는다(새 페이지의 요청 번호는 다시 1부터다). */
-type CachedRoute = RouteResult & { usedAt: string; seq: number };
+/** 메모리 캐시 항목. `seq`·`fresh`는 메모리에만 두고 저장하지 않는다(새 페이지의 요청 번호는 다시 1부터다). */
+type CachedRoute = RouteResult & { usedAt: string; seq: number; fresh: boolean };
 type LngLat = [number, number];
 
 const isLngLat = (value: unknown): value is LngLat =>
@@ -109,8 +111,8 @@ function readCache(storage: Storage | null): Map<string, CachedRoute> {
   for (const [key, value] of Object.entries(doc.entries)) {
     const route = toRouteResult(value);
     if (route === null || !isObject(value) || typeof value.usedAt !== 'string') continue;
-    // 저장소에서 읽은 항목은 이 세션의 어떤 요청보다 먼저다.
-    loaded.push([key, { ...route, usedAt: value.usedAt, seq: 0 }]);
+    // 저장소에서 읽은 항목은 이 세션의 어떤 요청보다 먼저다(어떤 종류의 요청이었는지도 모른다).
+    loaded.push([key, { ...route, usedAt: value.usedAt, seq: 0, fresh: false }]);
   }
   // 오래된 것이 앞에 오도록 맞춰 둔다(Map 삽입 순서 = 오래된 순).
   loaded.sort((a, b) => (a[1].usedAt < b[1].usedAt ? -1 : a[1].usedAt > b[1].usedAt ? 1 : 0));
@@ -133,7 +135,7 @@ export function listenPageLeave(flush: () => void): void {
  *   오래 안 쓴 것부터 지운다. 경로선 좌표는 소수 5자리로 줄여 저장하고, 저장은 300ms 간격으로 모아서 한다.
  * - 직선 10m 미만은 같은 지점으로 보고 서버에 묻지 않는다.
  * - 같은 키 요청이 진행 중이면 합치고, 동시에 나가는 요청은 최대 4개다.
- * - 답(성공·실패)마다 그 답을 만든 서버 요청의 순서 번호(`seq`)를 붙인다(`RouteAnswer`).
+ * - 답(성공·실패)마다 그 답을 만든 서버 요청의 순서 번호(`seq`)와 종류(`fresh`)를 붙인다(`RouteAnswer`).
  * - 서버 응답 처리는 `PlaceLookup`과 같다(HTML·`error` 없는 404·네트워크 실패는 `OFFLINE`).
  */
 export class RouteLookup extends Context.Service<
@@ -185,12 +187,13 @@ export class RouteLookup extends Context.Service<
         for (const key of [...entries.keys()].slice(0, count)) entries.delete(key);
       };
 
-      // 요청 번호(`seq`)는 이 세션에서만 뜻이 있어 저장하지 않는다.
+      // 요청 번호(`seq`)와 요청 종류(`fresh`)는 이 세션에서만 뜻이 있어 저장하지 않는다.
       const serialize = () =>
         JSON.stringify({
           entries: Object.fromEntries(
-            [...entries].map(([key, { seq, ...stored }]) => {
+            [...entries].map(([key, { seq, fresh, ...stored }]) => {
               void seq;
+              void fresh;
               return [key, stored];
             }),
           ),
@@ -255,12 +258,17 @@ export class RouteLookup extends Context.Service<
       };
 
       /**
-       * 요청 `seq`가 받은 경로를 캐시에 넣고, 캐시에 실제로 남은 경로를 돌려준다. 같은 구간의 보통 요청과
+       * 요청 `seq`(종류 `fresh`)가 받은 경로를 캐시에 넣고, 캐시에 실제로 남은 경로를 돌려준다. 같은 구간의 보통 요청과
        * `refresh`는 따로 돌아 끝나는 순서가 뒤바뀔 수 있다. 늦게 온 오래된 응답(엣지 캐시)이 먼저 끝난 새
        * 결과를 덮지 않게, 캐시에 더 새 항목이 있으면 그것을 지키고 호출한 쪽에도 그것을(그 항목을 남긴
-       * 요청의 번호와 함께) 돌려준다.
+       * 요청의 번호·종류와 함께) 돌려준다.
        */
-      const remember = (key: string, route: RouteResult, seq: number): RouteAnswer => {
+      const remember = (
+        key: string,
+        route: RouteResult,
+        seq: number,
+        fresh: boolean,
+      ): RouteAnswer => {
         const existing = entries.get(key);
         entries.delete(key);
         if (existing !== undefined && isNewerThan(existing, route)) {
@@ -274,20 +282,21 @@ export class RouteLookup extends Context.Service<
           path: roundPath(route.path),
           usedAt: now().toISOString(),
           seq,
+          fresh,
         });
         if (entries.size > ROUTE_CACHE_MAX) dropOldest(entries.size - ROUTE_CACHE_MAX);
         persistSoon();
-        return { ...route, seq };
+        return { ...route, seq, fresh };
       };
 
-      const offline = (seq: number) => (cause: unknown) =>
+      const offline = (seq: number, fresh: boolean) => (cause: unknown) =>
         Effect.sync(() => {
           if (offlineWarned) return;
           offlineWarned = true;
           console.warn(OFFLINE_WARNING, cause);
-        }).pipe(Effect.andThen(Effect.fail(new RouteLookupError({ code: 'OFFLINE', seq }))));
+        }).pipe(Effect.andThen(Effect.fail(new RouteLookupError({ code: 'OFFLINE', seq, fresh }))));
 
-      /** 요청 `seq`가 받은 응답을 경로로 읽는다. 실패에도 그 요청의 번호를 싣는다. */
+      /** 요청 `seq`가 받은 응답을 경로로 읽는다. 실패에도 그 요청의 번호와 종류(`fresh`)를 싣는다. */
       const request = Effect.fnUntraced(function* (
         seq: number,
         mode: RouteMode,
@@ -295,7 +304,7 @@ export class RouteLookup extends Context.Service<
         to: LngLat,
         fresh: boolean,
       ) {
-        const upstream = () => new RouteLookupError({ code: 'UPSTREAM_ERROR', seq });
+        const upstream = () => new RouteLookupError({ code: 'UPSTREAM_ERROR', seq, fresh });
         // `다시 계산`(fresh)은 서버의 엣지 캐시도 건너뛰게 한다(스펙 §4.2). 보통 요청은 엣지 캐시를 함께 쓴다.
         const path = `/api/route?mode=${mode}&from=${coordinate(from)}&to=${coordinate(to)}${fresh ? '&fresh=1' : ''}`;
         // 서버 시한(8초)보다 조금 길게 기다리고, 그래도 안 오면 중단한다. 중단하면 대기 칸과 진행 중 표가 풀린다.
@@ -303,15 +312,15 @@ export class RouteLookup extends Context.Service<
           const res = yield* Effect.tryPromise({
             try: (signal) => options.fetch(`${base}${path}`, { signal }),
             catch: (e) => e,
-          }).pipe(Effect.catch(offline(seq)));
+          }).pipe(Effect.catch(offline(seq, fresh)));
           const body = yield* Effect.tryPromise({ try: () => res.text(), catch: (e) => e }).pipe(
-            Effect.catch(offline(seq)),
+            Effect.catch(offline(seq, fresh)),
           );
           return { status: res.status, ok: res.ok, text: body };
         }).pipe(
           Effect.timeoutOrElse({
             duration: ROUTE_TIMEOUT_MS,
-            orElse: () => Effect.fail(new RouteLookupError({ code: 'TIMEOUT', seq })),
+            orElse: () => Effect.fail(new RouteLookupError({ code: 'TIMEOUT', seq, fresh })),
           }),
         );
         const text = response.text;
@@ -321,7 +330,7 @@ export class RouteLookup extends Context.Service<
         } catch {
           // 서버 함수가 있는 환경의 5xx(예: Cloudflare 오류 HTML 페이지)는 서버 문제이지 서버 함수 부재가 아니다.
           if (response.status >= 500) return yield* upstream();
-          return yield* offline(seq)(`JSON이 아닌 응답(HTTP ${response.status})`);
+          return yield* offline(seq, fresh)(`JSON이 아닌 응답(HTTP ${response.status})`);
         }
         const errorCode = readApiErrorCode(body);
         if (errorCode !== null) {
@@ -330,9 +339,9 @@ export class RouteLookup extends Context.Service<
             forbiddenWarned = true;
             console.warn(FORBIDDEN_ORIGIN_WARNING);
           }
-          return yield* new RouteLookupError({ code, seq });
+          return yield* new RouteLookupError({ code, seq, fresh });
         }
-        if (response.status === 404) return yield* offline(seq)('error 본문이 없는 404');
+        if (response.status === 404) return yield* offline(seq, fresh)('error 본문이 없는 404');
         if (!response.ok) return yield* upstream();
         const route = toRouteResult(body);
         if (route === null) return yield* upstream();
@@ -341,13 +350,13 @@ export class RouteLookup extends Context.Service<
 
       /**
        * 한 구간을 서버에서 받아 캐시에 넣고, 캐시에 남은 경로를 돌려준다. 동시 요청 수는 `slots`가 제한한다.
-       * 부를 때(진행 중 표에 올릴 때) 이 요청의 순서 번호를 매기고, 성공·실패 모두에 싣는다.
+       * 부를 때(진행 중 표에 올릴 때) 이 요청의 순서 번호를 매기고, 번호와 종류(`fresh`)를 성공·실패 모두에 싣는다.
        */
       const fetchLeg = (key: string, mode: RouteMode, from: LngLat, to: LngLat, fresh: boolean) => {
         const seq = ++requestSeq;
         return slots
           .withPermits(1)(request(seq, mode, from, to, fresh))
-          .pipe(Effect.map((route) => remember(key, route, seq)));
+          .pipe(Effect.map((route) => remember(key, route, seq, fresh)));
       };
 
       const leg = (
@@ -368,6 +377,7 @@ export class RouteLookup extends Context.Service<
               path: [from, to],
               queriedAt: now().toISOString(),
               seq: 0,
+              fresh: false,
             });
           }
           const key = routeInputKey({ mode, from, to });

@@ -63,7 +63,9 @@ const OFFLINE_PLACE_LOOKUP = Layer.succeed(
 /** 테스트 기본 경로 조회: 서버 없이 연결 실패(`OFFLINE`)만 돌려준다. 콘솔 경고도 내지 않는다. */
 const OFFLINE_ROUTE_LOOKUP = Layer.succeed(
   RouteLookup,
-  RouteLookup.of({ leg: () => Effect.fail(new RouteLookupError({ code: 'OFFLINE', seq: 0 })) }),
+  RouteLookup.of({
+    leg: () => Effect.fail(new RouteLookupError({ code: 'OFFLINE', seq: 0, fresh: false })),
+  }),
 );
 
 /** 테스트 기본 주소 변환: 늘 "주소를 못 찾음"(null). */

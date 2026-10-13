@@ -119,7 +119,7 @@ describe('RouteLookup 요청', () => {
       const got = yield* run({ fetch: fetchFn, storage: null, base: 'https://x.test' }, (l) =>
         l.leg('car', A, B),
       );
-      expect(got).toEqual({ ...result(), seq: 1 });
+      expect(got).toEqual({ ...result(), seq: 1, fresh: false });
       expect(fetchFn).toHaveBeenCalledTimes(1);
       expect(fetchFn).toHaveBeenCalledWith(
         'https://x.test/api/route?mode=car&from=127.00000,37.50000&to=127.05000,37.52000',
@@ -168,7 +168,7 @@ describe('RouteLookup 캐시', () => {
       const again = yield* run({ fetch: fetchFn, storage }, leg('car', A, B));
       expect(fetchFn).toHaveBeenCalledTimes(1);
       // 저장소에서 읽은 캐시는 번호 0(새 레이어의 어떤 요청보다 먼저).
-      expect(again).toEqual({ ...result(), seq: 0 });
+      expect(again).toEqual({ ...result(), seq: 0, fresh: false });
     }),
   );
 
@@ -292,7 +292,7 @@ describe('RouteLookup 캐시', () => {
           return first;
         }),
       );
-      expect(got).toEqual({ ...result(), seq: 1 });
+      expect(got).toEqual({ ...result(), seq: 1, fresh: false });
       expect(fetchFn).toHaveBeenCalledTimes(4);
       expect(storage.items.has(ROUTE_CACHE_KEY)).toBe(false);
     }),
@@ -318,7 +318,7 @@ describe('RouteLookup 캐시', () => {
       storage.setItem(ROUTE_CACHE_KEY, raw as string);
       const fetchFn = vi.fn(async () => json(result()));
       const got = yield* run({ fetch: fetchFn, storage }, leg('car', A, B));
-      expect(got).toEqual({ ...result(), seq: 1 });
+      expect(got).toEqual({ ...result(), seq: 1, fresh: false });
       expect(fetchFn).toHaveBeenCalledTimes(1);
       expect(Object.keys(readDoc(storage).entries)).toHaveLength(1);
     }),
@@ -346,7 +346,7 @@ describe('RouteLookup 캐시', () => {
           return [yield* l.leg('car', A, B), yield* l.leg('car', A, other)] as const;
         }),
       );
-      expect(kept).toEqual({ ...result(), seq: 0 });
+      expect(kept).toEqual({ ...result(), seq: 0, fresh: false });
       expect(refetched.durationS).toBe(777);
       expect(fetchFn).toHaveBeenCalledTimes(1);
     }),
@@ -776,7 +776,7 @@ describe('RouteLookup 오류', () => {
         ),
       );
       expect(outcome.codes).toEqual(['TIMEOUT', 'TIMEOUT', 'TIMEOUT', 'TIMEOUT']);
-      expect(outcome.retry).toEqual({ ...result(), seq: 5 });
+      expect(outcome.retry).toEqual({ ...result(), seq: 5, fresh: false });
       expect(fetchFn).toHaveBeenCalledTimes(5);
     }),
   );
@@ -796,7 +796,7 @@ describe('RouteLookup 오류', () => {
         ),
       );
       expect(outcome.first).toBe('UPSTREAM_ERROR');
-      expect(outcome.second).toEqual({ ...result(), seq: 2 });
+      expect(outcome.second).toEqual({ ...result(), seq: 2, fresh: false });
     }),
   );
 });
@@ -965,6 +965,72 @@ describe('RouteLookup 순서 번호(seq)', () => {
         expect(String((fetchFn.mock.calls[0] as unknown[])[0])).toContain('fresh=1');
         expect(refreshed).toMatchObject({ durationS: 900, seq: 1 });
         expect(plain).toMatchObject({ durationS: 900, seq: 1 });
+      }),
+  );
+
+  it.effect(
+    '답과 오류에 실제로 나간 요청의 종류(fresh)가 붙고, 합류·캐시 읽기도 만든 요청의 값을 받는다',
+    () =>
+      Effect.gen(function* () {
+        const { fetchFn, answer } = gatedFetch();
+        const out = yield* run({ fetch: fetchFn, storage: null }, (l) =>
+          Effect.gen(function* () {
+            // 진행 중인 다시 계산(fresh)에 보통 호출이 합류한다: 부른 쪽은 보통이지만 요청은 fresh다.
+            const [refreshed, joined] = yield* Effect.all(
+              [
+                l.leg('car', A, B, { refresh: true }),
+                Effect.andThen(settle, l.leg('car', A, B)),
+                Effect.andThen(settle, answer(0, json(result()))),
+              ],
+              { concurrency: 'unbounded' },
+            );
+            // 그 요청이 남긴 캐시를 읽은 보통 호출도 fresh를 받는다.
+            const cached = yield* l.leg('car', A, B);
+            // 보통 요청의 답은 fresh false, 거기 합류한 다시 계산 호출은 따로 fresh 요청을 보낸다.
+            const [plain, joinedPlain] = yield* Effect.all(
+              [l.leg('car', A, C), l.leg('car', A, C), answer(1, json(result()))],
+              { concurrency: 'unbounded' },
+            );
+            // 실패도 같다: 다시 계산이 실패하면 거기 합류한 보통 호출의 오류도 fresh true다.
+            const [failed, joinedFailed] = yield* Effect.all(
+              [
+                Effect.flip(l.leg('car', B, C, { refresh: true })),
+                Effect.flip(Effect.andThen(settle, l.leg('car', B, C))),
+                Effect.andThen(settle, answer(2, json(errorBody('NO_ROUTE'), 404))),
+              ],
+              { concurrency: 'unbounded' },
+            );
+            const [plainFailed] = yield* Effect.all(
+              [Effect.flip(l.leg('car', C, B)), answer(3, json(errorBody('UPSTREAM_ERROR'), 502))],
+              { concurrency: 'unbounded' },
+            );
+            const near = yield* l.leg('car', A, A);
+            return {
+              refreshed: [refreshed.seq, refreshed.fresh],
+              joined: [joined.seq, joined.fresh],
+              cached: [cached.seq, cached.fresh],
+              plain: [plain.seq, plain.fresh],
+              joinedPlain: [joinedPlain.seq, joinedPlain.fresh],
+              failed: [failed.seq, failed.fresh],
+              joinedFailed: [joinedFailed.seq, joinedFailed.fresh],
+              plainFailed: [plainFailed.seq, plainFailed.fresh],
+              near: [near.seq, near.fresh],
+            };
+          }).pipe(
+            Effect.catch((e) => (e instanceof RouteLookupError ? Effect.fail(e) : Effect.die(e))),
+          ),
+        );
+        expect(out).toEqual({
+          refreshed: [1, true],
+          joined: [1, true],
+          cached: [1, true],
+          plain: [2, false],
+          joinedPlain: [2, false],
+          failed: [3, true],
+          joinedFailed: [3, true],
+          plainFailed: [4, false],
+          near: [0, false],
+        });
       }),
   );
 });

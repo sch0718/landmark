@@ -228,8 +228,16 @@ describe('구간과 경로 상태', () => {
     // 어떤 순서로 답하든(가짜는 캐시로 순서를 맞추지 않는다) 먼저 시작한 요청의 답이 화면을 되돌리면 안 된다.
     const calls: { refresh: boolean }[] = [];
     let releaseStale: () => void = () => {};
-    const stale = { ...route(20, 5000, { queriedAt: '2026-10-12T03:00:00.000Z' }), seq: 1 };
-    const newer = { ...route(45, 9000, { queriedAt: '2026-10-13T03:00:00.000Z' }), seq: 2 };
+    const stale = {
+      ...route(20, 5000, { queriedAt: '2026-10-12T03:00:00.000Z' }),
+      seq: 1,
+      fresh: false,
+    };
+    const newer = {
+      ...route(45, 9000, { queriedAt: '2026-10-13T03:00:00.000Z' }),
+      seq: 2,
+      fresh: true,
+    };
     const layer = Layer.succeed(
       RouteLookup,
       RouteLookup.of({
@@ -514,6 +522,49 @@ describe('구간과 경로 상태', () => {
       expect(screen.queryByText(notice)).not.toBeInTheDocument();
       expect(ctl.count.plain).toBe(1);
     });
+
+    it.each(rejoins)(
+      '보통 요청·다시 계산이 진행 중일 때 %s, 합류한 보통 호출이 있어도 다시 계산의 연결 실패는 인터넷이 돌아올 때 다시 계산으로 묻는다',
+      async (_name, move) => {
+        const ctl = holdingFetch();
+        const lib = withTrip(
+          plannerLibrary(),
+          makeTrip({
+            stops: [
+              [P1, P2],
+              [P3, P5],
+            ],
+          }),
+        );
+        const { router } = await open(lib, { routes: { layer: layerOf(ctl.fetch), calls: [] } });
+        const user = userEvent.setup();
+        const notice = '인터넷에 연결되지 않아 이동 시간은 어림값이에요';
+
+        await waitFor(() => expect(ctl.count.plain).toBe(1));
+        await user.click(within(timeline()).getByRole('button', { name: '다시 계산' }));
+        await waitFor(() => expect(ctl.count.fresh).toBe(1));
+        // 화면을 옮기면 보통 호출이 진행 중인 다시 계산에 합류한다(같은 번호·종류의 답을 받는다).
+        await move({ user, router });
+        await act(async () => {});
+
+        // 먼저 시작한 보통 요청이 성공해 캐시를 채운 뒤, 나중에 시작한 다시 계산이 연결 실패로 끝난다.
+        await ctl.answer('plain', json(route(20, 5000, { queriedAt: '2026-10-12T03:00:00.000Z' })));
+        await ctl.fail('fresh', new TypeError('Failed to fetch'));
+        expect(await screen.findByText(notice)).toBeInTheDocument();
+        expect(ctl.count).toMatchObject({ plain: 1, fresh: 1 });
+
+        // 인터넷이 돌아오면 캐시의 이전 경로(보통 요청)가 아니라 다시 계산을 보낸다.
+        await act(async () => {
+          window.dispatchEvent(new Event('online'));
+        });
+        await waitFor(() => expect(ctl.count.fresh).toBe(2));
+        expect(ctl.count.plain).toBe(1);
+        await ctl.answer('fresh', json(newerBody()));
+        expect(await within(leg()).findByText('45분 · 9km')).toBeInTheDocument();
+        expect(within(timeline()).getByText('10월 13일 조회')).toBeInTheDocument();
+        expect(screen.queryByText(notice)).not.toBeInTheDocument();
+      },
+    );
   });
 
   it('고른 Day의 구간을 먼저 요청하고 다른 Day도 미리 요청한다', async () => {

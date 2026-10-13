@@ -143,8 +143,8 @@ export function fakeRoutes(answer: (call: Call, nth: number) => Answer) {
           const out = answer(call, nth);
           seq += 1;
           return typeof out === 'string'
-            ? Effect.fail(new RouteLookupError({ code: out, seq }))
-            : Effect.succeed({ ...out, seq });
+            ? Effect.fail(new RouteLookupError({ code: out, seq, fresh: call.refresh }))
+            : Effect.succeed({ ...out, seq, fresh: call.refresh });
         }),
     }),
   );
