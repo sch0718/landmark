@@ -264,6 +264,96 @@ describe('구간과 경로 상태', () => {
     expect(within(timeline()).queryByText('10월 12일 조회')).not.toBeInTheDocument();
   });
 
+  describe('실제 조회 계층으로 본 요청 순서 뒤바뀜', () => {
+    const json = (body: unknown, status = 200) =>
+      new Response(JSON.stringify(body), {
+        status,
+        headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      });
+    const errorBody = (code: string, status: number) =>
+      json({ error: { code, message: 'm' } }, status);
+
+    /** 보통 요청(`fresh` 없음)과 `다시 계산`(`fresh=1`)의 응답을 따로 정하는 통제된 fetch. */
+    function controlledFetch(onFresh: () => Response) {
+      const state = { plain: 0, fresh: 0 };
+      let release: (answer: () => Response) => void = () => {};
+      let fail: (cause: unknown) => void = () => {};
+      const fetchFn = vi.fn((input: RequestInfo | URL) => {
+        if (String(input).includes('fresh=1')) {
+          state.fresh += 1;
+          return Promise.resolve(onFresh());
+        }
+        state.plain += 1;
+        return new Promise<Response>((resolve, reject) => {
+          release = (answer) => resolve(answer());
+          fail = reject;
+        });
+      });
+      return {
+        state,
+        fetch: fetchFn as unknown as typeof fetch,
+        release: (answer: () => Response) => release(answer),
+        fail: (cause: unknown) => fail(cause),
+      };
+    }
+
+    const layerOf = (fetchFn: typeof fetch) =>
+      RouteLookup.layerWith({ fetch: fetchFn, storage: null, schedule: () => {} });
+    const leg = () => legRow('중앙시장 닭강정', '안목 카페거리');
+    const newerBody = () => route(45, 9000, { queriedAt: '2026-10-13T03:00:00.000Z' });
+
+    const lateFailures: [string, (c: ReturnType<typeof controlledFetch>) => void][] = [
+      ['NO_ROUTE(404 본문)', (c) => c.release(() => errorBody('NO_ROUTE', 404))],
+      ['TIMEOUT(504)', (c) => c.release(() => errorBody('TIMEOUT', 504))],
+      ['OFFLINE(fetch 거부)', (c) => c.fail(new TypeError('Failed to fetch'))],
+    ];
+
+    it.each(lateFailures)(
+      '먼저 시작한 보통 요청이 %s로 늦게 실패해도 나중에 시작한 다시 계산 결과를 지킨다',
+      async (_name, failLate) => {
+        const ctl = controlledFetch(() => json(newerBody()));
+        const lib = withTrip(plannerLibrary(), makeTrip({ stops: [[P1, P2]] }));
+        await open(lib, { routes: { layer: layerOf(ctl.fetch), calls: [] } });
+        const user = userEvent.setup();
+        const notice = '인터넷에 연결되지 않아 이동 시간은 어림값이에요';
+
+        await waitFor(() => expect(ctl.state.plain).toBe(1));
+        await user.click(within(timeline()).getByRole('button', { name: '다시 계산' }));
+        expect(await within(leg()).findByText('45분 · 9km')).toBeInTheDocument();
+        expect(within(timeline()).getByText('10월 13일 조회')).toBeInTheDocument();
+
+        await act(async () => {
+          failLate(ctl);
+        });
+        await act(async () => {});
+        expect(within(leg()).getByText('45분 · 9km')).toBeInTheDocument();
+        expect(within(leg()).queryByText(/직선 추정/)).not.toBeInTheDocument();
+        expect(within(leg()).queryByText('경로를 못 가져왔어요')).not.toBeInTheDocument();
+        expect(within(timeline()).getByText('10월 13일 조회')).toBeInTheDocument();
+        // 무시한 연결 실패는 안내를 띄우지 않는다.
+        expect(screen.queryByText(notice)).not.toBeInTheDocument();
+      },
+    );
+
+    it('이미 받은 경로 뒤에 시작한 다시 계산이 실패하면 그 실패를 보인다', async () => {
+      const ctl = controlledFetch(() => errorBody('NO_ROUTE', 404));
+      const lib = withTrip(plannerLibrary(), makeTrip({ stops: [[P1, P2]] }));
+      await open(lib, { routes: { layer: layerOf(ctl.fetch), calls: [] } });
+      const user = userEvent.setup();
+
+      await waitFor(() => expect(ctl.state.plain).toBe(1));
+      await act(async () => {
+        ctl.release(() => json(route(20, 5000, { queriedAt: '2026-10-12T03:00:00.000Z' })));
+      });
+      expect(await within(leg()).findByText('20분 · 5km')).toBeInTheDocument();
+
+      await user.click(within(timeline()).getByRole('button', { name: '다시 계산' }));
+      expect(await within(leg()).findByText('경로 없음 · 직선 추정')).toBeInTheDocument();
+      expect(within(leg()).queryByText('20분 · 5km')).not.toBeInTheDocument();
+      expect(ctl.state.fresh).toBe(1);
+    });
+  });
+
   it('고른 Day의 구간을 먼저 요청하고 다른 Day도 미리 요청한다', async () => {
     const routes = fakeRoutes(() => route(10, 1000));
     const lib = withTrip(

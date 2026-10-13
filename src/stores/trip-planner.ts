@@ -29,12 +29,16 @@ export const splitPreviewAtom: PrimitiveAtom<SplitPreview | null> = atom<SplitPr
  * - `no-route`: 네이버가 경로 없음(`NO_ROUTE`)
  * - `failed`: 서버 문제·시한 초과 등(`다시 시도` 대상)
  * - `offline`: 연결 실패. 다음 요청 때 다시 묻는다.
+ *
+ * `seq`는 그 조회를 *시작한* 순서(앞서 시작한 조회일수록 작다). 늦게 끝난 먼저 시작한 요청의 실패가
+ * 나중에 시작한 요청이 받은 경로를 덮지 않게 가리는 데 쓴다.
  */
-export type RouteState =
+export type RouteState = { seq: number } & (
   | { status: 'routed'; result: RouteResult }
   | { status: 'no-route' }
   | { status: 'failed'; code: RouteLookupErrorCode }
-  | { status: 'offline' };
+  | { status: 'offline' }
+);
 
 export const routeStatesAtom: PrimitiveAtom<Record<string, RouteState>> = atom<
   Record<string, RouteState>

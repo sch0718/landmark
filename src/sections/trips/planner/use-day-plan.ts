@@ -56,29 +56,37 @@ const isNewerRoute = (known: RouteResult, incoming: RouteResult): boolean => {
   return Number.isFinite(knownAt) && Number.isFinite(incomingAt) && knownAt > incomingAt;
 };
 
+/** 조회를 시작할 때마다 하나씩 올리는 번호(화면·훅 인스턴스와 상관없이 하나). 끝나는 순서가 아니라 시작 순서다. */
+let lookupSeq = 0;
+
+/**
+ * 들어온 조회 결과를 이미 있는 상태에 쓸지 정한다. 같은 구간의 두 조회(보통·`다시 계산`)가 뒤바뀐 순서로
+ * 끝나도 오래된 쪽이 새 경로를 덮지 않게 한다.
+ * - 경로: 이미 받은 경로의 조회 시각이 더 늦으면 지킨다.
+ * - 실패(경로 없음·연결 실패·서버 문제): 이미 받은 경로가 *나중에 시작한* 요청의 것이면 지킨다.
+ *   먼저 시작한 경로 위에 나중에 시작한 요청이 실패하면 실패를 보인다.
+ */
+const shouldWrite = (known: RouteState | undefined, incoming: RouteState): boolean => {
+  if (known?.status !== 'routed') return true;
+  if (incoming.status === 'routed') return !isNewerRoute(known.result, incoming.result);
+  return known.seq < incoming.seq;
+};
+
 /** 한 구간을 묻고 결과를 `routeStatesAtom`에 쓴다. 실패도 상태로 남기므로 이 효과는 실패하지 않는다. */
 function lookupLeg(store: Store, key: string, refresh: boolean) {
   const { mode, from, to } = parseRouteInputKey(key);
   return Effect.gen(function* () {
+    const seq = ++lookupSeq;
     const lookup = yield* RouteLookup;
     const result = yield* Effect.result(lookup.leg(mode, from, to, { refresh }));
     let state: RouteState;
-    if (Result.isSuccess(result)) state = { status: 'routed', result: result.success };
-    else if (result.failure.code === 'NO_ROUTE') state = { status: 'no-route' };
-    else if (result.failure.code === 'OFFLINE') state = { status: 'offline' };
-    else state = { status: 'failed', code: result.failure.code };
-    store.set(routeStatesAtom, (prev) => {
-      // 같은 구간의 두 조회가 뒤바뀐 순서로 끝나도 오래된 경로가 새 경로를 덮지 않게 한다.
-      const known = prev[key];
-      if (
-        known?.status === 'routed' &&
-        state.status === 'routed' &&
-        isNewerRoute(known.result, state.result)
-      ) {
-        return prev;
-      }
-      return { ...prev, [key]: state };
-    });
+    if (Result.isSuccess(result)) state = { seq, status: 'routed', result: result.success };
+    else if (result.failure.code === 'NO_ROUTE') state = { seq, status: 'no-route' };
+    else if (result.failure.code === 'OFFLINE') state = { seq, status: 'offline' };
+    else state = { seq, status: 'failed', code: result.failure.code };
+    store.set(routeStatesAtom, (prev) =>
+      shouldWrite(prev[key], state) ? { ...prev, [key]: state } : prev,
+    );
   });
 }
 
