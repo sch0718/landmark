@@ -7,9 +7,10 @@ import { addFlowAtom } from 'src/stores/add-place';
  * 고른(끌어 놓은) 공유 파일을 읽는다. 성공하면 흐름을 미리보기(`share`)로 옮기고,
  * 실패하면 `error`에 오류 문구(스펙 §2.5)를 담는다. 새로 읽기 시작하면 이전 오류는 지운다.
  * 읽는 사이 칸이 닫혔으면(언마운트) 늦은 결과는 버린다.
+ * `read`는 오류 문구(성공하거나 결과를 버렸으면 `null`)로도 끝나서, 칸 없이 쓰는 쪽이 토스트로 알릴 수 있다.
  */
 export function useShareFile(): {
-  read(file: File): Promise<void>;
+  read(file: File): Promise<string | null>;
   reading: boolean;
   error: string | null;
 } {
@@ -25,15 +26,20 @@ export function useShareFile(): {
     };
   }, []);
 
-  const read = async (file: File) => {
+  const read = async (file: File): Promise<string | null> => {
     const run = ++seq.current;
     setError(null);
     setReading(true);
     const result = await readShareFile(file);
-    if (seq.current !== run) return;
+    if (seq.current !== run) return null;
     setReading(false);
-    if (result.ok) setFlow({ step: 'share', doc: result.doc });
-    else setError(SHARE_READ_MESSAGES[result.error]);
+    if (result.ok) {
+      setFlow({ step: 'share', doc: result.doc });
+      return null;
+    }
+    const message = SHARE_READ_MESSAGES[result.error];
+    setError(message);
+    return message;
   };
 
   return { read, reading, error };
