@@ -36,7 +36,7 @@ class CorruptBoundary extends Component<BoundaryProps, BoundaryState> {
 }
 
 /** 셸이 처음 그려진 뒤 한가할 때 미리 받을 단위들. 한 곳에서 모은다. */
-const PREFETCH_CHUNKS = [...ROUTE_CHUNKS];
+export const PREFETCH_CHUNKS = [...ROUTE_CHUNKS];
 
 /** 보관함을 읽고(`useLibrarySync`, 앱에서 한 번) 셸을 그린다. 읽는 동안은 Suspense가 멈춘다. */
 function LibraryShell() {
