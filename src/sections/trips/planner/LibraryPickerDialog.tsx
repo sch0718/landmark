@@ -8,6 +8,7 @@ import InputBase from '@mui/material/InputBase';
 import { useAtomValue } from 'jotai';
 import { useId, useMemo, useState } from 'react';
 import { toast } from 'sonner';
+import { SEARCH_BOX_SX, SEARCH_INPUT_SX } from 'src/components/field-style';
 import { SearchIcon } from 'src/components/icons';
 import {
   DEFAULT_QUERY,
@@ -162,21 +163,7 @@ export function LibraryPickerDialog({ open, tripId, onClose }: Props) {
     >
       <DialogTitle id={titleId}>보관함에서 더하기</DialogTitle>
       <Box sx={{ flex: 'none', display: 'flex', flexDirection: 'column', gap: 0.5, pb: 1 }}>
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 1,
-            minHeight: 44,
-            mx: 3,
-            px: 1.5,
-            borderRadius: 'var(--tm-radius-md)',
-            bgcolor: 'var(--tm-bg-raised)',
-            border: '1px solid var(--tm-border)',
-            color: 'var(--tm-text-muted)',
-            '&:focus-within': { borderColor: 'var(--tm-accent-main)' },
-          }}
-        >
+        <Box component="label" sx={[SEARCH_BOX_SX, { mx: 3 }]}>
           <SearchIcon aria-hidden="true" width={18} height={18} />
           <InputBase
             fullWidth
@@ -185,7 +172,7 @@ export function LibraryPickerDialog({ open, tripId, onClose }: Props) {
             placeholder="이름·주소·메모·라벨 검색"
             onChange={(event) => patch({ text: event.target.value })}
             slotProps={{ input: { 'aria-label': '장소 검색' } }}
-            sx={{ color: 'var(--tm-text-primary)' }}
+            sx={SEARCH_INPUT_SX}
           />
         </Box>
         <LabelChips

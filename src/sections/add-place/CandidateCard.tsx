@@ -5,15 +5,11 @@ import { useAtomValue, useSetAtom } from 'jotai';
 import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
+import { fieldSx } from 'src/components/field-style';
 import { addPlace, findExisting, type PlaceCandidate } from 'src/domain/library/add-place';
 import { paths } from 'src/routes/paths';
 import { LIBRARY_LIMITS, type PlaceSource } from 'src/schema/library';
-import {
-  CARD_FIELD_SX,
-  CardSection,
-  useAliveRef,
-  useCardLabels,
-} from 'src/sections/add-place/card-parts';
+import { CardSection, useAliveRef, useCardLabels } from 'src/sections/add-place/card-parts';
 import {
   SaveToLibraryOption,
   thenAddCandidates,
@@ -169,7 +165,7 @@ export function CandidateCard({ candidate }: { candidate: PlaceCandidate }) {
             aria-required="true"
             value={name}
             onChange={(event) => setName(event.target.value)}
-            sx={CARD_FIELD_SX}
+            sx={fieldSx()}
           />
         </CardSection>
       )}
@@ -181,7 +177,7 @@ export function CandidateCard({ candidate }: { candidate: PlaceCandidate }) {
           autoComplete="off"
           value={address}
           onChange={(event) => setAddress(event.target.value)}
-          sx={CARD_FIELD_SX}
+          sx={fieldSx()}
         />
         {/* 주소 변환이 못 찾았을 때, 사용자가 주소를 쓰기 전까지만 보인다. */}
         {candidate.address === '' && address.trim() === '' && (
@@ -213,7 +209,7 @@ export function CandidateCard({ candidate }: { candidate: PlaceCandidate }) {
           placeholder="이 장소에 대한 메모"
           value={memo}
           onChange={(event) => setMemo(event.target.value)}
-          sx={{ ...CARD_FIELD_SX, minHeight: 96, py: 1.25, lineHeight: 1.6, resize: 'vertical' }}
+          sx={fieldSx({ multiline: true })}
         />
       </CardSection>
       <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mt: 2.5 }}>

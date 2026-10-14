@@ -13,9 +13,10 @@ import {
   planShareLabels,
   shareTitle,
 } from 'src/domain/library/import-share';
+import { fieldSx } from 'src/components/field-style';
 import { labelNameIssue } from 'src/schema/library';
 import type { ShareDoc } from 'src/schema/share';
-import { FIELD_SX, resultMessage } from 'src/sections/add-place/shared';
+import { resultMessage } from 'src/sections/add-place/shared';
 import { useLibraryQuery } from 'src/sections/library/use-library-query';
 import { ShareLabelRows } from 'src/sections/share-import/ShareLabelRows';
 import { SharePlaceRows } from 'src/sections/share-import/SharePlaceRows';
@@ -152,7 +153,7 @@ export function SharePreview({ doc }: { doc: ShareDoc }) {
                 autoComplete="off"
                 value={name}
                 onChange={(event) => setName(event.target.value)}
-                sx={{ ...FIELD_SX, borderColor: nameTooLong ? 'error.main' : 'var(--tm-border)' }}
+                sx={fieldSx({ invalid: nameTooLong })}
               />
               {nameTooLong && (
                 <Box id={nameErrorId} role="alert" sx={{ ...NOTE_SX, color: 'error.main' }}>

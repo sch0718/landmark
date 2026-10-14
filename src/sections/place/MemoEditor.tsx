@@ -1,6 +1,7 @@
 import Box from '@mui/material/Box';
 import { useStore } from 'jotai';
 import { useEffect, useRef, useState, type ClipboardEvent } from 'react';
+import { fieldSx } from 'src/components/field-style';
 import { LIBRARY_LIMITS } from 'src/schema/library';
 import { memoDraftsAtom, useDraft, type MemoDraft } from 'src/stores/library-state';
 
@@ -146,22 +147,7 @@ export function MemoEditor({ placeId, saved, onSave }: Props) {
         placeholder="이 장소에 대한 메모"
         onChange={(event) => onChange(event.target.value)}
         onPaste={onPaste}
-        sx={{
-          boxSizing: 'border-box',
-          display: 'block',
-          width: '100%',
-          minHeight: 132,
-          p: 1.25,
-          border: '1px solid var(--tm-border)',
-          borderRadius: 'var(--tm-radius-md)',
-          bgcolor: 'var(--tm-bg-raised)',
-          color: 'var(--tm-text-primary)',
-          font: 'inherit',
-          fontSize: 14,
-          lineHeight: 1.6,
-          resize: 'vertical',
-          '&:focus-visible': { outline: '2px solid var(--tm-accent-main)', outlineOffset: 1 },
-        }}
+        sx={fieldSx({ multiline: true, minHeight: 132 })}
       />
       <Box
         id={`memo-status-${placeId}`}

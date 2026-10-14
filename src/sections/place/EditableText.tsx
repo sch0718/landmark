@@ -1,5 +1,6 @@
 import Box from '@mui/material/Box';
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { fieldSx } from 'src/components/field-style';
 import { PencilIcon } from 'src/components/icons';
 
 type Props = {
@@ -112,18 +113,15 @@ export function EditableText({
         onChange={(event) => setDraft(event.target.value)}
         onKeyDown={onKeyDown}
         onBlur={() => void commit()}
-        sx={{
-          boxSizing: 'border-box',
-          width: '100%',
-          minHeight: 44,
-          px: 1,
-          border: '2px solid var(--tm-accent-main)',
-          borderRadius: 'var(--tm-radius-md)',
-          bgcolor: 'var(--tm-bg-raised)',
-          color: 'var(--tm-text-primary)',
-          fontFamily: 'inherit',
-          ...font,
-        }}
+        sx={[
+          fieldSx(),
+          {
+            // 고치는 중이라는 표시로 늘 강조 테두리를 둔다(나머지 모양은 다른 입력칸과 같다).
+            border: '2px solid var(--tm-accent-main)',
+            // 제목은 보이던 글자 크기를 지킨다. 그 밖에는 16px(아이폰에서 눌러도 확대되지 않게).
+            ...(variant === 'title' ? font : { fontWeight: font.fontWeight }),
+          },
+        ]}
       />,
     );
   }

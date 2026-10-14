@@ -20,6 +20,7 @@ import { CSS } from '@dnd-kit/utilities';
 import Box from '@mui/material/Box';
 import { useAtomValue } from 'jotai';
 import { useMemo, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { fieldSx } from 'src/components/field-style';
 import { GripIcon, LabelGlyph } from 'src/components/icons';
 import { useDocumentTitle } from 'src/lib/use-document-title';
 import { createLabel, deleteLabel, mergeLabels, reorderLabels } from 'src/domain/library/ops';
@@ -258,21 +259,7 @@ export function LabelsPage() {
             setCreateError(null);
           }}
           onKeyDown={onCreateKeyDown}
-          sx={{
-            flex: 1,
-            minWidth: 0,
-            boxSizing: 'border-box',
-            minHeight: 44,
-            px: 1.25,
-            border: '1px solid',
-            borderColor: createError === null ? 'var(--tm-border)' : 'error.main',
-            borderRadius: 'var(--tm-radius-md)',
-            bgcolor: 'var(--tm-bg-raised)',
-            color: 'var(--tm-text-primary)',
-            font: 'inherit',
-            fontSize: 16,
-            '&:focus-visible': { outline: '2px solid var(--tm-accent-main)', outlineOffset: 1 },
-          }}
+          sx={[fieldSx({ invalid: createError !== null }), { flex: 1, minWidth: 0 }]}
         />
         <Box
           component="button"

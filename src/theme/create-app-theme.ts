@@ -3,6 +3,9 @@ import { LABEL_COLORS } from 'src/schema/library';
 import { FOCUS_RING, FOCUS_RING_INSET } from 'src/theme/focus-ring';
 import { TOKENS, type ColorMode, type ThemeName, type Tokens } from 'src/theme/tokens';
 
+/** 입력칸 테두리 색. `--tm-border-strong`이 없어도 지금 테두리로 그려지게 대체값을 둔다(스펙 §8). */
+const BORDER_STRONG = 'var(--tm-border-strong, var(--tm-border))';
+
 const HEADINGS = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'] as const;
 
 /** 토큰을 CSS 변수(`--tm-*`)로 펼친다. 컴포넌트는 `var(--tm-bg-surface)`처럼 읽는다. */
@@ -94,6 +97,28 @@ export function createAppTheme(name: ThemeName, mode: ColorMode): Theme {
       },
       MuiInputBase: {
         styleOverrides: { input: { fontSize: 16 } },
+      },
+      // `TextField`의 입력칸. 직접 만든 입력칸(`fieldSx`)과 같은 테두리 색·모서리를 쓰고, 높이는 떠 있는 이름표 방식 그대로(56px)다.
+      // 포커스는 테두리를 바깥선과 같은 강조색 글자색 2px로 그린다(안쪽 `input`의 전역 바깥선은 끈다).
+      // 오류 색은 MUI 기본 규칙(`.Mui-error`)이 이긴다.
+      MuiOutlinedInput: {
+        styleOverrides: {
+          root: {
+            borderRadius: 'var(--tm-radius-md)',
+            '& .MuiOutlinedInput-notchedOutline': { borderColor: BORDER_STRONG },
+            '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: BORDER_STRONG },
+            '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+              borderColor: t.accent.text,
+              borderWidth: 2,
+            },
+            '& input:focus-visible, & textarea:focus-visible': { outline: 'none' },
+          },
+        },
+      },
+      MuiInputLabel: {
+        styleOverrides: {
+          root: { '&.Mui-focused:not(.Mui-error)': { color: t.accent.text } },
+        },
       },
     },
   });

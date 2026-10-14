@@ -166,3 +166,15 @@ describe('library filters', () => {
     expect(screen.getByRole('button', { name: '이름순' })).toBeInTheDocument();
   });
 });
+
+describe('library search box', () => {
+  it('상자 전체가 label이라 돋보기·여백을 눌러도 입력칸에 포커스가 간다', async () => {
+    const user = userEvent.setup();
+    await renderLibrary(sampleLibrary(), { prefs: LIST });
+    const input = screen.getByRole('searchbox', { name: '장소 검색' });
+    const box = input.closest('label');
+    expect(box).not.toBeNull();
+    await user.click(box!);
+    expect(input).toHaveFocus();
+  });
+});

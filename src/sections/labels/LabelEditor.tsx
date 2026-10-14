@@ -5,6 +5,7 @@ import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import { useId, useState, type KeyboardEvent } from 'react';
+import { fieldSx } from 'src/components/field-style';
 import { renameLabel, setLabelColor, setLabelIcon } from 'src/domain/library/ops';
 import { LIBRARY_LIMITS, type Label } from 'src/schema/library';
 import { ColorPicker } from 'src/sections/labels/ColorPicker';
@@ -83,20 +84,7 @@ export function LabelEditor({ label, canMerge, onClose, onMerge, onDelete }: Pro
             }}
             onBlur={() => void commitName()}
             onKeyDown={onKeyDown}
-            sx={{
-              boxSizing: 'border-box',
-              width: '100%',
-              minHeight: 44,
-              px: 1.25,
-              border: '1px solid',
-              borderColor: error === null ? 'var(--tm-border)' : 'error.main',
-              borderRadius: 'var(--tm-radius-md)',
-              bgcolor: 'var(--tm-bg-raised)',
-              color: 'var(--tm-text-primary)',
-              font: 'inherit',
-              fontSize: 16,
-              '&:focus-visible': { outline: '2px solid var(--tm-accent-main)', outlineOffset: 1 },
-            }}
+            sx={fieldSx({ invalid: error !== null })}
           />
           {error !== null && (
             <Box id={errorId} role="alert" sx={{ mt: 0.5, fontSize: 12, color: 'error.main' }}>

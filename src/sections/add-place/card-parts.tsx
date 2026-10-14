@@ -8,22 +8,6 @@ import { libraryAtom, useLibraryAction, type LibraryActionResult } from 'src/sto
 
 // 확인 카드(`CandidateCard`)와 핀 입력 카드(`PinCard`)가 같이 쓰는 칸·훅.
 
-/** 카드의 한 줄 입력칸. */
-export const CARD_FIELD_SX = {
-  boxSizing: 'border-box',
-  display: 'block',
-  width: '100%',
-  minHeight: 44,
-  px: 1.25,
-  border: '1px solid var(--tm-border)',
-  borderRadius: 'var(--tm-radius-md)',
-  bgcolor: 'var(--tm-bg-raised)',
-  color: 'var(--tm-text-primary)',
-  font: 'inherit',
-  fontSize: 16,
-  '&:focus-visible': { outline: '2px solid var(--tm-accent-main)', outlineOffset: 1 },
-} as const;
-
 /** 카드의 제목 붙은 칸. */
 export function CardSection({ title, children }: { title: string; children: ReactNode }) {
   return (

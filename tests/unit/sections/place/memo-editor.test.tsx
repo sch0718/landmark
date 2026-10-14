@@ -1,5 +1,6 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ruleValue } from '../../components/helpers/rule-style';
 import { MemoEditor } from 'src/sections/place/MemoEditor';
 
 type Result = { ok: boolean };
@@ -177,5 +178,13 @@ describe('MemoEditor', () => {
     expect(onSave.mock.calls.map(([text]) => text)).toEqual(['하나', '하나 둘']);
 
     await act(async () => first.resolve({ ok: false }));
+  });
+
+  it('메모 칸은 16px이고 최소 높이 132px을 지킨다', () => {
+    render(
+      <MemoEditor placeId="p1" saved="" onSave={vi.fn(() => Promise.resolve({ ok: true }))} />,
+    );
+    expect(ruleValue(textarea(), 'font-size')).toBe('16px');
+    expect(ruleValue(textarea(), 'min-height')).toBe('132px');
   });
 });

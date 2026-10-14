@@ -1,5 +1,6 @@
 import Box from '@mui/material/Box';
 import { useId, useState, type KeyboardEvent } from 'react';
+import { fieldSx } from 'src/components/field-style';
 import { LabelGlyph } from 'src/components/icons';
 import type { LibraryActionResult } from 'src/stores/library-state';
 import { LABEL_NAME_RANGE_MESSAGE, type Label } from 'src/schema/library';
@@ -92,21 +93,7 @@ export function LabelPicker({ labels, attachedIds, onToggle, onCreate }: Props) 
           setError(null);
         }}
         onKeyDown={onKeyDown}
-        sx={{
-          boxSizing: 'border-box',
-          width: '100%',
-          minHeight: 44,
-          mt: 0.5,
-          px: 1.25,
-          border: '1px solid',
-          borderColor: error === null ? 'var(--tm-border)' : 'error.main',
-          borderRadius: 'var(--tm-radius-md)',
-          bgcolor: 'var(--tm-bg-raised)',
-          color: 'var(--tm-text-primary)',
-          font: 'inherit',
-          fontSize: 14,
-          '&:focus-visible': { outline: '2px solid var(--tm-accent-main)', outlineOffset: 1 },
-        }}
+        sx={[fieldSx({ invalid: error !== null }), { mt: 0.5 }]}
       />
       {error !== null && (
         <Box id={errorId} role="alert" sx={{ mt: 0.5, fontSize: 12, color: 'error.main' }}>

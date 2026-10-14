@@ -35,4 +35,21 @@ describe('createAppTheme', () => {
       expect(cssVarsOf(t)['--tm-border']).toBe(t.border);
     },
   );
+
+  it.each(THEMES.flatMap((name) => MODES.map((mode) => [name, mode] as const)))(
+    '%s/%s: TextField의 테두리는 강한 테두리색(대체값 포함)·둥근 모서리, 포커스는 accent.text',
+    (name, mode) => {
+      const t = TOKENS[name][mode];
+      const root = createAppTheme(name, mode).components?.MuiOutlinedInput?.styleOverrides
+        ?.root as Record<string, Record<string, unknown> | string>;
+      const strong = 'var(--tm-border-strong, var(--tm-border))';
+      expect(root.borderRadius).toBe('var(--tm-radius-md)');
+      expect(root['& .MuiOutlinedInput-notchedOutline']).toEqual({ borderColor: strong });
+      expect(root['&:hover .MuiOutlinedInput-notchedOutline']).toEqual({ borderColor: strong });
+      expect(root['&.Mui-focused .MuiOutlinedInput-notchedOutline']).toEqual({
+        borderColor: t.accent.text,
+        borderWidth: 2,
+      });
+    },
+  );
 });

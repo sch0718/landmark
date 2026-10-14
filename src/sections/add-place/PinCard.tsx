@@ -6,16 +6,12 @@ import { useSetAtom } from 'jotai';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
+import { fieldSx } from 'src/components/field-style';
 import { addPlace } from 'src/domain/library/add-place';
 import { forkEffect } from 'src/lib/effect/runtime';
 import { paths } from 'src/routes/paths';
 import { LIBRARY_LIMITS } from 'src/schema/library';
-import {
-  CARD_FIELD_SX,
-  CardSection,
-  useAliveRef,
-  useCardLabels,
-} from 'src/sections/add-place/card-parts';
+import { CardSection, useAliveRef, useCardLabels } from 'src/sections/add-place/card-parts';
 import {
   SaveToLibraryOption,
   thenAddCandidates,
@@ -142,7 +138,7 @@ export function PinCard({
           autoComplete="off"
           value={name}
           onChange={(event) => setName(event.target.value)}
-          sx={CARD_FIELD_SX}
+          sx={fieldSx()}
         />
       </CardSection>
       <CardSection title="주소">
@@ -153,7 +149,7 @@ export function PinCard({
           autoComplete="off"
           value={address}
           onChange={(event) => setAddress(event.target.value)}
-          sx={CARD_FIELD_SX}
+          sx={fieldSx()}
         />
         {/* 주소를 찾는 동안, 사용자가 주소를 쓰기 전까지만 보인다. */}
         {geocode === 'loading' && address.trim() === '' && (
@@ -195,7 +191,7 @@ export function PinCard({
           placeholder="이 장소에 대한 메모"
           value={memo}
           onChange={(event) => setMemo(event.target.value)}
-          sx={{ ...CARD_FIELD_SX, minHeight: 96, py: 1.25, lineHeight: 1.6, resize: 'vertical' }}
+          sx={fieldSx({ multiline: true })}
         />
       </CardSection>
       <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mt: 2.5 }}>

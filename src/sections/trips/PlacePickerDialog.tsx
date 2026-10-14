@@ -6,6 +6,7 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import { useAtomValue } from 'jotai';
 import { useDeferredValue, useId, useMemo, useState, type ReactNode } from 'react';
+import { fieldSx } from 'src/components/field-style';
 import { searchPlaces } from 'src/domain/library/query';
 import type { Library, Place } from 'src/schema/library';
 import { libraryAtom } from 'src/stores/library-state';
@@ -57,7 +58,7 @@ function PlaceButton({ place, onPick }: { place: Place; onPick(id: string): void
           color: 'var(--tm-text-primary)',
           textAlign: 'left',
           cursor: 'pointer',
-          '&:focus-visible': { outline: '2px solid var(--tm-accent-main)', outlineOffset: -2 },
+          '&:focus-visible': { outlineOffset: -2 },
         }}
       >
         <Box component="span" sx={{ fontWeight: 700, overflowWrap: 'anywhere' }}>
@@ -145,19 +146,7 @@ export function PlacePickerDialog({ open, title, tripId, onPick, onClose, extra 
           autoComplete="off"
           value={text}
           onChange={(event) => setText(event.target.value)}
-          sx={{
-            boxSizing: 'border-box',
-            width: '100%',
-            minHeight: 44,
-            px: 1.25,
-            border: '1px solid var(--tm-border)',
-            borderRadius: 'var(--tm-radius-md)',
-            bgcolor: 'var(--tm-bg-raised)',
-            color: 'var(--tm-text-primary)',
-            font: 'inherit',
-            fontSize: 16,
-            '&:focus-visible': { outline: '2px solid var(--tm-accent-main)', outlineOffset: 1 },
-          }}
+          sx={fieldSx()}
         />
         {extra !== undefined && <Box sx={{ mt: 1 }}>{extra}</Box>}
         {mine.length === 0 && rest.length === 0 ? (

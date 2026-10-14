@@ -6,6 +6,7 @@ import Radio from '@mui/material/Radio';
 import RadioGroup from '@mui/material/RadioGroup';
 import Typography from '@mui/material/Typography';
 import { useId } from 'react';
+import { fieldSx } from 'src/components/field-style';
 import type { MemoDecision } from 'src/domain/library/legacy-import';
 import { downloadText } from 'src/lib/download-text';
 import { LIBRARY_LIMITS, type LabelNameIssue } from 'src/schema/library';
@@ -59,22 +60,10 @@ export function LabelNameItem({ item, draft, error, onChange }: LabelProps) {
           value={draft.name}
           disabled={draft.excluded}
           onChange={(event) => onChange({ ...draft, name: event.target.value, confirmed: true })}
-          sx={{
-            flex: '1 1 160px',
-            minWidth: 0,
-            boxSizing: 'border-box',
-            minHeight: 44,
-            px: 1.25,
-            border: '1px solid',
-            borderColor: error === null ? 'var(--tm-border)' : 'error.main',
-            borderRadius: 'var(--tm-radius-md)',
-            bgcolor: 'var(--tm-bg-surface)',
-            color: 'var(--tm-text-primary)',
-            font: 'inherit',
-            fontSize: 16,
-            '&:disabled': { opacity: 0.5 },
-            '&:focus-visible': { outline: '2px solid var(--tm-accent-main)', outlineOffset: 1 },
-          }}
+          sx={[
+            fieldSx({ invalid: error !== null }),
+            { flex: '1 1 160px', minWidth: 0, width: 'auto' },
+          ]}
         />
         <Button
           variant="outlined"
