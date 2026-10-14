@@ -77,7 +77,6 @@ describe('classifyLink', () => {
     });
 
     it.each([
-      'https://map.naver.com/p/favorite/myPlace/folder/5f1c2b3a4d',
       'https://map.naver.com/p/directions/-/-/-/transit',
       'https://map.naver.com/p/entry/address/123',
       'https://map.naver.com/place/1958911015',
@@ -108,6 +107,28 @@ describe('classifyLink', () => {
           'https://map.naver.com/p/favorite/sharedPlace/folder/fb65e7f93f8a4144a4ded594d604a7aa?c=15.00,0,0,0,dh',
         ),
       ).toEqual({ kind: 'naver-folder', shareId: 'fb65e7f93f8a4144a4ded594d604a7aa' });
+    });
+
+    // 2026-10 공유 링크(`naver.me/FQI4XSw3`)는 `/v5/favorite/myPlace/folder/<ID>`로 이동하고,
+    // 지도는 다시 `/p/favorite/myPlace/folder/<ID>`로 바꾼다. 같은 ID가 공유 폴더 API에서 읽힌다.
+    it.each([
+      'https://map.naver.com/v5/favorite/myPlace/folder/b56e505e2bba4ce7aed94c0ea7fa7823',
+      'https://map.naver.com/p/favorite/myPlace/folder/b56e505e2bba4ce7aed94c0ea7fa7823?c=15.00,0,0,0,dh',
+      'https://map.naver.com/v5/favorite/sharedPlace/folder/b56e505e2bba4ce7aed94c0ea7fa7823',
+      'https://map.naver.com/p/favorite/myPlace/folder/b56e505e2bba4ce7aed94c0ea7fa7823/',
+    ])('%s → 폴더', (url) => {
+      expect(classifyLink(url)).toEqual({
+        kind: 'naver-folder',
+        shareId: 'b56e505e2bba4ce7aed94c0ea7fa7823',
+      });
+    });
+
+    it.each([
+      'https://map.naver.com/p/favorite/otherPlace/folder/b56e505e2bba4ce7aed94c0ea7fa7823',
+      'https://map.naver.com/v4/favorite/myPlace/folder/b56e505e2bba4ce7aed94c0ea7fa7823',
+      'https://map.naver.com/p/favorite/myPlace/folder/b56e-505e',
+    ])('%s → unsupported', (url) => {
+      expect(classifyLink(url)).toEqual({ kind: 'unsupported' });
     });
   });
 
