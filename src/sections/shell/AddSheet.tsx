@@ -121,7 +121,6 @@ export function AddSheet({ open, onClose }: { open: boolean; onClose: () => void
                 cursor: 'pointer',
                 borderRadius: 'var(--tm-radius-md)',
                 '&:hover': { bgcolor: 'var(--tm-bg-raised)' },
-                '&:focus-visible': { outline: '2px solid var(--tm-accent-main)', outlineOffset: 2 },
               }}
             >
               <Box

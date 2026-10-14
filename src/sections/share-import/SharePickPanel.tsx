@@ -9,7 +9,8 @@ import { useLayout } from 'src/sections/shell/use-layout';
 const TITLE = '공유 파일 가져오기';
 
 /**
- * 공유 파일 고르기 칸(스펙 §2.2). `파일 고르기` 버튼이 숨긴 파일 입력을 연다.
+ * 공유 파일 고르기 칸(스펙 §2.2). `파일 고르기` 버튼이 숨긴 파일 입력을 연다. 칸이 열리면 이 버튼에
+ * 포커스한다(`data-autofocus`, `AddPlaceHost`).
  * 넓은·중간 화면(PC)에서는 칸 자체가 끌어 놓는 자리도 된다(첫 파일만 읽는다). 칸 밖(목록·지도 등)에
  * 놓은 파일도 같은 방법으로 읽어서, `여기로 끌어 놓아도 돼요` 안내를 보고 조금 빗나가게 놓아도 된다.
  * 칸 안에 놓은 것은 칸이 읽고 `window` 쪽은 건너뛰어 한 번 놓을 때 한 번만 읽는다.
@@ -80,6 +81,7 @@ export function SharePickPanel() {
         onChange={onChange}
       />
       <Button
+        data-autofocus
         variant="contained"
         disabled={reading}
         onClick={() => inputRef.current?.click()}

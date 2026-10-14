@@ -16,6 +16,7 @@ import { BottomTabs } from 'src/sections/shell/BottomTabs';
 import { NavRail } from 'src/sections/shell/NavRail';
 import { DETAIL_WIDTH, LIST_WIDTH } from 'src/sections/shell/pane-widths';
 import { DetailSlot, ListSlot, MapSlot } from 'src/sections/shell/ShellSlots';
+import { MAIN_ID, SkipLink } from 'src/sections/shell/SkipLink';
 import { StorageBanner } from 'src/sections/shell/StorageBanner';
 import { useLayout } from 'src/sections/shell/use-layout';
 import {
@@ -151,10 +152,12 @@ export function AppShell() {
   const location = useLocation();
   const { pathname } = location;
   const navigate = useNavigate();
-  // ＋추가 시트. 계획 화면도 여행 대상을 붙여 열 수 있도록 atom에 둔다. 레일·탭의 ＋는 대상 없이 연다.
+  // ＋추가 시트. 계획 화면도 여행 대상을 붙여 열 수 있도록 atom에 둔다. 레일·탭의 ＋는 대상 없이 열고,
+  // 흐름을 닫을 때 포커스가 돌아올 곳으로 자신을 남긴다.
   const addOpen = useAtomValue(addSheetOpenAtom);
   const openAdd = useSetAtom(openAddSheetAtom);
   const closeAdd = useSetAtom(closeAddSheetAtom);
+  const openFromPlus = (opener: HTMLElement) => openAdd(null, opener);
   // 추가 흐름의 칸은 상세 칸 자리를 쓴다(상세가 열려 있어도 추가 흐름이 우선).
   const flow = useAtomValue(addFlowAtom);
   const adding = showsAddPanel(flow);
@@ -191,7 +194,7 @@ export function AppShell() {
   if (!isLibraryView) {
     body = (
       <Box sx={{ flex: 1, minHeight: 0, display: 'flex', position: 'relative' }}>
-        <Box component="main" sx={{ flex: 1, minWidth: 0, minHeight: 0, overflow: 'auto' }}>
+        <Box sx={{ flex: 1, minWidth: 0, minHeight: 0, overflow: 'auto' }}>
           <Outlet />
         </Box>
         {layout !== 'compact' && <AddPlaceHost floating />}
@@ -241,22 +244,38 @@ export function AppShell() {
     );
   }
 
+  // 본문(`main`)은 메뉴(레일·하단 탭) 밖의 모든 것이다. 좁은 화면은 하단 탭을 본문 아래에 두려고 세로로 쌓는다.
+  // 본문 바로가기와 추가 칸의 포커스 복귀가 `#main`으로 포커스를 옮긴다(`tabIndex={-1}`, 바깥선은 그리지 않는다).
   return (
     <Box
       sx={{
         height: '100dvh',
         display: 'flex',
+        flexDirection: layout === 'compact' ? 'column' : 'row',
         bgcolor: 'var(--tm-bg-base)',
         color: 'var(--tm-text-primary)',
       }}
     >
-      {layout !== 'compact' && <NavRail onAdd={() => openAdd(null)} />}
-      <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+      <SkipLink />
+      {layout !== 'compact' && <NavRail onAdd={openFromPlus} />}
+      <Box
+        component="main"
+        id={MAIN_ID}
+        tabIndex={-1}
+        sx={{
+          flex: 1,
+          minWidth: 0,
+          minHeight: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          '&:focus': { outline: 'none' },
+        }}
+      >
         <StorageBanner />
         {isLibraryView && <LibraryViewTitle placeId={placeId} isMap={isMap} />}
         {body}
-        {layout === 'compact' && <BottomTabs onAdd={() => openAdd(null)} />}
       </Box>
+      {layout === 'compact' && <BottomTabs onAdd={openFromPlus} />}
       <AddSheet open={addOpen} onClose={closeAdd} />
       {layout === 'compact' && <AddPlaceHost />}
       <ShareDropOverlay />

@@ -2,8 +2,8 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Drawer from '@mui/material/Drawer';
 import IconButton from '@mui/material/IconButton';
-import { useAtom, useSetAtom } from 'jotai';
-import { Suspense, useEffect, useRef } from 'react';
+import { useAtom, useAtomValue, useSetAtom } from 'jotai';
+import { Suspense, useEffect, useRef, type KeyboardEvent, type RefObject } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { ChunkErrorBoundary } from 'src/components/ChunkErrorBoundary';
 import { ChunkErrorNotice } from 'src/components/ChunkErrorNotice';
@@ -20,9 +20,11 @@ import {
 import { paths } from 'src/routes/paths';
 import { ADD_LABEL } from 'src/sections/shell/nav-items';
 import { DETAIL_WIDTH } from 'src/sections/shell/pane-widths';
+import { MAIN_ID } from 'src/sections/shell/SkipLink';
 import { useLayout } from 'src/sections/shell/use-layout';
 import {
   addFlowAtom,
+  addOpenerAtom,
   addTargetAtom,
   linkDraftAtom,
   showsAddPanel,
@@ -63,14 +65,45 @@ function StepView({ flow }: { flow: AddFlow }) {
   }
 }
 
+/** 단계가 열릴 때 포커스할 첫 입력 요소. 숨긴 입력(파일 고르기 등)과 꺼진 요소는 건너뛴다. */
+const FIRST_FIELD =
+  'input:not([type="hidden"]):not([hidden]):not(:disabled), textarea:not(:disabled), button:not(:disabled)';
+
+/**
+ * 단계 화면이 그려지면(파일을 기다렸다면 받은 뒤) 그 단계의 첫 입력 요소로 포커스를 옮긴다(스펙 §2).
+ * 단계가 `data-autofocus`로 정한 요소가 있으면 그것을, 없으면 `scope` 안의 첫 입력 요소를 고른다.
+ * 칸이 열리며 지도·목록이 스크롤되지 않게 `preventScroll`로 옮긴다. 단계 화면과 같은 `Suspense` 안에
+ * 두어 단계가 실제로 그려진 뒤에만 돈다.
+ */
+function StepFocus({ scope }: { scope: RefObject<HTMLElement | null> }) {
+  useEffect(() => {
+    const root = scope.current;
+    if (root === null) return;
+    const target =
+      root.querySelector<HTMLElement>('[data-autofocus]') ??
+      root.querySelector<HTMLElement>(FIRST_FIELD);
+    target?.focus({ preventScroll: true });
+  }, [scope]);
+  return null;
+}
+
 /**
  * 단계 화면 파일은 그 단계가 열릴 때 받는다. 받는 동안은 칸 안에 기다림 표시를, 받지 못하면(새 배포 뒤 옛 파일 없음)
  * 칸 안에 새 버전 안내를 보인다. 칸 닫기는 칸 바깥(`AddPlaceHost`)에 있어 그대로 된다.
  * 좁은 화면 시트에는 닫기 버튼이 없고 단계의 `취소`는 파일이 와야 보이므로, 그 두 경우에만(`withCancel`)
  * 단계와 같은 모양의 `취소`를 안내 아래에 둔다.
- * 단계가 바뀌면 호출하는 쪽이 `key`로 이 컴포넌트를 새로 만들어 오류 경계도 풀린다.
+ * 단계가 바뀌면 호출하는 쪽이 `key`로 이 컴포넌트를 새로 만들어 오류 경계도 풀린다(새 단계의 첫 입력 요소로
+ * 포커스도 다시 옮긴다 — `scope`는 단계 화면을 담은 요소).
  */
-function StepContent({ flow, withCancel = false }: { flow: AddFlow; withCancel?: boolean }) {
+function StepContent({
+  flow,
+  scope,
+  withCancel = false,
+}: {
+  flow: AddFlow;
+  scope: RefObject<HTMLElement | null>;
+  withCancel?: boolean;
+}) {
   const setFlow = useSetAtom(addFlowAtom);
   const cancel = withCancel ? (
     <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, px: 2, pb: 2 }}>
@@ -97,6 +130,7 @@ function StepContent({ flow, withCancel = false }: { flow: AddFlow; withCancel?:
         }
       >
         <StepView flow={flow} />
+        <StepFocus scope={scope} />
       </Suspense>
     </ChunkErrorBoundary>
   );
@@ -166,12 +200,25 @@ export function useAddFlowRoute(mapShown: boolean) {
  * 오른쪽 칸은 셸이 상세 칸 자리에 놓는다(상세가 열려 있어도 추가 흐름이 우선). `floating`이면 지도 위에
  * 덮는 패널(중간 폭·보관함 밖 화면), 아니면 넓은 화면의 오른쪽 칸 그대로다.
  * 단계가 바뀌면 `key`로 내용을 새로 만들어 이전 단계의 입력·진행 중 요청을 이어받지 않는다.
+ * 포커스(스펙 §2): 단계가 열리면 첫 입력 요소로(`StepFocus`). 시트는 대화상자라 `Esc`·포커스 가두기를 MUI가
+ * 맡고, 오른쪽 칸은 칸 안에서 누른 `Esc`로 흐름을 닫고 흐름을 연 ＋(없으면 본문)로 포커스를 돌려준다.
  */
 export function AddPlaceHost({ floating = false }: { floating?: boolean }) {
   const [flow, setFlow] = useAtom(addFlowAtom);
+  const opener = useAtomValue(addOpenerAtom);
   const layout = useLayout();
   const open = showsAddPanel(flow);
   const close = () => setFlow({ step: 'closed' });
+  const scope = useRef<HTMLElement>(null);
+
+  const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    // 칸 안의 메뉴·입력칸이 먼저 받은 Esc(전파를 멈췄거나 기본 동작을 막은 것)와 한글 조합 중의 Esc는 그쪽 몫이다.
+    if (event.key !== 'Escape' || event.defaultPrevented || event.nativeEvent.isComposing) return;
+    event.preventDefault();
+    const back = opener?.isConnected === true ? opener : document.getElementById(MAIN_ID);
+    back?.focus();
+    close();
+  };
 
   if (layout === 'compact') {
     return (
@@ -181,6 +228,7 @@ export function AddPlaceHost({ floating = false }: { floating?: boolean }) {
         onClose={close}
         slotProps={{
           paper: {
+            ref: scope,
             'aria-label': ADD_LABEL,
             sx: {
               maxWidth: 480,
@@ -200,7 +248,7 @@ export function AddPlaceHost({ floating = false }: { floating?: boolean }) {
           },
         }}
       >
-        {open && <StepContent key={stepKey(flow)} flow={flow} withCancel />}
+        {open && <StepContent key={stepKey(flow)} flow={flow} scope={scope} withCancel />}
       </Drawer>
     );
   }
@@ -210,6 +258,7 @@ export function AddPlaceHost({ floating = false }: { floating?: boolean }) {
     <Box
       component="section"
       aria-label={ADD_LABEL}
+      onKeyDown={onKeyDown}
       sx={{
         minWidth: 0,
         minHeight: 0,
@@ -236,8 +285,8 @@ export function AddPlaceHost({ floating = false }: { floating?: boolean }) {
           <XIcon aria-hidden="true" />
         </IconButton>
       </Box>
-      <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-        <StepContent key={stepKey(flow)} flow={flow} />
+      <Box ref={scope} sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+        <StepContent key={stepKey(flow)} flow={flow} scope={scope} />
       </Box>
     </Box>
   );

@@ -19,12 +19,16 @@ const TAB_SX = {
   border: 0,
   background: 'transparent',
   cursor: 'pointer',
-  '&:focus-visible': { outline: '2px solid var(--tm-accent-main)', outlineOffset: -2 },
+  // 탭은 하단 메뉴 높이를 꽉 채우므로 바깥선을 안쪽으로 그린다(색·굵기는 테마의 포커스 표시와 같다).
+  '&:focus-visible': { outline: '2px solid var(--tm-accent-text)', outlineOffset: -2 },
   '& svg': { width: 22, height: 22 },
 } as const;
 
-/** 좁은 화면(<768px)의 하단 탭. 높이는 56px에 홈 인디케이터 영역을 더한다. */
-export function BottomTabs({ onAdd }: { onAdd: () => void }) {
+/**
+ * 좁은 화면(<768px)의 하단 탭. 높이는 56px에 홈 인디케이터 영역을 더한다.
+ * `onAdd`는 누른 ＋를 받는다(흐름을 닫을 때 포커스를 돌려줄 곳).
+ */
+export function BottomTabs({ onAdd }: { onAdd: (opener: HTMLElement) => void }) {
   const { pathname } = useLocation();
   return (
     <Box
@@ -52,7 +56,7 @@ export function BottomTabs({ onAdd }: { onAdd: () => void }) {
                 component="button"
                 type="button"
                 aria-label={ADD_LABEL}
-                onClick={onAdd}
+                onClick={(event) => onAdd(event.currentTarget)}
                 sx={{
                   width: 44,
                   height: 44,
@@ -66,10 +70,6 @@ export function BottomTabs({ onAdd }: { onAdd: () => void }) {
                   bgcolor: 'var(--tm-accent-main)',
                   color: 'var(--tm-accent-contrast)',
                   cursor: 'pointer',
-                  '&:focus-visible': {
-                    outline: '2px solid var(--tm-text-primary)',
-                    outlineOffset: 2,
-                  },
                 }}
               >
                 <PlusIcon aria-hidden="true" width={22} height={22} />

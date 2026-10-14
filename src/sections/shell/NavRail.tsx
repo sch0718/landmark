@@ -14,12 +14,14 @@ const ITEM_SX = {
   border: 0,
   background: 'transparent',
   cursor: 'pointer',
-  '&:focus-visible': { outline: '2px solid var(--tm-accent-main)', outlineOffset: 2 },
   '& svg': { width: 22, height: 22 },
 } as const;
 
-/** 넓은 화면(≥768px)의 왼쪽 내비게이션 레일. */
-export function NavRail({ onAdd }: { onAdd: () => void }) {
+/**
+ * 넓은 화면(≥768px)의 왼쪽 내비게이션 레일. 포커스 표시는 테마의 전역 `:focus-visible`을 쓴다.
+ * `onAdd`는 누른 ＋를 받는다(추가 칸을 `Esc`로 닫으면 포커스가 돌아올 곳).
+ */
+export function NavRail({ onAdd }: { onAdd: (opener: HTMLElement) => void }) {
   const { pathname } = useLocation();
   return (
     <Box
@@ -48,7 +50,7 @@ export function NavRail({ onAdd }: { onAdd: () => void }) {
               type="button"
               aria-label={ADD_LABEL}
               title={ADD_LABEL}
-              onClick={onAdd}
+              onClick={(event) => onAdd(event.currentTarget)}
               sx={{
                 ...ITEM_SX,
                 bgcolor: 'var(--tm-accent-main)',

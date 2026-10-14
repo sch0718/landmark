@@ -43,11 +43,24 @@ export const addTargetAtom: PrimitiveAtom<{ tripId: string } | null> = atom<{
 /** ＋추가 시트(`AddSheet`)가 열려 있는가. 셸 밖(계획 화면)에서도 열 수 있게 atom에 둔다. */
 export const addSheetOpenAtom: PrimitiveAtom<boolean> = atom(false);
 
-/** ＋추가 시트를 연다. `target`이 있으면 이번 흐름이 그 여행에 후보를 더하고, 없으면 보통의 추가다. */
-export const openAddSheetAtom = atom(null, (_get, set, target: { tripId: string } | null) => {
-  set(addTargetAtom, target);
-  set(addSheetOpenAtom, true);
-});
+/**
+ * 추가 흐름을 연 요소(레일·하단 탭의 ＋). 넓은·중간 화면의 칸을 `Esc`로 닫으면 여기로 포커스를 돌려준다
+ * (없거나 화면에서 빠졌으면 본문으로 — `AddPlaceHost`).
+ */
+export const addOpenerAtom: PrimitiveAtom<HTMLElement | null> = atom<HTMLElement | null>(null);
+
+/**
+ * ＋추가 시트를 연다. `target`이 있으면 이번 흐름이 그 여행에 후보를 더하고, 없으면 보통의 추가다.
+ * `opener`는 시트를 연 요소다(흐름을 닫을 때 포커스를 돌려줄 곳). 넘기지 않으면 지난 값을 버린다.
+ */
+export const openAddSheetAtom = atom(
+  null,
+  (_get, set, target: { tripId: string } | null, opener: HTMLElement | null = null) => {
+    set(addTargetAtom, target);
+    set(addOpenerAtom, opener);
+    set(addSheetOpenAtom, true);
+  },
+);
 
 /** 시트를 닫는다. 항목을 고르지 않고 닫았다면(흐름이 아직 `closed`) 붙여 둔 여행 대상도 버린다. */
 export const closeAddSheetAtom = atom(null, (get, set) => {
