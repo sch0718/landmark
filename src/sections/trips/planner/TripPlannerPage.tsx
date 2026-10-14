@@ -1,6 +1,7 @@
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
+import useMediaQuery from '@mui/material/useMediaQuery';
 import { useAtom, useAtomValue } from 'jotai';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router';
@@ -8,6 +9,7 @@ import { toast } from 'sonner';
 import { PanelLeftOpenIcon } from 'src/components/icons';
 import type { MapPadding } from 'src/components/map/MapAdapter';
 import { hiddenPlaceCount, locatePlace } from 'src/domain/trips/query';
+import { useDocumentTitle } from 'src/lib/use-document-title';
 import { paths } from 'src/routes/paths';
 import type { Library } from 'src/schema/library';
 import type { Trip } from 'src/schema/trip';
@@ -21,10 +23,13 @@ import { MapCard } from 'src/sections/trips/planner/MapCard';
 import { PlannerDnd } from 'src/sections/trips/planner/PlannerDnd';
 import { COLLAPSED_PX, PlannerSheet } from 'src/sections/trips/planner/PlannerSheet';
 import { TripMap } from 'src/sections/trips/planner/TripMap';
+import { TripTitleHeading } from 'src/sections/trips/planner/TripTitleHeading';
 import { useDayPlan, type DayPlan } from 'src/sections/trips/planner/use-day-plan';
 import { libraryAtom } from 'src/stores/library-state';
 import { mapCardAtom, selectedDayAtom } from 'src/stores/trip-planner';
 
+/** 이 폭(px) 이상이면 후보 칸을 펼친 채 시작한다. */
+const CANDIDATES_OPEN_MIN = 1100;
 const OFFLINE_NOTICE = '인터넷에 연결되지 않아 이동 시간은 어림값이에요';
 
 const EDGE = 40;
@@ -68,7 +73,7 @@ function NotFound() {
         textAlign: 'center',
       }}
     >
-      <Box component="p" sx={{ m: 0, fontWeight: 800 }}>
+      <Box component="h1" sx={{ m: 0, fontSize: 'inherit', fontWeight: 800 }}>
         여행을 찾지 못했어요
       </Box>
       <Button component={Link} to={paths.trips} variant="contained" sx={{ minHeight: 44 }}>
@@ -156,7 +161,7 @@ function DetailPane({ placeId, onBack }: { placeId: string; onBack(): void }) {
         </Button>
       </Box>
       <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-        <PlaceDetail placeId={placeId} />
+        <PlaceDetail placeId={placeId} headingLevel={2} />
       </Box>
     </>
   );
@@ -224,7 +229,26 @@ function TimelinePane({
 function Planner({ trip, library }: { trip: Trip; library: Library }) {
   const layout = useLayout();
   const [dayIndex, selectDay] = useSelectedDay(trip);
-  const [candidatesOpen, setCandidatesOpen] = useState(true);
+  // 후보 칸은 1100px 미만이면 접힌 채 시작한다(시간표 칸 옆에서 지도가 너무 좁아진다). 사용자가 펼치거나 접으면
+  // (`candidatesOverride`) 그 상태를 지키고, 화면을 다시 열면 기본값으로 돌아간다.
+  const roomy = useMediaQuery(`(min-width:${CANDIDATES_OPEN_MIN}px)`, { noSsr: true });
+  const [candidatesOverride, setCandidatesOverride] = useState<boolean | null>(null);
+  const candidatesOpen = candidatesOverride ?? roomy;
+  // 접기·펼치기 버튼은 누르면 사라지고 맞은편 버튼이 나타난다. 포커스가 본문(body)으로 빠지지 않게
+  // 누른 쪽을 적어 두었다가 칸이 바뀐 뒤 맞은편 버튼으로 옮긴다(폭이 바뀌어 칸이 달라진 경우는 건드리지 않는다).
+  const expandButton = useRef<HTMLButtonElement>(null);
+  const collapseButton = useRef<HTMLButtonElement>(null);
+  const focusAfterToggle = useRef<'expand' | 'collapse' | null>(null);
+  const toggleCandidates = (open: boolean) => {
+    focusAfterToggle.current = open ? 'collapse' : 'expand';
+    setCandidatesOverride(open);
+  };
+  useEffect(() => {
+    const target = focusAfterToggle.current;
+    if (target === null) return;
+    focusAfterToggle.current = null;
+    (target === 'expand' ? expandButton : collapseButton).current?.focus();
+  }, [candidatesOpen]);
   const [detailId, setDetailId] = useState<string | null>(null);
   // 고른 Day의 구간·시각은 여기서 한 번 구해 지도·시간표·오프라인 안내가 함께 쓴다. 좁은 화면에서 시트가
   // 후보 탭이어도 경로 요청이 지도와 함께 시작된다.
@@ -320,6 +344,8 @@ function Planner({ trip, library }: { trip: Trip; library: Library }) {
   const showCandidates = !medium || candidatesOpen;
   return (
     <Box sx={{ height: '100%', display: 'flex', position: 'relative', overflow: 'hidden' }}>
+      {/* 후보 칸을 접으면 보이는 여행 제목이 없다. 화면 `h1`을 눈에만 숨겨 남긴다. */}
+      <TripTitleHeading title={trip.title.value} candidatesShown={showCandidates} />
       {showCandidates && (
         <Box
           sx={{
@@ -333,7 +359,8 @@ function Planner({ trip, library }: { trip: Trip; library: Library }) {
           <CandidatePanel
             trip={trip}
             dayIndex={dayIndex}
-            onCollapse={medium ? () => setCandidatesOpen(false) : undefined}
+            onCollapse={medium ? () => toggleCandidates(false) : undefined}
+            collapseRef={collapseButton}
           />
         </Box>
       )}
@@ -341,8 +368,9 @@ function Planner({ trip, library }: { trip: Trip; library: Library }) {
         medium ? MEDIUM_PADDING : WIDE_PADDING,
         !showCandidates && (
           <IconButton
+            ref={expandButton}
             aria-label="후보 칸 펼치기"
-            onClick={() => setCandidatesOpen(true)}
+            onClick={() => toggleCandidates(true)}
             sx={{
               position: 'absolute',
               top: 8,
@@ -381,7 +409,9 @@ export function TripPlannerPage() {
   const { id = '' } = useParams();
   const library = useAtomValue(libraryAtom);
   const trip = library.trips[id];
-  if (trip === undefined || trip.deletedAt !== null) return <NotFound />;
+  const found = trip !== undefined && trip.deletedAt === null;
+  useDocumentTitle(found ? trip.title.value : null);
+  if (!found) return <NotFound />;
   // 여행이 바뀌면 화면 상태(후보 칸 접기·토스트 확인·끌기)를 새로 시작한다.
   return (
     <PlannerDnd key={trip.id} tripId={trip.id}>

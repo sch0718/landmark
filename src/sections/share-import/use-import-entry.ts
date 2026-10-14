@@ -30,6 +30,8 @@ export function useImportEntry(): void {
     handledKey.current = key;
     void navigate(paths.library, { replace: true });
     setTarget(null);
+    // 흐름을 연 요소(`addOpenerAtom`)는 그대로 둔다. ＋ 시트에서 왔으면 닫을 때 그 ＋로 돌아가야 하고,
+    // 바로 들어왔다면(주소·설정·보기 화면 링크) 비어 있어 본문으로 돌아간다.
     if (!hash.startsWith(SHARE_HASH_PREFIX)) {
       setFlow({ step: 'share-pick' });
       return;

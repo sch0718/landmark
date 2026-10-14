@@ -1,6 +1,7 @@
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import { useState } from 'react';
+import { fieldSx } from 'src/components/field-style';
 import { HomeIcon, LabelGlyph } from 'src/components/icons';
 import type { Place } from 'src/schema/library';
 
@@ -66,18 +67,7 @@ export function DayHeader({
         onBlur={() => {
           if (!HHMM.test(value)) setDraft({ base: startTime, value: startTime });
         }}
-        sx={{
-          minHeight: 44,
-          px: 1,
-          border: '1px solid var(--tm-border)',
-          borderRadius: 'var(--tm-radius-md)',
-          bgcolor: 'var(--tm-bg-raised)',
-          color: 'var(--tm-text-primary)',
-          font: 'inherit',
-          fontSize: 16,
-          fontVariantNumeric: 'tabular-nums',
-          '&:focus-visible': { outline: '2px solid var(--tm-accent-main)', outlineOffset: 1 },
-        }}
+        sx={[fieldSx(), { width: 'auto', fontVariantNumeric: 'tabular-nums' }]}
       />
       <Box
         sx={{

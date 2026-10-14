@@ -8,6 +8,7 @@ import type { Trip } from 'src/schema/trip';
 import { CandidatePanel } from 'src/sections/trips/planner/CandidatePanel';
 import { DayTimeline } from 'src/sections/trips/planner/DayTimeline';
 import { DropTab } from 'src/sections/trips/planner/PlannerDnd';
+import { TripTitleHeading } from 'src/sections/trips/planner/TripTitleHeading';
 import type { DayPlan } from 'src/sections/trips/planner/use-day-plan';
 import { mapCardAtom } from 'src/stores/trip-planner';
 
@@ -144,7 +145,7 @@ export function PlannerSheet({ trip, library, dayIndex, plan, onSelectDay }: Pro
           background: 'transparent',
           cursor: 'grab',
           touchAction: 'none',
-          '&:focus-visible': { outline: '2px solid var(--tm-accent-main)', outlineOffset: -2 },
+          '&:focus-visible': { outlineOffset: -2 },
         }}
       >
         <Box
@@ -183,6 +184,11 @@ export function PlannerSheet({ trip, library, dayIndex, plan, onSelectDay }: Pro
           />
         ))}
       </Tabs>
+      {/* 후보 칸이 그려지지 않으면(접힘·Day 탭) 화면 `h1`(여행 제목)을 눈에만 숨겨 남긴다. */}
+      <TripTitleHeading
+        title={trip.title.value}
+        candidatesShown={snap !== 'collapsed' && tab === 'candidates'}
+      />
       <Box
         role="tabpanel"
         hidden={snap === 'collapsed'}

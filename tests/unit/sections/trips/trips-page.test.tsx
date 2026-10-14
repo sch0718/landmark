@@ -130,8 +130,9 @@ describe('여행 목록', () => {
       makeTrip(4, '오늘 끝나는 여행', '2026-10-12', '2026-10-13'),
     ]);
     await renderLibrary(lib, { path: '/trips' });
-    const titles = screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent);
-    expect(titles).toEqual(['오늘 끝나는 여행', '곧 갈 여행', '먼 여행', '지난 제주']);
+    // 여행 카드 제목도 `h2`라 "지난 여행" 머리글과 같은 단계다.
+    const titles = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
+    expect(titles).toEqual(['오늘 끝나는 여행', '곧 갈 여행', '먼 여행', '지난 여행', '지난 제주']);
     const header = screen.getByRole('heading', { name: '지난 여행' });
     const past = screen.getByRole('heading', { name: '지난 제주' });
     const upcoming = screen.getByRole('heading', { name: '먼 여행' });

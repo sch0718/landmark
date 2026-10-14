@@ -76,7 +76,6 @@ export function ThemePicker({ value, onChange }: Props) {
               font: 'inherit',
               fontWeight: checked ? 800 : 600,
               cursor: 'pointer',
-              '&:focus-visible': { outline: '2px solid var(--tm-accent-main)', outlineOffset: 2 },
             }}
           >
             <MiniBento theme={theme} />

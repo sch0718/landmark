@@ -3,6 +3,7 @@ import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
 import { useAtomValue } from 'jotai';
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { fieldSx } from 'src/components/field-style';
 import { XIcon } from 'src/components/icons';
 import { setStopFixedTime, setStopStay } from 'src/domain/trips/ops';
 import { visibleStops } from 'src/domain/trips/query';
@@ -23,19 +24,7 @@ import { libraryAtom, useLibraryAction } from 'src/stores/library-state';
 
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 
-const INPUT_SX = {
-  width: '100%',
-  minHeight: 44,
-  px: 1,
-  border: '1px solid var(--tm-border)',
-  borderRadius: 'var(--tm-radius-md)',
-  bgcolor: 'var(--tm-bg-raised)',
-  color: 'var(--tm-text-primary)',
-  font: 'inherit',
-  fontSize: 16,
-  fontVariantNumeric: 'tabular-nums',
-  '&:focus-visible': { outline: '2px solid var(--tm-accent-main)', outlineOffset: 1 },
-} as const;
+const INPUT_SX = [fieldSx(), { mt: 0.5, fontVariantNumeric: 'tabular-nums' }];
 
 const BUTTON_SX = { minHeight: 44, textTransform: 'none' } as const;
 
@@ -143,7 +132,7 @@ function StopFields({
               live.current.stay = savedStay;
             }
           }}
-          sx={{ ...INPUT_SX, mt: 0.5 }}
+          sx={INPUT_SX}
         />
       </Box>
       <Box component="label" sx={{ fontSize: 12, color: 'var(--tm-text-secondary)' }}>
@@ -162,7 +151,7 @@ function StopFields({
           onBlur={() => {
             if (fixed !== '' && !HHMM.test(fixed)) setFixed(savedFixed);
           }}
-          sx={{ ...INPUT_SX, mt: 0.5 }}
+          sx={INPUT_SX}
         />
       </Box>
     </Box>
@@ -259,7 +248,6 @@ export function MapCard({ trip, dayIndex, placeId, onClose, onDetail }: Props) {
         color: 'var(--tm-text-primary)',
         borderRadius: 'var(--tm-radius-lg)',
         boxShadow: 'var(--tm-shadow-2)',
-        '&:focus-visible': { outline: '2px solid var(--tm-accent-main)', outlineOffset: 2 },
       }}
     >
       <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>

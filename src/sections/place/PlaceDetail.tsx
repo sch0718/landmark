@@ -38,15 +38,25 @@ const BUTTON_SX = {
   fontWeight: 700,
   textDecoration: 'none',
   cursor: 'pointer',
-  '&:focus-visible': { outline: '2px solid var(--tm-accent-main)', outlineOffset: 2 },
   '& svg': { width: 16, height: 16 },
 } as const;
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+/** 장소 상세 안 제목 단계. 화면의 `h1`이면 1, 다른 `h1`이 이미 있는 화면(여행 계획) 안이면 2. */
+type HeadingLevel = 1 | 2;
+
+function Section({
+  title,
+  level,
+  children,
+}: {
+  title: string;
+  level: HeadingLevel;
+  children: ReactNode;
+}) {
   return (
     <Box component="section" aria-label={title} sx={{ mt: 2.5 }}>
       <Box
-        component="h3"
+        component={level === 1 ? 'h2' : 'h3'}
         sx={{ m: 0, mb: 0.5, fontSize: 13, fontWeight: 800, color: 'var(--tm-text-secondary)' }}
       >
         {title}
@@ -56,11 +66,11 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-function NotFound() {
+function NotFound({ level }: { level: HeadingLevel }) {
   const navigate = useNavigate();
   return (
     <Box sx={{ p: 2 }}>
-      <Box component="p" sx={{ m: 0, mb: 1.5, fontWeight: 800 }}>
+      <Box component={`h${level}`} sx={{ m: 0, mb: 1.5, fontSize: 'inherit', fontWeight: 800 }}>
         장소를 찾을 수 없어요
       </Box>
       <Box
@@ -76,7 +86,7 @@ function NotFound() {
 }
 
 /** 장소 하나의 편집 화면. 장소가 바뀌면 `key`로 새로 만들어 이전 장소의 입력 상태를 이어받지 않는다. */
-function PlaceBody({ place }: { place: Place }) {
+function PlaceBody({ place, level }: { place: Place; level: HeadingLevel }) {
   const library = useAtomValue(libraryAtom);
   const { run } = useLibraryAction();
   const navigate = useNavigate();
@@ -115,6 +125,7 @@ function PlaceBody({ place }: { place: Place }) {
     <Box sx={{ p: 2, pb: 4 }}>
       <EditableText
         variant="title"
+        headingLevel={level}
         label="이름"
         value={place.name.value}
         allowEmpty={false}
@@ -140,7 +151,7 @@ function PlaceBody({ place }: { place: Place }) {
           </Box>
         </Box>
       )}
-      <Section title="라벨">
+      <Section title="라벨" level={level}>
         <LabelPicker
           labels={labels}
           attachedIds={place.labelIds.value}
@@ -148,7 +159,7 @@ function PlaceBody({ place }: { place: Place }) {
           onCreate={(name) => run((lib, ctx) => createAndAttachLabel(lib, id, name, ctx))}
         />
       </Section>
-      <Section title="메모">
+      <Section title="메모" level={level}>
         <MemoEditor placeId={id} saved={place.memo.value} onSave={saveMemo} />
       </Section>
       <Box sx={{ mt: 3 }}>
@@ -161,10 +172,19 @@ function PlaceBody({ place }: { place: Place }) {
   );
 }
 
-/** 장소 상세(스펙 §4.3). 없는 id나 지운 장소는 안내와 함께 보관함으로 돌아가는 길을 준다. */
-export function PlaceDetail({ placeId }: { placeId: string }) {
+/**
+ * 장소 상세(스펙 §4.3). 없는 id나 지운 장소는 안내와 함께 보관함으로 돌아가는 길을 준다.
+ * 장소 이름은 화면의 `h1`이다(`headingLevel` 1). 여행 계획 안에서는 여행 제목이 `h1`이라 2로 내린다.
+ */
+export function PlaceDetail({
+  placeId,
+  headingLevel = 1,
+}: {
+  placeId: string;
+  headingLevel?: HeadingLevel;
+}) {
   const library = useAtomValue(libraryAtom);
   const place = library.places[placeId];
-  if (place === undefined || place.deletedAt !== null) return <NotFound />;
-  return <PlaceBody key={place.id} place={place} />;
+  if (place === undefined || place.deletedAt !== null) return <NotFound level={headingLevel} />;
+  return <PlaceBody key={place.id} place={place} level={headingLevel} />;
 }

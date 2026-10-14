@@ -43,7 +43,6 @@ export function OptionGroup<V extends string>({ label, value, options, onChange 
               fontWeight: 600,
               cursor: 'pointer',
               '& svg': { width: 18, height: 18 },
-              '&:focus-visible': { outline: '2px solid var(--tm-accent-main)', outlineOffset: 2 },
             }}
           >
             {Icon !== undefined && <Icon aria-hidden="true" />}

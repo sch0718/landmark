@@ -1,5 +1,6 @@
 import Box from '@mui/material/Box';
 import InputBase from '@mui/material/InputBase';
+import { SEARCH_BOX_SX, SEARCH_INPUT_SX } from 'src/components/field-style';
 import { SearchIcon, ShareIcon } from 'src/components/icons';
 import type { LibraryQuery } from 'src/domain/library/query';
 import type { Label } from 'src/schema/library';
@@ -42,20 +43,7 @@ export function FilterBar({
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, pt: 1.5, pb: 0.5 }}>
       <Box sx={{ px: 2 }}>
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 1,
-            minHeight: 44,
-            px: 1.5,
-            borderRadius: 'var(--tm-radius-md)',
-            bgcolor: 'var(--tm-bg-raised)',
-            border: '1px solid var(--tm-border)',
-            color: 'var(--tm-text-muted)',
-            '&:focus-within': { borderColor: 'var(--tm-accent-main)' },
-          }}
-        >
+        <Box component="label" sx={SEARCH_BOX_SX}>
           <SearchIcon aria-hidden="true" width={18} height={18} />
           <InputBase
             fullWidth
@@ -64,7 +52,7 @@ export function FilterBar({
             placeholder={SEARCH_PLACEHOLDER}
             onChange={(event) => onChange({ text: event.target.value })}
             slotProps={{ input: { 'aria-label': '장소 검색', enterKeyHint: 'search' } }}
-            sx={{ color: 'var(--tm-text-primary)' }}
+            sx={SEARCH_INPUT_SX}
           />
         </Box>
       </Box>
@@ -90,7 +78,7 @@ export function FilterBar({
               background: 'transparent',
               color: 'var(--tm-text-secondary)',
               cursor: 'pointer',
-              '&:focus-visible': { outline: '2px solid var(--tm-accent-main)', outlineOffset: -2 },
+              '&:focus-visible': { outlineOffset: -2 },
             }}
           >
             <ShareIcon aria-hidden="true" width={18} height={18} />

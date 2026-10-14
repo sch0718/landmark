@@ -9,6 +9,7 @@ import { startEffect } from 'src/lib/effect/runtime';
 import type { FolderResult } from 'src/server/resolve';
 import { FolderList } from 'src/sections/add-place/FolderList';
 import { RETRY_CODES, type FolderPlace } from 'src/sections/add-place/shared';
+import { useStepRefocus } from 'src/sections/add-place/step-focus';
 import { PlaceLookupError } from 'src/services/errors';
 import { PlaceLookup } from 'src/services/place-lookup';
 import { addFlowAtom } from 'src/stores/add-place';
@@ -65,6 +66,9 @@ export function FolderPreview({ shareId }: { shareId: string }) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // `찾는 중` 화면(포커스된 `취소`)이 목록으로 바뀌면 포커스가 빠지므로 목록의 첫 조작 요소로 옮긴다.
+  useStepRefocus(status.kind === 'ready');
 
   const retry = () => {
     setStatus({ kind: 'loading' });

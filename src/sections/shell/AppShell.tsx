@@ -1,10 +1,12 @@
 import Box from '@mui/material/Box';
 import IconButton from '@mui/material/IconButton';
 import type { SxProps, Theme } from '@mui/material/styles';
+import { visuallyHidden } from '@mui/utils';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { useState, type ReactNode } from 'react';
 import { matchPath, Outlet, useLocation, useNavigate } from 'react-router';
 import { ChevronLeftIcon, XIcon } from 'src/components/icons';
+import { useDocumentTitle } from 'src/lib/use-document-title';
 import { paths } from 'src/routes/paths';
 import { AddPlaceHost, useAddFlowRoute } from 'src/sections/add-place/AddPlaceHost';
 import { ShareDropOverlay } from 'src/sections/share-import/ShareDropOverlay';
@@ -14,6 +16,7 @@ import { BottomTabs } from 'src/sections/shell/BottomTabs';
 import { NavRail } from 'src/sections/shell/NavRail';
 import { DETAIL_WIDTH, LIST_WIDTH } from 'src/sections/shell/pane-widths';
 import { DetailSlot, ListSlot, MapSlot } from 'src/sections/shell/ShellSlots';
+import { MAIN_ID, SkipLink } from 'src/sections/shell/SkipLink';
 import { StorageBanner } from 'src/sections/shell/StorageBanner';
 import { useLayout } from 'src/sections/shell/use-layout';
 import {
@@ -23,6 +26,7 @@ import {
   openAddSheetAtom,
   showsAddPanel,
 } from 'src/stores/add-place';
+import { libraryAtom } from 'src/stores/library-state';
 
 /** 슬롯 하나. 랜드마크(`aria-label`)와 스크롤을 맡는다. */
 function Pane({
@@ -113,6 +117,42 @@ function DetailPane({
 }
 
 /**
+ * 보관함·지도·장소 상세 화면의 제목. 화면 제목(`h1`)과 탭 제목을 함께 정한다. 이 화면들만 그릴 때 두어서,
+ * 다른 경로의 자식 화면이 자기 탭 제목을 정하는 것을 가리지 않는다.
+ * - 보관함·지도: 화면에 보이지 않는 `h1`(목록·지도 칸은 제목 없는 랜드마크라서).
+ * - 장소 상세: 장소 이름이 `h1`이라(`PlaceDetail`) 여기서는 탭 제목만 정한다. 다만 추가 칸이나 핀 모드가 상세 칸을
+ *   내려(`detailShown`이 거짓) `PlaceDetail`이 없을 때는 장소 이름을 눈에만 숨긴 `h1`로 대신한다.
+ */
+function LibraryViewTitle({
+  placeId,
+  isMap,
+  detailShown,
+}: {
+  placeId: string | null;
+  isMap: boolean;
+  detailShown: boolean;
+}) {
+  const library = useAtomValue(libraryAtom);
+  const place = placeId === null ? undefined : library.places[placeId];
+  const screen =
+    placeId !== null
+      ? place?.deletedAt === null
+        ? place.name.value
+        : null
+      : isMap
+        ? '지도'
+        : '보관함';
+  useDocumentTitle(screen);
+  if (placeId !== null && detailShown) return null;
+  if (screen === null) return null;
+  return (
+    <Box component="h1" sx={visuallyHidden}>
+      {screen}
+    </Box>
+  );
+}
+
+/**
  * 앱 뼈대(스펙 §4.1). 폭에 따라 레일·목록·지도·상세를 배치하고 하단 탭을 붙인다.
  * `/`·`/map`·`/place/:id`는 같은 셸이 목록·지도·상세 슬롯을 채우고, 그 밖의 경로(`/labels`·`/settings`·
  * `/trips`)는 자식 라우트(`Outlet`)가 본문을 채운다.
@@ -122,10 +162,12 @@ export function AppShell() {
   const location = useLocation();
   const { pathname } = location;
   const navigate = useNavigate();
-  // ＋추가 시트. 계획 화면도 여행 대상을 붙여 열 수 있도록 atom에 둔다. 레일·탭의 ＋는 대상 없이 연다.
+  // ＋추가 시트. 계획 화면도 여행 대상을 붙여 열 수 있도록 atom에 둔다. 레일·탭의 ＋는 대상 없이 열고,
+  // 흐름을 닫을 때 포커스가 돌아올 곳으로 자신을 남긴다.
   const addOpen = useAtomValue(addSheetOpenAtom);
   const openAdd = useSetAtom(openAddSheetAtom);
   const closeAdd = useSetAtom(closeAddSheetAtom);
+  const openFromPlus = (opener: HTMLElement) => openAdd(null, opener);
   // 추가 흐름의 칸은 상세 칸 자리를 쓴다(상세가 열려 있어도 추가 흐름이 우선).
   const flow = useAtomValue(addFlowAtom);
   const adding = showsAddPanel(flow);
@@ -136,6 +178,10 @@ export function AppShell() {
   const placeId = matchPath(paths.place(':id'), pathname)?.params.id ?? null;
   const isMap = matchPath(paths.map, pathname) !== null;
   const isLibraryView = isMap || placeId !== null || matchPath(paths.library, pathname) !== null;
+
+  // 장소 상세(`PlaceDetail`, 장소 이름 `h1`)가 그려지는가. 넓은·중간 폭에서는 추가 칸이 상세 자리를 대신하고,
+  // 중간 폭에서는 핀 모드가 상세 오버레이를 내린다(아래 `body`의 분기와 같다).
+  const detailShown = layout === 'compact' || (!adding && (layout === 'wide' || !pinning));
 
   // 좁은 화면에서 장소 시트 뒤에 깔리는 화면(목록/지도). 마지막으로 본 쪽을 기억한다.
   const [origin, setOrigin] = useState<'list' | 'map'>('list');
@@ -162,7 +208,7 @@ export function AppShell() {
   if (!isLibraryView) {
     body = (
       <Box sx={{ flex: 1, minHeight: 0, display: 'flex', position: 'relative' }}>
-        <Box component="main" sx={{ flex: 1, minWidth: 0, minHeight: 0, overflow: 'auto' }}>
+        <Box sx={{ flex: 1, minWidth: 0, minHeight: 0, overflow: 'auto' }}>
           <Outlet />
         </Box>
         {layout !== 'compact' && <AddPlaceHost floating />}
@@ -212,21 +258,40 @@ export function AppShell() {
     );
   }
 
+  // 본문(`main`)은 메뉴(레일·하단 탭) 밖의 모든 것이다. 좁은 화면은 하단 탭을 본문 아래에 두려고 세로로 쌓는다.
+  // 본문 바로가기와 추가 칸의 포커스 복귀가 `#main`으로 포커스를 옮긴다(`tabIndex={-1}`, 바깥선은 그리지 않는다).
   return (
     <Box
       sx={{
         height: '100dvh',
         display: 'flex',
+        flexDirection: layout === 'compact' ? 'column' : 'row',
         bgcolor: 'var(--tm-bg-base)',
         color: 'var(--tm-text-primary)',
       }}
     >
-      {layout !== 'compact' && <NavRail onAdd={() => openAdd(null)} />}
-      <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+      <SkipLink />
+      {layout !== 'compact' && <NavRail onAdd={openFromPlus} />}
+      <Box
+        component="main"
+        id={MAIN_ID}
+        tabIndex={-1}
+        sx={{
+          flex: 1,
+          minWidth: 0,
+          minHeight: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          '&:focus': { outline: 'none' },
+        }}
+      >
         <StorageBanner />
+        {isLibraryView && (
+          <LibraryViewTitle placeId={placeId} isMap={isMap} detailShown={detailShown} />
+        )}
         {body}
-        {layout === 'compact' && <BottomTabs onAdd={() => openAdd(null)} />}
       </Box>
+      {layout === 'compact' && <BottomTabs onAdd={openFromPlus} />}
       <AddSheet open={addOpen} onClose={closeAdd} />
       {layout === 'compact' && <AddPlaceHost />}
       <ShareDropOverlay />

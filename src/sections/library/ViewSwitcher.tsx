@@ -43,7 +43,7 @@ export function ViewSwitcher({ value, onChange }: Props) {
             color: view === value ? 'var(--tm-accent-contrast)' : 'var(--tm-text-muted)',
             cursor: 'pointer',
             '& svg': { width: 20, height: 20 },
-            '&:focus-visible': { outline: '2px solid var(--tm-accent-main)', outlineOffset: -2 },
+            '&:focus-visible': { outlineOffset: -2 },
           }}
         >
           <Icon aria-hidden="true" />

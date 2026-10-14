@@ -5,6 +5,7 @@ import { Effect, Result } from 'effect';
 import { useAtom, useSetAtom } from 'jotai';
 import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { toast } from 'sonner';
+import { fieldSx } from 'src/components/field-style';
 import type { PlaceCandidate } from 'src/domain/library/add-place';
 import { startEffect } from 'src/lib/effect/runtime';
 import type { PlaceSource } from 'src/schema/library';
@@ -15,23 +16,6 @@ import { PlaceLookupError } from 'src/services/errors';
 import { PlaceLookup } from 'src/services/place-lookup';
 import { ReverseGeocoder } from 'src/services/reverse-geocoder';
 import { addFlowAtom, linkDraftAtom, type AddFlow } from 'src/stores/add-place';
-
-const FIELD_SX = {
-  boxSizing: 'border-box',
-  display: 'block',
-  width: '100%',
-  minHeight: 88,
-  p: 1.25,
-  border: '1px solid var(--tm-border)',
-  borderRadius: 'var(--tm-radius-md)',
-  bgcolor: 'var(--tm-bg-raised)',
-  color: 'var(--tm-text-primary)',
-  font: 'inherit',
-  fontSize: 16,
-  lineHeight: 1.5,
-  resize: 'vertical',
-  '&:focus-visible': { outline: '2px solid var(--tm-accent-main)', outlineOffset: 1 },
-} as const;
 
 /**
  * 링크 결과의 출처. 장소 ID가 없는 구글 링크(좌표만 있음)는 직접 찍은 핀처럼 다뤄
@@ -161,7 +145,7 @@ export function LinkInputPanel({ hint }: { hint: 'place' | 'folder' }) {
           if (status.kind === 'error') setStatus({ kind: 'idle' });
         }}
         onKeyDown={onKeyDown}
-        sx={FIELD_SX}
+        sx={fieldSx({ multiline: true })}
       />
       {loading && (
         <Typography role="status" variant="body2" sx={{ mt: 1, color: 'var(--tm-text-secondary)' }}>

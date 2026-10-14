@@ -73,7 +73,6 @@ export function LabelBlock({
           textAlign: 'left',
           cursor: 'pointer',
           overflow: 'hidden',
-          '&:focus-visible': { outline: '2px solid var(--tm-accent-main)', outlineOffset: 2 },
         },
         ...(Array.isArray(sx) ? sx : [sx]),
       ]}
@@ -92,7 +91,7 @@ export function LabelBlock({
       >
         {label === null ? '미분류' : label.name.value}
       </Box>
-      <Box component="span" sx={{ display: 'block', mt: 0.25, fontSize: 12, opacity: 0.75 }}>
+      <Box component="span" sx={{ display: 'block', mt: 0.25, fontSize: 12 }}>
         {count}곳
       </Box>
       {label !== null && (

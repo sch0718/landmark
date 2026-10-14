@@ -10,6 +10,8 @@ export type Tokens = {
   bg: { base: string; surface: string; raised: string };
   text: { primary: string; secondary: string; muted: string };
   border: string;
+  /** 입력칸·체크 상자 테두리. `bg.raised` 위에서 3:1 이상. 목록 구분선 등은 `border`. */
+  borderStrong: string;
   accent: {
     main: string;
     /** `main` 위에 올리는 글자·아이콘 색. */

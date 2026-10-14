@@ -321,7 +321,7 @@ export function DragHandle({
       aria-roledescription="옮길 수 있는 항목"
       sx={{
         flex: 'none',
-        width: 32,
+        width: 44,
         minHeight: 44,
         display: 'grid',
         placeItems: 'center',
@@ -333,7 +333,7 @@ export function DragHandle({
         // 손잡이에서만 끌기가 시작되므로 행의 나머지 부분은 평소처럼 스크롤된다.
         touchAction: 'none',
         borderRadius: 'var(--tm-radius-sm)',
-        '&:focus-visible': { outline: '2px solid var(--tm-accent-main)', outlineOffset: -2 },
+        '&:focus-visible': { outlineOffset: -2 },
       }}
     >
       <GripIcon aria-hidden="true" width={18} height={18} />

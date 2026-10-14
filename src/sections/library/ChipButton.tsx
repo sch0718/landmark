@@ -1,5 +1,6 @@
 import Box from '@mui/material/Box';
 import type { ReactNode } from 'react';
+import { FOCUS_RING } from 'src/theme/focus-ring';
 
 type Props = {
   selected: boolean;
@@ -31,7 +32,9 @@ export function ChipButton({ selected, onClick, disabled = false, tone, children
         font: 'inherit',
         cursor: 'pointer',
         '&:disabled': { cursor: 'default', opacity: 0.45 },
-        '&:focus-visible > span': { outline: '2px solid var(--tm-accent-main)', outlineOffset: 2 },
+        // 누르는 자리(44px)가 아니라 보이는 칩에 포커스 표시를 그린다.
+        '&:focus-visible': { outline: 'none' },
+        '&:focus-visible > span': FOCUS_RING,
       }}
     >
       <Box

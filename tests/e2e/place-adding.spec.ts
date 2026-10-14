@@ -228,3 +228,55 @@ test.describe('장소 추가', () => {
     await expect(rows(page)).toHaveCount(0);
   });
 });
+
+test.describe('키보드·포커스', () => {
+  test(
+    '데스크톱: 첫 Tab에 본문 바로가기, ＋ → 링크 붙여넣기면 입력칸에 포커스, Esc로 닫으면 ＋로',
+    {
+      tag: '@desktop',
+    },
+    async ({ page }) => {
+      await openEmptyLibrary(page);
+      const plus = page.getByRole('button', { name: '장소 추가', exact: true });
+      // 셸이 그려진 뒤에 Tab을 누른다.
+      await expect(plus).toBeVisible();
+
+      await page.keyboard.press('Tab');
+      const skip = page.getByRole('link', { name: '본문으로 바로 가기' });
+      await expect(skip).toBeFocused();
+      // 포커스 전에는 1px로 숨어 있다가 포커스를 받으면 글자가 보이는 크기로 나타난다.
+      expect((await skip.boundingBox())!.width).toBeGreaterThan(40);
+
+      // 레일: 보관함 → 지도 → ＋ 순서다.
+      await page.keyboard.press('Tab');
+      await page.keyboard.press('Tab');
+      await page.keyboard.press('Tab');
+      await expect(plus).toBeFocused();
+      await page.keyboard.press('Enter');
+      // 시트가 열리면 시트 자체에 포커스가 가고, 다음 Tab이 첫 항목이다.
+      const linkItem = page
+        .getByRole('dialog', { name: '장소 추가' })
+        .getByRole('button', { name: /링크 붙여넣기/ });
+      await expect(linkItem).toBeVisible();
+      await page.keyboard.press('Tab');
+      await expect(linkItem).toBeFocused();
+      await page.keyboard.press('Enter');
+
+      const panel = page.getByRole('region', { name: '장소 추가' });
+      await expect(panel.getByRole('textbox', { name: '링크' })).toBeFocused();
+      await page.keyboard.press('Escape');
+      await expect(panel).toHaveCount(0);
+      await expect(plus).toBeFocused();
+    },
+  );
+
+  test(
+    '휴대폰: ＋ → 링크 붙여넣기면 시트의 링크 입력칸에 포커스',
+    { tag: '@mobile' },
+    async ({ page }) => {
+      await openEmptyLibrary(page);
+      await openFrom(page, /링크 붙여넣기/);
+      await expect(page.getByRole('textbox', { name: '링크' })).toBeFocused();
+    },
+  );
+});

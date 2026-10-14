@@ -4,13 +4,14 @@ import Typography from '@mui/material/Typography';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { fieldSx } from 'src/components/field-style';
 import { LabelGlyph } from 'src/components/icons';
 import { importFolder, planFolderImport } from 'src/domain/library/add-place';
 import type { OpSummary } from 'src/domain/library/ops';
 import { liveLabels } from 'src/domain/library/query';
 import { labelNameIssue, type Library } from 'src/schema/library';
 import { FolderPlaceRows } from 'src/sections/add-place/FolderPlaceRows';
-import { FIELD_SX, resultMessage, type FolderPlace } from 'src/sections/add-place/shared';
+import { resultMessage, type FolderPlace } from 'src/sections/add-place/shared';
 import { thenAddCandidates, useTripTarget } from 'src/sections/add-place/trip-target';
 import { ChipButton } from 'src/sections/library/ChipButton';
 import { labelColors } from 'src/sections/library/label-style';
@@ -167,7 +168,7 @@ export function FolderList({ folderName, places }: { folderName: string; places:
             disabled={labelId !== null}
             value={name}
             onChange={(event) => setName(event.target.value)}
-            sx={{ ...FIELD_SX, borderColor: nameTooLong ? 'error.main' : 'var(--tm-border)' }}
+            sx={fieldSx({ invalid: nameTooLong })}
           />
           {nameTooLong && (
             <Box id={nameErrorId} role="alert" sx={{ mt: 0.5, fontSize: 12, color: 'error.main' }}>

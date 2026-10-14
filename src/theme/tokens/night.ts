@@ -11,6 +11,7 @@ const dark: Tokens = {
   bg: { base: '#0E1324', surface: '#171E38', raised: '#212A4D' },
   text: { primary: '#E8ECF8', secondary: '#AAB3D0', muted: '#8C96B8' },
   border: '#2B3558',
+  borderStrong: '#6A76A0',
   accent: {
     // 그라데이션 시작색(#7C5CFF)은 흰 글자와의 대비가 4.35라서, 단색으로 쓰는 main은 살짝 짙게 한다.
     main: '#7857FF',
@@ -40,8 +41,9 @@ const dark: Tokens = {
 /** 밝은 야외에서 읽기 쉽도록 라벤더 빛이 도는 밝은 바탕. 포인트는 같은 보라→하늘. */
 const light: Tokens = {
   bg: { base: '#F2F4FB', surface: '#FFFFFF', raised: '#FFFFFF' },
-  text: { primary: '#151B33', secondary: '#4A5373', muted: '#7480A0' },
+  text: { primary: '#151B33', secondary: '#4A5373', muted: '#626F90' },
   border: '#DDE2F0',
+  borderStrong: '#8692B2',
   accent: {
     main: '#6A4BF0',
     contrast: '#FFFFFF',

@@ -35,7 +35,7 @@ export function RegionChips({ regions, selected, onChange, onCreateTrip }: Props
           onClick={() => toggle(region)}
         >
           {region}{' '}
-          <Box component="span" sx={{ fontWeight: 500, opacity: 0.8 }}>
+          <Box component="span" sx={{ fontWeight: 500 }}>
             {count}
           </Box>
         </ChipButton>
@@ -54,10 +54,10 @@ export function RegionChips({ regions, selected, onChange, onCreateTrip }: Props
             font: 'inherit',
             fontSize: 14,
             fontWeight: 700,
-            color: 'var(--tm-accent-main)',
+            color: 'var(--tm-accent-text)',
             whiteSpace: 'nowrap',
             cursor: 'pointer',
-            '&:focus-visible': { outline: '2px solid var(--tm-accent-main)', outlineOffset: -2 },
+            '&:focus-visible': { outlineOffset: -2 },
           }}
         >
           이 지역으로 여행 만들기

@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { ruleValue } from '../../components/helpers/rule-style';
 import { LabelPicker } from 'src/sections/place/LabelPicker';
 import type { LibraryActionResult } from 'src/stores/library-state';
 
@@ -31,5 +32,14 @@ describe('LabelPicker rejections', () => {
   it('shows nothing for errors that were already reported as a toast', async () => {
     await submit({ ok: false, error: new Error('저장소 오류') });
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+});
+
+describe('LabelPicker 입력칸', () => {
+  it('새 라벨 이름 입력칸은 16px(아이폰에서 눌러도 확대되지 않는다)이다', () => {
+    render(<LabelPicker labels={[]} attachedIds={[]} onToggle={vi.fn()} onCreate={vi.fn()} />);
+    const input = screen.getByPlaceholderText('새 라벨 이름');
+    expect(ruleValue(input, 'font-size')).toBe('16px');
+    expect(ruleValue(input, 'min-height')).toBe('44px');
   });
 });

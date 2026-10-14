@@ -410,6 +410,18 @@ describe('지도 위 카드', () => {
     expect(within(detail).getByText('비밀 메모: 창가 자리가 좋아요')).toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'Day 시간표' })).not.toBeInTheDocument();
 
+    // 계획 화면의 `h1`은 여행 제목 하나뿐이고 장소 이름은 `h2`, 하위 제목은 `h3`이다.
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(within(detail).queryByRole('heading', { level: 1 })).not.toBeInTheDocument();
+    expect(
+      within(detail).getByRole('heading', { level: 2, name: '창가 자리' }),
+    ).toBeInTheDocument();
+    expect(
+      within(detail)
+        .getAllByRole('heading', { level: 3 })
+        .map((h) => h.textContent),
+    ).toEqual(['라벨', '메모']);
+
     await user.click(within(detail).getByRole('button', { name: '← 일정으로' }));
     expect(timeline()).toBeInTheDocument();
     expect(screen.queryByRole('region', { name: '장소 상세' })).not.toBeInTheDocument();

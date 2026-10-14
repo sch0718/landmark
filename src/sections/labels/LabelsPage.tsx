@@ -20,7 +20,9 @@ import { CSS } from '@dnd-kit/utilities';
 import Box from '@mui/material/Box';
 import { useAtomValue } from 'jotai';
 import { useMemo, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { fieldSx } from 'src/components/field-style';
 import { GripIcon, LabelGlyph } from 'src/components/icons';
+import { useDocumentTitle } from 'src/lib/use-document-title';
 import { createLabel, deleteLabel, mergeLabels, reorderLabels } from 'src/domain/library/ops';
 import { liveLabels, livePlaces } from 'src/domain/library/query';
 import { LIBRARY_LIMITS, type Label } from 'src/schema/library';
@@ -99,7 +101,7 @@ function LabelRow({ label, count, onOpen }: RowProps) {
           cursor: 'grab',
           // 손잡이에서만 드래그가 시작되므로 줄 나머지 부분은 평소처럼 스크롤된다.
           touchAction: 'none',
-          '&:focus-visible': { outline: '2px solid var(--tm-accent-main)', outlineOffset: -2 },
+          '&:focus-visible': { outlineOffset: -2 },
           '& svg': { width: 20, height: 20 },
         }}
       >
@@ -123,7 +125,7 @@ function LabelRow({ label, count, onOpen }: RowProps) {
           color: 'var(--tm-text-primary)',
           textAlign: 'left',
           cursor: 'pointer',
-          '&:focus-visible': { outline: '2px solid var(--tm-accent-main)', outlineOffset: -2 },
+          '&:focus-visible': { outlineOffset: -2 },
         }}
       >
         <Box
@@ -175,6 +177,7 @@ type Open = { kind: 'edit' | 'merge' | 'delete'; id: string };
 
 /** `/labels`: 라벨을 만들고, 순서를 바꾸고(드래그·키보드), 이름·색·아이콘을 고치고, 합치거나 지운다. */
 export function LabelsPage() {
+  useDocumentTitle('라벨 관리');
   const library = useAtomValue(libraryAtom);
   const { run } = useLibraryAction();
   const labels = useMemo(() => liveLabels(library), [library]);
@@ -256,21 +259,7 @@ export function LabelsPage() {
             setCreateError(null);
           }}
           onKeyDown={onCreateKeyDown}
-          sx={{
-            flex: 1,
-            minWidth: 0,
-            boxSizing: 'border-box',
-            minHeight: 44,
-            px: 1.25,
-            border: '1px solid',
-            borderColor: createError === null ? 'var(--tm-border)' : 'error.main',
-            borderRadius: 'var(--tm-radius-md)',
-            bgcolor: 'var(--tm-bg-raised)',
-            color: 'var(--tm-text-primary)',
-            font: 'inherit',
-            fontSize: 16,
-            '&:focus-visible': { outline: '2px solid var(--tm-accent-main)', outlineOffset: 1 },
-          }}
+          sx={[fieldSx({ invalid: createError !== null }), { flex: 1, minWidth: 0 }]}
         />
         <Box
           component="button"
@@ -287,7 +276,6 @@ export function LabelsPage() {
             font: 'inherit',
             fontWeight: 700,
             cursor: 'pointer',
-            '&:focus-visible': { outline: '2px solid var(--tm-accent-main)', outlineOffset: 2 },
           }}
         >
           추가

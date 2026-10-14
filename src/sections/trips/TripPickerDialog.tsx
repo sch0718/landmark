@@ -77,10 +77,7 @@ export function TripPickerDialog({ open, onPick, onCreateNew, onClose }: Props) 
                     color: 'var(--tm-text-primary)',
                     textAlign: 'left',
                     cursor: 'pointer',
-                    '&:focus-visible': {
-                      outline: '2px solid var(--tm-accent-main)',
-                      outlineOffset: -2,
-                    },
+                    '&:focus-visible': { outlineOffset: -2 },
                   }}
                 >
                   <Box component="span" sx={{ fontWeight: 700, overflowWrap: 'anywhere' }}>

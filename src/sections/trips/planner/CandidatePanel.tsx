@@ -3,7 +3,7 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
 import { useAtomValue, useSetAtom } from 'jotai';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type Ref } from 'react';
 import { PanelLeftCloseIcon, PlusIcon } from 'src/components/icons';
 import { liveLabels } from 'src/domain/library/query';
 import { regionsByPlace } from 'src/domain/library/region';
@@ -104,7 +104,6 @@ function CandidateRow({
           textAlign: 'left',
           cursor: 'pointer',
           borderRadius: 'var(--tm-radius-sm)',
-          '&:focus-visible': { outline: '2px solid var(--tm-accent-main)', outlineOffset: 2 },
         }}
       >
         <Box
@@ -144,6 +143,8 @@ type Props = {
   dayIndex: number;
   /** 주어지면(중간 폭) 머리에 `후보 칸 접기` 버튼을 둔다. */
   onCollapse?: () => void;
+  /** `후보 칸 접기` 버튼. 접은 뒤 펼치기 버튼에서 되돌아올 때 포커스를 주려고 계획 화면이 쥔다. */
+  collapseRef?: Ref<HTMLButtonElement>;
   /** 칸 높이를 채우고 목록만 스크롤한다(넓은·중간 폭). 끄면(시트) 내용 높이대로 늘고 바깥이 스크롤한다. */
   fill?: boolean;
 };
@@ -154,7 +155,7 @@ type Props = {
  * `Day 자동 나누기`는 후보가 있으면 켜지고, 누르면 목록 자리에 미리보기(`적용`·`취소`)를 보인다.
  * `보관함에서 더하기`는 보관함 고르기 창을, `링크·핀으로 새로 추가`는 이 여행을 대상으로 붙인 ＋추가 시트를 연다(스펙 §2.2).
  */
-export function CandidatePanel({ trip, dayIndex, onCollapse, fill = true }: Props) {
+export function CandidatePanel({ trip, dayIndex, onCollapse, collapseRef, fill = true }: Props) {
   const library = useAtomValue(libraryAtom);
   const { run } = useTripUndo(trip.id);
   const openCard = useSetAtom(mapCardAtom);
@@ -210,7 +211,12 @@ export function CandidatePanel({ trip, dayIndex, onCollapse, fill = true }: Prop
           </Box>
         </Box>
         {onCollapse !== undefined && (
-          <IconButton aria-label="후보 칸 접기" onClick={onCollapse} sx={{ width: 44, height: 44 }}>
+          <IconButton
+            ref={collapseRef}
+            aria-label="후보 칸 접기"
+            onClick={onCollapse}
+            sx={{ width: 44, height: 44 }}
+          >
             <PanelLeftCloseIcon aria-hidden="true" width={20} height={20} />
           </IconButton>
         )}

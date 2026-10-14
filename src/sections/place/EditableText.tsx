@@ -1,5 +1,6 @@
 import Box from '@mui/material/Box';
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { fieldSx } from 'src/components/field-style';
 import { PencilIcon } from 'src/components/icons';
 
 type Props = {
@@ -11,6 +12,8 @@ type Props = {
   /** 빈 값으로 저장해도 되는가. 아니면 빈 입력은 저장하지 않고 원래 값으로 둔다. */
   allowEmpty: boolean;
   variant?: 'title' | 'body';
+  /** 제목(`h1`·`h2`)으로 만든다(장소 이름). 고치는 동안에도 제목 이름은 지금 값이다. */
+  headingLevel?: 1 | 2;
   /** 저장한다. 실패는 호출한 쪽이 알린다(토스트). */
   onSave(text: string): Promise<{ ok: boolean }>;
 };
@@ -28,6 +31,7 @@ export function EditableText({
   emptyText = '',
   allowEmpty,
   variant = 'body',
+  headingLevel,
   onSave,
 }: Props) {
   const [editing, setEditing] = useState(false);
@@ -88,8 +92,18 @@ export function EditableText({
       ? { fontSize: 20, fontWeight: 800, lineHeight: 1.35 }
       : { fontSize: 14, fontWeight: 600, lineHeight: 1.5 };
 
+  // 제목이면 접근성 이름을 값으로 고정한다(안쪽 버튼의 "이름 수정"이 제목 이름이 되지 않게).
+  const wrap = (node: ReactNode) =>
+    headingLevel !== undefined ? (
+      <Box component={`h${headingLevel}`} aria-label={shown} sx={{ m: 0, font: 'inherit' }}>
+        {node}
+      </Box>
+    ) : (
+      node
+    );
+
   if (editing) {
-    return (
+    return wrap(
       <Box
         component="input"
         type="text"
@@ -99,23 +113,20 @@ export function EditableText({
         onChange={(event) => setDraft(event.target.value)}
         onKeyDown={onKeyDown}
         onBlur={() => void commit()}
-        sx={{
-          boxSizing: 'border-box',
-          width: '100%',
-          minHeight: 44,
-          px: 1,
-          border: '2px solid var(--tm-accent-main)',
-          borderRadius: 'var(--tm-radius-md)',
-          bgcolor: 'var(--tm-bg-raised)',
-          color: 'var(--tm-text-primary)',
-          fontFamily: 'inherit',
-          ...font,
-        }}
-      />
+        sx={[
+          fieldSx(),
+          {
+            // 고치는 중이라는 표시로 늘 강조 테두리를 둔다(나머지 모양은 다른 입력칸과 같다).
+            border: '2px solid var(--tm-accent-main)',
+            // 제목은 보이던 글자 크기를 지킨다. 그 밖에는 16px(아이폰에서 눌러도 확대되지 않게).
+            ...(variant === 'title' ? font : { fontWeight: font.fontWeight }),
+          },
+        ]}
+      />,
     );
   }
 
-  return (
+  return wrap(
     <Box
       component="button"
       type="button"
@@ -140,7 +151,6 @@ export function EditableText({
         textAlign: 'left',
         cursor: 'text',
         '&:hover': { bgcolor: 'var(--tm-bg-raised)' },
-        '&:focus-visible': { outline: '2px solid var(--tm-accent-main)' },
         ...font,
       }}
     >
@@ -153,6 +163,6 @@ export function EditableText({
         height={14}
         style={{ flex: 'none', opacity: 0.6 }}
       />
-    </Box>
+    </Box>,
   );
 }

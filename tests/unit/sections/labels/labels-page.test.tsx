@@ -36,6 +36,17 @@ const openEditor = async (user: ReturnType<typeof userEvent.setup>, name: RegExp
   user.click(within(list()).getByRole('button', { name }));
 
 describe('LabelsPage', () => {
+  it('drag handles are at least 44x44px', async () => {
+    await open();
+    const handles = within(list()).getAllByRole('button', { name: /순서 바꾸기$/ });
+    expect(handles).toHaveLength(3);
+    for (const handle of handles) {
+      const style = getComputedStyle(handle);
+      expect(parseFloat(style.width)).toBeGreaterThanOrEqual(44);
+      expect(parseFloat(style.height)).toBeGreaterThanOrEqual(44);
+    }
+  });
+
   it('lists labels in order with place counts', async () => {
     await open();
     const items = within(list()).getAllByRole('listitem');

@@ -166,3 +166,34 @@ describe('library filters', () => {
     expect(screen.getByRole('button', { name: '이름순' })).toBeInTheDocument();
   });
 });
+
+describe('library search box', () => {
+  it('상자 전체가 label이라 돋보기·여백을 눌러도 입력칸에 포커스가 간다', async () => {
+    const user = userEvent.setup();
+    await renderLibrary(sampleLibrary(), { prefs: LIST });
+    const input = screen.getByRole('searchbox', { name: '장소 검색' });
+    const box = input.closest('label');
+    expect(box).not.toBeNull();
+    await user.click(box!);
+    expect(input).toHaveFocus();
+  });
+
+  it('안쪽 입력칸의 전역 바깥선은 꺼져 있어 상자의 바깥선만 보인다', async () => {
+    await renderLibrary(sampleLibrary(), { prefs: LIST });
+    const box = screen.getByRole('searchbox', { name: '장소 검색' }).closest('label')!;
+    const classes = [...box.classList].map((name) => `.${name}`);
+    const rules = [...document.styleSheets]
+      .flatMap((sheet) => [...sheet.cssRules])
+      .filter((rule): rule is CSSStyleRule => rule instanceof CSSStyleRule);
+    const inner = rules.filter((rule) =>
+      classes.some((name) => rule.selectorText === `${name} input:focus-visible`),
+    );
+    expect(inner.map((rule) => rule.style.getPropertyValue('outline'))).toEqual(['none']);
+    const ring = rules.filter((rule) =>
+      classes.some((name) => rule.selectorText === `${name}:focus-within`),
+    );
+    expect(ring.map((rule) => rule.style.getPropertyValue('outline'))).toEqual([
+      '2px solid var(--tm-accent-text)',
+    ]);
+  });
+});

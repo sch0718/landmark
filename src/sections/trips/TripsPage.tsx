@@ -14,6 +14,7 @@ import { toast } from 'sonner';
 import { EllipsisIcon } from 'src/components/icons';
 import { deleteTrip, restoreTrip } from 'src/domain/trips/ops';
 import { liveTrips, localToday, visibleCandidates, visibleStops } from 'src/domain/trips/query';
+import { useDocumentTitle } from 'src/lib/use-document-title';
 import type { Library } from 'src/schema/library';
 import type { Trip } from 'src/schema/trip';
 import { paths } from 'src/routes/paths';
@@ -64,10 +65,10 @@ function TripCard({ trip, library, onMenu }: CardProps) {
           borderRadius: 'inherit',
           color: 'inherit',
           textDecoration: 'none',
-          '&:focus-visible': { outline: '2px solid var(--tm-accent-main)', outlineOffset: -2 },
+          '&:focus-visible': { outlineOffset: -2 },
         }}
       >
-        <Box component="h3" sx={{ m: 0, fontSize: 16, fontWeight: 800, overflowWrap: 'anywhere' }}>
+        <Box component="h2" sx={{ m: 0, fontSize: 16, fontWeight: 800, overflowWrap: 'anywhere' }}>
           {title}
         </Box>
         <Box sx={{ mt: 0.5, fontSize: 13, color: 'var(--tm-text-secondary)' }}>{period}</Box>
@@ -92,7 +93,7 @@ function TripCard({ trip, library, onMenu }: CardProps) {
           background: 'transparent',
           color: 'var(--tm-text-secondary)',
           cursor: 'pointer',
-          '&:focus-visible': { outline: '2px solid var(--tm-accent-main)', outlineOffset: -2 },
+          '&:focus-visible': { outlineOffset: -2 },
           '& svg': { width: 20, height: 20 },
         }}
       >
@@ -129,6 +130,7 @@ function TripList({
 
 /** `/trips`: 여행 목록. 새 여행 만들기, 이름 바꾸기, 삭제(되돌리기 토스트). */
 export function TripsPage() {
+  useDocumentTitle('여행');
   const library = useAtomValue(libraryAtom);
   const { run } = useLibraryAction();
   const navigate = useNavigate();

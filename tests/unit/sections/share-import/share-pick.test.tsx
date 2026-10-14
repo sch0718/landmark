@@ -52,6 +52,20 @@ describe('SharePickPanel', () => {
     expect(within(compact.panel).queryByText('여기로 끌어 놓아도 돼요')).toBeNull();
   });
 
+  it('compact sheet fits its content (max 90vh); the share preview step keeps 90vh', async () => {
+    const user = userEvent.setup();
+    const { panel, store } = await openPick(390);
+    const paper = () => document.querySelector('.MuiDrawer-paper') as HTMLElement;
+    expect(paper()).toContainElement(panel);
+    // jsdom은 vh를 px로 풀어 돌려준다. 고정 높이가 없으면 `height`는 비어 있거나 auto다.
+    const max = getComputedStyle(paper()).maxHeight;
+    expect(max).not.toBe('');
+    expect(['', 'auto']).toContain(getComputedStyle(paper()).height);
+    await user.upload(panel.querySelector('input[type="file"]') as HTMLInputElement, shareFile());
+    await waitFor(() => expect(store.get(addFlowAtom).step).toBe('share'));
+    expect(getComputedStyle(paper()).height).toBe(max);
+  });
+
   it('shows the error inside the panel and clears it on the next pick', async () => {
     const user = userEvent.setup();
     const { panel, store } = await openPick();

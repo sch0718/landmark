@@ -4,6 +4,7 @@ import Typography from '@mui/material/Typography';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import type { LegacySource } from 'src/domain/library/legacy-import';
+import { useDocumentTitle } from 'src/lib/use-document-title';
 import { paths } from 'src/routes/paths';
 import { ImportPreview } from 'src/sections/settings/ImportPreview';
 import { loadLegacySource } from 'src/sections/settings/import-effects';
@@ -15,6 +16,7 @@ type State =
 
 /** `/t/:publicId`: 배포된 옛 여행을 읽어 가져오기 미리보기를 한 페이지로 보여 준다. */
 export function LegacyImportPage() {
+  useDocumentTitle('옛 여행 가져오기');
   const { publicId = '' } = useParams();
   const navigate = useNavigate();
   const [loaded, setLoaded] = useState<{ publicId: string; state: State } | null>(null);

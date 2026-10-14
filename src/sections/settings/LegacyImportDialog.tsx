@@ -6,6 +6,7 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import Typography from '@mui/material/Typography';
 import { useId, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
+import { fieldSx } from 'src/components/field-style';
 import type { LegacySource } from 'src/domain/library/legacy-import';
 import { ImportPreview } from 'src/sections/settings/ImportPreview';
 import { loadLegacySource, type SourceInput } from 'src/sections/settings/import-effects';
@@ -22,21 +23,6 @@ type Props = {
   /** 가져오기가 끝났다. */
   onImported(added: number): void;
 };
-
-const FIELD_SX = {
-  flex: 1,
-  minWidth: 0,
-  boxSizing: 'border-box',
-  minHeight: 44,
-  px: 1.25,
-  border: '1px solid var(--tm-border)',
-  borderRadius: 'var(--tm-radius-md)',
-  bgcolor: 'var(--tm-bg-raised)',
-  color: 'var(--tm-text-primary)',
-  font: 'inherit',
-  fontSize: 16,
-  '&:focus-visible': { outline: '2px solid var(--tm-accent-main)', outlineOffset: 1 },
-} as const;
 
 /**
  * 옛 여행 가져오기 대화상자. 입력은 `.json` 파일 선택 또는 `/t/<publicId>` 링크 붙여넣기이고,
@@ -118,7 +104,7 @@ export function LegacyImportDialog({ open, onClose, onImported }: Props) {
                 autoComplete="off"
                 value={link}
                 onChange={(event) => setLink(event.target.value)}
-                sx={FIELD_SX}
+                sx={[fieldSx(), { flex: 1, minWidth: 0 }]}
               />
               <Button
                 type="submit"

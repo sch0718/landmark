@@ -816,7 +816,8 @@ describe('화면 열기', () => {
   });
 
   it('중간 폭에서는 후보 칸을 접고 펼칠 수 있다', async () => {
-    await open(withTrip(plannerLibrary(), makeTrip({ candidates: [P1] })), { width: 1000 });
+    // 1100px 이상이면 펼친 채 시작한다(1100px 미만의 기본값은 planner-layout.test.tsx).
+    await open(withTrip(plannerLibrary(), makeTrip({ candidates: [P1] })), { width: 1100 });
     const user = userEvent.setup();
     expect(screen.getByRole('region', { name: '후보 칸' })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: '후보 칸 접기' }));
