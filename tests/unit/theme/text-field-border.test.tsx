@@ -24,7 +24,7 @@ const specificity = (selector: string) => (selector.match(/[.:](?!not\()[\w-]+/g
  * (jsdom의 계산 스타일은 가상 클래스를 못 풀어서 우선순위·순서를 직접 적용한다).
  * 대상은 오류 여부(`error`)와 상태만 다른 `OutlinedInput` 뿌리 하나다.
  */
-function outlineColor(state: State, error: boolean): string | undefined {
+function outlineColor(state: State, error: boolean, disabled = false): string | undefined {
   const rules = [...document.styleSheets]
     .flatMap((sheet) => [...sheet.cssRules])
     .filter((rule): rule is CSSStyleRule => rule instanceof CSSStyleRule);
@@ -39,10 +39,13 @@ function outlineColor(state: State, error: boolean): string | undefined {
     const conditions = match[1]!;
     const notError = conditions.includes(':not(.Mui-error)');
     const needsError = conditions.replace(':not(.Mui-error)', '').includes('.Mui-error');
+    const notDisabled = conditions.includes(':not(.Mui-disabled)');
+    const needsDisabled = conditions.replace(':not(.Mui-disabled)', '').includes('.Mui-disabled');
     const applies =
       (!conditions.includes(':hover') || state === 'hover') &&
       (!conditions.includes('.Mui-focused') || state === 'focused') &&
-      !conditions.includes('.Mui-disabled') &&
+      (!needsDisabled || disabled) &&
+      (!notDisabled || !disabled) &&
       (!needsError || error) &&
       (!notError || !error);
     if (!applies) continue;
@@ -55,10 +58,10 @@ function outlineColor(state: State, error: boolean): string | undefined {
 describe('TextField 윤곽선 색', () => {
   const theme = createAppTheme('night', 'dark');
   const t = TOKENS.night.dark;
-  const renderField = (error: boolean) =>
+  const renderField = (error: boolean, disabled = false) =>
     render(
       <ThemeProvider theme={theme}>
-        <TextField label="제목" error={error} />
+        <TextField label="제목" error={error} disabled={disabled} />
       </ThemeProvider>,
     );
 
@@ -77,4 +80,12 @@ describe('TextField 윤곽선 색', () => {
     expect(outlineColor('hover', false)).toBe(strong);
     expect(outlineColor('focused', false)).toBe(normalize(t.accent.text));
   });
+
+  it.each(['resting', 'hover'] as const)(
+    '비활성 칸은 %s에서도 비활성 테두리색이다(호버가 강한 테두리색으로 바꾸지 않는다)',
+    (state) => {
+      renderField(false, true);
+      expect(outlineColor(state, false, true)).toBe(normalize(theme.palette.action.disabled));
+    },
+  );
 });

@@ -133,13 +133,14 @@ export function createAppTheme(name: ThemeName, mode: ColorMode): Theme {
       // `TextField`의 입력칸. 직접 만든 입력칸(`fieldSx`)과 같은 테두리 색·모서리를 쓰고, 높이는 떠 있는 이름표 방식 그대로(56px)다.
       // 포커스는 테두리를 바깥선과 같은 강조색 글자색 2px로 그린다(안쪽 `input`의 전역 바깥선은 끈다).
       // 호버·포커스 규칙은 MUI의 `.Mui-error` 규칙과 우선순위가 같고 뒤에 오므로 `:not(.Mui-error)`로 오류 칸을 빼
-      // 잘못된 값이면 가만히 있을 때도, 호버·포커스에서도 오류 색이 이긴다.
+      // 잘못된 값이면 가만히 있을 때도, 호버·포커스에서도 오류 색이 이긴다. 호버 규칙은 `:not(.Mui-disabled)`로 비활성 칸도 빼
+      // 호버해도 비활성 테두리색이 그대로다.
       MuiOutlinedInput: {
         styleOverrides: {
           root: {
             borderRadius: 'var(--tm-radius-md)',
             '& .MuiOutlinedInput-notchedOutline': { borderColor: FIELD_BORDER_COLOR },
-            '&:not(.Mui-error):hover .MuiOutlinedInput-notchedOutline': {
+            '&:not(.Mui-error):not(.Mui-disabled):hover .MuiOutlinedInput-notchedOutline': {
               borderColor: FIELD_BORDER_COLOR,
             },
             '&.Mui-focused:not(.Mui-error) .MuiOutlinedInput-notchedOutline': {

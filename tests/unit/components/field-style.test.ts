@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fieldSx } from 'src/components/field-style';
+import { fieldSx, SEARCH_BOX_SX } from 'src/components/field-style';
 
 /** `SystemStyleObject`는 null·함수일 수도 있어 키를 읽기 쉽게 평평한 객체로 본다. */
 const plain = (options?: Parameters<typeof fieldSx>[0]) =>
@@ -46,5 +46,20 @@ describe('fieldSx', () => {
 
   it('한 줄 입력칸에는 resize가 없다', () => {
     expect(plain().resize).toBeUndefined();
+  });
+});
+
+describe('SEARCH_BOX_SX', () => {
+  it('포커스하면 상자 바깥선 하나만 그린다(테두리 색은 바꾸지 않는다)', () => {
+    const focus = SEARCH_BOX_SX['&:focus-within'] as Record<string, unknown>;
+    expect(focus).toEqual({
+      outline: '2px solid var(--tm-accent-text)',
+      outlineOffset: 2,
+    });
+    expect(focus.borderColor).toBeUndefined();
+  });
+
+  it('안쪽 입력칸의 전역 바깥선은 끈다', () => {
+    expect(SEARCH_BOX_SX['& input:focus-visible']).toEqual({ outline: 'none' });
   });
 });

@@ -62,7 +62,6 @@ export const SEARCH_BOX_SX = {
   cursor: 'text',
   '& > svg': { alignSelf: 'center', flex: 'none' },
   '&:focus-within': {
-    borderColor: 'var(--tm-accent-text)',
     outline: '2px solid var(--tm-accent-text)',
     outlineOffset: 2,
   },
