@@ -133,6 +133,29 @@ describe('화면별 제목 구조', () => {
     expect(h1s().map((h) => h.textContent)).toEqual(['강릉 여행']);
   });
 
+  it('중간 폭에서 후보 칸을 접어도 여행 제목 h1 하나가 남는다', async () => {
+    const user = userEvent.setup();
+    await renderLibrary(withTrip(sampleLibrary()), { path: `/trips/${TRIP}`, width: 1200 });
+    await user.click(screen.getByRole('button', { name: '후보 칸 접기' }));
+    expect(screen.queryByRole('region', { name: '후보 칸' })).not.toBeInTheDocument();
+    expect(h1s().map((h) => h.textContent)).toEqual(['강릉 여행']);
+    await user.click(screen.getByRole('button', { name: '후보 칸 펼치기' }));
+    expect(h1s().map((h) => h.textContent)).toEqual(['강릉 여행']);
+  });
+
+  it('휴대폰 일정 시트가 Day 탭이거나 접혀도 여행 제목 h1 하나가 남는다', async () => {
+    const user = userEvent.setup();
+    await renderLibrary(withTrip(sampleLibrary()), { path: `/trips/${TRIP}`, width: 390 });
+    const sheet = screen.getByRole('region', { name: '일정 시트' });
+    await user.click(within(sheet).getByRole('tab', { name: 'Day 1' }));
+    expect(h1s().map((h) => h.textContent)).toEqual(['강릉 여행']);
+    // 반쯤 → 거의 전체 → 접힘
+    await user.click(within(sheet).getByRole('button', { name: '시트 높이 바꾸기' }));
+    await user.click(within(sheet).getByRole('button', { name: '시트 높이 바꾸기' }));
+    expect(sheet).toHaveAttribute('data-snap', 'collapsed');
+    expect(h1s().map((h) => h.textContent)).toEqual(['강릉 여행']);
+  });
+
   it('여행 카드 제목은 h2다', async () => {
     await renderLibrary(withTrip(sampleLibrary()), { path: '/trips' });
     expect(screen.queryByRole('heading', { level: 3 })).not.toBeInTheDocument();

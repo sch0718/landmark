@@ -17,12 +17,13 @@ import { PlaceDetail } from 'src/sections/place/PlaceDetail';
 import { DETAIL_WIDTH, LIST_WIDTH } from 'src/sections/shell/pane-widths';
 import { useLayout } from 'src/sections/shell/use-layout';
 import { useCloseStaleSplit, useSplitPlan } from 'src/sections/trips/planner/AutoSplitPreview';
-import { CandidatePanel, HiddenTripTitle } from 'src/sections/trips/planner/CandidatePanel';
+import { CandidatePanel } from 'src/sections/trips/planner/CandidatePanel';
 import { DayTabs, DayTimeline } from 'src/sections/trips/planner/DayTimeline';
 import { MapCard } from 'src/sections/trips/planner/MapCard';
 import { PlannerDnd } from 'src/sections/trips/planner/PlannerDnd';
 import { COLLAPSED_PX, PlannerSheet } from 'src/sections/trips/planner/PlannerSheet';
 import { TripMap } from 'src/sections/trips/planner/TripMap';
+import { TripTitleHeading } from 'src/sections/trips/planner/TripTitleHeading';
 import { useDayPlan, type DayPlan } from 'src/sections/trips/planner/use-day-plan';
 import { libraryAtom } from 'src/stores/library-state';
 import { mapCardAtom, selectedDayAtom } from 'src/stores/trip-planner';
@@ -343,8 +344,8 @@ function Planner({ trip, library }: { trip: Trip; library: Library }) {
   const showCandidates = !medium || candidatesOpen;
   return (
     <Box sx={{ height: '100%', display: 'flex', position: 'relative', overflow: 'hidden' }}>
-      {/* 후보 칸이 접히면 보이는 제목이 없으므로 화면 `h1`을 눈에만 숨겨 둔다. */}
-      {!showCandidates && <HiddenTripTitle title={trip.title.value} />}
+      {/* 후보 칸을 접으면 보이는 여행 제목이 없다. 화면 `h1`을 눈에만 숨겨 남긴다. */}
+      <TripTitleHeading title={trip.title.value} candidatesShown={showCandidates} />
       {showCandidates && (
         <Box
           sx={{

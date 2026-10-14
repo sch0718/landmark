@@ -5,9 +5,10 @@ import { useRef, useState, type MouseEvent, type PointerEvent } from 'react';
 import { visibleCandidates } from 'src/domain/trips/query';
 import type { Library } from 'src/schema/library';
 import type { Trip } from 'src/schema/trip';
-import { CandidatePanel, HiddenTripTitle } from 'src/sections/trips/planner/CandidatePanel';
+import { CandidatePanel } from 'src/sections/trips/planner/CandidatePanel';
 import { DayTimeline } from 'src/sections/trips/planner/DayTimeline';
 import { DropTab } from 'src/sections/trips/planner/PlannerDnd';
+import { TripTitleHeading } from 'src/sections/trips/planner/TripTitleHeading';
 import type { DayPlan } from 'src/sections/trips/planner/use-day-plan';
 import { mapCardAtom } from 'src/stores/trip-planner';
 
@@ -183,10 +184,11 @@ export function PlannerSheet({ trip, library, dayIndex, plan, onSelectDay }: Pro
           />
         ))}
       </Tabs>
-      {/* 후보 칸이 그려지지 않을 때(접힘·Day 탭)는 화면 `h1`(여행 제목)을 눈에만 숨겨 둔다. */}
-      {(snap === 'collapsed' || tab !== 'candidates') && (
-        <HiddenTripTitle title={trip.title.value} />
-      )}
+      {/* 후보 칸이 그려지지 않으면(접힘·Day 탭) 화면 `h1`(여행 제목)을 눈에만 숨겨 남긴다. */}
+      <TripTitleHeading
+        title={trip.title.value}
+        candidatesShown={snap !== 'collapsed' && tab === 'candidates'}
+      />
       <Box
         role="tabpanel"
         hidden={snap === 'collapsed'}
