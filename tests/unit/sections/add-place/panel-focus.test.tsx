@@ -96,6 +96,28 @@ describe('추가 칸 포커스 (넓은·중간 화면)', () => {
     await waitFor(() => expect(pick).toHaveFocus());
   });
 
+  it('＋ → 공유 파일 가져오기를 Esc로 닫으면 ＋로 돌아온다', async () => {
+    const user = userEvent.setup();
+    const { store } = await renderLibrary(sampleLibrary());
+    await openFrom(user, '공유 파일 가져오기');
+    const pick = await screen.findByRole('button', { name: '파일 고르기' });
+    await waitFor(() => expect(pick).toHaveFocus());
+    await user.keyboard('{Escape}');
+    expect(store.get(addFlowAtom)).toEqual({ step: 'closed' });
+    expect(queryPanel()).not.toBeInTheDocument();
+    expect(plus()).toHaveFocus();
+  });
+
+  it('`/import`로 바로 들어와 연 파일 고르기를 Esc로 닫으면 본문으로 포커스한다', async () => {
+    const user = userEvent.setup();
+    await renderLibrary(sampleLibrary(), { path: '/import' });
+    const pick = await screen.findByRole('button', { name: '파일 고르기' });
+    await waitFor(() => expect(pick).toHaveFocus());
+    await user.keyboard('{Escape}');
+    expect(queryPanel()).not.toBeInTheDocument();
+    expect(screen.getByRole('main')).toHaveFocus();
+  });
+
   it('칸 안의 요소가 먼저 받아 기본 동작을 막은 Esc로는 칸을 닫지 않는다', async () => {
     const user = userEvent.setup();
     const { store } = await renderLibrary(sampleLibrary());

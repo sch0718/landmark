@@ -63,12 +63,14 @@ export const openAddSheetAtom = atom(
 );
 
 /**
- * 시트를 닫는다. 항목을 고르지 않고 닫았다면(흐름이 아직 `closed`) 붙여 둔 여행 대상과 연 요소도 버린다
- * (연 요소를 남기면 나중에 ＋ 없이 열린 흐름을 Esc로 닫을 때 엉뚱하게 그 ＋로 돌아간다).
+ * 시트를 닫는다. `chosen`은 항목을 골라서 닫는가다. 항목을 고르지 않고 닫았다면(배경·Esc, 흐름이 아직
+ * `closed`) 붙여 둔 여행 대상과 연 요소도 버린다(연 요소를 남기면 나중에 ＋ 없이 열린 흐름을 Esc로 닫을 때
+ * 엉뚱하게 그 ＋로 돌아간다). 항목을 골랐으면 둘 다 남긴다. 경로 항목(`공유 파일 가져오기`)은 이 순간
+ * 흐름이 아직 `closed`지만 곧 `/import`가 흐름을 연다.
  */
-export const closeAddSheetAtom = atom(null, (get, set) => {
+export const closeAddSheetAtom = atom(null, (get, set, chosen: boolean = false) => {
   set(addSheetOpenAtom, false);
-  if (get(addFlowAtom).step === 'closed') {
+  if (!chosen && get(addFlowAtom).step === 'closed') {
     set(addTargetAtom, null);
     set(addOpenerAtom, null);
   }

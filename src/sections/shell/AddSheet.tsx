@@ -48,8 +48,11 @@ const OPTIONS: readonly Option[] = [
   },
 ];
 
-/** ＋ 버튼이 여는 추가 시트(스펙 §2.1). 항목을 고르면 추가 흐름을 시작하고 시트를 닫는다. */
-export function AddSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+/**
+ * ＋ 버튼이 여는 추가 시트(스펙 §2.1). 항목을 고르면 추가 흐름을 시작하고 시트를 닫는다.
+ * `onClose`의 `chosen`은 항목을 골라 닫는가다(배경·Esc로 닫으면 `false`).
+ */
+export function AddSheet({ open, onClose }: { open: boolean; onClose: (chosen: boolean) => void }) {
   const setFlow = useSetAtom(addFlowAtom);
   const navigate = useNavigate();
   const { pathname } = useLocation();
@@ -59,7 +62,7 @@ export function AddSheet({ open, onClose }: { open: boolean; onClose: () => void
     <Drawer
       anchor="bottom"
       open={open}
-      onClose={onClose}
+      onClose={() => onClose(false)}
       slotProps={{
         paper: {
           'aria-label': ADD_LABEL,
@@ -99,7 +102,7 @@ export function AddSheet({ open, onClose }: { open: boolean; onClose: () => void
               type="button"
               onClick={() => {
                 if (flow !== undefined) setFlow(flow);
-                onClose();
+                onClose(true);
                 // 경로 항목(`/import`)은 곧바로 `/`로 바뀐다. 보관함(`/`)에서 열었으면 바꿔치기로 가서
                 // 같은 `/`가 기록에 두 번 남지 않게 하고, 다른 화면에서 열었으면 그 화면을 기록에 남긴다.
                 if (to !== undefined) {
