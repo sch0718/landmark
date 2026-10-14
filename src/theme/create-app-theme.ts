@@ -6,6 +6,13 @@ import { TOKENS, type ColorMode, type ThemeName, type Tokens } from 'src/theme/t
 
 const HEADINGS = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'] as const;
 
+/** 입력칸 안내 글자의 가상 요소(브라우저마다 이름이 다르다). */
+const PLACEHOLDER_PSEUDOS = [
+  '::placeholder',
+  '::-webkit-input-placeholder',
+  '::-moz-placeholder',
+] as const;
+
 /** 토큰을 CSS 변수(`--tm-*`)로 펼친다. 컴포넌트는 `var(--tm-bg-surface)`처럼 읽는다. */
 export function cssVarsOf(tokens: Tokens): Record<string, string> {
   const vars: Record<string, string> = {
@@ -95,8 +102,29 @@ export function createAppTheme(name: ThemeName, mode: ColorMode): Theme {
       MuiIconButton: {
         styleOverrides: { root: { minWidth: 44, minHeight: 44 } },
       },
+      // MUI는 안쪽 `input`에 `::-webkit-input-placeholder`로 `color: currentColor; opacity: 0.42`(다크 0.5)를 깔아
+      // 전역 `::placeholder` 규칙보다 앞선다. 같은 선택자로 뒤에서 text.muted·투명도 1로 덮는다
+      // (가상 요소 선택자는 묶으면 하나만 몰라도 규칙 전체가 버려지므로 낱낱의 키로 쓴다).
+      // `TextField`의 이름표가 접히지 않은 동안 안내 글자를 숨기는 규칙(`opacity: 0 !important`)은 그대로 이기고,
+      // 포커스하면 안내 글자를 0.5로 되살리는 MUI 규칙만 1로 맞춘다.
       MuiInputBase: {
-        styleOverrides: { input: { fontSize: 16 } },
+        styleOverrides: {
+          input: {
+            fontSize: 16,
+            ...Object.fromEntries(
+              PLACEHOLDER_PSEUDOS.map((pseudo) => [
+                `&${pseudo}`,
+                { color: t.text.muted, opacity: 1 },
+              ]),
+            ),
+            ...Object.fromEntries(
+              PLACEHOLDER_PSEUDOS.map((pseudo) => [
+                `label[data-shrink=false] + .MuiInputBase-formControl &:focus${pseudo}`,
+                { opacity: 1 },
+              ]),
+            ),
+          },
+        },
       },
       // `TextField`의 입력칸. 직접 만든 입력칸(`fieldSx`)과 같은 테두리 색·모서리를 쓰고, 높이는 떠 있는 이름표 방식 그대로(56px)다.
       // 포커스는 테두리를 바깥선과 같은 강조색 글자색 2px로 그린다(안쪽 `input`의 전역 바깥선은 끈다).
