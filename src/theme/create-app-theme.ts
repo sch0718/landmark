@@ -1,23 +1,9 @@
 import { createTheme, type Theme } from '@mui/material/styles';
 import { LABEL_COLORS } from 'src/schema/library';
+import { FOCUS_RING, FOCUS_RING_INSET } from 'src/theme/focus-ring';
 import { TOKENS, type ColorMode, type ThemeName, type Tokens } from 'src/theme/tokens';
 
 const HEADINGS = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'] as const;
-
-/**
- * 키보드 포커스 표시(스펙 §2). 모든 조작 요소가 같은 바깥선을 쓴다. 색은 바탕 위 대비가 나오는 강조색 글자색.
- * 마우스로 누를 때는 그리지 않도록 `:focus-visible`(MUI는 `.Mui-focusVisible`)에서만 쓴다.
- * `outline: 2px solid var(--tm-accent-text)`를 낱낱의 속성으로 쓴 것이다(값은 같다).
- */
-const FOCUS_RING = {
-  outlineWidth: 2,
-  outlineStyle: 'solid',
-  outlineColor: 'var(--tm-accent-text)',
-  outlineOffset: 2,
-} as const;
-
-/** 넘침을 자르는 칸(탭 줄·메뉴) 안의 요소는 바깥선이 잘리지 않게 안쪽으로 그린다. */
-const FOCUS_RING_INSET = { ...FOCUS_RING, outlineOffset: -2 } as const;
 
 /** 토큰을 CSS 변수(`--tm-*`)로 펼친다. 컴포넌트는 `var(--tm-bg-surface)`처럼 읽는다. */
 export function cssVarsOf(tokens: Tokens): Record<string, string> {

@@ -71,11 +71,14 @@ describe('포커스 표시', () => {
       .flatMap((sheet) => [...sheet.cssRules])
       .filter((rule): rule is CSSStyleRule => rule instanceof CSSStyleRule)
       .filter((rule) => rule.selectorText === ':focus-visible');
-    expect(rules).toHaveLength(1);
-    const { style } = rules[0]!;
-    expect(style.outlineStyle).toBe('solid');
-    expect(style.outlineWidth).toBe('2px');
-    expect(style.outlineColor).toBe('var(--tm-accent-text)');
-    expect(style.outlineOffset).toBe('2px');
+    expect(
+      rules.some(
+        ({ style }) =>
+          style.outlineStyle === 'solid' &&
+          style.outlineWidth === '2px' &&
+          style.outlineColor === 'var(--tm-accent-text)' &&
+          style.outlineOffset === '2px',
+      ),
+    ).toBe(true);
   });
 });

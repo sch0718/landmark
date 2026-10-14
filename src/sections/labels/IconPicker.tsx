@@ -2,6 +2,7 @@ import Box from '@mui/material/Box';
 import { LabelGlyph } from 'src/components/icons';
 import { LABEL_ICONS, type LabelColor, type LabelIcon } from 'src/schema/library';
 import { labelColors } from 'src/sections/library/label-style';
+import { FOCUS_RING } from 'src/theme/focus-ring';
 
 /** 스크린리더용 이름. `Record`라서 허용 목록에 아이콘이 늘면 여기서 컴파일 오류가 난다. */
 export const ICON_NAMES: Record<LabelIcon, string> = {
@@ -74,10 +75,9 @@ export function IconPicker({ value, color, onChange }: Props) {
               cursor: 'pointer',
               display: 'grid',
               placeItems: 'center',
-              '&:focus-visible > span': {
-                outline: '2px solid var(--tm-accent-main)',
-                outlineOffset: 2,
-              },
+              // 누르는 자리(44px)가 아니라 보이는 견본에 포커스 표시를 그린다.
+              '&:focus-visible': { outline: 'none' },
+              '&:focus-visible > span': FOCUS_RING,
             }}
           >
             <Box

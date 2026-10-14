@@ -87,7 +87,7 @@ export function LegRow({ leg, onMode, onRetry }: Props) {
           color: 'inherit',
           cursor: 'pointer',
           '&:hover': { bgcolor: 'var(--tm-bg-raised)' },
-          '&:focus-visible': { outline: '2px solid var(--tm-accent-main)', outlineOffset: -2 },
+          '&:focus-visible': { outlineOffset: -2 },
         }}
       >
         <LabelGlyph name={leg.mode === 'car' ? 'car' : 'footprints'} size={16} />
@@ -124,7 +124,7 @@ export function LegRow({ leg, onMode, onRetry }: Props) {
             textDecoration: 'none',
             borderRadius: 'var(--tm-radius-md)',
             '&:hover': { textDecoration: 'underline' },
-            '&:focus-visible': { outline: '2px solid var(--tm-accent-main)', outlineOffset: -2 },
+            '&:focus-visible': { outlineOffset: -2 },
           }}
         >
           네이버 지도로 길찾기

@@ -65,6 +65,7 @@ describe('본문 바로가기', () => {
     document.body.dataset.recompute = '';
     expect(getComputedStyle(link).position).toBe('fixed');
     expect(getComputedStyle(link).width).not.toBe('1px');
+    delete document.body.dataset.recompute;
 
     await user.keyboard('{Enter}');
     expect(screen.getByRole('main')).toHaveFocus();

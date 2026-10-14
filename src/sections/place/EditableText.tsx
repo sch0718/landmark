@@ -153,7 +153,6 @@ export function EditableText({
         textAlign: 'left',
         cursor: 'text',
         '&:hover': { bgcolor: 'var(--tm-bg-raised)' },
-        '&:focus-visible': { outline: '2px solid var(--tm-accent-main)' },
         ...font,
       }}
     >

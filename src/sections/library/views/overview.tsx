@@ -73,7 +73,6 @@ export function LabelBlock({
           textAlign: 'left',
           cursor: 'pointer',
           overflow: 'hidden',
-          '&:focus-visible': { outline: '2px solid var(--tm-accent-main)', outlineOffset: 2 },
         },
         ...(Array.isArray(sx) ? sx : [sx]),
       ]}

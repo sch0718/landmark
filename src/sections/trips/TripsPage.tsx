@@ -65,7 +65,7 @@ function TripCard({ trip, library, onMenu }: CardProps) {
           borderRadius: 'inherit',
           color: 'inherit',
           textDecoration: 'none',
-          '&:focus-visible': { outline: '2px solid var(--tm-accent-main)', outlineOffset: -2 },
+          '&:focus-visible': { outlineOffset: -2 },
         }}
       >
         <Box component="h2" sx={{ m: 0, fontSize: 16, fontWeight: 800, overflowWrap: 'anywhere' }}>
@@ -93,7 +93,7 @@ function TripCard({ trip, library, onMenu }: CardProps) {
           background: 'transparent',
           color: 'var(--tm-text-secondary)',
           cursor: 'pointer',
-          '&:focus-visible': { outline: '2px solid var(--tm-accent-main)', outlineOffset: -2 },
+          '&:focus-visible': { outlineOffset: -2 },
           '& svg': { width: 20, height: 20 },
         }}
       >

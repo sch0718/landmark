@@ -38,7 +38,6 @@ const BUTTON_SX = {
   fontWeight: 700,
   textDecoration: 'none',
   cursor: 'pointer',
-  '&:focus-visible': { outline: '2px solid var(--tm-accent-main)', outlineOffset: 2 },
   '& svg': { width: 16, height: 16 },
 } as const;
 

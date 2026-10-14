@@ -85,7 +85,7 @@ export function LabelChips({ query, onChange, labels, counts, manageLink = true 
             fontWeight: 700,
             textDecoration: 'none',
             whiteSpace: 'nowrap',
-            '&:focus-visible': { outline: '2px solid var(--tm-accent-main)', outlineOffset: -2 },
+            '&:focus-visible': { outlineOffset: -2 },
           }}
         >
           <TagsIcon aria-hidden="true" width={14} height={14} />

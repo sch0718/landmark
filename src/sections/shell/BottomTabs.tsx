@@ -20,7 +20,7 @@ const TAB_SX = {
   background: 'transparent',
   cursor: 'pointer',
   // 탭은 하단 메뉴 높이를 꽉 채우므로 바깥선을 안쪽으로 그린다(색·굵기는 테마의 포커스 표시와 같다).
-  '&:focus-visible': { outline: '2px solid var(--tm-accent-text)', outlineOffset: -2 },
+  '&:focus-visible': { outlineOffset: -2 },
   '& svg': { width: 22, height: 22 },
 } as const;
 

@@ -247,12 +247,20 @@ test.describe('키보드·포커스', () => {
       // 포커스 전에는 1px로 숨어 있다가 포커스를 받으면 글자가 보이는 크기로 나타난다.
       expect((await skip.boundingBox())!.width).toBeGreaterThan(40);
 
-      await plus.focus();
+      // 레일: 보관함 → 지도 → ＋ 순서다.
+      await page.keyboard.press('Tab');
+      await page.keyboard.press('Tab');
+      await page.keyboard.press('Tab');
+      await expect(plus).toBeFocused();
       await page.keyboard.press('Enter');
-      await page
+      // 시트가 열리면 시트 자체에 포커스가 가고, 다음 Tab이 첫 항목이다.
+      const linkItem = page
         .getByRole('dialog', { name: '장소 추가' })
-        .getByRole('button', { name: /링크 붙여넣기/ })
-        .press('Enter');
+        .getByRole('button', { name: /링크 붙여넣기/ });
+      await expect(linkItem).toBeVisible();
+      await page.keyboard.press('Tab');
+      await expect(linkItem).toBeFocused();
+      await page.keyboard.press('Enter');
 
       const panel = page.getByRole('region', { name: '장소 추가' });
       await expect(panel.getByRole('textbox', { name: '링크' })).toBeFocused();

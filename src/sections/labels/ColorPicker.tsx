@@ -2,6 +2,7 @@ import Box from '@mui/material/Box';
 import { CheckIcon } from 'src/components/icons';
 import { LABEL_COLORS, type LabelColor } from 'src/schema/library';
 import { labelColors } from 'src/sections/library/label-style';
+import { FOCUS_RING } from 'src/theme/focus-ring';
 
 export const COLOR_NAMES: Record<LabelColor, string> = {
   red: '빨강',
@@ -40,10 +41,9 @@ export function ColorPicker({ value, onChange }: Props) {
               cursor: 'pointer',
               display: 'grid',
               placeItems: 'center',
-              '&:focus-visible > span': {
-                outline: '2px solid var(--tm-accent-main)',
-                outlineOffset: 2,
-              },
+              // 누르는 자리(44px)가 아니라 보이는 견본에 포커스 표시를 그린다.
+              '&:focus-visible': { outline: 'none' },
+              '&:focus-visible > span': FOCUS_RING,
             }}
           >
             <Box

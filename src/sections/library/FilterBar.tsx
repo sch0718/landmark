@@ -90,7 +90,7 @@ export function FilterBar({
               background: 'transparent',
               color: 'var(--tm-text-secondary)',
               cursor: 'pointer',
-              '&:focus-visible': { outline: '2px solid var(--tm-accent-main)', outlineOffset: -2 },
+              '&:focus-visible': { outlineOffset: -2 },
             }}
           >
             <ShareIcon aria-hidden="true" width={18} height={18} />

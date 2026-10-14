@@ -144,7 +144,7 @@ export function PlannerSheet({ trip, library, dayIndex, plan, onSelectDay }: Pro
           background: 'transparent',
           cursor: 'grab',
           touchAction: 'none',
-          '&:focus-visible': { outline: '2px solid var(--tm-accent-main)', outlineOffset: -2 },
+          '&:focus-visible': { outlineOffset: -2 },
         }}
       >
         <Box

@@ -61,10 +61,6 @@ export function MergeDialog({ from, targets, counts, onCancel, onConfirm }: Prop
                   font: 'inherit',
                   textAlign: 'left',
                   cursor: 'pointer',
-                  '&:focus-visible': {
-                    outline: '2px solid var(--tm-accent-main)',
-                    outlineOffset: 1,
-                  },
                 }}
               >
                 <Box component="span" sx={{ display: 'inline-flex', color: tone.marker }}>

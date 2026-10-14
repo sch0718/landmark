@@ -37,7 +37,7 @@ export const ITEM_BUTTON_SX = {
   userSelect: 'none',
   WebkitTouchCallout: 'none',
   touchAction: 'manipulation',
-  '&:focus-visible': { outline: '2px solid var(--tm-accent-main)', outlineOffset: -2 },
+  '&:focus-visible': { outlineOffset: -2 },
 } as const;
 
 /** 행에 보이는 라벨 칩의 최대 개수. 넘치면 `+N`으로 줄인다. */

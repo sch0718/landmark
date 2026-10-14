@@ -104,7 +104,6 @@ function CandidateRow({
           textAlign: 'left',
           cursor: 'pointer',
           borderRadius: 'var(--tm-radius-sm)',
-          '&:focus-visible': { outline: '2px solid var(--tm-accent-main)', outlineOffset: 2 },
         }}
       >
         <Box

@@ -2,7 +2,7 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Drawer from '@mui/material/Drawer';
 import IconButton from '@mui/material/IconButton';
-import { useAtom, useAtomValue, useSetAtom } from 'jotai';
+import { useAtom, useAtomValue, useSetAtom, useStore } from 'jotai';
 import { Suspense, useEffect, useRef, type KeyboardEvent, type RefObject } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { ChunkErrorBoundary } from 'src/components/ChunkErrorBoundary';
@@ -18,6 +18,7 @@ import {
   SharePreview,
 } from 'src/routes/lazy-routes';
 import { paths } from 'src/routes/paths';
+import { focusIsLost, focusStepField, StepScopeContext } from 'src/sections/add-place/step-focus';
 import { ADD_LABEL } from 'src/sections/shell/nav-items';
 import { DETAIL_WIDTH } from 'src/sections/shell/pane-widths';
 import { MAIN_ID } from 'src/sections/shell/SkipLink';
@@ -65,24 +66,13 @@ function StepView({ flow }: { flow: AddFlow }) {
   }
 }
 
-/** 단계가 열릴 때 포커스할 첫 입력 요소. 숨긴 입력(파일 고르기 등)과 꺼진 요소는 건너뛴다. */
-const FIRST_FIELD =
-  'input:not([type="hidden"]):not([hidden]):not(:disabled), textarea:not(:disabled), button:not(:disabled)';
-
 /**
- * 단계 화면이 그려지면(파일을 기다렸다면 받은 뒤) 그 단계의 첫 입력 요소로 포커스를 옮긴다(스펙 §2).
- * 단계가 `data-autofocus`로 정한 요소가 있으면 그것을, 없으면 `scope` 안의 첫 입력 요소를 고른다.
- * 칸이 열리며 지도·목록이 스크롤되지 않게 `preventScroll`로 옮긴다. 단계 화면과 같은 `Suspense` 안에
- * 두어 단계가 실제로 그려진 뒤에만 돈다.
+ * 단계 화면이 그려지면(파일을 기다렸다면 받은 뒤) 그 단계의 첫 입력 요소로 포커스를 옮긴다(스펙 §2,
+ * `focusStepField`). 단계 화면과 같은 `Suspense` 안에 두어 단계가 실제로 그려진 뒤에만 돈다.
  */
 function StepFocus({ scope }: { scope: RefObject<HTMLElement | null> }) {
   useEffect(() => {
-    const root = scope.current;
-    if (root === null) return;
-    const target =
-      root.querySelector<HTMLElement>('[data-autofocus]') ??
-      root.querySelector<HTMLElement>(FIRST_FIELD);
-    target?.focus({ preventScroll: true });
+    focusStepField(scope.current);
   }, [scope]);
   return null;
 }
@@ -113,26 +103,28 @@ function StepContent({
     </Box>
   ) : null;
   return (
-    <ChunkErrorBoundary
-      fallback={
-        <>
-          <ChunkErrorNotice />
-          {cancel}
-        </>
-      }
-    >
-      <Suspense
+    <StepScopeContext value={scope}>
+      <ChunkErrorBoundary
         fallback={
           <>
-            <LoadingNotice />
+            <ChunkErrorNotice />
             {cancel}
           </>
         }
       >
-        <StepView flow={flow} />
-        <StepFocus scope={scope} />
-      </Suspense>
-    </ChunkErrorBoundary>
+        <Suspense
+          fallback={
+            <>
+              <LoadingNotice />
+              {cancel}
+            </>
+          }
+        >
+          <StepView flow={flow} />
+          <StepFocus scope={scope} />
+        </Suspense>
+      </ChunkErrorBoundary>
+    </StepScopeContext>
   );
 }
 
@@ -143,12 +135,13 @@ function StepContent({
  *   좁은 화면은 지도 탭(`/map`)으로, 그 밖은 지도가 있는 보관함(`/`)으로 간다(예: 넓은 화면의 `/labels`).
  * - 핀 모드 중에 경로가 바뀌면(뒤로 가기·목록에서 장소 고르기·다른 메뉴) 지도가 계속 보여도 핀 모드를
  *   끝낸다(스펙 §2.4). 이 훅이 지도로 옮긴 이동은 예외다.
- * 흐름이 끝나면(`closed`가 되면, 어느 길로든) 붙여 둔 여행 대상(`addTargetAtom`)을 버린다.
+ * 흐름이 끝나면(`closed`가 되면, 어느 길로든) 붙여 둔 여행 대상(`addTargetAtom`)과 연 요소(`addOpenerAtom`)를 버린다.
  * `mapShown`은 지금 경로·폭에서 지도가 가려지지 않고 보이는가다.
  */
 export function useAddFlowRoute(mapShown: boolean) {
   const [flow, setFlow] = useAtom(addFlowAtom);
   const setTarget = useSetAtom(addTargetAtom);
+  const setOpener = useSetAtom(addOpenerAtom);
   const setLinkDraft = useSetAtom(linkDraftAtom);
   const layout = useLayout();
   const navigate = useNavigate();
@@ -165,7 +158,12 @@ export function useAddFlowRoute(mapShown: boolean) {
     prev.current = { step, pathname, hint };
     if (before.step !== step) movingToMap.current = false;
     // 흐름이 막 끝났다. 대상을 열어 두기만 한 시트(아직 `closed`)는 시트가 닫힐 때 따로 버린다.
-    if (before.step !== 'closed' && step === 'closed') setTarget(null);
+    // 흐름을 연 요소도 잊는다(다음에 ＋ 없이 열린 흐름 — 공유 파일 끌어 놓기 등 — 은 본문으로 돌아가고,
+    // 화면에서 빠진 요소를 붙들지 않게).
+    if (before.step !== 'closed' && step === 'closed') {
+      setTarget(null);
+      setOpener(null);
+    }
     // 링크 입력 단계를 떠나거나 안내 종류(장소·폴더)가 바뀌었다. 쓰던 글은 이어받지 않는다
     // (폭이 바뀌어도 단계·종류는 그대로라 남는다).
     if (before.step === 'link' && (step !== 'link' || before.hint !== hint)) setLinkDraft('');
@@ -191,6 +189,7 @@ export function useAddFlowRoute(mapShown: boolean) {
     navigate,
     setFlow,
     setTarget,
+    setOpener,
     setLinkDraft,
   ]);
 }
@@ -201,22 +200,34 @@ export function useAddFlowRoute(mapShown: boolean) {
  * 덮는 패널(중간 폭·보관함 밖 화면), 아니면 넓은 화면의 오른쪽 칸 그대로다.
  * 단계가 바뀌면 `key`로 내용을 새로 만들어 이전 단계의 입력·진행 중 요청을 이어받지 않는다.
  * 포커스(스펙 §2): 단계가 열리면 첫 입력 요소로(`StepFocus`). 시트는 대화상자라 `Esc`·포커스 가두기를 MUI가
- * 맡고, 오른쪽 칸은 칸 안에서 누른 `Esc`로 흐름을 닫고 흐름을 연 ＋(없으면 본문)로 포커스를 돌려준다.
+ * 맡고, 오른쪽 칸은 칸 안에서 누른 `Esc`로 흐름을 닫는다. 어느 길로 닫혀도(`Esc`·닫기·취소·추가 끝) 칸과 함께
+ * 포커스가 빠졌으면 흐름을 연 ＋(없거나 화면에서 빠졌으면 본문)로 돌려준다.
  */
 export function AddPlaceHost({ floating = false }: { floating?: boolean }) {
   const [flow, setFlow] = useAtom(addFlowAtom);
   const opener = useAtomValue(addOpenerAtom);
+  const store = useStore();
   const layout = useLayout();
   const open = showsAddPanel(flow);
   const close = () => setFlow({ step: 'closed' });
   const scope = useRef<HTMLElement>(null);
 
+  // 칸이 닫힐 때(넓은 화면 보관함에서는 이 컴포넌트가 상세 칸으로 바뀌며 빠질 때) 포커스를 돌려준다.
+  // 정리 함수가 도는 때는 칸이 이미 빠진 뒤다. 흐름이 아직 열려 있으면(폭이 바뀌어 칸 자리만 옮김) 두고,
+  // 포커스가 남아 있으면(시트가 스스로 돌려줬거나 사용자가 다른 곳을 눌렀다) 건드리지 않는다.
+  useEffect(() => {
+    if (!open) return;
+    return () => {
+      if (showsAddPanel(store.get(addFlowAtom)) || !focusIsLost()) return;
+      const back = opener?.isConnected === true ? opener : document.getElementById(MAIN_ID);
+      back?.focus({ preventScroll: true });
+    };
+  }, [open, opener, store]);
+
   const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     // 칸 안의 메뉴·입력칸이 먼저 받은 Esc(전파를 멈췄거나 기본 동작을 막은 것)와 한글 조합 중의 Esc는 그쪽 몫이다.
     if (event.key !== 'Escape' || event.defaultPrevented || event.nativeEvent.isComposing) return;
     event.preventDefault();
-    const back = opener?.isConnected === true ? opener : document.getElementById(MAIN_ID);
-    back?.focus();
     close();
   };
 

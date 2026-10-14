@@ -100,7 +100,7 @@ function LabelRow({ label, count, onOpen }: RowProps) {
           cursor: 'grab',
           // 손잡이에서만 드래그가 시작되므로 줄 나머지 부분은 평소처럼 스크롤된다.
           touchAction: 'none',
-          '&:focus-visible': { outline: '2px solid var(--tm-accent-main)', outlineOffset: -2 },
+          '&:focus-visible': { outlineOffset: -2 },
           '& svg': { width: 20, height: 20 },
         }}
       >
@@ -124,7 +124,7 @@ function LabelRow({ label, count, onOpen }: RowProps) {
           color: 'var(--tm-text-primary)',
           textAlign: 'left',
           cursor: 'pointer',
-          '&:focus-visible': { outline: '2px solid var(--tm-accent-main)', outlineOffset: -2 },
+          '&:focus-visible': { outlineOffset: -2 },
         }}
       >
         <Box
@@ -289,7 +289,6 @@ export function LabelsPage() {
             font: 'inherit',
             fontWeight: 700,
             cursor: 'pointer',
-            '&:focus-visible': { outline: '2px solid var(--tm-accent-main)', outlineOffset: 2 },
           }}
         >
           추가

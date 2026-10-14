@@ -57,7 +57,7 @@ export function RegionChips({ regions, selected, onChange, onCreateTrip }: Props
             color: 'var(--tm-accent-main)',
             whiteSpace: 'nowrap',
             cursor: 'pointer',
-            '&:focus-visible': { outline: '2px solid var(--tm-accent-main)', outlineOffset: -2 },
+            '&:focus-visible': { outlineOffset: -2 },
           }}
         >
           이 지역으로 여행 만들기
