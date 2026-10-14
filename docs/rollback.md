@@ -44,7 +44,19 @@ PR을 만들어 CI를 통과하면 병합한다. 그 PR의 변경 일부(묶음 
 
 ## 3. 공유 지도 페이지 (`https://sch0718.github.io/landmark/`)
 
-`.github/workflows/deploy-share-map.yml`이 `main`에서 지도 관련 파일이 바뀔 때 `gh-pages` 브랜치로 배포한다. 되돌리려면 `gh-pages`의 이전 커밋으로 되돌리는 커밋을 올리거나, 원하는 `main` 커밋에서 워크플로를 수동 실행(`workflow_dispatch`)한다.
+`.github/workflows/deploy-share-map.yml`이 `main`에 지도 관련 파일이 바뀐 커밋이 들어올 때만 `gh-pages` 브랜치로 배포한다(다른 브랜치·태그에서 수동 실행하면 배포 단계는 건너뛴다. `main`에서 수동 실행하면 최신 `main`을 다시 배포할 뿐이라 옛 버전으로 되돌리지는 못한다). 되돌리는 방법은 둘이다.
+
+- **코드로**: 2번처럼 `main`에서 해당 변경을 되돌리는 PR을 병합한다. 지도 관련 파일이 바뀌므로 워크플로가 되돌린 코드를 다시 배포한다.
+- **`gh-pages`를 직접**: `gh-pages`는 배포할 때마다 커밋이 하나씩 쌓인다. 되돌릴 배포 커밋을 찾아 되돌리는 커밋을 올린다.
+
+  ```bash
+  git fetch origin gh-pages && git switch gh-pages
+  git log --oneline   # 배포 커밋 찾기
+  git revert <되돌릴 배포 커밋>
+  git push origin gh-pages
+  ```
+
+  이 방법은 `main`에 그 변경이 남아 있으므로, 다음에 지도 관련 파일이 바뀌어 배포되면 다시 덮인다.
 
 ## 새 버전을 낼 때
 
