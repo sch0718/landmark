@@ -64,6 +64,28 @@ describe('classifyLink', () => {
       expect(classifyLink(url)).toEqual({ kind: 'naver-place', sid: '12028621' });
     });
 
+    // PC 지도 주소창: 저장 목록·공유 폴더·주변 탐색에서 고른 장소, 예전 v5 주소.
+    it.each([
+      'https://map.naver.com/p/favorite/myPlace/folder/5f1c2b3a4d/place/1958911015?c=15.00,0,0,0,dh',
+      'https://map.naver.com/p/favorite/sharedPlace/folder/fb65e7f93f8a4144a4ded594d604a7aa/place/1958911015',
+      'https://map.naver.com/p/favorite/myPlace/place/1958911015',
+      'https://map.naver.com/p/smart-around/place/1958911015?placePath=%2Fhome',
+      'https://map.naver.com/v5/entry/place/1958911015?c=14134,4517,15,0,0,0,dh',
+      'https://map.naver.com/v5/search/구십도씨/place/1958911015',
+    ])('%s → 1958911015', (url) => {
+      expect(classifyLink(url)).toEqual({ kind: 'naver-place', sid: '1958911015' });
+    });
+
+    it.each([
+      'https://map.naver.com/p/favorite/myPlace/folder/5f1c2b3a4d',
+      'https://map.naver.com/p/directions/-/-/-/transit',
+      'https://map.naver.com/p/entry/address/123',
+      'https://map.naver.com/place/1958911015',
+      'https://map.naver.com/p/smart-around/place/1958911015x',
+    ])('%s → unsupported', (url) => {
+      expect(classifyLink(url)).toEqual({ kind: 'unsupported' });
+    });
+
     it('ID가 숫자가 아니면 unsupported', () => {
       expect(classifyLink('https://map.naver.com/p/entry/place/abc')).toEqual({
         kind: 'unsupported',
