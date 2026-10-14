@@ -6,13 +6,6 @@ import { TOKENS, type ColorMode, type ThemeName, type Tokens } from 'src/theme/t
 
 const HEADINGS = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'] as const;
 
-/** 입력칸 안내 글자의 가상 요소(브라우저마다 이름이 다르다). */
-const PLACEHOLDER_PSEUDOS = [
-  '::placeholder',
-  '::-webkit-input-placeholder',
-  '::-moz-placeholder',
-] as const;
-
 /** 토큰을 CSS 변수(`--tm-*`)로 펼친다. 컴포넌트는 `var(--tm-bg-surface)`처럼 읽는다. */
 export function cssVarsOf(tokens: Tokens): Record<string, string> {
   const vars: Record<string, string> = {
@@ -49,6 +42,8 @@ export function cssVarsOf(tokens: Tokens): Record<string, string> {
 /** 토큰에서 MUI 테마를 만든다. 터치 대상 44px·입력 16px(iOS 확대 방지)은 모든 테마에 공통이다. */
 export function createAppTheme(name: ThemeName, mode: ColorMode): Theme {
   const t = TOKENS[name][mode];
+  // 입력칸 안내 글자의 가상 요소(브라우저마다 이름이 다르다).
+  const placeholderPseudos = ['::placeholder', '::-webkit-input-placeholder', '::-moz-placeholder'];
   return createTheme({
     palette: {
       mode,
@@ -116,13 +111,13 @@ export function createAppTheme(name: ThemeName, mode: ColorMode): Theme {
           input: {
             fontSize: 16,
             ...Object.fromEntries(
-              PLACEHOLDER_PSEUDOS.map((pseudo) => [
+              placeholderPseudos.map((pseudo) => [
                 `&${pseudo}`,
                 { color: t.text.muted, opacity: 1 },
               ]),
             ),
             ...Object.fromEntries(
-              PLACEHOLDER_PSEUDOS.map((pseudo) => [
+              placeholderPseudos.map((pseudo) => [
                 `label[data-shrink=false] + .MuiInputBase-formControl &:focus${pseudo}`,
                 { opacity: 1 },
               ]),
