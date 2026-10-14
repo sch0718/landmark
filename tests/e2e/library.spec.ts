@@ -164,3 +164,12 @@ test.describe('모바일', { tag: '@mobile' }, () => {
     expect(overflow).toBeLessThanOrEqual(0);
   });
 });
+
+// 세 프로젝트(데스크톱·iPhone·Galaxy) 모두에서 도는 시험이라 태그를 달지 않는다.
+test('탭 제목이 화면을 따라간다', async ({ page }) => {
+  await seedStorage(page);
+  await page.goto('/labels');
+  await expect(page).toHaveTitle('라벨 관리 · 랜드마크');
+  await page.goto('/');
+  await expect(page).toHaveTitle('보관함 · 랜드마크');
+});

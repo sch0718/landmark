@@ -46,7 +46,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <Box component="section" aria-label={title} sx={{ mt: 2.5 }}>
       <Box
-        component="h3"
+        component="h2"
         sx={{ m: 0, mb: 0.5, fontSize: 13, fontWeight: 800, color: 'var(--tm-text-secondary)' }}
       >
         {title}
@@ -60,7 +60,7 @@ function NotFound() {
   const navigate = useNavigate();
   return (
     <Box sx={{ p: 2 }}>
-      <Box component="p" sx={{ m: 0, mb: 1.5, fontWeight: 800 }}>
+      <Box component="h1" sx={{ m: 0, mb: 1.5, fontSize: 'inherit', fontWeight: 800 }}>
         장소를 찾을 수 없어요
       </Box>
       <Box
@@ -115,6 +115,7 @@ function PlaceBody({ place }: { place: Place }) {
     <Box sx={{ p: 2, pb: 4 }}>
       <EditableText
         variant="title"
+        asHeading
         label="이름"
         value={place.name.value}
         allowEmpty={false}

@@ -8,7 +8,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
   return (
     <ThemeRoot>
       {children}
-      <Toaster position="top-center" />
+      <Toaster position="top-center" customAriaLabel="알림" />
     </ThemeRoot>
   );
 }

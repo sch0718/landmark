@@ -1,10 +1,12 @@
 import Box from '@mui/material/Box';
 import IconButton from '@mui/material/IconButton';
 import type { SxProps, Theme } from '@mui/material/styles';
+import { visuallyHidden } from '@mui/utils';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { useState, type ReactNode } from 'react';
 import { matchPath, Outlet, useLocation, useNavigate } from 'react-router';
 import { ChevronLeftIcon, XIcon } from 'src/components/icons';
+import { useDocumentTitle } from 'src/lib/use-document-title';
 import { paths } from 'src/routes/paths';
 import { AddPlaceHost, useAddFlowRoute } from 'src/sections/add-place/AddPlaceHost';
 import { ShareDropOverlay } from 'src/sections/share-import/ShareDropOverlay';
@@ -23,6 +25,7 @@ import {
   openAddSheetAtom,
   showsAddPanel,
 } from 'src/stores/add-place';
+import { libraryAtom } from 'src/stores/library-state';
 
 /** 슬롯 하나. 랜드마크(`aria-label`)와 스크롤을 맡는다. */
 function Pane({
@@ -108,6 +111,32 @@ function DetailPane({
       <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
         <DetailSlot placeId={placeId} />
       </Box>
+    </Box>
+  );
+}
+
+/**
+ * 보관함·지도·장소 상세 화면의 제목. 화면 제목(`h1`)과 탭 제목을 함께 정한다. 이 화면들만 그릴 때 두어서,
+ * 다른 경로의 자식 화면이 자기 탭 제목을 정하는 것을 가리지 않는다.
+ * - 보관함·지도: 화면에 보이지 않는 `h1`(목록·지도 칸은 제목 없는 랜드마크라서).
+ * - 장소 상세: 장소 이름이 `h1`이라(`PlaceDetail`) 여기서는 탭 제목만 정한다.
+ */
+function LibraryViewTitle({ placeId, isMap }: { placeId: string | null; isMap: boolean }) {
+  const library = useAtomValue(libraryAtom);
+  const place = placeId === null ? undefined : library.places[placeId];
+  const screen =
+    placeId !== null
+      ? place?.deletedAt === null
+        ? place.name.value
+        : null
+      : isMap
+        ? '지도'
+        : '보관함';
+  useDocumentTitle(screen);
+  if (placeId !== null) return null;
+  return (
+    <Box component="h1" sx={visuallyHidden}>
+      {screen}
     </Box>
   );
 }
@@ -224,6 +253,7 @@ export function AppShell() {
       {layout !== 'compact' && <NavRail onAdd={() => openAdd(null)} />}
       <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
         <StorageBanner />
+        {isLibraryView && <LibraryViewTitle placeId={placeId} isMap={isMap} />}
         {body}
         {layout === 'compact' && <BottomTabs onAdd={() => openAdd(null)} />}
       </Box>

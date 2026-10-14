@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { MonitorIcon, MoonIcon, SunIcon } from 'src/components/icons';
 import { liveLabels, livePlaces } from 'src/domain/library/query';
+import { useDocumentTitle } from 'src/lib/use-document-title';
 import type { Prefs } from 'src/schema/prefs';
 import { paths } from 'src/routes/paths';
 import { LegacyImportDialog } from 'src/sections/settings/LegacyImportDialog';
@@ -51,6 +52,7 @@ const approxKb = (library: unknown): number =>
 
 /** 설정(스펙 §4.7): 테마·모드·보관함 보기·옛 여행 가져오기·데이터 정보. */
 export function SettingsPage() {
+  useDocumentTitle('설정');
   const prefs = useAtomValue(prefsAtom);
   const setPrefs = useSetAtom(setPrefsAtom);
   const library = useAtomValue(libraryAtom);

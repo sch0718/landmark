@@ -21,6 +21,7 @@ import Box from '@mui/material/Box';
 import { useAtomValue } from 'jotai';
 import { useMemo, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { GripIcon, LabelGlyph } from 'src/components/icons';
+import { useDocumentTitle } from 'src/lib/use-document-title';
 import { createLabel, deleteLabel, mergeLabels, reorderLabels } from 'src/domain/library/ops';
 import { liveLabels, livePlaces } from 'src/domain/library/query';
 import { LIBRARY_LIMITS, type Label } from 'src/schema/library';
@@ -175,6 +176,7 @@ type Open = { kind: 'edit' | 'merge' | 'delete'; id: string };
 
 /** `/labels`: 라벨을 만들고, 순서를 바꾸고(드래그·키보드), 이름·색·아이콘을 고치고, 합치거나 지운다. */
 export function LabelsPage() {
+  useDocumentTitle('라벨 관리');
   const library = useAtomValue(libraryAtom);
   const { run } = useLibraryAction();
   const labels = useMemo(() => liveLabels(library), [library]);

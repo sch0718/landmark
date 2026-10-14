@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { PanelLeftOpenIcon } from 'src/components/icons';
 import type { MapPadding } from 'src/components/map/MapAdapter';
 import { hiddenPlaceCount, locatePlace } from 'src/domain/trips/query';
+import { useDocumentTitle } from 'src/lib/use-document-title';
 import { paths } from 'src/routes/paths';
 import type { Library } from 'src/schema/library';
 import type { Trip } from 'src/schema/trip';
@@ -68,7 +69,7 @@ function NotFound() {
         textAlign: 'center',
       }}
     >
-      <Box component="p" sx={{ m: 0, fontWeight: 800 }}>
+      <Box component="h1" sx={{ m: 0, fontSize: 'inherit', fontWeight: 800 }}>
         여행을 찾지 못했어요
       </Box>
       <Button component={Link} to={paths.trips} variant="contained" sx={{ minHeight: 44 }}>
@@ -381,7 +382,9 @@ export function TripPlannerPage() {
   const { id = '' } = useParams();
   const library = useAtomValue(libraryAtom);
   const trip = library.trips[id];
-  if (trip === undefined || trip.deletedAt !== null) return <NotFound />;
+  const found = trip !== undefined && trip.deletedAt === null;
+  useDocumentTitle(found ? trip.title.value : null);
+  if (!found) return <NotFound />;
   // 여행이 바뀌면 화면 상태(후보 칸 접기·토스트 확인·끌기)를 새로 시작한다.
   return (
     <PlannerDnd key={trip.id} tripId={trip.id}>
