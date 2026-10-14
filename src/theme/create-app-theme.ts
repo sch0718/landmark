@@ -85,13 +85,13 @@ export function createAppTheme(name: ThemeName, mode: ColorMode): Theme {
           },
         },
       },
+      MuiMenuItem: { styleOverrides: { root: { '&.Mui-focusVisible': FOCUS_RING_INSET } } },
+      // MUI 다크 Paper는 높이에 따라 흰 오버레이(backgroundImage)를 덮어 불투명 표면 토큰을 흐린다.
+      MuiPaper: { styleOverrides: { root: { backgroundImage: 'none' } } },
       // 스위치는 뿌리가 넘침을 잘라(`overflow: hidden`) 바깥쪽 바깥선이 보이지 않는다. 눌리는 동그라미(`switchBase`)에 안쪽으로 그린다.
       MuiSwitch: {
         styleOverrides: { switchBase: { '&.Mui-focusVisible': FOCUS_RING_INSET } },
       },
-      MuiMenuItem: { styleOverrides: { root: { '&.Mui-focusVisible': FOCUS_RING_INSET } } },
-      // MUI 다크 Paper는 높이에 따라 흰 오버레이(backgroundImage)를 덮어 불투명 표면 토큰을 흐린다.
-      MuiPaper: { styleOverrides: { root: { backgroundImage: 'none' } } },
       MuiButton: {
         defaultProps: { disableElevation: true },
         // 채운 버튼은 accent.main 바탕에 contrast 글자. 글자·아웃라인 버튼은 바탕 위 대비가 나오는 accent.text.
