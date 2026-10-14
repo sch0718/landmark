@@ -1,5 +1,6 @@
 import Button from '@mui/material/Button';
 import CssBaseline from '@mui/material/CssBaseline';
+import Switch from '@mui/material/Switch';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 import { ThemeProvider } from '@mui/material/styles';
@@ -60,6 +61,23 @@ describe('포커스 표시', () => {
     expect(tab).toHaveClass('Mui-focusVisible');
     const style = getComputedStyle(tab);
     expect(style.outlineStyle).toBe('solid');
+    expect(style.outlineColor).toBe('var(--tm-accent-text)');
+    expect(style.outlineOffset).toBe('-2px');
+  });
+
+  it('넘침을 자르는 스위치는 바깥선을 안쪽으로 그려 잘리지 않는다', async () => {
+    const user = userEvent.setup();
+    const { container } = render(
+      <ThemeProvider theme={createAppTheme('pastel', 'light')}>
+        <Switch inputProps={{ 'aria-label': '제목 넣기' }} />
+      </ThemeProvider>,
+    );
+    await user.tab();
+    const base = container.querySelector('.MuiSwitch-switchBase')!;
+    expect(base).toHaveClass('Mui-focusVisible');
+    const style = getComputedStyle(base);
+    expect(style.outlineStyle).toBe('solid');
+    expect(style.outlineWidth).toBe('2px');
     expect(style.outlineColor).toBe('var(--tm-accent-text)');
     expect(style.outlineOffset).toBe('-2px');
   });

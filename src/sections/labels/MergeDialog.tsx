@@ -61,6 +61,8 @@ export function MergeDialog({ from, targets, counts, onCancel, onConfirm }: Prop
                   font: 'inherit',
                   textAlign: 'left',
                   cursor: 'pointer',
+                  // 대화상자 내용이 넘침을 자르니 첫 행의 바깥선이 위에서 잘리지 않게 안쪽으로 그린다.
+                  '&:focus-visible': { outlineOffset: -2 },
                 }}
               >
                 <Box component="span" sx={{ display: 'inline-flex', color: tone.marker }}>

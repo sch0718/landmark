@@ -240,4 +240,22 @@ describe('추가 칸을 닫으면 포커스를 돌려준다', () => {
     await user.keyboard('{Escape}');
     expect(screen.getByRole('main')).toHaveFocus();
   });
+
+  it('＋로 연 시트를 항목 없이 닫았다면 연 요소를 잊어, 다음에 ＋ 없이 연 흐름은 본문으로 돌아온다', async () => {
+    const user = userEvent.setup();
+    const { store } = await renderLibrary(sampleLibrary());
+    const opener = plus();
+    await user.click(opener);
+    const sheet = await screen.findByRole('dialog', { name: '장소 추가' });
+    expect(store.get(addOpenerAtom)).toBe(opener);
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(sheet).not.toBeInTheDocument());
+    expect(store.get(addOpenerAtom)).toBeNull();
+
+    act(() => store.set(addFlowAtom, { step: 'share-pick' }));
+    const pick = await screen.findByRole('button', { name: '파일 고르기' });
+    await waitFor(() => expect(pick).toHaveFocus());
+    await user.keyboard('{Escape}');
+    expect(screen.getByRole('main')).toHaveFocus();
+  });
 });

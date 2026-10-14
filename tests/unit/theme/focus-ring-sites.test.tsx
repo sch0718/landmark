@@ -2,10 +2,11 @@ import { ThemeProvider } from '@mui/material/styles';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { setAppRuntimeForTest } from 'src/lib/effect/runtime';
+import { MergeDialog } from 'src/sections/labels/MergeDialog';
 import { ChipButton } from 'src/sections/library/ChipButton';
 import { DragHandle } from 'src/sections/trips/planner/PlannerDnd';
 import { createAppTheme } from 'src/theme/create-app-theme';
-import { renderLibrary, sampleLibrary } from '../sections/library/fixtures';
+import { L_CAFE, L_FOOD, renderLibrary, sampleLibrary } from '../sections/library/fixtures';
 
 vi.mock('src/theme/fonts', () => ({ loadDisplayFont: vi.fn(() => Promise.resolve()) }));
 
@@ -72,6 +73,22 @@ describe('자리마다의 포커스 표시가 테마의 바깥선을 쓴다', ()
       </ThemeProvider>,
     );
     expectThemeRing(screen.getByRole('button', { name: '중앙시장 끌어 옮기기' }), '-2px');
+  });
+
+  it('라벨 합치기의 대상 행: 대화상자 내용이 넘침을 자르니 안쪽으로만 옮긴다', () => {
+    const library = sampleLibrary();
+    render(
+      <ThemeProvider theme={createAppTheme('night', 'dark')}>
+        <MergeDialog
+          from={library.labels[L_FOOD]!}
+          targets={[library.labels[L_CAFE]!]}
+          counts={new Map()}
+          onCancel={() => undefined}
+          onConfirm={() => undefined}
+        />
+      </ThemeProvider>,
+    );
+    expectThemeRing(screen.getAllByRole('radio')[0]!, '-2px');
   });
 
   it('칩: 누르는 자리 대신 보이는 알약에 테마와 같은 바깥선을 그린다', () => {

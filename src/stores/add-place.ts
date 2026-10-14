@@ -62,10 +62,16 @@ export const openAddSheetAtom = atom(
   },
 );
 
-/** 시트를 닫는다. 항목을 고르지 않고 닫았다면(흐름이 아직 `closed`) 붙여 둔 여행 대상도 버린다. */
+/**
+ * 시트를 닫는다. 항목을 고르지 않고 닫았다면(흐름이 아직 `closed`) 붙여 둔 여행 대상과 연 요소도 버린다
+ * (연 요소를 남기면 나중에 ＋ 없이 열린 흐름을 Esc로 닫을 때 엉뚱하게 그 ＋로 돌아간다).
+ */
 export const closeAddSheetAtom = atom(null, (get, set) => {
   set(addSheetOpenAtom, false);
-  if (get(addFlowAtom).step === 'closed') set(addTargetAtom, null);
+  if (get(addFlowAtom).step === 'closed') {
+    set(addTargetAtom, null);
+    set(addOpenerAtom, null);
+  }
 });
 
 /**
