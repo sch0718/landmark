@@ -120,7 +120,7 @@ export function LegRow({ leg, onMode, onRetry }: Props) {
             alignItems: 'center',
             minHeight: 44,
             px: 1,
-            color: 'var(--tm-accent-main)',
+            color: 'var(--tm-accent-text)',
             textDecoration: 'none',
             borderRadius: 'var(--tm-radius-md)',
             '&:hover': { textDecoration: 'underline' },

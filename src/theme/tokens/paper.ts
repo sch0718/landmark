@@ -8,8 +8,9 @@ const DISPLAY = '"Gowun Batang", "Nanum Myeongjo", AppleMyungjo, Georgia, serif'
 /** 종이색 바탕, 벽돌·숲·바다색 잉크, 도장 같은 라벨. */
 const light: Tokens = {
   bg: { base: '#F6F1E7', surface: '#FFFDF8', raised: '#FFFFFF' },
-  text: { primary: '#2B2620', secondary: '#5E5446', muted: '#8A7F70' },
+  text: { primary: '#2B2620', secondary: '#5E5446', muted: '#766C60' },
   border: '#E8DFCF',
+  borderStrong: '#A2906E',
   accent: { main: '#C2492D', contrast: '#FFFFFF', text: '#B4401F', gradient: '#C2492D' },
   label: {
     red: { fill: '#F6DDD3', text: '#A63A20', marker: '#C2492D' },
@@ -32,8 +33,9 @@ const light: Tokens = {
 /** 같은 종이를 등불 아래에 둔 느낌: 따뜻한 갈색 바탕. */
 const dark: Tokens = {
   bg: { base: '#1B1713', surface: '#252019', raised: '#2F2921' },
-  text: { primary: '#EFE6D6', secondary: '#C2B6A2', muted: '#978B79' },
+  text: { primary: '#EFE6D6', secondary: '#C2B6A2', muted: '#9B907E' },
   border: '#3A3329',
+  borderStrong: '#82735C',
   accent: { main: '#E8795B', contrast: '#1B1713', text: '#E8795B', gradient: '#E8795B' },
   label: {
     red: { fill: '#43251C', text: '#F4B09B', marker: '#E2684A' },

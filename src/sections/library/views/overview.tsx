@@ -91,7 +91,7 @@ export function LabelBlock({
       >
         {label === null ? '미분류' : label.name.value}
       </Box>
-      <Box component="span" sx={{ display: 'block', mt: 0.25, fontSize: 12, opacity: 0.75 }}>
+      <Box component="span" sx={{ display: 'block', mt: 0.25, fontSize: 12 }}>
         {count}곳
       </Box>
       {label !== null && (

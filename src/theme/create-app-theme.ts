@@ -15,6 +15,7 @@ export function cssVarsOf(tokens: Tokens): Record<string, string> {
     '--tm-text-secondary': tokens.text.secondary,
     '--tm-text-muted': tokens.text.muted,
     '--tm-border': tokens.border,
+    '--tm-border-strong': tokens.borderStrong,
     '--tm-accent-main': tokens.accent.main,
     '--tm-accent-contrast': tokens.accent.contrast,
     '--tm-accent-text': tokens.accent.text,
@@ -58,10 +59,24 @@ export function createAppTheme(name: ThemeName, mode: ColorMode): Theme {
     },
     components: {
       // 직접 만든 요소(`button`·`a`·`input` 등)의 포커스 표시. 자리마다 정한 `&:focus-visible`이 있으면 그쪽이 우선한다.
-      MuiCssBaseline: { styleOverrides: { ':focus-visible': FOCUS_RING } },
+      // 입력칸 안내 글자는 보조 글자 중 가장 옅은 text.muted. 파이어폭스는 안내 글자에 기본 투명도를 얹으므로 1로 되돌린다.
+      MuiCssBaseline: {
+        styleOverrides: {
+          ':focus-visible': FOCUS_RING,
+          '::placeholder': { color: t.text.muted, opacity: 1 },
+        },
+      },
       // MUI의 버튼·탭·칩·목록 행·체크 상자는 모두 `ButtonBase`라서 여기 하나로 같은 바깥선을 그린다.
       MuiButtonBase: { styleOverrides: { root: { '&.Mui-focusVisible': FOCUS_RING } } },
-      MuiTab: { styleOverrides: { root: { '&.Mui-focusVisible': FOCUS_RING_INSET } } },
+      // 고른 탭 글자는 바탕 위 대비가 나오는 accent.text(accent.main은 어두운 바탕에서 글자로 모자란다). 밑줄은 main 그대로.
+      MuiTab: {
+        styleOverrides: {
+          root: {
+            '&.Mui-selected': { color: t.accent.text },
+            '&.Mui-focusVisible': FOCUS_RING_INSET,
+          },
+        },
+      },
       MuiMenuItem: { styleOverrides: { root: { '&.Mui-focusVisible': FOCUS_RING_INSET } } },
       // MUI 다크 Paper는 높이에 따라 흰 오버레이(backgroundImage)를 덮어 불투명 표면 토큰을 흐린다.
       MuiPaper: { styleOverrides: { root: { backgroundImage: 'none' } } },

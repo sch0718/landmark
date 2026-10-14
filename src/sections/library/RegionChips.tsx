@@ -54,7 +54,7 @@ export function RegionChips({ regions, selected, onChange, onCreateTrip }: Props
             font: 'inherit',
             fontSize: 14,
             fontWeight: 700,
-            color: 'var(--tm-accent-main)',
+            color: 'var(--tm-accent-text)',
             whiteSpace: 'nowrap',
             cursor: 'pointer',
             '&:focus-visible': { outlineOffset: -2 },
