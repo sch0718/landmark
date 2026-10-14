@@ -90,6 +90,8 @@ export function createAppTheme(name: ThemeName, mode: ColorMode): Theme {
         },
       },
       MuiLink: { styleOverrides: { root: { color: t.accent.text } } },
+      // 대화상자 제목은 다른 화면 제목처럼 800(MUI 기본은 500). 크기는 그대로다.
+      MuiDialogTitle: { styleOverrides: { root: { fontWeight: 800 } } },
       MuiIconButton: {
         styleOverrides: { root: { minWidth: 44, minHeight: 44 } },
       },

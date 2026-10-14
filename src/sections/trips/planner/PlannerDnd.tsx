@@ -321,7 +321,7 @@ export function DragHandle({
       aria-roledescription="옮길 수 있는 항목"
       sx={{
         flex: 'none',
-        width: 32,
+        width: 44,
         minHeight: 44,
         display: 'grid',
         placeItems: 'center',

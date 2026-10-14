@@ -246,10 +246,8 @@ export function AddPlaceHost({ floating = false }: { floating?: boolean }) {
               width: '100%',
               maxHeight: '90vh',
               // 폴더·공유 파일 미리보기는 긴 목록이라 늘 90vh로 열어 목록 칸이 흔들리지 않게 한다.
-              // 파일 고르기(`share-pick`)도 미리보기로 바뀔 때 시트가 출렁이지 않게 같은 높이다.
-              ...(flow.step === 'folder' || flow.step === 'share-pick' || flow.step === 'share'
-                ? { height: '90vh' }
-                : {}),
+              // 파일 고르기(`share-pick`)는 내용이 짧아 내용 높이에 맞춘다(위의 `maxHeight`까지).
+              ...(flow.step === 'folder' || flow.step === 'share' ? { height: '90vh' } : {}),
               mx: 'auto',
               borderRadius: 'var(--tm-radius-xl) var(--tm-radius-xl) 0 0',
               bgcolor: 'var(--tm-bg-surface)',

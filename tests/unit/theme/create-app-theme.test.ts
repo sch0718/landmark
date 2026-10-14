@@ -37,6 +37,14 @@ describe('createAppTheme', () => {
   );
 
   it.each(THEMES.flatMap((name) => MODES.map((mode) => [name, mode] as const)))(
+    '%s/%s: 대화상자 제목은 굵기 800(크기는 정하지 않는다)',
+    (name, mode) => {
+      const title = createAppTheme(name, mode).components?.MuiDialogTitle?.styleOverrides?.root;
+      expect(title).toEqual({ fontWeight: 800 });
+    },
+  );
+
+  it.each(THEMES.flatMap((name) => MODES.map((mode) => [name, mode] as const)))(
     '%s/%s: TextField의 테두리는 강한 테두리색(대체값 포함)·둥근 모서리, 포커스는 accent.text',
     (name, mode) => {
       const t = TOKENS[name][mode];

@@ -1,6 +1,7 @@
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
+import useMediaQuery from '@mui/material/useMediaQuery';
 import { useAtom, useAtomValue } from 'jotai';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router';
@@ -16,7 +17,7 @@ import { PlaceDetail } from 'src/sections/place/PlaceDetail';
 import { DETAIL_WIDTH, LIST_WIDTH } from 'src/sections/shell/pane-widths';
 import { useLayout } from 'src/sections/shell/use-layout';
 import { useCloseStaleSplit, useSplitPlan } from 'src/sections/trips/planner/AutoSplitPreview';
-import { CandidatePanel } from 'src/sections/trips/planner/CandidatePanel';
+import { CandidatePanel, HiddenTripTitle } from 'src/sections/trips/planner/CandidatePanel';
 import { DayTabs, DayTimeline } from 'src/sections/trips/planner/DayTimeline';
 import { MapCard } from 'src/sections/trips/planner/MapCard';
 import { PlannerDnd } from 'src/sections/trips/planner/PlannerDnd';
@@ -26,6 +27,8 @@ import { useDayPlan, type DayPlan } from 'src/sections/trips/planner/use-day-pla
 import { libraryAtom } from 'src/stores/library-state';
 import { mapCardAtom, selectedDayAtom } from 'src/stores/trip-planner';
 
+/** 이 폭(px) 이상이면 후보 칸을 펼친 채 시작한다. */
+const CANDIDATES_OPEN_MIN = 1100;
 const OFFLINE_NOTICE = '인터넷에 연결되지 않아 이동 시간은 어림값이에요';
 
 const EDGE = 40;
@@ -225,7 +228,11 @@ function TimelinePane({
 function Planner({ trip, library }: { trip: Trip; library: Library }) {
   const layout = useLayout();
   const [dayIndex, selectDay] = useSelectedDay(trip);
-  const [candidatesOpen, setCandidatesOpen] = useState(true);
+  // 후보 칸은 1100px 미만이면 접힌 채 시작한다(시간표 칸 옆에서 지도가 너무 좁아진다). 사용자가 펼치거나 접으면
+  // (`candidatesOverride`) 그 상태를 지키고, 화면을 다시 열면 기본값으로 돌아간다.
+  const roomy = useMediaQuery(`(min-width:${CANDIDATES_OPEN_MIN}px)`, { noSsr: true });
+  const [candidatesOverride, setCandidatesOverride] = useState<boolean | null>(null);
+  const candidatesOpen = candidatesOverride ?? roomy;
   const [detailId, setDetailId] = useState<string | null>(null);
   // 고른 Day의 구간·시각은 여기서 한 번 구해 지도·시간표·오프라인 안내가 함께 쓴다. 좁은 화면에서 시트가
   // 후보 탭이어도 경로 요청이 지도와 함께 시작된다.
@@ -321,6 +328,8 @@ function Planner({ trip, library }: { trip: Trip; library: Library }) {
   const showCandidates = !medium || candidatesOpen;
   return (
     <Box sx={{ height: '100%', display: 'flex', position: 'relative', overflow: 'hidden' }}>
+      {/* 후보 칸이 접히면 보이는 제목이 없으므로 화면 `h1`을 눈에만 숨겨 둔다. */}
+      {!showCandidates && <HiddenTripTitle title={trip.title.value} />}
       {showCandidates && (
         <Box
           sx={{
@@ -334,7 +343,7 @@ function Planner({ trip, library }: { trip: Trip; library: Library }) {
           <CandidatePanel
             trip={trip}
             dayIndex={dayIndex}
-            onCollapse={medium ? () => setCandidatesOpen(false) : undefined}
+            onCollapse={medium ? () => setCandidatesOverride(false) : undefined}
           />
         </Box>
       )}
@@ -343,7 +352,7 @@ function Planner({ trip, library }: { trip: Trip; library: Library }) {
         !showCandidates && (
           <IconButton
             aria-label="후보 칸 펼치기"
-            onClick={() => setCandidatesOpen(true)}
+            onClick={() => setCandidatesOverride(true)}
             sx={{
               position: 'absolute',
               top: 8,

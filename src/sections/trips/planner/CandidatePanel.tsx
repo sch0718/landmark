@@ -2,6 +2,7 @@ import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
+import { visuallyHidden } from '@mui/utils';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { useMemo, useState } from 'react';
 import { PanelLeftCloseIcon, PlusIcon } from 'src/components/icons';
@@ -146,6 +147,18 @@ type Props = {
   /** 칸 높이를 채우고 목록만 스크롤한다(넓은·중간 폭). 끄면(시트) 내용 높이대로 늘고 바깥이 스크롤한다. */
   fill?: boolean;
 };
+
+/**
+ * 계획 화면의 `h1`은 여행 제목 하나다. 보이는 제목은 후보 칸(`CandidatePanel`)에 있어서, 후보 칸이 접히거나
+ * 좁은 화면 시트가 후보 탭이 아닐 때는 눈에만 숨긴 `h1`로 대신한다.
+ */
+export function HiddenTripTitle({ title }: { title: string }) {
+  return (
+    <Box component="h1" sx={visuallyHidden}>
+      {title}
+    </Box>
+  );
+}
 
 /**
  * 후보 칸(스펙 §2.3): 여행 제목·기간, `후보 N`, 후보 행(이름·지역·대표 라벨 색, `＋`로 지금 Day 끝에 넣기, 행 메뉴).

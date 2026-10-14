@@ -5,7 +5,7 @@ import { useRef, useState, type MouseEvent, type PointerEvent } from 'react';
 import { visibleCandidates } from 'src/domain/trips/query';
 import type { Library } from 'src/schema/library';
 import type { Trip } from 'src/schema/trip';
-import { CandidatePanel } from 'src/sections/trips/planner/CandidatePanel';
+import { CandidatePanel, HiddenTripTitle } from 'src/sections/trips/planner/CandidatePanel';
 import { DayTimeline } from 'src/sections/trips/planner/DayTimeline';
 import { DropTab } from 'src/sections/trips/planner/PlannerDnd';
 import type { DayPlan } from 'src/sections/trips/planner/use-day-plan';
@@ -183,6 +183,10 @@ export function PlannerSheet({ trip, library, dayIndex, plan, onSelectDay }: Pro
           />
         ))}
       </Tabs>
+      {/* 후보 칸이 그려지지 않을 때(접힘·Day 탭)는 화면 `h1`(여행 제목)을 눈에만 숨겨 둔다. */}
+      {(snap === 'collapsed' || tab !== 'candidates') && (
+        <HiddenTripTitle title={trip.title.value} />
+      )}
       <Box
         role="tabpanel"
         hidden={snap === 'collapsed'}
