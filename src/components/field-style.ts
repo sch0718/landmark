@@ -1,5 +1,13 @@
 import type { Theme } from '@mui/material/styles';
 import type { SystemStyleObject } from '@mui/system';
+import { FIELD_BORDER } from 'src/theme/field-border';
+
+/** 입력칸과 검색칸 상자가 같이 쓰는 테두리·모서리·배경. */
+const FIELD_BOX = {
+  border: FIELD_BORDER,
+  borderRadius: 'var(--tm-radius-md)',
+  bgcolor: 'var(--tm-bg-raised)',
+} as const;
 
 type FieldOptions = {
   /** 잘못된 값이면 테두리를 `error` 색으로 */
@@ -29,10 +37,8 @@ export function fieldSx({
     minHeight: minHeight ?? (multiline ? 96 : 44),
     px: 1.25,
     ...(multiline && { py: 1.25, lineHeight: 1.6, resize: 'vertical' }),
-    border: '1px solid var(--tm-border-strong, var(--tm-border))',
+    ...FIELD_BOX,
     ...(invalid && { borderColor: 'error.main' }),
-    borderRadius: 'var(--tm-radius-md)',
-    bgcolor: 'var(--tm-bg-raised)',
     color: 'var(--tm-text-primary)',
     font: 'inherit',
     fontSize: 16,
@@ -51,9 +57,7 @@ export const SEARCH_BOX_SX = {
   gap: 1,
   minHeight: 44,
   pl: 1.5,
-  borderRadius: 'var(--tm-radius-md)',
-  bgcolor: 'var(--tm-bg-raised)',
-  border: '1px solid var(--tm-border-strong, var(--tm-border))',
+  ...FIELD_BOX,
   color: 'var(--tm-text-muted)',
   cursor: 'text',
   '& > svg': { alignSelf: 'center', flex: 'none' },

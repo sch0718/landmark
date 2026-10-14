@@ -1,10 +1,8 @@
 import { createTheme, type Theme } from '@mui/material/styles';
 import { LABEL_COLORS } from 'src/schema/library';
+import { FIELD_BORDER_COLOR } from 'src/theme/field-border';
 import { FOCUS_RING, FOCUS_RING_INSET } from 'src/theme/focus-ring';
 import { TOKENS, type ColorMode, type ThemeName, type Tokens } from 'src/theme/tokens';
-
-/** 입력칸 테두리 색. `--tm-border-strong`이 없어도 지금 테두리로 그려지게 대체값을 둔다(스펙 §8). */
-const BORDER_STRONG = 'var(--tm-border-strong, var(--tm-border))';
 
 const HEADINGS = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'] as const;
 
@@ -100,14 +98,17 @@ export function createAppTheme(name: ThemeName, mode: ColorMode): Theme {
       },
       // `TextField`의 입력칸. 직접 만든 입력칸(`fieldSx`)과 같은 테두리 색·모서리를 쓰고, 높이는 떠 있는 이름표 방식 그대로(56px)다.
       // 포커스는 테두리를 바깥선과 같은 강조색 글자색 2px로 그린다(안쪽 `input`의 전역 바깥선은 끈다).
-      // 오류 색은 MUI 기본 규칙(`.Mui-error`)이 이긴다.
+      // 호버·포커스 규칙은 MUI의 `.Mui-error` 규칙과 우선순위가 같고 뒤에 오므로 `:not(.Mui-error)`로 오류 칸을 빼
+      // 잘못된 값이면 가만히 있을 때도, 호버·포커스에서도 오류 색이 이긴다.
       MuiOutlinedInput: {
         styleOverrides: {
           root: {
             borderRadius: 'var(--tm-radius-md)',
-            '& .MuiOutlinedInput-notchedOutline': { borderColor: BORDER_STRONG },
-            '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: BORDER_STRONG },
-            '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+            '& .MuiOutlinedInput-notchedOutline': { borderColor: FIELD_BORDER_COLOR },
+            '&:not(.Mui-error):hover .MuiOutlinedInput-notchedOutline': {
+              borderColor: FIELD_BORDER_COLOR,
+            },
+            '&.Mui-focused:not(.Mui-error) .MuiOutlinedInput-notchedOutline': {
               borderColor: t.accent.text,
               borderWidth: 2,
             },

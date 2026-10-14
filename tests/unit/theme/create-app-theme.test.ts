@@ -45,8 +45,10 @@ describe('createAppTheme', () => {
       const strong = 'var(--tm-border-strong, var(--tm-border))';
       expect(root.borderRadius).toBe('var(--tm-radius-md)');
       expect(root['& .MuiOutlinedInput-notchedOutline']).toEqual({ borderColor: strong });
-      expect(root['&:hover .MuiOutlinedInput-notchedOutline']).toEqual({ borderColor: strong });
-      expect(root['&.Mui-focused .MuiOutlinedInput-notchedOutline']).toEqual({
+      expect(root['&:not(.Mui-error):hover .MuiOutlinedInput-notchedOutline']).toEqual({
+        borderColor: strong,
+      });
+      expect(root['&.Mui-focused:not(.Mui-error) .MuiOutlinedInput-notchedOutline']).toEqual({
         borderColor: t.accent.text,
         borderWidth: 2,
       });
