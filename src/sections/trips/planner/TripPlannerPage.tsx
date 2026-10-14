@@ -157,7 +157,7 @@ function DetailPane({ placeId, onBack }: { placeId: string; onBack(): void }) {
         </Button>
       </Box>
       <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-        <PlaceDetail placeId={placeId} />
+        <PlaceDetail placeId={placeId} headingLevel={2} />
       </Box>
     </>
   );

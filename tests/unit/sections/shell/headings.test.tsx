@@ -1,4 +1,5 @@
 import { act, cleanup, render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { setAppRuntimeForTest } from 'src/lib/effect/runtime';
 import { AppProviders } from 'src/app';
@@ -80,6 +81,14 @@ describe('화면별 제목 구조', () => {
       expect(within(detail).getByRole('button', { name: '이름 수정' })).toBeInTheDocument();
     },
   );
+
+  it('이름을 고치는 입력칸이 열려 있어도 제목 이름은 지금 장소 이름이다', async () => {
+    await renderLibrary(sampleLibrary(), { path: `/place/${P1}` });
+    await userEvent.setup().click(screen.getByRole('button', { name: '이름 수정' }));
+    expect(screen.getByRole('textbox', { name: '이름' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: '중앙시장 닭강정' })).toBeInTheDocument();
+    expect(h1s()).toHaveLength(1);
+  });
 
   it('찾을 수 없는 장소도 h1이 하나다', async () => {
     await renderLibrary(sampleLibrary(), { path: '/place/nothere000', width: 390 });
