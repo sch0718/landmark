@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { setAppRuntimeForTest } from 'src/lib/effect/runtime';
 import { AppProviders } from 'src/app';
 import type { Library } from 'src/schema/library';
+import { addFlowAtom } from 'src/stores/add-place';
 import { renderLibrary, sampleLibrary, T0 } from '../library/fixtures';
 
 vi.mock('src/theme/fonts', () => ({ loadDisplayFont: vi.fn(() => Promise.resolve()) }));
@@ -88,6 +89,29 @@ describe('화면별 제목 구조', () => {
     expect(screen.getByRole('textbox', { name: '이름' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 1, name: '중앙시장 닭강정' })).toBeInTheDocument();
     expect(h1s()).toHaveLength(1);
+  });
+
+  it.each([1280, 1024])(
+    '장소 상세(%i px) 자리를 추가 칸이 대신 차지해도 장소 이름 h1 하나가 남는다',
+    async (width) => {
+      const { store } = await renderLibrary(sampleLibrary(), { path: `/place/${P1}`, width });
+      expect(screen.getByRole('region', { name: '장소 상세' })).toBeInTheDocument();
+      act(() => store.set(addFlowAtom, { step: 'link', hint: 'place' }));
+      await screen.findByRole('region', { name: '장소 추가' });
+      expect(screen.queryByRole('region', { name: '장소 상세' })).not.toBeInTheDocument();
+      expect(h1s().map((h) => h.textContent)).toEqual(['중앙시장 닭강정']);
+      // 눈에만 숨긴다.
+      expect(getComputedStyle(h1s()[0]!).width).toBe('1px');
+    },
+  );
+
+  it('중간 폭에서 핀 모드가 상세 오버레이를 내려도 장소 이름 h1 하나가 남는다', async () => {
+    const { store } = await renderLibrary(sampleLibrary(), { path: `/place/${P1}`, width: 1024 });
+    act(() => store.set(addFlowAtom, { step: 'pin', name: '', start: null }));
+    await vi.waitFor(() =>
+      expect(screen.queryByRole('region', { name: '장소 상세' })).not.toBeInTheDocument(),
+    );
+    expect(h1s().map((h) => h.textContent)).toEqual(['중앙시장 닭강정']);
   });
 
   it('찾을 수 없는 장소도 h1이 하나다', async () => {

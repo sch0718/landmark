@@ -120,9 +120,18 @@ function DetailPane({
  * 보관함·지도·장소 상세 화면의 제목. 화면 제목(`h1`)과 탭 제목을 함께 정한다. 이 화면들만 그릴 때 두어서,
  * 다른 경로의 자식 화면이 자기 탭 제목을 정하는 것을 가리지 않는다.
  * - 보관함·지도: 화면에 보이지 않는 `h1`(목록·지도 칸은 제목 없는 랜드마크라서).
- * - 장소 상세: 장소 이름이 `h1`이라(`PlaceDetail`) 여기서는 탭 제목만 정한다.
+ * - 장소 상세: 장소 이름이 `h1`이라(`PlaceDetail`) 여기서는 탭 제목만 정한다. 다만 추가 칸이나 핀 모드가 상세 칸을
+ *   내려(`detailShown`이 거짓) `PlaceDetail`이 없을 때는 장소 이름을 눈에만 숨긴 `h1`로 대신한다.
  */
-function LibraryViewTitle({ placeId, isMap }: { placeId: string | null; isMap: boolean }) {
+function LibraryViewTitle({
+  placeId,
+  isMap,
+  detailShown,
+}: {
+  placeId: string | null;
+  isMap: boolean;
+  detailShown: boolean;
+}) {
   const library = useAtomValue(libraryAtom);
   const place = placeId === null ? undefined : library.places[placeId];
   const screen =
@@ -134,7 +143,8 @@ function LibraryViewTitle({ placeId, isMap }: { placeId: string | null; isMap: b
         ? '지도'
         : '보관함';
   useDocumentTitle(screen);
-  if (placeId !== null) return null;
+  if (placeId !== null && detailShown) return null;
+  if (screen === null) return null;
   return (
     <Box component="h1" sx={visuallyHidden}>
       {screen}
@@ -168,6 +178,10 @@ export function AppShell() {
   const placeId = matchPath(paths.place(':id'), pathname)?.params.id ?? null;
   const isMap = matchPath(paths.map, pathname) !== null;
   const isLibraryView = isMap || placeId !== null || matchPath(paths.library, pathname) !== null;
+
+  // 장소 상세(`PlaceDetail`, 장소 이름 `h1`)가 그려지는가. 넓은·중간 폭에서는 추가 칸이 상세 자리를 대신하고,
+  // 중간 폭에서는 핀 모드가 상세 오버레이를 내린다(아래 `body`의 분기와 같다).
+  const detailShown = layout === 'compact' || (!adding && (layout === 'wide' || !pinning));
 
   // 좁은 화면에서 장소 시트 뒤에 깔리는 화면(목록/지도). 마지막으로 본 쪽을 기억한다.
   const [origin, setOrigin] = useState<'list' | 'map'>('list');
@@ -272,7 +286,9 @@ export function AppShell() {
         }}
       >
         <StorageBanner />
-        {isLibraryView && <LibraryViewTitle placeId={placeId} isMap={isMap} />}
+        {isLibraryView && (
+          <LibraryViewTitle placeId={placeId} isMap={isMap} detailShown={detailShown} />
+        )}
         {body}
       </Box>
       {layout === 'compact' && <BottomTabs onAdd={openFromPlus} />}
