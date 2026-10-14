@@ -233,6 +233,21 @@ function Planner({ trip, library }: { trip: Trip; library: Library }) {
   const roomy = useMediaQuery(`(min-width:${CANDIDATES_OPEN_MIN}px)`, { noSsr: true });
   const [candidatesOverride, setCandidatesOverride] = useState<boolean | null>(null);
   const candidatesOpen = candidatesOverride ?? roomy;
+  // 접기·펼치기 버튼은 누르면 사라지고 맞은편 버튼이 나타난다. 포커스가 본문(body)으로 빠지지 않게
+  // 누른 쪽을 적어 두었다가 칸이 바뀐 뒤 맞은편 버튼으로 옮긴다(폭이 바뀌어 칸이 달라진 경우는 건드리지 않는다).
+  const expandButton = useRef<HTMLButtonElement>(null);
+  const collapseButton = useRef<HTMLButtonElement>(null);
+  const focusAfterToggle = useRef<'expand' | 'collapse' | null>(null);
+  const toggleCandidates = (open: boolean) => {
+    focusAfterToggle.current = open ? 'collapse' : 'expand';
+    setCandidatesOverride(open);
+  };
+  useEffect(() => {
+    const target = focusAfterToggle.current;
+    if (target === null) return;
+    focusAfterToggle.current = null;
+    (target === 'expand' ? expandButton : collapseButton).current?.focus();
+  }, [candidatesOpen]);
   const [detailId, setDetailId] = useState<string | null>(null);
   // 고른 Day의 구간·시각은 여기서 한 번 구해 지도·시간표·오프라인 안내가 함께 쓴다. 좁은 화면에서 시트가
   // 후보 탭이어도 경로 요청이 지도와 함께 시작된다.
@@ -343,7 +358,8 @@ function Planner({ trip, library }: { trip: Trip; library: Library }) {
           <CandidatePanel
             trip={trip}
             dayIndex={dayIndex}
-            onCollapse={medium ? () => setCandidatesOverride(false) : undefined}
+            onCollapse={medium ? () => toggleCandidates(false) : undefined}
+            collapseRef={collapseButton}
           />
         </Box>
       )}
@@ -351,8 +367,9 @@ function Planner({ trip, library }: { trip: Trip; library: Library }) {
         medium ? MEDIUM_PADDING : WIDE_PADDING,
         !showCandidates && (
           <IconButton
+            ref={expandButton}
             aria-label="후보 칸 펼치기"
-            onClick={() => setCandidatesOverride(true)}
+            onClick={() => toggleCandidates(true)}
             sx={{
               position: 'absolute',
               top: 8,

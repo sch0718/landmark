@@ -63,6 +63,46 @@ describe('여행 계획: 후보 칸 기본 접힘(1100px 미만)', () => {
   });
 });
 
+describe('여행 계획: 후보 칸을 접고 펼치면 포커스가 맞은편 버튼으로 간다', () => {
+  it('접기를 누르면(키보드) 펼치기 버튼으로 포커스가 간다', async () => {
+    await open(lib(), { width: 1100 });
+    const user = userEvent.setup();
+    const collapse = screen.getByRole('button', { name: '후보 칸 접기' });
+    collapse.focus();
+    await user.keyboard('{Enter}');
+    expect(candidates()).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '후보 칸 펼치기' })).toHaveFocus();
+  });
+
+  it('펼치기를 누르면(키보드) 접기 버튼으로 포커스가 간다', async () => {
+    await open(lib(), { width: 1099 });
+    const user = userEvent.setup();
+    const expand = screen.getByRole('button', { name: '후보 칸 펼치기' });
+    expand.focus();
+    await user.keyboard('{Enter}');
+    expect(candidates()).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '후보 칸 접기' })).toHaveFocus();
+  });
+
+  it('접고 펼치기를 되풀이해도 매번 맞은편으로 간다', async () => {
+    await open(lib(), { width: 1100 });
+    const user = userEvent.setup();
+    for (let i = 0; i < 2; i += 1) {
+      await user.click(screen.getByRole('button', { name: '후보 칸 접기' }));
+      expect(screen.getByRole('button', { name: '후보 칸 펼치기' })).toHaveFocus();
+      await user.click(screen.getByRole('button', { name: '후보 칸 펼치기' }));
+      expect(screen.getByRole('button', { name: '후보 칸 접기' })).toHaveFocus();
+    }
+  });
+
+  it('폭이 바뀌어 칸이 달라져도 포커스를 가져오지 않는다', async () => {
+    const { setWidth } = await open(lib(), { width: 1099 });
+    expect(document.body).toHaveFocus();
+    setWidth(1200);
+    expect(document.body).toHaveFocus();
+  });
+});
+
 describe('여행 계획: 여행 제목 h1은 늘 하나', () => {
   it('1099px(후보 칸 접힘)에서는 눈에만 숨긴 h1 하나, 펼치면 보이는 h1 하나', async () => {
     await open(lib(), { width: 1099 });
