@@ -35,7 +35,7 @@ export function RegionChips({ regions, selected, onChange, onCreateTrip }: Props
           onClick={() => toggle(region)}
         >
           {region}{' '}
-          <Box component="span" sx={{ fontWeight: 500, opacity: 0.8 }}>
+          <Box component="span" sx={{ fontWeight: 500 }}>
             {count}
           </Box>
         </ChipButton>

@@ -56,7 +56,7 @@ describe('theme contrast (6 themes)', () => {
       // 입력칸 테두리(입력칸 바탕은 bg.raised)
       check(`${at} border.strong/bg.raised`, tokens.borderStrong, tokens.bg.raised, 3);
       for (const color of LABEL_COLORS) {
-        // 칩·타일(개수 글자 포함)은 라벨 글자색을 라벨 바탕 위에 그대로 쓴다
+        // 칩·타일의 이름·개수 글자는 모두 라벨 글자색을 라벨 바탕 위에 반투명 없이 쓴다(개수 글자에 opacity가 없다는 것은 chip-counts.test.tsx가 확인)
         check(`${at} label.${color}`, tokens.label[color].text, tokens.label[color].fill, 4.5);
       }
       // 라벨 없는 타일('미분류'): bg.raised 위 text.secondary

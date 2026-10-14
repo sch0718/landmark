@@ -46,7 +46,7 @@ export function LabelChips({ query, onChange, labels, counts, manageLink = true 
       </ChipButton>
       <ChipButton selected={query.unlabeled} onClick={toggleUnlabeled}>
         미분류{' '}
-        <Box component="span" sx={{ fontWeight: 500, opacity: 0.8 }}>
+        <Box component="span" sx={{ fontWeight: 500 }}>
           {counts.get('unlabeled') ?? 0}
         </Box>
       </ChipButton>
@@ -64,7 +64,7 @@ export function LabelChips({ query, onChange, labels, counts, manageLink = true 
             <LabelGlyph name={label.icon.value} size={14} />
           </Box>
           {label.name.value}{' '}
-          <Box component="span" sx={{ fontWeight: 500, opacity: 0.8 }}>
+          <Box component="span" sx={{ fontWeight: 500 }}>
             {counts.get(label.id) ?? 0}
           </Box>
         </ChipButton>
