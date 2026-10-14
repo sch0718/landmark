@@ -50,7 +50,8 @@ PR을 만들어 CI를 통과하면 병합한다. 그 PR의 변경 일부(묶음 
 - **`gh-pages`를 직접**: `gh-pages`는 배포할 때마다 커밋이 하나씩 쌓인다. 되돌릴 배포 커밋을 찾아 되돌리는 커밋을 올린다.
 
   ```bash
-  git fetch origin gh-pages && git switch gh-pages
+  git fetch origin gh-pages
+  git switch -C gh-pages origin/gh-pages   # 로컬 gh-pages가 뒤처져 있어도 원격 최신에서 시작
   git log --oneline   # 배포 커밋 찾기
   git revert <되돌릴 배포 커밋>
   git push origin gh-pages
