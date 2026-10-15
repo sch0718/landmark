@@ -56,7 +56,14 @@ export class NaverMapAdapter implements MapAdapter {
   private markerCb: ((id: string) => void) | null = null;
   private boundsCb: ((b: Bounds) => void) | null = null;
 
-  constructor(private readonly clientId: string) {}
+  /**
+   * @param options.zoomControl SDK 확대·축소 막대를 보일까(기본 보임). 대신 쓸 ＋/− 버튼을 직접 그리는 쪽
+   *   (`MapView`의 `MapZoomButtons`)만 끈다 — 끄기만 하면 한 손가락 축소 수단이 없어진다.
+   */
+  constructor(
+    private readonly clientId: string,
+    private readonly options: { zoomControl?: boolean } = {},
+  ) {}
 
   async mount(el: HTMLElement): Promise<void> {
     await loadNaverSdk(this.clientId);
@@ -65,7 +72,7 @@ export class NaverMapAdapter implements MapAdapter {
     const map = new m.Map(el, {
       center: new m.LatLng(37.5, 128.2),
       zoom: 8,
-      zoomControl: true,
+      zoomControl: this.options.zoomControl ?? true,
     });
     this.map = map;
     this.listeners.push(

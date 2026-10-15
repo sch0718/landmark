@@ -3,6 +3,7 @@ import HomeIcon from '~icons/lucide/house';
 import MapIcon from '~icons/lucide/map';
 import RouteIcon from '~icons/lucide/route';
 import PlusIcon from '~icons/lucide/plus';
+import MinusIcon from '~icons/lucide/minus';
 import SettingsIcon from '~icons/lucide/settings';
 import SearchIcon from '~icons/lucide/search';
 import LinkIcon from '~icons/lucide/link';
@@ -71,6 +72,7 @@ export {
   MapIcon,
   RouteIcon,
   PlusIcon,
+  MinusIcon,
   SettingsIcon,
   SearchIcon,
   LinkIcon,

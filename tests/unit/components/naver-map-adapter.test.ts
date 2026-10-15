@@ -114,10 +114,35 @@ function installSdk() {
       },
     },
   };
-  return { map, listeners, overlays, labels, markerOptions, removeListener };
+  return { map, MapCtor, listeners, overlays, labels, markerOptions, removeListener };
 }
 
 describe('NaverMapAdapter SDK 계약', () => {
+  // SDK 막대는 대신 쓸 ＋/− 버튼을 그리는 쪽(MapView)만 끈다. 공유 지도(`share-map/main.ts`)처럼 옵션 없이 만들면
+  // 터치 전용 기기에서도 막대를 보인다 — 끄기만 하면 한 손가락 축소 수단이 없어진다.
+  it.each([
+    ['옵션 없음, 터치 전용 기기', undefined, true, true],
+    ['옵션 없음, 마우스', undefined, false, true],
+    ['zoomControl: false', { zoomControl: false }, true, false],
+    ['zoomControl: true', { zoomControl: true }, true, true],
+  ])('%s → zoomControl=%s', async (_, options, touch, zoomControl) => {
+    vi.stubGlobal('matchMedia', (q: string) => ({
+      matches: touch && q === '(any-hover: none) and (any-pointer: coarse)',
+    }));
+    try {
+      const sdk = installSdk();
+      const pending = new NaverMapAdapter('id', options).mount(document.createElement('div'));
+      release();
+      await pending;
+      expect(sdk.MapCtor).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ zoomControl }),
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('resize가 Size를 전달하고 SDK가 바꾼 center/zoom을 복원하며 bounds를 알린다', async () => {
     const sdk = installSdk();
     const adapter = new NaverMapAdapter('id');
