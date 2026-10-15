@@ -36,9 +36,13 @@ export const ALLOWED_HOSTS: readonly string[] = [
   'maps.google.com',
 ];
 
-const NAVER_ENTRY_PLACE = /^\/p\/entry\/place\/(\d+)(?:\/|$)/;
-const NAVER_SEARCH_PLACE = /^\/p\/search\/[^/]+\/place\/(\d+)(?:\/|$)/;
-const NAVER_FOLDER = /^\/p\/favorite\/sharedPlace\/folder\/([0-9a-zA-Z]+)\/?$/;
+// 지도 화면(`/p/…`, 예전 `/v5/…`) 안의 `/place/<ID>`. 들어온 길(entry·search·저장 목록·공유 폴더·주변 탐색)은
+// 앞쪽 경로만 다르고, 어느 길이든 고른 장소는 `/place/<ID>`로 붙는다.
+const NAVER_MAP_PLACE = /^\/(?:p|v5)\/(?:[^/]+\/)*?place\/(\d+)(?:\/|$)/;
+// 공유 폴더. 예전 공유 링크는 `/p/favorite/sharedPlace/folder/<ID>`로, 2026-10 공유 링크는
+// `/v5/favorite/myPlace/folder/<ID>`(지도가 다시 `/p/…`로 바꿈)로 이동한다. 어느 쪽이든 ID는 공유 ID다.
+// 공유하지 않은 내 폴더 주소도 같은 모양이라 여기서 걸러지지 않는다 — 폴더 조회가 NOT_FOUND로 답한다.
+const NAVER_FOLDER = /^\/(?:p|v5)\/favorite\/(?:sharedPlace|myPlace)\/folder\/([0-9a-zA-Z]+)\/?$/;
 const NAVER_PLACE_HOST_PATH = /^\/[^/]+\/(\d+)(?:\/|$)/;
 const KAKAO_PLACE_PATH = /^\/(\d+)\/?$/;
 const DIGITS = /^\d+$/;
@@ -111,7 +115,8 @@ export function classifyLink(raw: string): LinkKind {
 function classifyNaverMap(pathname: string): LinkKind {
   const folder = NAVER_FOLDER.exec(pathname)?.[1];
   if (folder) return { kind: 'naver-folder', shareId: folder };
-  const sid = (NAVER_ENTRY_PLACE.exec(pathname) ?? NAVER_SEARCH_PLACE.exec(pathname))?.[1];
+  // 공유 폴더 안에서 고른 장소(`…/folder/<ID>/place/<ID>`)는 폴더가 아니라 그 장소다.
+  const sid = NAVER_MAP_PLACE.exec(pathname)?.[1];
   return sid ? { kind: 'naver-place', sid } : UNSUPPORTED;
 }
 

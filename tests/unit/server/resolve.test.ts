@@ -223,6 +223,19 @@ describe('resolveLink — 폴더', () => {
     expect(calls).toHaveLength(1);
   });
 
+  it('v5 내 장소 폴더로 이동하는 naver.me 링크 → FolderRef', async () => {
+    const { deps, calls } = makeDeps({
+      'https://naver.me/FQI4XSw3': redirect(
+        `https://map.naver.com/v5/favorite/myPlace/folder/${SHARE_ID}`,
+      ),
+    });
+    expect(await resolveLink('https://naver.me/FQI4XSw3', deps)).toEqual({
+      kind: 'folder',
+      shareId: SHARE_ID,
+    });
+    expect(calls).toHaveLength(1);
+  });
+
   it('폴더 웹 주소 → FolderRef', async () => {
     const { deps } = makeDeps({});
     expect(
