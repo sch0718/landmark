@@ -118,42 +118,25 @@ function installSdk() {
 }
 
 describe('NaverMapAdapter SDK 계약', () => {
-  // 휴대폰에서는 SDK 막대가 왼쪽 위 핀 이름표를 가린다. 터치 전용 기기에서는 막대를 빼고 MapView가 ＋/− 버튼을 그린다.
-  // 마우스를 함께 쓰는 터치 기기는 `any-hover: none`이 아니므로 막대를 그대로 둔다.
+  // SDK 막대는 대신 쓸 ＋/− 버튼을 그리는 쪽(MapView)만 끈다. 공유 지도(`share-map/main.ts`)처럼 옵션 없이 만들면
+  // 터치 전용 기기에서도 막대를 보인다 — 끄기만 하면 한 손가락 축소 수단이 없어진다.
   it.each([
-    ['터치 전용', ['(any-hover: none) and (any-pointer: coarse)'], false],
-    [
-      '주 입력이 터치이고 마우스도 연결',
-      ['(hover: none) and (pointer: coarse)', '(any-pointer: coarse)'],
-      true,
-    ],
-    ['마우스만', ['(hover: hover) and (pointer: fine)'], true],
-  ])('%s → zoomControl=%s', async (_, matching, zoomControl) => {
-    vi.stubGlobal('matchMedia', (q: string) => ({ matches: matching.includes(q) }));
+    ['옵션 없음, 터치 전용 기기', undefined, true, true],
+    ['옵션 없음, 마우스', undefined, false, true],
+    ['zoomControl: false', { zoomControl: false }, true, false],
+    ['zoomControl: true', { zoomControl: true }, true, true],
+  ])('%s → zoomControl=%s', async (_, options, touch, zoomControl) => {
+    vi.stubGlobal('matchMedia', (q: string) => ({
+      matches: touch && q === '(any-hover: none) and (any-pointer: coarse)',
+    }));
     try {
       const sdk = installSdk();
-      const pending = new NaverMapAdapter('id').mount(document.createElement('div'));
+      const pending = new NaverMapAdapter('id', options).mount(document.createElement('div'));
       release();
       await pending;
       expect(sdk.MapCtor).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({ zoomControl }),
-      );
-    } finally {
-      vi.unstubAllGlobals();
-    }
-  });
-
-  it('matchMedia가 없으면 확대·축소 막대를 보인다', async () => {
-    vi.stubGlobal('matchMedia', undefined);
-    try {
-      const sdk = installSdk();
-      const pending = new NaverMapAdapter('id').mount(document.createElement('div'));
-      release();
-      await pending;
-      expect(sdk.MapCtor).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.objectContaining({ zoomControl: true }),
       );
     } finally {
       vi.unstubAllGlobals();

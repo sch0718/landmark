@@ -11,7 +11,6 @@ import {
   type MapPolyline,
 } from './MapAdapter';
 import { createMarkerLabelElement } from './marker-label';
-import { isTouchOnly } from './touch-only';
 
 /** 사용하는 Naver Maps v3 API만 좁게 선언한다(전용 타입 패키지는 추가하지 않는다). */
 type Overlay = { setMap(map: unknown): void };
@@ -57,7 +56,14 @@ export class NaverMapAdapter implements MapAdapter {
   private markerCb: ((id: string) => void) | null = null;
   private boundsCb: ((b: Bounds) => void) | null = null;
 
-  constructor(private readonly clientId: string) {}
+  /**
+   * @param options.zoomControl SDK 확대·축소 막대를 보일까(기본 보임). 대신 쓸 ＋/− 버튼을 직접 그리는 쪽
+   *   (`MapView`의 `MapZoomButtons`)만 끈다 — 끄기만 하면 한 손가락 축소 수단이 없어진다.
+   */
+  constructor(
+    private readonly clientId: string,
+    private readonly options: { zoomControl?: boolean } = {},
+  ) {}
 
   async mount(el: HTMLElement): Promise<void> {
     await loadNaverSdk(this.clientId);
@@ -66,9 +72,7 @@ export class NaverMapAdapter implements MapAdapter {
     const map = new m.Map(el, {
       center: new m.LatLng(37.5, 128.2),
       zoom: 8,
-      // 휴대폰에서는 기본 확대·축소 막대(슬라이더)가 왼쪽 위 핀 이름표를 가리고 버튼이 28px로 작다.
-      // 터치 전용 기기에서는 SDK 막대를 빼고 `MapView`가 44px ＋/− 버튼(`MapZoomButtons`)을 그린다.
-      zoomControl: !isTouchOnly(),
+      zoomControl: this.options.zoomControl ?? true,
     });
     this.map = map;
     this.listeners.push(

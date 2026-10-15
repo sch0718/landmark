@@ -56,7 +56,7 @@ export function MapView(props: Props) {
   const visible = props.visible ?? true;
   const [activated, setActivated] = useState(visible);
   const [mountedAdapter, setMountedAdapter] = useState<MapAdapter | null>(null);
-  // 어댑터와 같은 판단: 터치 전용 기기면 SDK 막대 대신 ＋/− 버튼을 그린다. 처음 한 번만 본다.
+  // 터치 전용 기기면 SDK 막대를 빼고 ＋/− 버튼을 그린다. 처음 한 번만 보므로 바뀌지 않는다.
   const [touchOnly] = useState(isTouchOnly);
   const cameras = useRef(new Map<string, MapCamera>());
   const fittedKeys = useRef(new Set<string>());
@@ -100,7 +100,9 @@ export function MapView(props: Props) {
         unavailable(MAP_MISSING_CLIENT_ID_MESSAGE);
         return;
       }
-      adapter = new NaverMapAdapter(clientId);
+      // 휴대폰에서는 SDK 막대(슬라이더)가 왼쪽 위 핀 이름표를 가리고 그 버튼은 28px로 작다. 터치 전용 기기에서는
+      // SDK 막대를 빼고 아래에서 44px ＋/− 버튼(`MapZoomButtons`)을 그린다. 둘은 늘 함께 바뀐다.
+      adapter = new NaverMapAdapter(clientId, { zoomControl: !touchOnly });
       unsubscribeAuth = onNaverAuthFailure(() => {
         if (cancelled) return;
         cancelled = true;
@@ -147,7 +149,7 @@ export function MapView(props: Props) {
       displayedKey.current = null;
       appliedFocus.current = null;
     };
-  }, [activated]);
+  }, [activated, touchOnly]);
 
   const ready = useMapSize(frameRef, mountedAdapter, visible);
   useEffect(() => {

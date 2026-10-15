@@ -118,6 +118,37 @@ describe('MapView 확대·축소 버튼', () => {
     expect(Number(map.dataset.zoom)).toBe(zoomed - 1);
   });
 
+  // 버튼을 그리는 쪽이 SDK 막대도 끈다. 둘이 어긋나면 막대와 버튼이 겹치거나 축소 수단이 없어진다.
+  it.each([
+    [true, false],
+    [false, true],
+  ])('터치 전용(%s)이면 네이버 지도를 zoomControl=%s로 만든다', async (touch, zoomControl) => {
+    vi.stubEnv('VITE_MAP_ADAPTER', '');
+    vi.stubEnv('VITE_NAVER_MAP_CLIENT_ID', 'cid');
+    touchOnly(touch);
+    const MapCtor = vi.fn(() => {
+      throw new Error('지도 생성자만 본다');
+    });
+    (window as unknown as { naver: unknown }).naver = {
+      maps: { Map: MapCtor, LatLng: vi.fn() },
+    };
+    sdk.load = () => Promise.resolve();
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const unavailable = vi.fn();
+    try {
+      render(
+        <MapView markers={[]} polylines={[]} onMarkerClick={vi.fn()} onUnavailable={unavailable} />,
+      );
+      await waitFor(() => expect(unavailable).toHaveBeenCalled());
+      expect(MapCtor).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ zoomControl }),
+      );
+    } finally {
+      delete (window as { naver?: unknown }).naver;
+    }
+  });
+
   it('마우스가 있는 기기에서는 버튼을 그리지 않는다(SDK 막대를 쓴다)', async () => {
     vi.stubEnv('VITE_MAP_ADAPTER', 'fake');
     touchOnly(false);
