@@ -11,6 +11,7 @@ import {
   type MapPolyline,
 } from './MapAdapter';
 import { createMarkerLabelElement } from './marker-label';
+import { isTouchOnly } from './touch-only';
 
 /** 사용하는 Naver Maps v3 API만 좁게 선언한다(전용 타입 패키지는 추가하지 않는다). */
 type Overlay = { setMap(map: unknown): void };
@@ -42,13 +43,6 @@ const SELECTED_Z_INDEX = 1000;
 
 const maps = (): NaverMaps => (window as unknown as { naver: { maps: NaverMaps } }).naver.maps;
 
-const TOUCH_ONLY_QUERY = '(hover: none) and (pointer: coarse)';
-
-/** 마우스 없이 터치로만 다루는 기기(휴대폰·태블릿)인가. 알 수 없으면 아니라고 본다. */
-function isTouchOnly(): boolean {
-  return typeof window.matchMedia === 'function' && window.matchMedia(TOUCH_ONLY_QUERY).matches;
-}
-
 export class NaverMapAdapter implements MapAdapter {
   private map: NaverMap | null = null;
   private markers: MapMarker[] = [];
@@ -72,7 +66,8 @@ export class NaverMapAdapter implements MapAdapter {
     const map = new m.Map(el, {
       center: new m.LatLng(37.5, 128.2),
       zoom: 8,
-      // 휴대폰에서는 기본 확대·축소 막대가 왼쪽 위 핀 이름표를 가린다. 두 손가락 확대가 있으니 뺀다.
+      // 휴대폰에서는 기본 확대·축소 막대(슬라이더)가 왼쪽 위 핀 이름표를 가리고 버튼이 28px로 작다.
+      // 터치 전용 기기에서는 SDK 막대를 빼고 `MapView`가 44px ＋/− 버튼(`MapZoomButtons`)을 그린다.
       zoomControl: !isTouchOnly(),
     });
     this.map = map;

@@ -85,6 +85,55 @@ describe('MapView (Fake 어댑터)', () => {
   });
 });
 
+describe('MapView 확대·축소 버튼', () => {
+  const touchOnly = (on: boolean) =>
+    vi.stubGlobal('matchMedia', (q: string) => ({
+      matches: on && q === '(any-hover: none) and (any-pointer: coarse)',
+    }));
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('터치 전용 기기면 44px ＋/− 버튼을 그리고 한 단계씩 확대·축소한다', async () => {
+    vi.stubEnv('VITE_MAP_ADAPTER', 'fake');
+    touchOnly(true);
+    render(
+      <MapView
+        markers={[mk('a')]}
+        polylines={[]}
+        onMarkerClick={vi.fn()}
+        onUnavailable={vi.fn()}
+      />,
+    );
+    const map = await screen.findByTestId('fake-map');
+    const zoomIn = await screen.findByRole('button', { name: '지도 확대' });
+    const zoomOut = screen.getByRole('button', { name: '지도 축소' });
+    expect(screen.getByRole('group', { name: '지도 확대·축소' })).toContainElement(zoomIn);
+    // 가짜 지도는 카메라를 바꿀 때만 줌을 적으므로 첫 확대 뒤 값을 기준으로 본다.
+    await userEvent.click(zoomIn);
+    const zoomed = Number(map.dataset.zoom);
+    expect(Number.isFinite(zoomed)).toBe(true);
+    await userEvent.click(zoomIn);
+    expect(Number(map.dataset.zoom)).toBe(zoomed + 1);
+    await userEvent.click(zoomOut);
+    await userEvent.click(zoomOut);
+    expect(Number(map.dataset.zoom)).toBe(zoomed - 1);
+  });
+
+  it('마우스가 있는 기기에서는 버튼을 그리지 않는다(SDK 막대를 쓴다)', async () => {
+    vi.stubEnv('VITE_MAP_ADAPTER', 'fake');
+    touchOnly(false);
+    render(
+      <MapView
+        markers={[mk('a')]}
+        polylines={[]}
+        onMarkerClick={vi.fn()}
+        onUnavailable={vi.fn()}
+      />,
+    );
+    await screen.findByTestId('marker-a');
+    expect(screen.queryByRole('button', { name: '지도 확대' })).toBeNull();
+  });
+});
+
 describe('MapView 크기 추적', () => {
   it('SDK가 마운트 요소에 고정 px 크기를 써도, 측정 요소는 별도라서 영역이 다시 넓어지면 따라간다', async () => {
     // 네이버 SDK의 setSize는 마운트 요소에 width/height px를 인라인으로 쓴다.

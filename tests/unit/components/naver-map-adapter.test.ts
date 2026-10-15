@@ -118,15 +118,18 @@ function installSdk() {
 }
 
 describe('NaverMapAdapter SDK 계약', () => {
-  // 휴대폰에서는 확대·축소 막대가 왼쪽 위 핀 이름표를 가린다. 두 손가락 확대가 있으니 터치 기기에서는 뺀다.
+  // 휴대폰에서는 SDK 막대가 왼쪽 위 핀 이름표를 가린다. 터치 전용 기기에서는 막대를 빼고 MapView가 ＋/− 버튼을 그린다.
+  // 마우스를 함께 쓰는 터치 기기는 `any-hover: none`이 아니므로 막대를 그대로 둔다.
   it.each([
-    [true, false],
-    [false, true],
-  ])('터치 기기(%s)면 확대·축소 막대 zoomControl=%s', async (touch, zoomControl) => {
-    const query = vi.fn((q: string) => ({
-      matches: touch && q === '(hover: none) and (pointer: coarse)',
-    }));
-    vi.stubGlobal('matchMedia', query);
+    ['터치 전용', ['(any-hover: none) and (any-pointer: coarse)'], false],
+    [
+      '주 입력이 터치이고 마우스도 연결',
+      ['(hover: none) and (pointer: coarse)', '(any-pointer: coarse)'],
+      true,
+    ],
+    ['마우스만', ['(hover: hover) and (pointer: fine)'], true],
+  ])('%s → zoomControl=%s', async (_, matching, zoomControl) => {
+    vi.stubGlobal('matchMedia', (q: string) => ({ matches: matching.includes(q) }));
     try {
       const sdk = installSdk();
       const pending = new NaverMapAdapter('id').mount(document.createElement('div'));

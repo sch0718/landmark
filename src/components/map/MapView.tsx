@@ -13,7 +13,9 @@ import {
   type MapPolyline,
 } from './MapAdapter';
 import { onNaverAuthFailure } from './load-naver-sdk';
+import { MapZoomButtons } from './MapZoomButtons';
 import { NaverMapAdapter } from './NaverMapAdapter';
+import { isTouchOnly } from './touch-only';
 import { useMapSize } from './use-map-size';
 
 export const MAP_UNAVAILABLE_MESSAGE = '지도를 불러오지 못했어요. 도메인 등록을 확인하세요';
@@ -54,6 +56,8 @@ export function MapView(props: Props) {
   const visible = props.visible ?? true;
   const [activated, setActivated] = useState(visible);
   const [mountedAdapter, setMountedAdapter] = useState<MapAdapter | null>(null);
+  // 어댑터와 같은 판단: 터치 전용 기기면 SDK 막대 대신 ＋/− 버튼을 그린다. 처음 한 번만 본다.
+  const [touchOnly] = useState(isTouchOnly);
   const cameras = useRef(new Map<string, MapCamera>());
   const fittedKeys = useRef(new Set<string>());
   const displayedKey = useRef<string | null>(null);
@@ -209,6 +213,7 @@ export function MapView(props: Props) {
       data-testid="map-host"
     >
       <Box ref={canvasRef} sx={{ position: 'absolute', inset: 0 }} data-testid="map-canvas" />
+      {touchOnly && ready && mountedAdapter && <MapZoomButtons adapter={mountedAdapter} />}
     </Box>
   );
 }
