@@ -42,6 +42,13 @@ const SELECTED_Z_INDEX = 1000;
 
 const maps = (): NaverMaps => (window as unknown as { naver: { maps: NaverMaps } }).naver.maps;
 
+const TOUCH_ONLY_QUERY = '(hover: none) and (pointer: coarse)';
+
+/** 마우스 없이 터치로만 다루는 기기(휴대폰·태블릿)인가. 알 수 없으면 아니라고 본다. */
+function isTouchOnly(): boolean {
+  return typeof window.matchMedia === 'function' && window.matchMedia(TOUCH_ONLY_QUERY).matches;
+}
+
 export class NaverMapAdapter implements MapAdapter {
   private map: NaverMap | null = null;
   private markers: MapMarker[] = [];
@@ -65,7 +72,8 @@ export class NaverMapAdapter implements MapAdapter {
     const map = new m.Map(el, {
       center: new m.LatLng(37.5, 128.2),
       zoom: 8,
-      zoomControl: true,
+      // 휴대폰에서는 기본 확대·축소 막대가 왼쪽 위 핀 이름표를 가린다. 두 손가락 확대가 있으니 뺀다.
+      zoomControl: !isTouchOnly(),
     });
     this.map = map;
     this.listeners.push(

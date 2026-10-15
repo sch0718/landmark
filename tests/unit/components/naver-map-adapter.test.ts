@@ -114,10 +114,49 @@ function installSdk() {
       },
     },
   };
-  return { map, listeners, overlays, labels, markerOptions, removeListener };
+  return { map, MapCtor, listeners, overlays, labels, markerOptions, removeListener };
 }
 
 describe('NaverMapAdapter SDK 계약', () => {
+  // 휴대폰에서는 확대·축소 막대가 왼쪽 위 핀 이름표를 가린다. 두 손가락 확대가 있으니 터치 기기에서는 뺀다.
+  it.each([
+    [true, false],
+    [false, true],
+  ])('터치 기기(%s)면 확대·축소 막대 zoomControl=%s', async (touch, zoomControl) => {
+    const query = vi.fn((q: string) => ({
+      matches: touch && q === '(hover: none) and (pointer: coarse)',
+    }));
+    vi.stubGlobal('matchMedia', query);
+    try {
+      const sdk = installSdk();
+      const pending = new NaverMapAdapter('id').mount(document.createElement('div'));
+      release();
+      await pending;
+      expect(sdk.MapCtor).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ zoomControl }),
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('matchMedia가 없으면 확대·축소 막대를 보인다', async () => {
+    vi.stubGlobal('matchMedia', undefined);
+    try {
+      const sdk = installSdk();
+      const pending = new NaverMapAdapter('id').mount(document.createElement('div'));
+      release();
+      await pending;
+      expect(sdk.MapCtor).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ zoomControl: true }),
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('resize가 Size를 전달하고 SDK가 바꾼 center/zoom을 복원하며 bounds를 알린다', async () => {
     const sdk = installSdk();
     const adapter = new NaverMapAdapter('id');
