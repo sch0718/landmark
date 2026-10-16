@@ -6,9 +6,10 @@ import { useAtom, useAtomValue } from 'jotai';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router';
 import { toast } from 'sonner';
-import { PanelLeftOpenIcon } from 'src/components/icons';
+import { NavigationIcon, PanelLeftOpenIcon } from 'src/components/icons';
 import type { MapPadding } from 'src/components/map/MapAdapter';
 import { hiddenPlaceCount, locatePlace } from 'src/domain/trips/query';
+import { todayStatus } from 'src/domain/trips/today';
 import { useDocumentTitle } from 'src/lib/use-document-title';
 import { paths } from 'src/routes/paths';
 import type { Library } from 'src/schema/library';
@@ -31,6 +32,10 @@ import { mapCardAtom, selectedDayAtom } from 'src/stores/trip-planner';
 /** 이 폭(px) 이상이면 후보 칸을 펼친 채 시작한다. */
 const CANDIDATES_OPEN_MIN = 1100;
 const OFFLINE_NOTICE = '인터넷에 연결되지 않아 이동 시간은 어림값이에요';
+
+/** 지도 칸 왼쪽 위에 덮는 버튼(후보 칸 펼치기·오늘 일정)의 높이와 바깥 여백(px). */
+const OVERLAY_BUTTON_PX = 44;
+const OVERLAY_GAP = 8;
 
 const EDGE = 40;
 const WIDE_PADDING: MapPadding = { top: EDGE, right: EDGE, bottom: EDGE, left: EDGE };
@@ -122,15 +127,24 @@ function useHiddenPlaceToast(library: Library, trip: Trip) {
   }, [hidden]);
 }
 
-/** 계획 화면 위에 한 번 보이는 오프라인 안내(스펙 §6). 지도 칸 위쪽 가운데에 덮는다. */
-function OfflineNotice({ rightInset }: { rightInset: number }) {
+/**
+ * 계획 화면 위에 한 번 보이는 오프라인 안내(스펙 §6). 지도 칸 위쪽 가운데에 덮는다.
+ * 왼쪽 위에 `오늘 일정` 버튼이 있으면(`belowButtons`) 그 줄 아래로 내려 겹치지 않게 한다(스펙 §3.2).
+ */
+function OfflineNotice({
+  rightInset,
+  belowButtons,
+}: {
+  rightInset: number;
+  belowButtons: boolean;
+}) {
   // 중간 폭에서는 시간표 칸이 지도 오른쪽(`rightInset`)을 덮으므로 보이는 부분의 가운데에 둔다.
   return (
     <Box
       role="status"
       sx={{
         position: 'absolute',
-        top: 8,
+        top: belowButtons ? OVERLAY_GAP * 2 + OVERLAY_BUTTON_PX : OVERLAY_GAP,
         left: `calc((100% - ${rightInset}px) / 2)`,
         transform: 'translateX(-50%)',
         zIndex: 1,
@@ -148,6 +162,33 @@ function OfflineNotice({ rightInset }: { rightInset: number }) {
     >
       {OFFLINE_NOTICE}
     </Box>
+  );
+}
+
+/**
+ * 지도 칸 왼쪽 위의 `오늘 일정`(스펙 §3.2): 당일 모드로 간다. 후보 칸 펼치기 버튼이 있으면(`afterExpand`) 그 오른쪽.
+ */
+function TodayLink({ tripId, afterExpand }: { tripId: string; afterExpand: boolean }) {
+  return (
+    <Button
+      component={Link}
+      to={paths.tripToday(tripId)}
+      startIcon={<NavigationIcon aria-hidden="true" width={18} height={18} />}
+      sx={{
+        position: 'absolute',
+        top: OVERLAY_GAP,
+        left: afterExpand ? OVERLAY_GAP * 2 + OVERLAY_BUTTON_PX : OVERLAY_GAP,
+        zIndex: 1,
+        height: OVERLAY_BUTTON_PX,
+        px: 1.5,
+        fontWeight: 700,
+        bgcolor: 'var(--tm-bg-surface)',
+        boxShadow: 'var(--tm-shadow-2)',
+        '&:hover': { bgcolor: 'var(--tm-bg-raised)' },
+      }}
+    >
+      오늘 일정
+    </Button>
   );
 }
 
@@ -274,6 +315,10 @@ function Planner({ trip, library }: { trip: Trip; library: Library }) {
 
   const compact = layout === 'compact';
   const medium = layout === 'medium';
+  const showCandidates = !medium || candidatesOpen;
+  // 오늘(04:00 경계)이 기간 안일 때만 당일 모드로 가는 버튼을 둔다.
+  const during = todayStatus(trip, new Date()).kind === 'during';
+  const expandShown = !compact && !showCandidates;
   const mapArea = (padding: MapPadding, extra?: ReactNode) => (
     <MapArea>
       <TripMap
@@ -285,8 +330,11 @@ function Planner({ trip, library }: { trip: Trip; library: Library }) {
         onOpenCard={openCard}
         splitPlan={splitPlan}
       />
-      {plan.offline && <OfflineNotice rightInset={medium ? DETAIL_WIDTH : 0} />}
+      {plan.offline && (
+        <OfflineNotice rightInset={medium ? DETAIL_WIDTH : 0} belowButtons={during} />
+      )}
       {extra}
+      {during && <TodayLink tripId={trip.id} afterExpand={expandShown} />}
       {cardPlaceId !== null && (
         <Box
           sx={{
@@ -341,7 +389,6 @@ function Planner({ trip, library }: { trip: Trip; library: Library }) {
     );
   }
 
-  const showCandidates = !medium || candidatesOpen;
   return (
     <Box sx={{ height: '100%', display: 'flex', position: 'relative', overflow: 'hidden' }}>
       {/* 후보 칸을 접으면 보이는 여행 제목이 없다. 화면 `h1`을 눈에만 숨겨 남긴다. */}
@@ -373,11 +420,11 @@ function Planner({ trip, library }: { trip: Trip; library: Library }) {
             onClick={() => toggleCandidates(true)}
             sx={{
               position: 'absolute',
-              top: 8,
-              left: 8,
+              top: OVERLAY_GAP,
+              left: OVERLAY_GAP,
               zIndex: 1,
-              width: 44,
-              height: 44,
+              width: OVERLAY_BUTTON_PX,
+              height: OVERLAY_BUTTON_PX,
               bgcolor: 'var(--tm-bg-surface)',
               boxShadow: 'var(--tm-shadow-2)',
               '&:hover': { bgcolor: 'var(--tm-bg-raised)' },

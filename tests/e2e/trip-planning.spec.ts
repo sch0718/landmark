@@ -1,35 +1,5 @@
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { seedStorage } from './fixtures';
-
-/** 앱이 `/api/route`에서 받는 응답을 녹화해 둔 fixture(`tests/fixtures/routes/api/`). */
-const routeFixture = (name: string): string =>
-  readFileSync(fileURLToPath(new URL(`../fixtures/routes/api/${name}`, import.meta.url)), 'utf8');
-
-const ROUTE_REPLY: Record<'car' | 'walk', string> = {
-  car: routeFixture('car.json'),
-  walk: routeFixture('walk.json'),
-};
-
-/** 앱이 `/api/route`로 보낸 질의를 요청 순서대로 모은 것. */
-type RouteCall = { mode: string; from: string; to: string };
-
-/** `/api/route`를 녹화 응답으로 대신한다. 실제 네트워크는 타지 않는다. */
-async function mockRoutes(page: Page): Promise<RouteCall[]> {
-  const calls: RouteCall[] = [];
-  await page.route('**/api/route?**', (route) => {
-    const params = new URL(route.request().url()).searchParams;
-    const mode = params.get('mode') === 'walk' ? 'walk' : 'car';
-    calls.push({ mode, from: params.get('from') ?? '', to: params.get('to') ?? '' });
-    return route.fulfill({
-      status: 200,
-      contentType: 'application/json; charset=utf-8',
-      body: ROUTE_REPLY[mode],
-    });
-  });
-  return calls;
-}
+import { mockRoutes, seedStorage } from './fixtures';
 
 /** 좁은 화면(하단 시트)인가. */
 const isCompact = (page: Page): boolean => page.viewportSize()!.width < 768;

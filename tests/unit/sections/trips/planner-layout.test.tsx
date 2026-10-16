@@ -2,7 +2,7 @@ import { cleanup, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setAppRuntimeForTest } from 'src/lib/effect/runtime';
-import { makeTrip, open, P1, plannerLibrary, withTrip } from './planner-fixtures';
+import { makeTrip, open, P1, P2, plannerLibrary, TRIP, withTrip } from './planner-fixtures';
 
 vi.mock('src/theme/fonts', () => ({ loadDisplayFont: vi.fn(() => Promise.resolve()) }));
 
@@ -149,5 +149,54 @@ describe('끌기 손잡이 크기', () => {
       expect(parseFloat(style.width)).toBeGreaterThanOrEqual(44);
       expect(parseFloat(style.minHeight || style.height)).toBeGreaterThanOrEqual(44);
     }
+  });
+});
+
+describe('오늘 일정 버튼(스펙 §3.2)', () => {
+  // 기본 여행은 2026-10-23~24(2일).
+  const todayLink = () => screen.queryByRole('link', { name: '오늘 일정' });
+  const mapPane = () => screen.getByRole('region', { name: '지도' });
+
+  it('오늘이 기간 안이면 지도 칸에 보이고 /trips/<id>/today로 간다', async () => {
+    vi.setSystemTime(new Date(2026, 9, 24, 9, 0, 0));
+    await open(lib(), { width: 1280 });
+    const link = within(mapPane()).getByRole('link', { name: '오늘 일정' });
+    expect(link).toHaveAttribute('href', `/trips/${TRIP}/today`);
+    expect(getComputedStyle(link).height).toBe('44px');
+    expect(getComputedStyle(link).left).toBe('8px');
+  });
+
+  it('기간 밖(시작 전·끝난 뒤)이면 없다', async () => {
+    await open(lib(), { width: 1280 });
+    expect(todayLink()).not.toBeInTheDocument();
+    cleanup();
+    vi.setSystemTime(new Date(2026, 9, 25, 4, 0, 0));
+    await open(lib(), { width: 1280 });
+    expect(todayLink()).not.toBeInTheDocument();
+  });
+
+  it('휴대폰에서도 지도 칸에 보인다', async () => {
+    vi.setSystemTime(new Date(2026, 9, 23, 9, 0, 0));
+    await open(lib(), { width: 375 });
+    expect(within(mapPane()).getByRole('link', { name: '오늘 일정' })).toBeInTheDocument();
+  });
+
+  it('중간 폭에서 후보 칸을 접으면 펼치기 버튼 오른쪽(왼쪽 60px)으로 비킨다', async () => {
+    vi.setSystemTime(new Date(2026, 9, 23, 9, 0, 0));
+    await open(lib(), { width: 1100 });
+    expect(getComputedStyle(todayLink()!).left).toBe('8px');
+    await userEvent.setup().click(screen.getByRole('button', { name: '후보 칸 접기' }));
+    expect(screen.getByRole('button', { name: '후보 칸 펼치기' })).toBeInTheDocument();
+    expect(getComputedStyle(todayLink()!).left).toBe('60px');
+  });
+
+  it('오프라인 안내와 겹치지 않게 안내를 버튼 아래로 내린다', async () => {
+    // 기본 하네스는 경로 조회가 늘 OFFLINE이라 안내가 뜬다.
+    vi.setSystemTime(new Date(2026, 9, 23, 9, 0, 0));
+    await open(withTrip(plannerLibrary(), makeTrip({ stops: [[P1, P2]] })), { width: 375 });
+    const notice = await within(mapPane()).findByText(
+      '인터넷에 연결되지 않아 이동 시간은 어림값이에요',
+    );
+    expect(getComputedStyle(notice).top).toBe('60px');
   });
 });

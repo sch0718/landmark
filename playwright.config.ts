@@ -50,6 +50,7 @@ export default defineConfig({
         'backup-restore.spec.ts',
         'visited-review.spec.ts',
         'nearby.spec.ts',
+        'trip-today.spec.ts',
       ],
       use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 } },
     },
@@ -68,6 +69,7 @@ export default defineConfig({
         'backup-restore.spec.ts',
         'visited-review.spec.ts',
         'nearby.spec.ts',
+        'trip-today.spec.ts',
       ],
       use: { ...devices['iPhone 13'], viewport: { width: 390, height: 844 } },
     },
@@ -84,6 +86,7 @@ export default defineConfig({
         'backup-restore.spec.ts',
         'visited-review.spec.ts',
         'nearby.spec.ts',
+        'trip-today.spec.ts',
       ],
       use: {
         ...devices['Galaxy S9+'],

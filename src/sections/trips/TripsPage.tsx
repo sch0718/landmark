@@ -13,6 +13,7 @@ import { Link, useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { EllipsisIcon } from 'src/components/icons';
 import { deleteTrip, restoreTrip } from 'src/domain/trips/ops';
+import { todayStatus } from 'src/domain/trips/today';
 import { liveTrips, localToday, visibleCandidates, visibleStops } from 'src/domain/trips/query';
 import { useDocumentTitle } from 'src/lib/use-document-title';
 import type { Library } from 'src/schema/library';
@@ -32,9 +33,13 @@ type CardProps = {
   onMenu(anchor: HTMLElement): void;
 };
 
-/** 여행 카드: 제목, 기간, 일정·후보 수. 카드를 누르면 계획 화면, 오른쪽 `⋯`은 메뉴. */
+/**
+ * 여행 카드: 제목, 기간, 일정·후보 수. 카드를 누르면 계획 화면, 오른쪽 `⋯`은 메뉴.
+ * 오늘(04:00 경계)이 기간 안이면 카드 링크 아래 줄에 `오늘 일정`(당일 모드)을 둔다(스펙 §3.1).
+ */
 function TripCard({ trip, library, onMenu }: CardProps) {
   const title = trip.title.value;
+  const during = todayStatus(trip, new Date()).kind === 'during';
   const scheduled = trip.days.reduce((sum, day) => sum + visibleStops(library, day).length, 0);
   const candidates = visibleCandidates(library, trip).length;
   const period = periodLabel(trip.startDate.value, trip.endDate.value);
@@ -74,6 +79,20 @@ function TripCard({ trip, library, onMenu }: CardProps) {
         <Box sx={{ mt: 0.5, fontSize: 13, color: 'var(--tm-text-secondary)' }}>{period}</Box>
         <Box sx={{ mt: 0.25, fontSize: 13, color: 'var(--tm-text-secondary)' }}>{counts}</Box>
       </Box>
+      {/* 카드 전체가 링크라 그 안에 넣지 않고 링크 다음 형제로 둔다(⋯ 메뉴와 같다). */}
+      {during && (
+        <Box sx={{ px: 2, pb: 1.5 }}>
+          <Button
+            component={Link}
+            to={paths.tripToday(trip.id)}
+            variant="contained"
+            aria-label={`‘${title}’ 오늘 일정`}
+            sx={{ minHeight: 44 }}
+          >
+            오늘 일정
+          </Button>
+        </Box>
+      )}
       <Box
         component="button"
         type="button"
