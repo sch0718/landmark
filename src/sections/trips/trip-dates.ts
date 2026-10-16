@@ -1,20 +1,14 @@
 import { daysBetween } from 'src/schema/trip';
 
+// `addDays`는 도메인에서도 쓰므로 스키마 쪽에 두고, 기존 import 경로를 위해 다시 내보낸다.
+export { addDays } from 'src/schema/trip';
+
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'] as const;
-const DAY_MS = 86_400_000;
 
 const parts = (date: string): [number, number, number] => {
   const [y, m, d] = date.split('-').map(Number);
   return [y!, m!, d!];
 };
-
-/** 'YYYY-MM-DD'에 `n`일을 더한다. UTC 자정 기준이라 서머타임에 흔들리지 않는다. */
-export function addDays(date: string, n: number): string {
-  const [y, m, d] = parts(date);
-  const dt = new Date(Date.UTC(y, m - 1, d) + n * DAY_MS);
-  const pad = (v: number) => String(v).padStart(2, '0');
-  return `${dt.getUTCFullYear()}-${pad(dt.getUTCMonth() + 1)}-${pad(dt.getUTCDate())}`;
-}
 
 /** `10.24(금)`. */
 export function shortDate(date: string): string {

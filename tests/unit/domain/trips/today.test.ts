@@ -217,12 +217,131 @@ describe('projectFromNow', () => {
   });
 });
 
+describe('projectFromNow 구간 자르기', () => {
+  // 구간마다 길이가 달라 `legs.slice`가 한 칸만 어긋나도 시각이 달라진다(10·20·30분).
+  const pt = (arriveMin: number, departMin: number, slackMin: number | null) => ({
+    arriveMin,
+    departMin,
+    slackMin,
+  });
+  const stops = [
+    { stayMin: 60, fixedTime: null },
+    { stayMin: 30, fixedTime: '12:00' },
+  ];
+
+  describe('출발점이 있을 때: 출발 → A(60분) → B(30분, 고정 12:00) → 도착', () => {
+    const input: ScheduleInput = {
+      startTime: '09:00',
+      hasStart: true,
+      stops,
+      hasEnd: true,
+      legs: [leg(600), leg(1200), leg(1800)],
+    };
+    const planned = computeSchedule(input);
+
+    it('계획: 출발 540 / A 550~610 / B 630(여유 90)~750 / 도착 780', () => {
+      expect(planned.points).toEqual([
+        pt(540, 540, null),
+        pt(550, 610, null),
+        pt(630, 750, 90),
+        pt(780, 780, null),
+      ]);
+    });
+
+    it('앞 지점 출발, 다음 장소 A(nextIndex 0), 지금 10:30', () => {
+      const r = projectFromNow({ input, planned, nextIndex: 0, nowMin: 630, here: false });
+      expect(r.points).toEqual([pt(640, 700, null), pt(720, 750, 0), pt(780, 780, null)]);
+      expect(r.delayMin).toBe(90);
+    });
+
+    it('앞 지점 출발, 다음 장소 B(nextIndex 1), 지금 12:10', () => {
+      const r = projectFromNow({ input, planned, nextIndex: 1, nowMin: 730, here: false });
+      expect(r.points).toEqual([pt(750, 780, -30), pt(810, 810, null)]);
+      expect(r.delayMin).toBe(120);
+    });
+
+    it('지금 여기, 다음 장소 B(nextIndex 1), 지금 12:40', () => {
+      const r = projectFromNow({ input, planned, nextIndex: 1, nowMin: 760, here: true });
+      expect(r.points).toEqual([pt(760, 790, -40), pt(820, 820, null)]);
+      expect(r.delayMin).toBe(130);
+    });
+
+    it('지금 여기, 다음 장소가 도착점(nextIndex 2)', () => {
+      const r = projectFromNow({ input, planned, nextIndex: 2, nowMin: 800, here: true });
+      expect(r.points).toEqual([pt(800, 800, null)]);
+      expect(r.delayMin).toBe(20);
+    });
+  });
+
+  describe('출발점이 없을 때: A(60분) → B(30분, 고정 12:00) → 도착', () => {
+    const input: ScheduleInput = {
+      startTime: '09:00',
+      hasStart: false,
+      stops,
+      hasEnd: true,
+      legs: [leg(1200), leg(1800)],
+    };
+    const planned = computeSchedule(input);
+
+    it('계획: A 540~600 / B 620(여유 100)~750 / 도착 780', () => {
+      expect(planned.points).toEqual([pt(540, 600, null), pt(620, 750, 100), pt(780, 780, null)]);
+    });
+
+    it('첫 Stop(nextIndex 0)은 here 여부와 상관없이 도착 = max(지금, 계획 도착)', () => {
+      for (const here of [false, true]) {
+        const r = projectFromNow({ input, planned, nextIndex: 0, nowMin: 600, here });
+        expect(r.points).toEqual([pt(600, 660, null), pt(680, 750, 40), pt(780, 780, null)]);
+        expect(r.delayMin).toBe(60);
+      }
+    });
+
+    it('두 번째 Stop(nextIndex 1): 앞 지점이 있으면 그 출발부터', () => {
+      const r = projectFromNow({ input, planned, nextIndex: 1, nowMin: 700, here: false });
+      expect(r.points).toEqual([pt(720, 750, 0), pt(780, 780, null)]);
+      expect(r.delayMin).toBe(100);
+    });
+
+    it('두 번째 Stop(nextIndex 1): 지금 여기면 도착 = max(지금, 계획 도착)', () => {
+      const r = projectFromNow({ input, planned, nextIndex: 1, nowMin: 760, here: true });
+      expect(r.points).toEqual([pt(760, 790, -40), pt(820, 820, null)]);
+      expect(r.delayMin).toBe(140);
+    });
+  });
+
+  describe('범위를 벗어난 nextIndex', () => {
+    const input: ScheduleInput = {
+      startTime: '09:00',
+      hasStart: true,
+      stops,
+      hasEnd: false,
+      legs: [leg(600), leg(1200)],
+    };
+    const planned = computeSchedule(input);
+    const empty = { points: [], delayMin: 0 };
+
+    it.each([-1, 0.5, Number.NaN])('nextIndex %s는 빈 예상', (nextIndex) => {
+      expect(projectFromNow({ input, planned, nextIndex, nowMin: 600, here: false })).toEqual(
+        empty,
+      );
+      expect(projectFromNow({ input, planned, nextIndex, nowMin: 600, here: true })).toEqual(empty);
+    });
+
+    it('도착점이 없는데 nextIndex가 stops.length이면 빈 예상', () => {
+      const args = { input, planned, nextIndex: stops.length, nowMin: 600 };
+      expect(projectFromNow({ ...args, here: false })).toEqual(empty);
+      expect(projectFromNow({ ...args, here: true })).toEqual(empty);
+    });
+  });
+});
+
 describe('위치 판정', () => {
   const place = { lng: 128.6, lat: 37.7 };
-  // 위도 1도 ≈ 111,195m. 정북으로 meters만큼 떨어진 위치.
+  // 위도 1도의 길이. haversineM과 같은 지구 반지름을 써서 경계(정확히 150m)가 맞는다.
+  const METERS_PER_DEG_LAT = (6_371_008.8 * Math.PI) / 180;
+  // 정북으로 meters만큼 떨어진 위치.
   const north = (meters: number, accuracyM = 10, at = 0): GeoFix => ({
     lng: place.lng,
-    lat: place.lat + meters / 111_195,
+    lat: place.lat + meters / METERS_PER_DEG_LAT,
     accuracyM,
     at,
   });
@@ -233,6 +352,7 @@ describe('위치 판정', () => {
 
   it('isNear 경계', () => {
     expect(isNear(north(149, 200), place)).toBe(true);
+    expect(isNear(north(150, 200), place)).toBe(true);
     expect(isNear(north(149, 201), place)).toBe(false);
     expect(isNear(north(151, 10), place)).toBe(false);
     expect(isNear(north(0, 10), place)).toBe(true);

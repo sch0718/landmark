@@ -1,5 +1,4 @@
-import { addDays } from 'src/sections/trips/trip-dates';
-import { daysBetween, type Trip } from 'src/schema/trip';
+import { addDays, daysBetween, type Trip } from 'src/schema/trip';
 import type { GeoFix } from 'src/services/geolocation';
 import { haversineM } from 'src/domain/trips/geo';
 import {
@@ -93,7 +92,7 @@ export function pickNext(visited: readonly boolean[]): NextPick {
 export type Projection = {
   /** 다음 장소부터 그날 끝(도착점 포함)까지의 예상 시각. */
   points: PointTime[];
-  /** 다음 장소의 예상 도착 − 계획 도착(분). 음수일 수도 있다. */
+  /** 다음 장소의 예상 도착 − 계획 도착(분). 분 반올림 때문에 ±1분 흔들릴 수 있다(자르지 않는다). */
   delayMin: number;
 };
 
@@ -111,7 +110,9 @@ export function projectFromNow(args: {
 }): Projection {
   const { input, planned, nextIndex, nowMin, here } = args;
   const offset = input.hasStart ? 1 : 0;
-  const nextPlanned = planned.points[offset + nextIndex];
+  // 자리가 음수·소수이거나 점 범위를 벗어나면 예상할 것이 없다.
+  const nextPlanned =
+    Number.isInteger(nextIndex) && nextIndex >= 0 ? planned.points[offset + nextIndex] : undefined;
   if (nextPlanned === undefined) return { points: [], delayMin: 0 };
 
   const previous =

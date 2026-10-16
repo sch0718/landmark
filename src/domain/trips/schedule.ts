@@ -52,9 +52,12 @@ function safeMin(value: number | null): number {
 
 export function computeSchedule(input: ScheduleInput): DaySchedule {
   const { hasStart, hasEnd, stops, legs } = input;
-  const hasStartMin =
-    input.startMin !== undefined && Number.isFinite(input.startMin) && input.startMin >= 0;
-  const startSec = (hasStartMin ? input.startMin! : (parseClock(input.startTime) ?? 0)) * 60;
+  const { startMin } = input;
+  const startAtMin =
+    typeof startMin === 'number' && Number.isFinite(startMin) && startMin >= 0
+      ? startMin
+      : (parseClock(input.startTime) ?? 0);
+  const startSec = startAtMin * 60;
   const pointCount = (hasStart ? 1 : 0) + stops.length + (hasEnd ? 1 : 0);
   const legCount = Math.max(0, pointCount - 1);
   // 남는 구간은 무시해 점과 구간의 짝을 지킨다(합계에도 넣지 않는다).
