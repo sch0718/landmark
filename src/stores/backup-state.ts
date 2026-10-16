@@ -15,7 +15,7 @@ import { NoPrevious, PreviousNotKept, StorageQuotaExceeded } from 'src/services/
 import { LibraryStore } from 'src/services/library-store';
 import { queryDraftAtom } from 'src/stores/library-query-draft';
 import { libraryAtom, reflectSaved } from 'src/stores/library-state';
-import { setPrefsAtom } from 'src/stores/prefs-state';
+import { prefsAtom, setPrefsAtom } from 'src/stores/prefs-state';
 
 /** 저장된 백업 기록. localStorage를 동기로 읽으므로 첫 렌더 전에 읽을 수 있다. */
 const readSavedMeta = (): BackupMeta => {
@@ -152,13 +152,12 @@ export function useRestoreActions() {
       // 이 세션에서 바꾼 필터(메모리상의 초안)가 남아 되살린 장소를 가리지 않게 비운다.
       // 대기 중이던 저장도 초안이 없으면 아무것도 쓰지 않는다.
       await afterSaved(() => jotaiStore.set(queryDraftAtom, null));
-      if (backup.prefs !== null) {
-        const { prefs } = backup;
-        // 되살린 뒤 필터 때문에 목록이 비어 보이지 않게 `query`는 기본값으로 둔다.
-        await afterSaved(() =>
-          jotaiStore.set(setPrefsAtom, { ...prefs, query: structuredClone(DEFAULT_QUERY) }),
-        );
-      }
+      // 되살린 뒤 필터 때문에 목록이 비어 보이지 않게 `query`는 기본값으로 둔다.
+      // 백업에 선호가 없으면(옛 파일) 지금 선호에서 `query`만 바꾼다.
+      const prefs = backup.prefs ?? jotaiStore.get(prefsAtom);
+      await afterSaved(() =>
+        jotaiStore.set(setPrefsAtom, { ...prefs, query: structuredClone(DEFAULT_QUERY) }),
+      );
       const { exportedAt } = backup;
       // 그 파일이 이미 있으므로, 기록보다 늦게 만든 백업이면 마지막 백업으로 본다.
       await afterSaved(() => {

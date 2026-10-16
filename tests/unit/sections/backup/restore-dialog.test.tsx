@@ -104,6 +104,21 @@ const storedLibrary = (storage: Storage) => JSON.parse(storage.getItem(LIBRARY_K
 
 const user = () => userEvent.setup({ applyAccept: false });
 
+/** 필터가 저장돼 있는 선호(테마 night·목록 보기)를 미리 심은 저장소. */
+function seededStorage(): Storage {
+  const storage = createMemoryStorage();
+  storage.setItem(
+    PREFS_KEY,
+    JSON.stringify({
+      ...structuredClone(DEFAULT_PREFS),
+      theme: 'night',
+      libraryView: 'list',
+      query: { ...structuredClone(DEFAULT_QUERY), text: '없는이름' },
+    }),
+  );
+  return storage;
+}
+
 const openSettings = (library: Library = sampleLibrary(), storage?: Storage) =>
   renderLibrary(library, { path: '/settings', storage });
 const section = () => screen.getByRole('region', { name: '백업' });
@@ -277,6 +292,22 @@ describe('RestoreDialog (설정)', () => {
     expect(
       within(screen.getByRole('list', { name: '장소 목록' })).getAllByRole('button').length,
     ).toBeGreaterThan(0);
+  });
+
+  it('a backup without prefs still resets the saved filters and keeps the other prefs', async () => {
+    const u = user();
+    const { storage } = await openSettings(sampleLibrary(), seededStorage());
+    await openDialog(u);
+    await pick(u, backupFile(fileLibrary(), null));
+    await u.click(await within(dialog()).findByRole('button', { name: '이 백업으로 바꾸기' }));
+    await waitClosed();
+
+    await waitFor(() => {
+      const prefs = JSON.parse(storage.getItem(PREFS_KEY)!) as Prefs;
+      expect(prefs.query).toEqual(DEFAULT_QUERY);
+      expect(prefs.libraryView).toBe('list');
+      expect(prefs.theme).toBe('night');
+    });
   });
 
   it('a full storage keeps the library and asks to download first; after downloading it replaces without undo', async () => {
