@@ -258,6 +258,35 @@ describe('computeSchedule', () => {
   });
 });
 
+describe('computeSchedule startMin', () => {
+  it('startMin이 있으면 startTime 대신 그 분에서 시작한다(1440 이상 포함)', () => {
+    const s = computeSchedule({
+      startTime: '09:00',
+      startMin: 1450,
+      hasStart: true,
+      stops: [{ stayMin: 30, fixedTime: null }],
+      hasEnd: false,
+      legs: [leg(600)],
+    });
+    expect(s.points.map((p) => p.arriveMin)).toEqual([1450, 1460]);
+  });
+
+  it.each([Number.NaN, -5, Number.POSITIVE_INFINITY])(
+    'startMin이 %s이면 startTime을 쓴다',
+    (startMin) => {
+      const s = computeSchedule({
+        startTime: '09:00',
+        startMin,
+        hasStart: true,
+        stops: [{ stayMin: 30, fixedTime: null }],
+        hasEnd: false,
+        legs: [leg(600)],
+      });
+      expect(s.points[0]!.arriveMin).toBe(540);
+    },
+  );
+});
+
 describe('formatClock', () => {
   it('같은 날은 HH:mm', () => {
     expect(formatClock(640)).toBe('10:40');

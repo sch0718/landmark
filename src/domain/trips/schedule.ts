@@ -19,6 +19,11 @@ export type DaySchedule = {
 
 export type ScheduleInput = {
   startTime: string; // 'HH:mm'
+  /**
+   * 시작 시각(Day 0시 기준 절대 분, 1440 이상 가능). 유한하고 0 이상이면 `startTime` 대신 쓴다.
+   * 당일 모드가 "지금 나서면"을 계산할 때 준다. 고정 시각 비교는 그대로 같은 날 HH:mm 기준이다.
+   */
+  startMin?: number;
   /** 출발점(출발지/숙소)이 있는가. 있으면 points[0]이 출발점이다. */
   hasStart: boolean;
   stops: { stayMin: number | null; fixedTime: string | null }[];
@@ -47,7 +52,9 @@ function safeMin(value: number | null): number {
 
 export function computeSchedule(input: ScheduleInput): DaySchedule {
   const { hasStart, hasEnd, stops, legs } = input;
-  const startSec = (parseClock(input.startTime) ?? 0) * 60;
+  const hasStartMin =
+    input.startMin !== undefined && Number.isFinite(input.startMin) && input.startMin >= 0;
+  const startSec = (hasStartMin ? input.startMin! : (parseClock(input.startTime) ?? 0)) * 60;
   const pointCount = (hasStart ? 1 : 0) + stops.length + (hasEnd ? 1 : 0);
   const legCount = Math.max(0, pointCount - 1);
   // 남는 구간은 무시해 점과 구간의 짝을 지킨다(합계에도 넣지 않는다).
