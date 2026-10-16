@@ -366,6 +366,24 @@ describe('visited sort', () => {
     expect(screen.getByRole('button', { name: '다녀온 날순' })).toBeInTheDocument();
   });
 
+  it('keeps 다녀온 날순 on when 필터 지우기 clears the filters', async () => {
+    const user = userEvent.setup();
+    await renderLibrary(visitedLibrary(), { prefs: LIST });
+    await user.click(screen.getByRole('button', { name: '최근 저장순' }));
+    await user.click(screen.getByRole('menuitemradio', { name: '다녀온 날순' }));
+    // 다녀온 카페(2개 중 1곳)를 '안 가 본 곳'으로 거르면 비어서 `필터 지우기`가 나온다.
+    await user.click(screen.getByRole('button', { name: /^카페 / }));
+    await user.click(screen.getByRole('button', { name: /^안 가 본 곳 / }));
+    expect(screen.getByText('조건에 맞는 장소가 없어요')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '필터 지우기' }));
+    expect(screen.getByRole('button', { name: '다녀온 날순' })).toBeInTheDocument();
+    expect(shown().slice(0, 2)).toEqual([
+      expect.stringContaining('안목 카페거리'),
+      expect.stringContaining('중앙시장 닭강정'),
+    ]);
+  });
+
   it('starts over as the saved sort in a fresh store', async () => {
     const storage = createMemoryStorage();
     const user = userEvent.setup();

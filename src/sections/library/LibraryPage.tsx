@@ -210,7 +210,8 @@ export function LibraryPage() {
     if (n === 0) return;
     toast(`${n}곳의 다녀옴 표시를 지웠어요`, { duration: UNDO_MS, action: undoVisited(prevById) });
   };
-  const clearFilters = () => patch({ ...DEFAULT_QUERY, sort: query.sort });
+  // 정렬은 그대로 둔다. `patch`를 거치면 저장되지 않는 `다녀온 날순`이 꺼지므로 `patchQuery`로 직접 쓴다.
+  const clearFilters = () => patchQuery({ ...DEFAULT_QUERY, sort: query.sort });
   // 고른 장소를 기존 여행의 후보에 더한다. 이미 그 여행에 있는 곳은 건너뛰고 새로 넣은 수만 알린다.
   // 저장이 끝나기 전에 또 누르면(두 번 탭) 무시한다. 토스트가 두 번 뜨지 않게.
   const addingToTrip = useRef(false);
