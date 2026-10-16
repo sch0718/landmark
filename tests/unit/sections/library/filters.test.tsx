@@ -324,9 +324,14 @@ describe('visited sort', () => {
       expect.stringContaining('중앙시장 닭강정'),
     ]);
     // 저장되는 정렬은 그대로다(옛 버전이 읽어도 선호가 깨지지 않는다).
-    await act(async () => void (await Promise.resolve()));
-    const saved = storage.getItem(PREFS_KEY);
-    if (saved !== null) expect(JSON.parse(saved).query.sort).toBe('recent');
+    // 다른 필터를 바꿔 저장을 일으킨 뒤 읽는다(정렬만 바꿔서는 저장이 일어나지 않는다).
+    press(visitChip('가 본 곳 2'));
+    await act(async () => {
+      vi.advanceTimersByTime(QUERY_PERSIST_DELAY_MS + 100);
+      await Promise.resolve();
+    });
+    expect(JSON.parse(storage.getItem(PREFS_KEY)!).query.sort).toBe('recent');
+    press(visitChip('가 본 곳 2')); // 필터를 다시 꺼서 아래 확인이 같은 목록을 본다
 
     press(screen.getByRole('button', { name: '다녀온 날순' }));
     expect(screen.getByRole('menuitemradio', { name: '다녀온 날순' })).toHaveAttribute(
