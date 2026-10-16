@@ -12,6 +12,7 @@ import { LegacyTripSource } from 'src/services/legacy-trip-source';
 import { LibraryStore } from 'src/services/library-store';
 import { PlaceLookup } from 'src/services/place-lookup';
 import { PREFS_KEY, PrefsStore } from 'src/services/prefs-store';
+import { Geolocation } from 'src/services/geolocation';
 import { ReverseGeocoder } from 'src/services/reverse-geocoder';
 import { RouteLookup } from 'src/services/route-lookup';
 import { ShareTemplate } from 'src/services/share-template';
@@ -35,6 +36,7 @@ function setup() {
       PlaceLookup.layer,
       ReverseGeocoder.layer,
       RouteLookup.layer,
+      Geolocation.layerWith({ api: undefined, secure: true }),
     ),
   );
   setAppRuntimeForTest(runtime);

@@ -14,6 +14,7 @@ import { PlaceLookupError, RouteLookupError } from 'src/services/errors';
 import { LibraryStore } from 'src/services/library-store';
 import { PlaceLookup } from 'src/services/place-lookup';
 import { PrefsStore } from 'src/services/prefs-store';
+import { Geolocation } from 'src/services/geolocation';
 import { ReverseGeocoder } from 'src/services/reverse-geocoder';
 import { RouteLookup } from 'src/services/route-lookup';
 import { ShareTemplate } from 'src/services/share-template';
@@ -76,6 +77,9 @@ const NULL_REVERSE_GEOCODER = Layer.succeed(
   ReverseGeocoder.of({ reverse: () => Effect.succeed(null) }),
 );
 
+/** 테스트 기본 위치: 위치 API 없음(`unsupported`). */
+const UNSUPPORTED_GEOLOCATION = Geolocation.layerWith({ api: undefined, secure: true });
+
 /** 실제 라우트 표를 메모리 라우터로 그린다. 저장소는 `storage`(없으면 메모리 모드). */
 export async function renderApp(
   options: {
@@ -93,6 +97,8 @@ export async function renderApp(
     routeLookup?: Layer.Layer<RouteLookup>;
     /** 주소 변환 가짜 레이어. 없으면 늘 null을 돌려준다. */
     reverseGeocoder?: Layer.Layer<ReverseGeocoder>;
+    /** 위치 서비스 레이어. 없으면 위치 API가 없는 것(`unsupported`)으로 둔다. */
+    geolocation?: Layer.Layer<Geolocation>;
     /**
      * 화면 파일(여행·설정·라벨·옛 여행 가져오기)을 그리기 전에 미리 받아 둔다(기본 true). 실제 앱의 미리 받기와
      * 같은 효과라 `React.lazy`가 첫 그림에서 바로 풀린다. 받는 동안의 화면이나 받기 실패를 볼 때만 끈다.
@@ -113,6 +119,7 @@ export async function renderApp(
     placeLookup = OFFLINE_PLACE_LOOKUP,
     routeLookup = OFFLINE_ROUTE_LOOKUP,
     reverseGeocoder = NULL_REVERSE_GEOCODER,
+    geolocation = UNSUPPORTED_GEOLOCATION,
     preloadRoutes = true,
     preloadPanels = true,
   } = options;
@@ -139,6 +146,7 @@ export async function renderApp(
         placeLookup,
         routeLookup,
         reverseGeocoder,
+        geolocation,
       ),
     ),
   );
