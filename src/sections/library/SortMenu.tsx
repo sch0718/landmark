@@ -1,7 +1,7 @@
 import Box from '@mui/material/Box';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
-import { useId, useState } from 'react';
+import { useId, useState, type Ref } from 'react';
 import type { LibraryQuery } from 'src/domain/library/query';
 
 const SORTS: ReadonlyArray<{ value: LibraryQuery['sort']; label: string }> = [
@@ -27,9 +27,19 @@ type Props = {
   onVisitedSort(): void;
   /** `가까운 순`을 골랐다. 부른 쪽이 `다녀온 날순`을 끄고 위치를 묻는다. */
   onNearby(): void;
+  /** 메뉴를 여는 단추. 근처 줄의 ×처럼 사라지는 단추가 포커스를 여기로 넘길 때 쓴다. */
+  buttonRef?: Ref<HTMLButtonElement>;
 };
 
-export function SortMenu({ value, visitedSort, nearby, onChange, onVisitedSort, onNearby }: Props) {
+export function SortMenu({
+  value,
+  visitedSort,
+  nearby,
+  onChange,
+  onVisitedSort,
+  onNearby,
+  buttonRef,
+}: Props) {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const menuId = useId();
   const current = SORTS.find((s) => s.value === value) ?? SORTS[0]!;
@@ -40,6 +50,7 @@ export function SortMenu({ value, visitedSort, nearby, onChange, onVisitedSort, 
   return (
     <>
       <Box
+        ref={buttonRef}
         component="button"
         type="button"
         aria-haspopup="menu"

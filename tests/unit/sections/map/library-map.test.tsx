@@ -737,6 +737,8 @@ describe('library map 좁은 화면의 근처 칩', () => {
     await user.click(off);
 
     await waitFor(() => expect(screen.queryByText(/^내 근처/)).not.toBeInTheDocument());
+    // ×가 사라지므로 포커스는 같은 칩 줄의 다음 칩(방문 묶음의 첫 칩)으로 옮긴다.
+    expect(document.activeElement).toBe(within(visit).getAllByRole('button')[0]);
     await waitFor(() => expect(shownMarkers().sort()).toEqual([1, 2, 3, 4].map(id)));
     expect(dot()).toBeInTheDocument();
   });
@@ -760,6 +762,15 @@ describe('library map 좁은 화면의 근처 칩', () => {
 
     expect(await screen.findByText('내 근처')).toBeInTheDocument();
     expect(shownMarkers()).toHaveLength(4);
+
+    // 방문 묶음이 없으면 포커스는 라벨 묶음의 첫 칩으로 간다.
+    await user.click(screen.getByRole('button', { name: '가까운 순 끄기' }));
+    await waitFor(() => expect(screen.queryByText('내 근처')).not.toBeInTheDocument());
+    expect(document.activeElement).toBe(
+      within(screen.getByRole('group', { name: '라벨' })).getByRole('button', {
+        name: '모두 포함',
+      }),
+    );
   });
 
   it('근처 모드가 아니면 칩이 없다', async () => {

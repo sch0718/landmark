@@ -43,7 +43,7 @@ import { candidatesNotice } from 'src/sections/trips/candidate-notice';
 import { TripFormDialog } from 'src/sections/trips/TripFormDialog';
 import { TripPickerDialog } from 'src/sections/trips/TripPickerDialog';
 import type { Trip } from 'src/schema/trip';
-import { NearbyBar } from 'src/sections/nearby/NearbyBar';
+import { NearbyBar, type NearbyBarHandle } from 'src/sections/nearby/NearbyBar';
 import { useNearby, useStartNearby } from 'src/sections/nearby/use-nearby';
 import { ExportHtmlDialogHost } from 'src/sections/share-export/ExportHtmlDialogHost';
 import { exportTargets } from 'src/sections/share-export/export-targets';
@@ -90,6 +90,9 @@ export function LibraryPage() {
   const [visitedSort, setVisitedSort] = useAtom(visitedSortAtom);
   const [nearbyState, setNearby] = useAtom(nearbyAtom);
   const nearbyOff = useSetAtom(nearbyOffAtom);
+  // 근처 줄의 ×·빈 상태의 `반경 넓히기`는 누르면 사라질 수 있어, 포커스를 남는 단추로 옮긴다.
+  const sortButtonRef = useRef<HTMLButtonElement>(null);
+  const nearbyBarRef = useRef<NearbyBarHandle>(null);
   const startNearby = useStartNearby();
   // 저장되는 정렬을 고르면 저장하지 않는 `다녀온 날순`·`가까운 순`은 꺼진다(같은 값을 다시 골라도).
   const patch = useCallback(
@@ -304,12 +307,17 @@ export function LibraryPage() {
           }}
           nearby={nearbyState.on}
           onNearby={startNearby}
+          sortButtonRef={sortButtonRef}
           view={view}
           onViewChange={changeView}
           onExport={() => setExporting(true)}
           onCreateRegionTrip={createRegionTrip}
         />
-        <NearbyBar count={places.length} />
+        <NearbyBar
+          ref={nearbyBarRef}
+          count={places.length}
+          onTurnedOff={() => sortButtonRef.current?.focus()}
+        />
       </Box>
       <Box ref={setScrollElement} sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
         <Box>
@@ -323,9 +331,11 @@ export function LibraryPage() {
               <EmptyState
                 title={`반경 ${radiusLabel(nearby.radiusM)} 안에 저장한 곳이 없어요`}
                 actionLabel="반경 넓히기"
-                onAction={() =>
-                  setNearby((prev) => ({ ...prev, radiusM: nextRadius(prev.radiusM) }))
-                }
+                onAction={() => {
+                  const radiusM = nextRadius(nearbyState.radiusM);
+                  setNearby((prev) => ({ ...prev, radiusM }));
+                  nearbyBarRef.current?.focusRadius(radiusM);
+                }}
               />
             ) : (
               <EmptyState

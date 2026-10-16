@@ -301,6 +301,59 @@ describe('library 가까운 순', () => {
     expect(order()).toEqual(['가 식당', '나 식당', '다 카페', '라 카페']);
   });
 
+  it('keeps the time the distances are based on when a re-search fails', async () => {
+    const user = userEvent.setup();
+    const { fake } = await setup();
+    await startNearby(user, fake);
+    const UNAVAILABLE = '지금은 위치를 알 수 없어요. 잠시 뒤 다시 해 주세요';
+    await act(async () => fake.fail(0, 2));
+    // 아직 얻은 위치가 없으면 기준 문장도 없다.
+    expect(statusOf(UNAVAILABLE)).not.toBeNull();
+    expect(screen.queryByText(/기준$/)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '다시 시도' }));
+    await waitFor(() => expect(fake.requests).toHaveLength(2));
+    await answer(fake, BASE, 1);
+    await user.click(screen.getByRole('button', { name: '다시 찾기' }));
+    await waitFor(() => expect(fake.requests).toHaveLength(3));
+    await act(async () => fake.fail(2, 2));
+
+    // 목록은 지난 위치 기준 그대로이고, 그 기준 시각을 오류 문장 아래에 남긴다.
+    const status = statusOf(UNAVAILABLE)!;
+    expect(status).toHaveTextContent('내 위치에서 3km 안 · 2곳 · 14:05 기준');
+    expect(order()).toEqual(['가 식당', '라 카페']);
+    expect(screen.getByRole('button', { name: '다시 시도' })).toBeInTheDocument();
+  });
+
+  it('moves focus to the sort button after the close button', async () => {
+    const user = userEvent.setup();
+    const { fake } = await setup();
+    await startNearby(user, fake);
+    await answer(fake);
+
+    await user.click(screen.getByRole('button', { name: '가까운 순 끄기' }));
+
+    expect(nearbyBarShown()).toBe(false);
+    expect(document.activeElement).toBe(sortButton('최근 저장순'));
+  });
+
+  it('moves focus to the new radius chip after 반경 넓히기', async () => {
+    const user = userEvent.setup();
+    const { fake } = await setup({ library: nearbyLibrary({ dropNearest: true }) });
+    await startNearby(user, fake);
+    await answer(fake);
+    await user.click(radiusChip('500m'));
+
+    await user.click(screen.getByRole('button', { name: '반경 넓히기' }));
+    expect(document.activeElement).toBe(radiusChip('1km'));
+    await user.click(screen.getByRole('button', { name: '반경 넓히기' }));
+
+    // 3km 안에는 장소가 있어 빈 상태(와 그 단추)가 사라진다. 포커스는 새 반경 칩에 있다.
+    expect(screen.queryByRole('button', { name: '반경 넓히기' })).not.toBeInTheDocument();
+    expect(radiusChip('3km')).toHaveAttribute('aria-pressed', 'true');
+    expect(document.activeElement).toBe(radiusChip('3km'));
+  });
+
   it('가까운 순 and 다녀온 날순 switch each other off', async () => {
     const user = userEvent.setup();
     const { fake } = await setup({ library: nearbyLibrary({ visited: true }) });
