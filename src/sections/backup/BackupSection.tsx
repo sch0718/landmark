@@ -3,25 +3,17 @@ import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import { useAtomValue } from 'jotai';
 import { useRef, useState } from 'react';
-import { countsText, formatLocalDateTime } from 'src/domain/backup/summary';
+import { calendarDaysAgo, countsText, formatLocalDateTime } from 'src/domain/backup/summary';
 import { useBackupFile } from 'src/sections/backup/use-backup-file';
 import { backupMetaAtom, usePreviousCopy, useRestoreActions } from 'src/stores/backup-state';
 
 const DESCRIPTION =
   '보관함(장소·라벨·여행)은 이 기기의 브라우저에만 저장돼요. 브라우저는 오래 쓰지 않은 사이트의 데이터를 지울 수 있어요(특히 아이폰 사파리). 가끔 백업 파일을 받아 두세요.';
 
-/** 이 기기 시간의 달력 날짜 차이(같은 날이면 0). 서머타임으로 하루가 23·25시간이어도 반올림으로 맞춘다. */
-function daysAgo(iso: string, now: Date): number {
-  const then = new Date(iso);
-  const a = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
-  const b = Date.UTC(then.getFullYear(), then.getMonth(), then.getDate());
-  return Math.max(0, Math.round((a - b) / 86_400_000));
-}
-
 /** `마지막 백업: YYYY.MM.DD HH:mm (N일 전)` / `(오늘)` / `마지막 백업: 없음`. */
 function lastBackupText(lastBackupAt: string | null, now: Date): string {
   if (lastBackupAt === null) return '마지막 백업: 없음';
-  const days = daysAgo(lastBackupAt, now);
+  const days = calendarDaysAgo(lastBackupAt, now);
   return `마지막 백업: ${formatLocalDateTime(lastBackupAt)} (${days === 0 ? '오늘' : `${days}일 전`})`;
 }
 

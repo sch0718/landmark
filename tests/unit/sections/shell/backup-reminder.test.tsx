@@ -140,6 +140,20 @@ describe('BackupReminder', () => {
     expect(within(banner()!).getByText(STALE)).toBeInTheDocument();
   });
 
+  it('counts days as calendar days in device time, same as the settings line', async () => {
+    // 10/6 23:00 → 10/14 01:00: 경과 7일 2시간(내림 7), 달력으로는 8일 차이.
+    vi.setSystemTime(new Date(2026, 9, 14, 1, 0));
+    const storage = createMemoryStorage();
+    storage.setItem(
+      BACKUP_META_KEY,
+      JSON.stringify({ lastBackupAt: new Date(2026, 9, 6, 23, 0).toISOString(), snoozedAt: null }),
+    );
+    await renderLibrary(sampleLibrary(), { path: '/', storage });
+    expect(
+      within(banner()!).getByText('마지막 백업이 8일 전이에요. 그 뒤로 바뀐 내용이 있어요'),
+    ).toBeInTheDocument();
+  });
+
   it('is hidden in memory mode', async () => {
     const { store } = await renderLibrary(sampleLibrary(), { path: '/' });
     expect(banner()).not.toBeNull();

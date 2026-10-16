@@ -85,6 +85,27 @@ describe('reminderState', () => {
     ).toEqual({ kind: 'stale', days: 9 });
   });
 
+  it('stale의 일수는 이 기기 시간의 달력 날짜 차이다(경과 시간의 내림이 아니다)', () => {
+    // 10/8 23:00 → 10/16 01:00: 경과 7일 2시간(내림 7), 달력으로는 8일 차이.
+    const backup = new Date(2026, 9, 8, 23, 0).getTime();
+    const now = new Date(2026, 9, 16, 1, 0).getTime();
+    const changed = makeLibrary({ places: [place(1, { memo: f('수정', iso(backup + HOUR)) })] });
+    const meta: BackupMeta = { lastBackupAt: iso(backup), snoozedAt: null };
+    expect(reminderState({ library: changed, meta, persistence: 'local', now })).toEqual({
+      kind: 'stale',
+      days: 8,
+    });
+    // 임계는 경과 시간 기준 그대로: 6일 23시간이면 아직 null.
+    expect(
+      reminderState({
+        library: changed,
+        meta,
+        persistence: 'local',
+        now: backup + 7 * DAY - HOUR,
+      }),
+    ).toBeNull();
+  });
+
   it('미룸: 3일 전이면 null, 7일 전이면 다시 보인다', () => {
     const now = t0 + 20 * DAY;
     const at = (ago: number): BackupMeta => ({ lastBackupAt: null, snoozedAt: iso(now - ago) });

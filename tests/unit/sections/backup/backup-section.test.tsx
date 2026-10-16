@@ -83,6 +83,16 @@ describe('BackupSection', () => {
     );
   });
 
+  it('counts calendar days in device time, not floored elapsed time', async () => {
+    // 10/8 23:00 → 10/16 01:00: 경과 7일 2시간(내림 7), 달력으로는 8일 차이.
+    vi.setSystemTime(new Date(2026, 9, 16, 1, 0));
+    const last = new Date(2026, 9, 8, 23, 0).toISOString();
+    const storage = createMemoryStorage();
+    storage.setItem(BACKUP_META_KEY, JSON.stringify({ lastBackupAt: last, snoozedAt: null }));
+    await open(storage);
+    expect(statusLine()).toHaveTextContent(`마지막 백업: ${formatLocalDateTime(last)} (8일 전)`);
+  });
+
   it('says "오늘" for a backup from the same day', async () => {
     const storage = createMemoryStorage();
     storage.setItem(BACKUP_META_KEY, JSON.stringify({ lastBackupAt: NOW, snoozedAt: null }));

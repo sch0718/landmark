@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   countsText,
   earliestCreatedAt,
+  calendarDaysAgo,
   formatLocalDateTime,
   hasAnyEntry,
   hasLiveContent,
@@ -100,5 +101,23 @@ describe('formatLocalDateTime', () => {
     expect(formatLocalDateTime(iso)).toBe(
       `${d.getFullYear()}.${p(d.getMonth() + 1)}.${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`,
     );
+  });
+});
+
+describe('calendarDaysAgo', () => {
+  it('이 기기 시간의 달력 날짜 차이: 같은 날 0, 자정을 넘기면 1', () => {
+    const then = new Date(2026, 9, 15, 23, 50).toISOString();
+    expect(calendarDaysAgo(then, new Date(2026, 9, 15, 23, 59))).toBe(0);
+    expect(calendarDaysAgo(then, new Date(2026, 9, 16, 0, 10))).toBe(1);
+  });
+
+  it('경과 시간의 내림과 다르다: 7일 2시간 경과가 8일 차이', () => {
+    const then = new Date(2026, 9, 8, 23, 0).toISOString();
+    expect(calendarDaysAgo(then, new Date(2026, 9, 16, 1, 0))).toBe(8);
+  });
+
+  it('미래 시각은 0으로 막는다', () => {
+    const then = new Date(2026, 9, 17, 9, 0).toISOString();
+    expect(calendarDaysAgo(then, new Date(2026, 9, 16, 9, 0))).toBe(0);
   });
 });

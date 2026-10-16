@@ -81,3 +81,14 @@ export function formatLocalDateTime(iso: string): string {
   const date = `${d.getFullYear()}.${pad2(d.getMonth() + 1)}.${pad2(d.getDate())}`;
   return `${date} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 }
+
+/**
+ * 이 기기 시간의 달력 날짜 차이(같은 날이면 0, 미래면 0). 알림 띠와 설정 칸이 같은 규칙으로 "N일 전"을 보이게
+ * 여기 하나만 둔다. 서머타임으로 하루가 23·25시간이어도 반올림으로 맞춘다.
+ */
+export function calendarDaysAgo(iso: string, now: Date): number {
+  const then = new Date(iso);
+  const a = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  const b = Date.UTC(then.getFullYear(), then.getMonth(), then.getDate());
+  return Math.max(0, Math.round((a - b) / 86_400_000));
+}

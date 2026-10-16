@@ -1,4 +1,9 @@
-import { earliestCreatedAt, latestChangeAt, libraryCounts } from 'src/domain/backup/summary';
+import {
+  calendarDaysAgo,
+  earliestCreatedAt,
+  latestChangeAt,
+  libraryCounts,
+} from 'src/domain/backup/summary';
 import type { BackupMeta } from 'src/schema/backup';
 import type { Library } from 'src/schema/library';
 
@@ -36,7 +41,10 @@ export function reminderState(input: {
   }
   if (changedAt <= meta.lastBackupAt) return null;
   const elapsed = now - Date.parse(meta.lastBackupAt);
-  return elapsed >= limit ? { kind: 'stale', days: Math.floor(elapsed / DAY_MS) } : null;
+  // 임계는 경과 시간, 보이는 일수는 달력 날짜 차이(설정 칸과 같은 규칙).
+  return elapsed >= limit
+    ? { kind: 'stale', days: calendarDaysAgo(meta.lastBackupAt, new Date(now)) }
+    : null;
 }
 
 export function reminderText(state: Exclude<ReminderState, null>): string {
