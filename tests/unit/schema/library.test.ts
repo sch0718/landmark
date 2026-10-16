@@ -226,6 +226,7 @@ describe('constants', () => {
     expect(LABEL_ICONS[31]).toBe('flag');
     expect(LIBRARY_LIMITS).toEqual({
       memoChars: 10_000,
+      reviewChars: 140,
       labelNameChars: 30,
       libraryChars: 4_000_000,
       tripTitleChars: 60,

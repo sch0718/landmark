@@ -1,5 +1,5 @@
 import { Schema } from 'effect';
-import { IsoDateTime, Lat, Lng, PlaceKey, PublicId } from 'src/schema/common';
+import { CalendarDate, IsoDateTime, Lat, Lng, PlaceKey, PublicId } from 'src/schema/common';
 import { LABEL_COLORS } from 'src/schema/label-colors';
 import { FieldSchema, LIBRARY_LIMITS, PlaceId } from 'src/schema/library-base';
 import { checkTrip, TripSchema } from 'src/schema/trip';
@@ -85,6 +85,11 @@ export const PlaceSchema = Schema.Struct({
   labelIds: FieldSchema(Schema.Array(LabelId)),
   memo: FieldSchema(Schema.String.check(Schema.isMaxLength(LIBRARY_LIMITS.memoChars))),
   saved: FieldSchema(Schema.Boolean),
+  // 선택 필드: 옛 문서에는 키가 없고, 처음 쓸 때 생긴다. `visitedOn: null`은 "다녀옴 취소"를 LWW로 전하는 값이다.
+  visitedOn: Schema.optional(FieldSchema(Schema.NullOr(CalendarDate))),
+  review: Schema.optional(
+    FieldSchema(Schema.String.check(Schema.isMaxLength(LIBRARY_LIMITS.reviewChars))),
+  ),
   createdAt: IsoDateTime,
   deletedAt: Schema.NullOr(IsoDateTime),
 });

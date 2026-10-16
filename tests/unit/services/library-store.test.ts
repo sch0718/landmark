@@ -366,6 +366,26 @@ describe('LibraryStore.update', () => {
     }),
   );
 
+  it.effect('visitedOn·review가 있는 문서를 메모만 고쳐도 두 필드가 그대로 저장된다', () =>
+    Effect.gen(function* () {
+      const storage = createMemoryStorage();
+      const held = createHeldLocks();
+      const visitedOn = f<string | null>('2026-10-12');
+      const review = f('일출이 좋음');
+      seed(storage, libraryOf(place(P1, { visitedOn, review })));
+      yield* withStore({ storage, locks: held.locks }, (s) =>
+        Effect.gen(function* () {
+          yield* s.load;
+          yield* s.update((lib) => Effect.succeed(setPlaceMemo(lib, P1, '메모', ctx)));
+        }),
+      );
+      const stored = JSON.parse(storage.getItem(LIBRARY_KEY)!) as Library;
+      expect(stored.places[P1]!.memo.value).toBe('메모');
+      expect(stored.places[P1]!.visitedOn).toEqual(visitedOn);
+      expect(stored.places[P1]!.review).toEqual(review);
+    }),
+  );
+
   vitestIt('waits for a held lock before reading and running f', async () => {
     const storage = createMemoryStorage();
     const held = createHeldLocks();

@@ -1,5 +1,6 @@
-import { setField } from 'src/domain/library/lww';
+import { setField, setOptionalField } from 'src/domain/library/lww';
 import { liveLabels } from 'src/domain/library/query';
+import { localDateOf, normalizeReview, visitedOnOf } from 'src/domain/library/visit';
 import {
   LABEL_COLORS,
   LIBRARY_LIMITS,
@@ -10,6 +11,8 @@ import {
   type Library,
   type Place,
 } from 'src/schema/library';
+import { CalendarDate } from 'src/schema/common';
+import { is } from 'src/schema/parse';
 import type { IdKind } from 'src/services/id-gen';
 import type { TripOpError } from 'src/domain/trips/ops';
 
@@ -22,6 +25,8 @@ export type OpError =
   | { _tag: 'LabelNameTaken'; name: string }
   | { _tag: 'LabelNameInvalid'; name: string }
   | { _tag: 'NotFound'; id: string }
+  | { _tag: 'VisitDateInvalid'; date: string }
+  | { _tag: 'ReviewTooLong'; length: number }
   | TripOpError;
 
 /** 여러 장소를 한 번에 넣는 연산(폴더 가져오기)이 직접 센 결과. */
@@ -184,6 +189,84 @@ export function deletePlaces(lib: Library, placeIds: string[], ctx: OpCtx): Libr
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function restorePlaces(lib: Library, placeIds: string[], _ctx: OpCtx): Library {
   return updatePlaces(lib, placeIds, (p) => (p.deletedAt === null ? p : { ...p, deletedAt: null }));
+}
+
+// ---------- 다녀옴·한 줄 평 ----------
+
+/** 지운 장소는 건너뛰고, `saved` 여부와 상관없이 `update`를 적용한다. */
+function updateLivePlaces(
+  lib: Library,
+  placeIds: readonly string[],
+  update: (place: Place) => Place,
+): Library {
+  return updatePlaces(lib, placeIds, (p) => (p.deletedAt !== null ? p : update(p)));
+}
+
+/** 장소별로 다녀온 날을 정하거나(`YYYY-MM-DD`) 지운다(`null`). 날짜가 하나라도 틀리면 아무것도 바꾸지 않는다. */
+export function setVisitedOn(
+  lib: Library,
+  dates: Readonly<Record<string, string | null>>,
+  ctx: OpCtx,
+): OpResult {
+  for (const date of Object.values(dates)) {
+    if (date !== null && !is(CalendarDate, date)) {
+      return fail({ _tag: 'VisitDateInvalid', date });
+    }
+  }
+  return {
+    ok: true,
+    lib: updateLivePlaces(lib, Object.keys(dates), (p) => {
+      const field = setOptionalField(p.visitedOn, dates[p.id] ?? null, null, ctx.now);
+      return field === p.visitedOn ? p : { ...p, visitedOn: field };
+    }),
+  };
+}
+
+/** 이미 같거나 더 늦은 날짜가 있는 장소는 그대로 두고, 나머지에 `date`를 다녀온 날로 넣는다. */
+export function markVisited(
+  lib: Library,
+  placeIds: readonly string[],
+  date: string,
+  ctx: OpCtx,
+): OpResult {
+  if (!is(CalendarDate, date)) return fail({ _tag: 'VisitDateInvalid', date });
+  return {
+    ok: true,
+    lib: updateLivePlaces(lib, placeIds, (p) => {
+      const current = visitedOnOf(p);
+      if (current !== null && current >= date) return p;
+      return { ...p, visitedOn: setOptionalField(p.visitedOn, date, null, ctx.now) };
+    }),
+  };
+}
+
+/** `ctx.now`의 기기 시간대 날짜로 `markVisited`한다. 날짜는 항상 올바르므로 `Library`를 바로 돌려준다. */
+export function markVisitedToday(lib: Library, placeIds: readonly string[], ctx: OpCtx): Library {
+  const r = markVisited(lib, placeIds, localDateOf(ctx.now), ctx);
+  return r.ok ? r.lib : lib;
+}
+
+/** 한 줄 평을 저장한다. 공백을 정리해 140자(`String.length`)까지, 빈 평은 있던 평을 지운다. */
+export function setPlaceReview(
+  lib: Library,
+  placeId: string,
+  review: string,
+  ctx: OpCtx,
+): OpResult {
+  const place = lib.places[placeId];
+  if (place === undefined || place.deletedAt !== null)
+    return fail({ _tag: 'NotFound', id: placeId });
+  const text = normalizeReview(review);
+  if (text.length > LIBRARY_LIMITS.reviewChars) {
+    return fail({ _tag: 'ReviewTooLong', length: text.length });
+  }
+  return {
+    ok: true,
+    lib: updatePlaces(lib, [placeId], (p) => {
+      const field = setOptionalField(p.review, text, '', ctx.now);
+      return field === p.review ? p : { ...p, review: field };
+    }),
+  };
 }
 
 // ---------- 라벨 ----------
