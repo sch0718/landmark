@@ -13,7 +13,7 @@ import { paths } from 'src/routes/paths';
 import type { Trip } from 'src/schema/trip';
 import type { TodayModel } from 'src/sections/trips/today/use-today';
 import { shortDate } from 'src/sections/trips/trip-dates';
-import { selectedDayAtom } from 'src/stores/trip-planner';
+import { selectPlannerDayAtom } from 'src/stores/trip-planner';
 
 const ITEM_SX = { minHeight: 44 } as const;
 export const TO_PLANNER_LABEL = '계획 화면으로';
@@ -41,8 +41,8 @@ type Props = {
 export function TodayHeader({ trip, model, onPickDay, extraMenu, badge }: Props) {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const menuId = useId();
-  const setSelectedDay = useSetAtom(selectedDayAtom);
-  const toPlanner = () => setSelectedDay((prev) => ({ ...prev, [trip.id]: model.dayIndex }));
+  const selectPlannerDay = useSetAtom(selectPlannerDayAtom);
+  const toPlanner = () => selectPlannerDay(trip.id, model.dayIndex);
   const close = () => setAnchor(null);
 
   return (

@@ -1,4 +1,4 @@
-import { atom, type PrimitiveAtom } from 'jotai';
+import { atom, type PrimitiveAtom, type WritableAtom } from 'jotai';
 import type { Trip } from 'src/schema/trip';
 import type { RouteResult } from 'src/server/route';
 import type { RouteLookupErrorCode } from 'src/services/errors';
@@ -9,6 +9,12 @@ import type { RouteLookupErrorCode } from 'src/services/errors';
 export const selectedDayAtom: PrimitiveAtom<Record<string, number>> = atom<Record<string, number>>(
   {},
 );
+
+/** 계획 화면에서 이 여행의 고른 Day를 `dayIndex`로 둔다(당일 모드에서 계획 화면으로 갈 때, 스펙 §3.3). */
+export const selectPlannerDayAtom: WritableAtom<null, [tripId: string, dayIndex: number], void> =
+  atom(null, (_get, set, tripId: string, dayIndex: number) => {
+    set(selectedDayAtom, (prev) => ({ ...prev, [tripId]: dayIndex }));
+  });
 
 /** 지도 위 카드로 보는 장소(장소 핀·후보 행·시간표 행을 눌렀을 때). */
 export const mapCardAtom: PrimitiveAtom<{ tripId: string; placeId: string } | null> = atom<{

@@ -163,6 +163,17 @@ describe('당일 모드: 다음 장소 카드와 남은 일정', () => {
     expect(screen.queryByRole('list', { name: '남은 일정' })).not.toBeInTheDocument();
   });
 
+  it('빈 Day의 `계획 화면에서 장소 넣기`는 계획 화면의 고른 Day를 그 Day로 맞춘다(다른 여행 값은 그대로)', async () => {
+    const { router, store } = await renderToday(lib({ stops: [[P1], []] }));
+    act(() => store.set(selectedDayAtom, { other0001: 2 }));
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: '오늘 일정 메뉴' }));
+    await user.click(screen.getByRole('menuitemradio', { name: 'Day 2 · 10.25(일)' }));
+    await user.click(within(nextCard()).getByRole('link', { name: '계획 화면에서 장소 넣기' }));
+    expect(router.state.location.pathname).toBe(`/trips/${TRIP}`);
+    expect(store.get(selectedDayAtom)).toEqual({ other0001: 2, [TRIP]: 1 });
+  });
+
   it('모두 다녀왔고 숙소가 있으면 `마지막 · 숙소`', async () => {
     let all = lib({ lodging: [HOUSE] });
     all = withVisited(withVisited(all, P1, '2026-10-24'), P2, '2026-10-24');

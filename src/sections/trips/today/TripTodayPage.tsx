@@ -1,16 +1,15 @@
 import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
 import MenuItem from '@mui/material/MenuItem';
 import { useAtomValue } from 'jotai';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Link, useParams } from 'react-router';
+import { useParams } from 'react-router';
 import { CheckIcon } from 'src/components/icons';
 import type { MapPadding } from 'src/components/map/MapAdapter';
 import { useDocumentTitle } from 'src/lib/use-document-title';
-import { paths } from 'src/routes/paths';
 import type { Trip } from 'src/schema/trip';
 import { LIST_WIDTH } from 'src/sections/shell/pane-widths';
 import { useLayout } from 'src/sections/shell/use-layout';
+import { TripNotFound } from 'src/sections/trips/TripNotFound';
 import { NextCard } from 'src/sections/trips/today/NextCard';
 import { TodayHeader } from 'src/sections/trips/today/TodayHeader';
 import { TodayLists } from 'src/sections/trips/today/TodayLists';
@@ -30,30 +29,6 @@ const COMPACT_MAP_HEIGHT = 'clamp(180px, 34dvh, 320px)';
 const WAKE_LOCK_LABEL = '화면 켜 두기';
 const OFFLINE_NOTICE =
   '인터넷에 연결되지 않았어요. 일정과 체크는 그대로 쓸 수 있고, 이동 시간은 어림값이에요';
-
-function NotFound() {
-  return (
-    <Box
-      role="alert"
-      sx={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        gap: 1.5,
-        px: 3,
-        py: 6,
-        textAlign: 'center',
-      }}
-    >
-      <Box component="h1" sx={{ m: 0, fontSize: 'inherit', fontWeight: 800 }}>
-        여행을 찾지 못했어요
-      </Box>
-      <Button component={Link} to={paths.trips} variant="contained" sx={{ minHeight: 44 }}>
-        여행 목록으로
-      </Button>
-    </Box>
-  );
-}
 
 /** 체크·풀기(또는 스스로 사라지는 버튼) 뒤 포커스를 둘 곳. `index`는 누른 상자가 그 목록에서 있던 자리. */
 type CheckFocus = { from: 'remaining' | 'visited'; index: number } | { from: 'card' };
@@ -327,7 +302,7 @@ export function TripTodayPage() {
   const trip = library.trips[id];
   const found = trip !== undefined && trip.deletedAt === null;
   useDocumentTitle(found ? `오늘 일정 · ${trip.title.value}` : null);
-  if (!found) return <NotFound />;
+  if (!found) return <TripNotFound />;
   // 여행이 바뀌면 화면 상태(보는 Day·고른 장소)를 새로 시작한다.
   return <Today key={trip.id} trip={trip} />;
 }

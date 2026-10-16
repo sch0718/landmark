@@ -24,6 +24,7 @@ import { MapCard } from 'src/sections/trips/planner/MapCard';
 import { PlannerDnd } from 'src/sections/trips/planner/PlannerDnd';
 import { COLLAPSED_PX, PlannerSheet } from 'src/sections/trips/planner/PlannerSheet';
 import { TripMap } from 'src/sections/trips/planner/TripMap';
+import { TripNotFound } from 'src/sections/trips/TripNotFound';
 import { TripTitleHeading } from 'src/sections/trips/planner/TripTitleHeading';
 import { useDayPlan, type DayPlan } from 'src/sections/trips/planner/use-day-plan';
 import { libraryAtom } from 'src/stores/library-state';
@@ -60,30 +61,6 @@ function MapArea({ children }: { children?: ReactNode }) {
       }}
     >
       {children}
-    </Box>
-  );
-}
-
-function NotFound() {
-  return (
-    <Box
-      role="alert"
-      sx={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        gap: 1.5,
-        px: 3,
-        py: 6,
-        textAlign: 'center',
-      }}
-    >
-      <Box component="h1" sx={{ m: 0, fontSize: 'inherit', fontWeight: 800 }}>
-        여행을 찾지 못했어요
-      </Box>
-      <Button component={Link} to={paths.trips} variant="contained" sx={{ minHeight: 44 }}>
-        여행 목록으로
-      </Button>
     </Box>
   );
 }
@@ -458,7 +435,7 @@ export function TripPlannerPage() {
   const trip = library.trips[id];
   const found = trip !== undefined && trip.deletedAt === null;
   useDocumentTitle(found ? trip.title.value : null);
-  if (!found) return <NotFound />;
+  if (!found) return <TripNotFound />;
   // 여행이 바뀌면 화면 상태(후보 칸 접기·토스트 확인·끌기)를 새로 시작한다.
   return (
     <PlannerDnd key={trip.id} tripId={trip.id}>

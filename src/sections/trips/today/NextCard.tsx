@@ -17,7 +17,7 @@ import {
   type DirectionsTarget,
 } from 'src/sections/trips/today/today-directions';
 import { isLate, type TodayModel, type TodayStop } from 'src/sections/trips/today/use-today';
-import { selectedDayAtom } from 'src/stores/trip-planner';
+import { selectPlannerDayAtom } from 'src/stores/trip-planner';
 
 type Props = {
   model: TodayModel;
@@ -145,7 +145,7 @@ function directions(args: {
  * 늦어짐(§4.6)을, 카드가 보는 곳(Stop·숙소)에는 `길찾기`(§4.8)를 둔다. 그날 Stop이 없으면 숙소로 길찾기 하나.
  */
 export function NextCard({ model, trip, selected, onShowNext, onCheck, pending, cardRef }: Props) {
-  const setSelectedDay = useSetAtom(selectedDayAtom);
+  const selectPlannerDay = useSetAtom(selectPlannerDayAtom);
   const platform = useLayout() === 'compact' ? 'app' : 'web';
   const hintId = useId();
   const targetIndex =
@@ -176,7 +176,7 @@ export function NextCard({ model, trip, selected, onShowNext, onCheck, pending, 
           <Button
             component={Link}
             to={paths.trip(trip.id)}
-            onClick={() => setSelectedDay((prev) => ({ ...prev, [trip.id]: model.dayIndex }))}
+            onClick={() => selectPlannerDay(trip.id, model.dayIndex)}
             variant="outlined"
             sx={{ minHeight: 44 }}
           >
