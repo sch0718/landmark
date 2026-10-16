@@ -700,6 +700,20 @@ describe('당일 모드: 늦어짐', () => {
     expect(within(row).getByText('늦음 1시간 20분')).toHaveStyle({ fontWeight: 700 });
   });
 
+  it('전체로는 늦지 않아도 고정 시각에 늦는 행은 `예상 · 계획`을 함께 보인다', async () => {
+    const fixed = withFixed(lib(), 0, 1, '09:21');
+    await renderToday(fixed, { routes: routes() });
+    await waitFor(() => expect(remainingRows()[1]).toHaveTextContent('09:20 도착 예정'));
+
+    // 09:03: 다음 장소는 3분 늦음(계획대로). 2번째는 09:23 도착 예정이라 09:21 고정에 2분 늦는다.
+    tickTo(9, 3);
+    expect(within(nextCard()).getByText('계획대로')).toBeInTheDocument();
+    expect(remainingRows()[0]).toHaveTextContent('09:00 도착 예정');
+    const row = remainingRows()[1]!;
+    expect(row).toHaveTextContent('예상 09:23 · 계획 09:20 · 09:21 고정 · 늦음 2분');
+    expect(row).not.toHaveTextContent('도착 예정');
+  });
+
   it('다음 장소로 가는 구간이 직선 추정이면 예상 앞에 `약 `', async () => {
     vi.setSystemTime(at(10, 30));
     // 경로를 받지 못한다(기본 가짜: 연결 실패) → 직선 추정.

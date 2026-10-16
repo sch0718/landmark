@@ -24,22 +24,23 @@ const TIME_SX = { fontSize: 13, color: 'var(--tm-text-secondary)' } as const;
 
 /**
  * 시각 줄(스펙 §5.1): `09:00 도착 예정 · 12:00 고정`. 늦음이면 `예상 10:30 · 계획 09:00`(어림이면 `예상 약 10:30`).
- * 고정 시각이 있고 예상이 그보다 늦으면 끝에 `늦음 1시간 20분`(굵게, `error.main`).
+ * 고정 시각이 있고 예상이 그보다 늦으면 끝에 `늦음 1시간 20분`(굵게, `error.main`). 그 행은 전체가 늦지 않아도
+ * `예상 · 계획`을 보인다(`09:20 도착 예정 · 09:21 고정 · 늦음 2분`처럼 글끼리 어긋나지 않게).
  */
 function TimeLine({ item, model }: { item: TodayStop; model: TodayModel }) {
   const { projected } = item;
   const planned = formatClock(item.planned.arriveMin);
+  // 예상의 여유(`slackMin`, 정수 분)가 음수면 고정 시각에 늦는다.
+  const slack = projected?.slackMin ?? null;
+  const lateForFixed = slack !== null && slack < 0;
   const parts =
-    projected !== null && isLate(model)
+    projected !== null && (isLate(model) || lateForFixed)
       ? [
           `예상 ${model.approximate ? '약 ' : ''}${formatClock(projected.arriveMin)}`,
           `계획 ${planned}`,
         ]
       : [`${planned} 도착 예정`];
   if (item.stop.fixedTime !== null) parts.push(`${item.stop.fixedTime} 고정`);
-  // 예상의 여유(`slackMin`, 정수 분)가 음수면 고정 시각에 늦는다.
-  const slack = projected?.slackMin ?? null;
-  const lateForFixed = slack !== null && slack < 0;
   return (
     <Box sx={TIME_SX}>
       {parts.join(' · ')}

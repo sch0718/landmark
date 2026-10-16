@@ -2,7 +2,7 @@ import { useAtomValue } from 'jotai';
 import { useMemo } from 'react';
 import { visitedOnOf } from 'src/domain/library/visit';
 import { dayEndpoints, tripDates, visibleStops } from 'src/domain/trips/query';
-import type { PointTime, ScheduleInput } from 'src/domain/trips/schedule';
+import type { PointTime } from 'src/domain/trips/schedule';
 import {
   dayClockMin,
   isNear,
@@ -127,21 +127,14 @@ export function useToday(
     const nextPlace = nextIndex === null ? undefined : base[nextIndex]?.place;
     const here = me !== null && nextPlace !== undefined && isNear(me, nextPlace);
 
-    // 늦어짐(스펙 §4.6): 오늘 Day를 보고, 다음 장소가 Stop이고, 되감음이 아닐 때만. 계획과 같은 입력으로
+    // 늦어짐(스펙 §4.6): 오늘 Day를 보고, 다음 장소가 Stop이고, 되감음이 아닐 때만. 계획과 같은 입력(`plan.input`)으로
     // "지금 나서면"을 다시 계산해 다음 장소부터 끝까지 예상 시각을 붙인다. 지금 여기면 도착 = max(지금, 계획 도착).
     let projected: PointTime[] = [];
     let delayMin: number | null = null;
     let approximate = false;
     if (isToday && status.kind === 'during' && nextIndex !== null && !pick.wrapped) {
-      const input: ScheduleInput = {
-        startTime: day?.startTime.value ?? '09:00',
-        hasStart: start !== null,
-        stops: shown.map((s) => ({ stayMin: s.stayMin, fixedTime: s.fixedTime })),
-        hasEnd: end !== null,
-        legs: plan.legs.map((leg) => leg.time),
-      };
       const projection = projectFromNow({
-        input,
+        input: plan.input,
         planned: plan.schedule,
         nextIndex,
         nowMin: dayClockMin(status.date, now),

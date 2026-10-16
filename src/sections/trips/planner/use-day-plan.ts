@@ -3,7 +3,12 @@ import { useAtomValue, useStore } from 'jotai';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { estimateLeg, SAME_POINT_M } from 'src/domain/trips/geo';
 import { dayEndpoints, dayLegs, visibleStops, type Leg } from 'src/domain/trips/query';
-import { computeSchedule, type DaySchedule, type LegTime } from 'src/domain/trips/schedule';
+import {
+  computeSchedule,
+  type DaySchedule,
+  type LegTime,
+  type ScheduleInput,
+} from 'src/domain/trips/schedule';
 import { forkEffect } from 'src/lib/effect/runtime';
 import type { Library } from 'src/schema/library';
 import type { Trip } from 'src/schema/trip';
@@ -21,6 +26,8 @@ export type PlannedLeg = Leg & {
 
 export type DayPlan = {
   legs: PlannedLeg[];
+  /** `schedule`을 계산한 입력. 당일 모드의 "지금 나서면" 예상이 같은 입력으로 다시 계산한다(스펙 §4.6). */
+  input: ScheduleInput;
   schedule: DaySchedule;
   /** 그날 받은 경로 중 가장 오래된 조회 시각. 받은 경로가 없으면 null. */
   oldestQueriedAt: string | null;
@@ -228,17 +235,17 @@ export function useDayPlan(tripId: string, dayIndex: number): DayPlan {
     [legs, dayStates],
   );
 
-  const schedule = useMemo(
-    () =>
-      computeSchedule({
-        startTime,
-        hasStart,
-        stops: stops.map((s) => ({ stayMin: s.stayMin, fixedTime: s.fixedTime })),
-        hasEnd,
-        legs: planned.map((leg) => leg.time),
-      }),
+  const input = useMemo(
+    (): ScheduleInput => ({
+      startTime,
+      hasStart,
+      stops: stops.map((s) => ({ stayMin: s.stayMin, fixedTime: s.fixedTime })),
+      hasEnd,
+      legs: planned.map((leg) => leg.time),
+    }),
     [startTime, hasStart, stops, hasEnd, planned],
   );
+  const schedule = useMemo(() => computeSchedule(input), [input]);
 
   let oldestQueriedAt: string | null = null;
   for (const leg of planned) {
@@ -266,7 +273,7 @@ export function useDayPlan(tripId: string, dayIndex: number): DayPlan {
   );
 
   return useMemo(
-    () => ({ legs: planned, schedule, oldestQueriedAt, offline, refresh, retryLeg }),
-    [planned, schedule, oldestQueriedAt, offline, refresh, retryLeg],
+    () => ({ legs: planned, input, schedule, oldestQueriedAt, offline, refresh, retryLeg }),
+    [planned, input, schedule, oldestQueriedAt, offline, refresh, retryLeg],
   );
 }
