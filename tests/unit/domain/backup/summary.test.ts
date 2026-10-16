@@ -9,10 +9,28 @@ import {
   latestChangeAt,
   libraryCounts,
 } from 'src/domain/backup/summary';
-import { emptyLibrary } from 'src/schema/library';
+import { emptyLibrary, type FolderLink } from 'src/schema/library';
 import { f, label, makeLibrary, place, T0, trip } from './fixtures';
 
 const DEL = '2026-10-09T00:00:00.000Z';
+
+function folderLink(over: Partial<FolderLink> = {}): FolderLink {
+  return {
+    shareId: 'abc123',
+    name: f('폴더'),
+    labelId: f(label(1).id),
+    seenSids: f<string[]>(['1001']),
+    checkedAt: T0,
+    createdAt: T0,
+    deletedAt: null,
+    ...over,
+  };
+}
+
+const withFolder = (folder: FolderLink) => ({
+  ...makeLibrary({ labels: [label(1)] }),
+  folders: { [folder.shareId]: folder },
+});
 
 describe('libraryCounts', () => {
   it('묘비는 세지 않는다', () => {
@@ -77,6 +95,25 @@ describe('latestChangeAt', () => {
   it('createdAt만 있어도 센다', () => {
     const lib = makeLibrary({ labels: [label(1, { createdAt: '2026-10-12T00:00:00.000Z' })] });
     expect(latestChangeAt(lib)).toBe('2026-10-12T00:00:00.000Z');
+  });
+});
+
+describe('latestChangeAt: 네이버 폴더 연결', () => {
+  it('연결을 끊은 시각(deletedAt)도 변경 시각이다', () => {
+    const late = '2026-10-14T00:00:00.000Z';
+    expect(latestChangeAt(withFolder(folderLink({ deletedAt: late })))).toBe(late);
+  });
+
+  it('확인했어요로 바뀌는 checkedAt도 변경 시각이다', () => {
+    const late = '2026-10-15T00:00:00.000Z';
+    expect(latestChangeAt(withFolder(folderLink({ checkedAt: late })))).toBe(late);
+  });
+
+  it('연결을 만든 시각(createdAt)과 필드 updatedAt도 센다', () => {
+    const created = '2026-10-12T00:00:00.000Z';
+    expect(latestChangeAt(withFolder(folderLink({ createdAt: created })))).toBe(created);
+    const edited = '2026-10-13T00:00:00.000Z';
+    expect(latestChangeAt(withFolder(folderLink({ seenSids: f(['1001'], edited) })))).toBe(edited);
   });
 });
 

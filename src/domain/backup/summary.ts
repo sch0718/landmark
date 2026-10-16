@@ -54,7 +54,8 @@ const maxOf = (values: string[]): string | null =>
   values.length === 0 ? null : values.reduce((a, b) => (a >= b ? a : b));
 
 /**
- * 가장 늦은 변경 시각(스펙 §3.4): 장소·라벨·여행의 `createdAt`·`deletedAt`과 모든 필드의 `updatedAt`.
+ * 가장 늦은 변경 시각(스펙 §3.4): 장소·라벨·여행의 `createdAt`·`deletedAt`과 모든 필드의 `updatedAt`,
+ * 네이버 폴더 연결의 `createdAt`·`checkedAt`·`deletedAt`.
  * 필드 이름 목록을 두지 않으므로 뒤 묶음이 더하는 필드도 센다.
  */
 export function latestChangeAt(lib: Library): string | null {
@@ -62,6 +63,11 @@ export function latestChangeAt(lib: Library): string | null {
   for (const entry of entries(lib)) {
     times.push(entry.createdAt);
     if (entry.deletedAt !== null) times.push(entry.deletedAt);
+  }
+  // 네이버 폴더 연결: `확인했어요`가 올리는 `checkedAt`과 끊을 때의 `deletedAt`도 변경이다.
+  for (const link of Object.values(lib.folders ?? {})) {
+    times.push(link.createdAt, link.checkedAt);
+    if (link.deletedAt !== null) times.push(link.deletedAt);
   }
   collectUpdatedAt(lib, times);
   return maxOf(times);
