@@ -138,20 +138,27 @@ export function LibraryMap() {
     }
   }
 
-  // 필터가 바뀌면 지도는 새 필터에 맞춰지거나 그 필터의 옛 카메라로 돌아간다. 열어 둔 장소가 거기서 벗어나
-  // 안 보이지 않도록, 맞춘 뒤에 그 장소로 다시 모은다. 근처 모드가 켜지거나 반경·위치가 바뀌어도 다시 맞춘다.
+  // 필터가 바뀌면 지도는 새 필터에 맞춰지거나 그 필터의 옛 카메라로 돌아간다. 근처 모드가 켜지거나 반경·위치가
+  // 바뀌어도, 근처 모드에서 `내 위치 보기`를 누를 때마다(`locateSeq`)도 다시 맞춘다. 브라우저가 캐시한 위치
+  // (`maximumAge`)는 처음 시각 그대로 오므로 시각만으로는 누른 것을 알 수 없다.
+  const [locateSeq, setLocateSeq] = useState(0);
   const activeFix = nearby.active ? fix : null;
-  const nearbyKey = activeFix === null ? null : `${nearby.radiusM ?? 'all'}:${activeFix.at}`;
+  const nearbyKey =
+    activeFix === null ? null : `${nearby.radiusM ?? 'all'}:${activeFix.at}:${locateSeq}`;
   const fitKey = JSON.stringify([query, nearbyKey]);
-  // 근처 모드면 반경 원을 감싸는 상자에, 전체면 내 위치와 마커 전부에 맞춘다.
+  // 근처 모드면 반경 원을 감싸는 상자에, 전체면 내 위치와 마커 전부에 맞춘다. 열어 둔 장소는 넣지 않는다(스펙
+  // §4.3은 반경 상자를 약속한다. 먼 장소를 넣으면 반경을 바꿔도 지도가 그대로처럼 보인다).
   const extraFitPoints = useMemo((): [number, number][] | undefined => {
     if (activeFix === null) return undefined;
-    const center: [number, number] = [activeFix.lng, activeFix.lat];
-    return nearby.radiusM === null ? [center] : radiusBox(center, nearby.radiusM);
+    const origin: [number, number] = [activeFix.lng, activeFix.lat];
+    return nearby.radiusM === null ? [origin] : radiusBox(origin, nearby.radiusM);
   }, [activeFix, nearby.radiusM]);
-  const [seenKey, setSeenKey] = useState(fitKey);
-  if (seenKey !== fitKey) {
-    setSeenKey(fitKey);
+  // 필터(근처 말고 `query`)가 바뀌면 열어 둔 장소가 새 범위에서 벗어나 안 보이지 않도록, 맞춘 뒤에 그 장소로
+  // 다시 모은다. 근처 쪽 변화(켜기·반경·새 위치·`내 위치 보기`)는 반경 맞추기가 이겨야 하므로 모으지 않는다.
+  const queryKey = JSON.stringify(query);
+  const [seenQueryKey, setSeenQueryKey] = useState(queryKey);
+  if (seenQueryKey !== queryKey) {
+    setSeenQueryKey(queryKey);
     const open = placeId === null ? undefined : library.places[placeId];
     if (open !== undefined && open.deletedAt === null) {
       setFocus({ point: [open.lng, open.lat], seq: (focus?.seq ?? 0) + 1 });
@@ -190,7 +197,7 @@ export function LibraryMap() {
 
   const [unavailable, setUnavailable] = useState<string | null>(null);
 
-  // `내 위치 보기`: 한 번 찾고, 근처 모드가 아니면 그리로 옮긴다(근처 모드면 새 위치로 반경 상자에 다시 맞춘다).
+  // `내 위치 보기`: 한 번 찾고, 근처 모드가 아니면 그리로 옮긴다(근처 모드면 반경 상자에 다시 맞춘다).
   const locate = useSetAtom(locateAtom);
   const store = useStore();
   const [announcement, setAnnouncement] = useState('');
@@ -203,7 +210,9 @@ export function LibraryMap() {
       return;
     }
     const { lng, lat } = result.fix;
-    if (!store.get(nearbyAtom).on) {
+    if (store.get(nearbyAtom).on) {
+      setLocateSeq((prev) => prev + 1);
+    } else {
       setFocus((prev) => ({ point: [lng, lat], seq: (prev?.seq ?? 0) + 1 }));
     }
     setAnnouncement(LOCATED_MESSAGE);

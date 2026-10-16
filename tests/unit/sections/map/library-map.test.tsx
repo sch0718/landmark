@@ -6,6 +6,7 @@ import { setAppRuntimeForTest } from 'src/lib/effect/runtime';
 import { emptyLibrary, type Library, type Place } from 'src/schema/library';
 import type { Prefs } from 'src/schema/prefs';
 import { Geolocation } from 'src/services/geolocation';
+import { libraryAtom } from 'src/stores/library-state';
 import { focusPlaceAtom } from 'src/stores/library-ui';
 import { TOKENS } from 'src/theme/tokens';
 import { VIRTUALIZE_AFTER } from 'src/sections/library/views/VirtualRows';
@@ -579,6 +580,131 @@ describe('library map 내 위치 보기', () => {
     await waitFor(() =>
       expect(getComputedStyle(screen.getByTestId('map-controls')).right).toBe('8px'),
     );
+  });
+});
+
+describe('library map 근처 모드의 지도 맞추기', () => {
+  const PANNED = { center: [127, 36] as [number, number], zoom: 9 };
+  const center: [number, number] = [BASE.longitude, BASE.latitude];
+  const status = () =>
+    screen.getByTestId('map-host').parentElement!.querySelector('[role="status"]')!;
+
+  it('장소가 열려 있어도 가까운 순을 켜면 반경 상자에 맞추고, 반경을 바꾸면 다시 맞춘다', async () => {
+    const user = userEvent.setup();
+    const { fake, router } = await renderWithLocation(nearbyLibrary());
+    await ready();
+    await router.navigate(`/place/${id(2)}`);
+    await waitFor(() => expect(fakeAdapter().getCamera()?.zoom).toBe(16));
+    fakeAdapter().setCamera(PANNED);
+    const fits = fakeAdapter().fitCalls.length;
+
+    await pickNearby(user);
+    await waitFor(() => expect(fake.requests).toHaveLength(1));
+    await answer(fake);
+
+    await waitFor(() => expect(fakeAdapter().fitCalls.length).toBeGreaterThan(fits));
+    expect(lastFit()).toEqual(expect.arrayContaining(radiusBox(center, 3000)));
+    // 맞춘 뒤 열린 장소(줌 16)로 다시 모으지 않는다. 가짜 fitBounds는 카메라를 옮기지 않는다.
+    expect(fakeAdapter().getCamera()).toEqual(PANNED);
+    const before = fakeAdapter().fitCalls.length;
+
+    await user.click(
+      within(screen.getByRole('group', { name: '반경' })).getByRole('button', { name: '10km' }),
+    );
+
+    await waitFor(() => expect(fakeAdapter().fitCalls.length).toBeGreaterThan(before));
+    expect(lastFit()).toEqual(expect.arrayContaining(radiusBox(center, 10_000)));
+    expect(fakeAdapter().getCamera()).toEqual(PANNED);
+    expect(router.state.location.pathname).toBe(`/place/${id(2)}`);
+  });
+
+  it('먼 장소가 열려 있어도 근처 모드의 내 위치 보기는 그 장소가 아니라 반경으로 옮긴다', async () => {
+    const user = userEvent.setup();
+    const { fake, router } = await renderWithLocation(nearbyLibrary());
+    await ready();
+    await pickNearby(user);
+    await waitFor(() => expect(fake.requests).toHaveLength(1));
+    await answer(fake);
+    await waitFor(() => expect(shownMarkers().sort()).toEqual([id(1), id(2)]));
+    await router.navigate(`/place/${id(4)}`);
+    await waitFor(() => expect(fakeAdapter().getCamera()?.zoom).toBe(16));
+    fakeAdapter().setCamera(PANNED);
+    const fits = fakeAdapter().fitCalls.length;
+
+    await user.click(locateButton());
+    await act(async () => fake.succeed(1, BASE, FIX_AT + 60_000));
+
+    await waitFor(() => expect(fakeAdapter().fitCalls.length).toBeGreaterThan(fits));
+    expect(lastFit()).toEqual(expect.arrayContaining(radiusBox(center, 3000)));
+    expect(fakeAdapter().getCamera()).toEqual(PANNED);
+    expect(status()).toHaveTextContent('내 위치를 지도에 표시했어요');
+  });
+
+  it('같은 시각의 위치(브라우저 캐시)가 다시 와도 내 위치 보기를 누를 때마다 반경에 다시 맞춘다', async () => {
+    const user = userEvent.setup();
+    const { fake } = await renderWithLocation(nearbyLibrary(), { prefs: { libraryView: 'list' } });
+    await ready();
+    await pickNearby(user);
+    await waitFor(() => expect(fake.requests).toHaveLength(1));
+    await answer(fake);
+    await waitFor(() => expect(lastFit()).toEqual(expect.arrayContaining(radiusBox(center, 3000))));
+
+    for (const index of [1, 2]) {
+      fakeAdapter().setCamera(PANNED);
+      fakeAdapter().fitCalls.length = 0;
+
+      await user.click(locateButton());
+      await act(async () => fake.succeed(index, BASE, FIX_AT));
+
+      await waitFor(() => expect(fakeAdapter().fitCalls).toHaveLength(1));
+      expect(lastFit()).toEqual(expect.arrayContaining(radiusBox(center, 3000)));
+      expect(status()).toHaveTextContent('내 위치를 지도에 표시했어요');
+    }
+  });
+
+  it('근처 모드에서 상관없는 다시 그리기(장소 고침)에는 다시 맞추지 않는다', async () => {
+    const user = userEvent.setup();
+    const { fake, store } = await renderWithLocation(nearbyLibrary(), {
+      prefs: { libraryView: 'list' },
+    });
+    await ready();
+    await pickNearby(user);
+    await waitFor(() => expect(fake.requests).toHaveLength(1));
+    await answer(fake);
+    await waitFor(() => expect(lastFit()).toEqual(expect.arrayContaining(radiusBox(center, 3000))));
+    fakeAdapter().setCamera(PANNED);
+    const fits = fakeAdapter().fitCalls.length;
+
+    const current = store.get(libraryAtom);
+    const first = current.places[id(1)]!;
+    act(() =>
+      store.set(libraryAtom, {
+        ...current,
+        places: {
+          ...current.places,
+          [id(1)]: { ...first, name: { ...first.name, value: '가 식당 본점' } },
+        },
+      }),
+    );
+
+    await waitFor(() => expect(marker(1)).toHaveTextContent('가 식당 본점'));
+    expect(fakeAdapter().fitCalls).toHaveLength(fits);
+    expect(fakeAdapter().getCamera()).toEqual(PANNED);
+  });
+
+  it('내 위치 보기가 실패하면 숨은 알림은 비어 있다', async () => {
+    const user = userEvent.setup();
+    const { fake } = await renderWithLocation(nearbyLibrary(), { path: '/map' });
+    await ready();
+    await user.click(await screen.findByRole('button', { name: '내 위치 보기' }));
+    await answer(fake);
+    await waitFor(() => expect(status()).toHaveTextContent('내 위치를 지도에 표시했어요'));
+
+    await user.click(locateButton());
+    await act(async () => fake.fail(1, 1));
+
+    await waitFor(() => expect(toastMock.error).toHaveBeenCalledWith(DENIED));
+    expect(status().textContent).toBe('');
   });
 });
 
