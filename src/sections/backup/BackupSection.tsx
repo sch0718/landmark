@@ -3,6 +3,7 @@ import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import { useAtomValue } from 'jotai';
 import { useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { calendarDaysAgo, countsText, formatLocalDateTime } from 'src/domain/backup/summary';
 import { useBackupFile } from 'src/sections/backup/use-backup-file';
 import { backupMetaAtom, usePreviousCopy, useRestoreActions } from 'src/stores/backup-state';
@@ -29,17 +30,20 @@ export function BackupSection({ onRestore }: { onRestore(): void }) {
   const [previousBusy, setPreviousBusy] = useState(false);
   const restoreRef = useRef<HTMLButtonElement>(null);
 
-  const onPrevious = async (action: () => Promise<boolean | void>) => {
+  const onPrevious = async (action: () => Promise<boolean | void>, button: HTMLButtonElement) => {
     if (previousBusy) return;
     setPreviousBusy(true);
     let done: boolean | void;
     try {
       done = await action();
     } finally {
-      setPreviousBusy(false);
+      // 버튼이 다시 켜진 그림을 먼저 그려야 포커스를 줄 수 있다.
+      flushSync(() => setPreviousBusy(false));
     }
-    // 사본 줄이 사라졌으면(되돌림·지움) 포커스를 잃지 않게 옮긴다.
-    if (done !== false) restoreRef.current?.focus();
+    // 사본 줄이 사라졌으면(되돌림·지움) 포커스를 잃지 않게 되살리기 버튼으로 옮긴다.
+    // 실패해 줄이 남아 있으면 누른 버튼에 그대로 둔다(눌린 동안 꺼져 포커스를 잃는다).
+    if (done === false && button.isConnected) button.focus();
+    else restoreRef.current?.focus();
   };
 
   return (
@@ -85,14 +89,14 @@ export function BackupSection({ onRestore }: { onRestore(): void }) {
             <Button
               variant="outlined"
               disabled={previousBusy}
-              onClick={() => void onPrevious(undo)}
+              onClick={(event) => void onPrevious(undo, event.currentTarget)}
               sx={{ minHeight: 44 }}
             >
               되살리기 전으로 되돌리기
             </Button>
             <Button
               disabled={previousBusy}
-              onClick={() => void onPrevious(drop)}
+              onClick={(event) => void onPrevious(drop, event.currentTarget)}
               sx={{ minHeight: 44 }}
             >
               지우기

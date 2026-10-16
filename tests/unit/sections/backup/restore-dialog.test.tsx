@@ -28,10 +28,23 @@ vi.mock('sonner', async (importOriginal) => ({
 }));
 const downloadMock = vi.hoisted(() => vi.fn());
 vi.mock('src/lib/download-text', () => ({ downloadText: downloadMock }));
+// 보관함 저장이 끝난 뒤 화면 반영이 던지는 상황을 만든다(기본은 실제 동작).
+const reflect = vi.hoisted(() => ({ fail: false }));
+vi.mock('src/stores/library-state', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('src/stores/library-state')>();
+  return {
+    ...actual,
+    reflectSaved: (...args: Parameters<typeof actual.reflectSaved>) => {
+      if (reflect.fail) return Promise.reject(new Error('화면 반영 실패'));
+      return actual.reflectSaved(...args);
+    },
+  };
+});
 vi.mock('src/theme/fonts', () => ({ loadDisplayFont: vi.fn(() => Promise.resolve()) }));
 
 afterEach(() => {
   cleanup();
+  reflect.fail = false;
   toastMock.mockClear();
   toastMock.error.mockClear();
   downloadMock.mockClear();
@@ -341,6 +354,27 @@ describe('RestoreDialog (설정)', () => {
   });
 });
 
+describe('RestoreDialog 바꾼 뒤 화면 반영 실패', () => {
+  it('still succeeds (the library is replaced), reports the error, and closes the dialog', async () => {
+    const u = user();
+    const { storage } = await openSettings();
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    await openDialog(u);
+    await pick(u, backupFile());
+    const button = await within(dialog()).findByRole('button', { name: '이 백업으로 바꾸기' });
+    reflect.fail = true;
+    await u.click(button);
+
+    await waitClosed();
+    expect(storedLibrary(storage)).toEqual(fileLibrary());
+    expect(toastAction(RESTORED)?.action?.label).toBe('되돌리기');
+    expect(errors.mock.calls.some((call) => String(call[0]).includes('화면 반영 실패'))).toBe(true);
+    // 사본은 바꾸기 직전 보관함 그대로다(두 번째 바꾸기가 덮어쓰지 않았다).
+    expect(storage.getItem(PREVIOUS_KEY)).not.toBeNull();
+    errors.mockRestore();
+  });
+});
+
 describe('BackupSection 되살리기 전 사본 줄', () => {
   const COPY_LINE = new RegExp(
     `^되살리기 전 보관함이 남아 있어요 \\(\\d{4}\\.\\d{2}\\.\\d{2} \\d{2}:\\d{2} · ${SAMPLE_COUNTS}\\)$`,
@@ -356,6 +390,28 @@ describe('BackupSection 되살리기 전 사본 줄', () => {
     expect(await within(section()).findByText(COPY_LINE)).toBeInTheDocument();
     return { u, ...rendered };
   }
+
+  it('지우기 that fails keeps the copy, reports the error, toasts, and keeps focus on the button', async () => {
+    const { u, storage } = await restoreOnce();
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const removeItem = storage.removeItem.bind(storage);
+    storage.removeItem = (key: string) => {
+      if (key === PREVIOUS_KEY) throw new Error('지우기 실패');
+      removeItem(key);
+    };
+    const drop = within(section()).getByRole('button', { name: '지우기' });
+    await u.click(drop);
+    await waitFor(() =>
+      expect(toastMock.error).toHaveBeenCalledWith('되살리기 전 보관함을 지우지 못했어요'),
+    );
+    expect(toastMock).not.toHaveBeenCalledWith('되살리기 전 보관함을 지웠어요');
+    expect(errors).toHaveBeenCalled();
+    expect(within(section()).getByText(COPY_LINE)).toBeInTheDocument();
+    expect(storage.getItem(PREVIOUS_KEY)).not.toBeNull();
+    await waitFor(() => expect(drop).toBeEnabled());
+    expect(drop).toHaveFocus();
+    errors.mockRestore();
+  });
 
   it('지우기 removes only the copy', async () => {
     const { u, storage } = await restoreOnce();

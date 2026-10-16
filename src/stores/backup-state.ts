@@ -78,6 +78,21 @@ const previousVersionAtom = atom(0);
 const UNDONE = '되살리기 전으로 되돌렸어요';
 const UNDO_FAILED = '되돌리지 못했어요';
 const DROPPED = '되살리기 전 보관함을 지웠어요';
+const DROP_FAILED = '되살리기 전 보관함을 지우지 못했어요';
+
+/** 예상 밖 오류를 앱 오류 보고자(`ErrorReporter`)로 보고한다. 보고가 실패해도 흐름을 막지 않는다. */
+function reportUnexpected(error: unknown): void {
+  startEffect(ErrorReporter.report(Cause.die(error))).catch(() => {});
+}
+
+/** 저장이 끝난 뒤의 화면 반영 한 단계. 던져도 이미 바뀐 보관함을 되돌릴 수 없으므로 보고만 하고 이어 간다. */
+async function afterSaved(step: () => void | Promise<void>): Promise<void> {
+  try {
+    await step();
+  } catch (error) {
+    reportUnexpected(error);
+  }
+}
 
 type ReplaceOptions = { requirePrevious: boolean; savedText?: string | null };
 
@@ -130,17 +145,24 @@ export function useRestoreActions() {
         // 실패해도 옛 사본을 지웠을 수 있다(용량 초과 때 자리 내기).
         bumpPrevious();
       }
-      await reflectSaved(jotaiStore, before, result.library);
+      // 여기부터는 보관함이 이미 바뀌었다. 화면 반영이 던져도 성공으로 돌려줘야 대화상자가 닫힌다
+      // (실패로 보이면 두 번째 바꾸기가 진짜 바꾸기 전 사본을 덮어쓴다).
+      await afterSaved(() => reflectSaved(jotaiStore, before, result.library));
       if (backup.prefs !== null) {
+        const { prefs } = backup;
         // 되살린 뒤 필터 때문에 목록이 비어 보이지 않게 `query`는 기본값으로 둔다.
-        jotaiStore.set(setPrefsAtom, { ...backup.prefs, query: structuredClone(DEFAULT_QUERY) });
+        await afterSaved(() =>
+          jotaiStore.set(setPrefsAtom, { ...prefs, query: structuredClone(DEFAULT_QUERY) }),
+        );
       }
       const { exportedAt } = backup;
-      const last = jotaiStore.get(backupMetaAtom).lastBackupAt;
       // 그 파일이 이미 있으므로, 기록보다 늦게 만든 백업이면 마지막 백업으로 본다.
-      if (exportedAt !== null && (last === null || exportedAt > last)) {
-        jotaiStore.set(markBackedUpAtom, exportedAt);
-      }
+      await afterSaved(() => {
+        const last = jotaiStore.get(backupMetaAtom).lastBackupAt;
+        if (exportedAt !== null && (last === null || exportedAt > last)) {
+          jotaiStore.set(markBackedUpAtom, exportedAt);
+        }
+      });
       return { ok: true, previousKept: result.previousKept, counts: libraryCounts(result.library) };
     },
     [jotaiStore, bumpPrevious],
@@ -154,23 +176,31 @@ export function useRestoreActions() {
       library = await startEffect(restorePreviousEffect);
     } catch (error) {
       if (!(error instanceof NoPrevious) && !(error instanceof StorageQuotaExceeded)) {
-        console.error(error);
+        reportUnexpected(error);
       }
       toast.error(UNDO_FAILED);
       return false;
     } finally {
       bumpPrevious();
     }
-    await reflectSaved(jotaiStore, before, library);
+    await afterSaved(() => reflectSaved(jotaiStore, before, library));
     toast(UNDONE);
     return true;
   }, [jotaiStore, bumpPrevious]);
 
-  /** 사본만 지운다. */
-  const drop = useCallback(async (): Promise<void> => {
-    await startEffect(dropPreviousEffect);
-    bumpPrevious();
+  /** 사본만 지운다. 지우지 못하면 보고하고 토스트로 알린 뒤 `false`를 돌려준다. */
+  const drop = useCallback(async (): Promise<boolean> => {
+    try {
+      await startEffect(dropPreviousEffect);
+    } catch (error) {
+      reportUnexpected(error);
+      toast.error(DROP_FAILED);
+      return false;
+    } finally {
+      bumpPrevious();
+    }
     toast(DROPPED);
+    return true;
   }, [bumpPrevious]);
 
   return { replace, undo, drop };
