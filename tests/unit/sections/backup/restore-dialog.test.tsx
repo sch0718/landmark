@@ -463,6 +463,51 @@ describe('RestoreDialog (손상 화면)', () => {
     expect(toastAction(RESTORED)).toBeUndefined();
   });
 
+  it('지금 원문 받기 that finds nothing shows the message inside the dialog alert and keeps focus on a visible control', async () => {
+    const u = user();
+    await renderCorrupt({ savedText: C1, onDownloadCurrent: vi.fn(() => Promise.resolve(null)) });
+    await pick(u, backupFile());
+    await u.click(await within(dialog()).findByRole('button', { name: '이 백업으로 바꾸기' }));
+    expect(await within(dialog()).findByText(CORRUPT_CHANGED)).toBeInTheDocument();
+    await u.click(within(dialog()).getByRole('button', { name: '지금 원문 받기' }));
+    const alert = await within(dialog()).findByText('백업할 데이터를 찾지 못했어요');
+    expect(alert).toHaveAttribute('role', 'alert');
+    expect(within(dialog()).queryByText(CORRUPT_CHANGED)).toBeNull();
+    // 다시 눌러 볼 수 있게 버튼은 남고, 포커스는 보이는 버튼에 있다.
+    const again = within(dialog()).getByRole('button', { name: '지금 원문 받기' });
+    await waitFor(() => expect(again).toHaveFocus());
+  });
+
+  it('after a successful 지금 원문 받기 the focus moves to 이 백업으로 바꾸기', async () => {
+    const u = user();
+    await renderCorrupt({ savedText: C1, onDownloadCurrent: vi.fn(() => Promise.resolve(C2)) });
+    await pick(u, backupFile());
+    await u.click(await within(dialog()).findByRole('button', { name: '이 백업으로 바꾸기' }));
+    await u.click(await within(dialog()).findByRole('button', { name: '지금 원문 받기' }));
+    await waitFor(() => expect(within(dialog()).queryByText(CORRUPT_CHANGED)).toBeNull());
+    await waitFor(() => expect(replaceButton()).toHaveFocus());
+  });
+
+  it('after a failed replace the focus moves to the alert button 지금 원문 받기', async () => {
+    const u = user();
+    await renderCorrupt({ savedText: C1, onDownloadCurrent: vi.fn() });
+    await pick(u, backupFile());
+    await u.click(await within(dialog()).findByRole('button', { name: '이 백업으로 바꾸기' }));
+    await within(dialog()).findByText(CORRUPT_CHANGED);
+    await waitFor(() =>
+      expect(within(dialog()).getByRole('button', { name: '지금 원문 받기' })).toHaveFocus(),
+    );
+  });
+
+  it('a failed replace without a download-current button focuses 이 백업으로 바꾸기', async () => {
+    const u = user();
+    await renderCorrupt({ onDownloadCurrent: vi.fn() });
+    await pick(u, backupFile());
+    await u.click(await within(dialog()).findByRole('button', { name: '이 백업으로 바꾸기' }));
+    await within(dialog()).findByText(CORRUPT_QUOTA);
+    await waitFor(() => expect(replaceButton()).toHaveFocus());
+  });
+
   it('a new savedText prop re-seeds the dialog', async () => {
     const u = user();
     const { storage, rerender } = await renderCorrupt({

@@ -47,6 +47,7 @@ const UNKNOWN_WARNING =
 const SAME_CONTENT = '지금 보관함과 같은 내용이에요';
 const CURRENT_UNREADABLE = '지금 보관함: 읽지 못함';
 const DOWNLOAD_CURRENT = '지금 원문 받기';
+const CURRENT_NOT_FOUND = '백업할 데이터를 찾지 못했어요';
 
 /** 모드별 "사본을 남기지 못함" 문구(스펙 §2.3·§2.4·§2.7). */
 const NOT_KEPT = {
@@ -132,6 +133,7 @@ export function RestoreDialog({
   const pickRef = useRef<HTMLButtonElement>(null);
   const replaceRef = useRef<HTMLButtonElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
+  const currentRef = useRef<HTMLButtonElement>(null);
 
   const [step, setStep] = useState<Step>({ kind: 'pick' });
   const [readError, setReadError] = useState<string | null>(null);
@@ -184,6 +186,26 @@ export function RestoreDialog({
       const target = ref.current?.disabled === false ? ref.current : fallback?.current;
       target?.focus();
     });
+
+  // 상태를 바꾼 직후 요청하면, 그 상태가 그려진 같은 커밋에서(레이아웃 효과) 포커스를 옮긴다. 타이머 없이 정해진 순서다.
+  const pendingFocusRef = useRef<{
+    ref: RefObject<HTMLButtonElement | null>;
+    fallback: RefObject<HTMLButtonElement | null>;
+  } | null>(null);
+  const focusAfterCommit = (
+    ref: RefObject<HTMLButtonElement | null>,
+    fallback: RefObject<HTMLButtonElement | null>,
+  ) => {
+    pendingFocusRef.current = { ref, fallback };
+  };
+  useLayoutEffect(() => {
+    const pending = pendingFocusRef.current;
+    if (pending === null) return;
+    pendingFocusRef.current = null;
+    const target =
+      pending.ref.current?.disabled === false ? pending.ref.current : pending.fallback.current;
+    target?.focus();
+  });
 
   const onPick = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -239,7 +261,14 @@ export function RestoreDialog({
     }
     if (runIdRef.current !== runId) return;
     if (!outcome.ok) {
-      setError(replaceError(mode, outcome.error));
+      const failure = replaceError(mode, outcome.error);
+      setError(failure);
+      // 눌렀던 버튼은 바꾸는 동안 꺼져 포커스를 잃으므로, 보이는 조작 요소로 옮긴다.
+      if (failure.downloadCurrent && onDownloadCurrent !== undefined) {
+        focusAfterCommit(currentRef, replaceRef);
+      } else {
+        focusAfterCommit(replaceRef, cancelRef);
+      }
       return;
     }
     const message = `백업에서 되살렸어요 (${countsText(outcome.counts)})`;
@@ -268,12 +297,18 @@ export function RestoreDialog({
     const runId = runIdRef.current;
     busyRef.current = true;
     setBusy(true);
+    let focus: 'replace' | 'current' | null = null;
     try {
       const text = await onDownloadCurrent();
       if (runIdRef.current !== runId) return;
       if (text !== null) {
         setCorruptSavedText(text);
         setError(null);
+        focus = 'replace';
+      } else {
+        // 모달 뒤의 화면이 아니라 이 창의 알림으로 알린다. 다시 눌러 볼 수 있게 버튼은 남긴다.
+        setError({ message: CURRENT_NOT_FOUND, downloadCurrent: true });
+        focus = 'current';
       }
     } catch (e) {
       // 받지 못했으면 문구를 그대로 두어 다시 누를 수 있게 한다.
@@ -284,6 +319,9 @@ export function RestoreDialog({
         setBusy(false);
       }
     }
+    // 눌렀던 버튼은 받는 동안 꺼져 포커스를 잃는다. 받았으면 다음 조작(바꾸기)으로, 못 받았으면 그 버튼으로.
+    if (focus === 'replace') focusAfterCommit(replaceRef, cancelRef);
+    if (focus === 'current') focusAfterCommit(currentRef, cancelRef);
   };
 
   const preview = step.kind === 'preview' ? step.backup : null;
@@ -393,6 +431,7 @@ export function RestoreDialog({
               {error?.downloadCurrent === true && onDownloadCurrent !== undefined && (
                 <Box>
                   <Button
+                    ref={currentRef}
                     variant="outlined"
                     disabled={working}
                     onClick={() => void downloadCurrent()}

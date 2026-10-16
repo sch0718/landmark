@@ -83,10 +83,8 @@ export function CorruptScreen({
    */
   const downloadCurrent = (): Promise<string | null> => {
     const text = readCurrentText();
-    if (text === null) {
-      setMessage('백업할 데이터를 찾지 못했어요');
-      return Promise.resolve(null);
-    }
+    // 못 찾았다는 알림은 대화상자가 자기 알림으로 보인다(모달 뒤 화면에는 두지 않는다).
+    if (text === null) return Promise.resolve(null);
     setMessage(null);
     downloadRaw(text);
     return Promise.resolve(text);

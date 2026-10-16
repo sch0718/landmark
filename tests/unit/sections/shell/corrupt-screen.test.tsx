@@ -344,4 +344,31 @@ describe('corrupt screen restores from a backup file', () => {
     });
     expect(JSON.parse(storage.getItem(LIBRARY_KEY)!)).toEqual(fileLibrary());
   });
+
+  it('지금 원문 받기 with no stored raw text shows the message in the dialog alert only', async () => {
+    mockViewport(390);
+    const u = user();
+    let blocked = false;
+    const storage = storageBlocking(() => blocked);
+    storage.setItem(LIBRARY_KEY, T0);
+    await renderApp({ storage });
+    await screen.findByText('데이터를 읽지 못했어요');
+    blocked = true;
+    await u.click(screen.getByRole('button', { name: '백업 파일 받기' }));
+    expect(await lastDownloadText()).toBe(T0);
+    storage.setItem(LIBRARY_KEY, T1);
+    await openDialog(u);
+    await pick(u);
+    await u.click(await replaceButton());
+    await within(dialog()).findByText(CHANGED);
+
+    storage.removeItem(LIBRARY_KEY);
+    await u.click(within(dialog()).getByRole('button', { name: '지금 원문 받기' }));
+    expect(await within(dialog()).findByText('백업할 데이터를 찾지 못했어요')).toHaveAttribute(
+      'role',
+      'alert',
+    );
+    // 모달 뒤 화면에는 같은 문구를 따로 두지 않는다.
+    expect(screen.getAllByText('백업할 데이터를 찾지 못했어요')).toHaveLength(1);
+  });
 });
