@@ -416,6 +416,20 @@ describe('연결된 폴더를 읽는 중·오류', () => {
     expect(toastMock).toHaveBeenCalledWith('폴더 연결을 끊었어요. 라벨과 장소는 그대로예요');
   });
 
+  it('연결 끊기가 끝나기 전에 창을 닫고 새로 연 흐름은 늦은 결과가 닫지 않는다', async () => {
+    const { store } = await openFolder(() => new PlaceLookupError({ code: 'NOT_FOUND' }));
+    const unlink = await within(panel()).findByRole('button', { name: '연결 끊기' });
+    fireEvent.click(unlink);
+    fireEvent.click(within(panel()).getByRole('button', { name: '취소' }));
+    expect(store.get(addFlowAtom)).toEqual({ step: 'closed' });
+    act(() => store.set(addFlowAtom, { step: 'folder', shareId: 'zzz999' }));
+    await waitFor(() =>
+      expect(store.get(libraryAtom).folders![SHARE_ID]!.deletedAt).not.toBeNull(),
+    );
+    // 지난 흐름의 연결 끊기 결과가 새 흐름을 닫지 않는다.
+    expect(store.get(addFlowAtom)).toEqual({ step: 'folder', shareId: 'zzz999' });
+  });
+
   it('UPSTREAM_ERROR면 다시 시도도 새로 읽는다', async () => {
     let n = 0;
     const { user, lookup } = await openFolder(() =>

@@ -63,6 +63,14 @@ export function FolderPreview({ shareId }: { shareId: string }) {
   const [unlinking, setUnlinking] = useState(false);
   // 같은 이벤트 루프 안의 두 번째 클릭은 아직 `unlinking`을 못 본다.
   const unlinkingRef = useRef(false);
+  // 끊는 사이 창이 닫혔다면(취소) 늦은 결과로 흐름을 건드리지 않는다. 새로 연 흐름을 닫을 수 있다.
+  const aliveRef = useRef(true);
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => {
+      aliveRef.current = false;
+    };
+  }, []);
   // 실행 번호. 다시 조회하거나 창이 닫히면 올려서 지난 조회의 결과가 끼어들지 않게 한다.
   const runSeq = useRef(0);
 
@@ -119,13 +127,15 @@ export function FolderPreview({ shareId }: { shareId: string }) {
     unlinkingRef.current = true;
     setUnlinking(true);
     const result = await runLibrary((lib, ctx) => unlinkFolder(lib, shareId, ctx));
+    // 창이 닫힌 뒤에도 연결 끊기는 이미 저장소에 반영됐으므로 결과는 알린다.
+    if (result.ok) toast('폴더 연결을 끊었어요. 라벨과 장소는 그대로예요');
+    if (!aliveRef.current) return;
     if (!result.ok) {
       // 저장소 오류는 앱 오류 보고자가 알린다.
       unlinkingRef.current = false;
       setUnlinking(false);
       return;
     }
-    toast('폴더 연결을 끊었어요. 라벨과 장소는 그대로예요');
     setFlow({ step: 'closed' });
   };
 
