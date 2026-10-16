@@ -603,7 +603,7 @@ describe('library map 근처 모드의 지도 맞추기', () => {
     await answer(fake);
 
     await waitFor(() => expect(fakeAdapter().fitCalls.length).toBeGreaterThan(fits));
-    expect(lastFit()).toEqual(expect.arrayContaining(radiusBox(center, 3000)));
+    expect(lastFit()).toEqual(radiusBox(center, 3000));
     // 맞춘 뒤 열린 장소(줌 16)로 다시 모으지 않는다. 가짜 fitBounds는 카메라를 옮기지 않는다.
     expect(fakeAdapter().getCamera()).toEqual(PANNED);
     const before = fakeAdapter().fitCalls.length;
@@ -613,7 +613,7 @@ describe('library map 근처 모드의 지도 맞추기', () => {
     );
 
     await waitFor(() => expect(fakeAdapter().fitCalls.length).toBeGreaterThan(before));
-    expect(lastFit()).toEqual(expect.arrayContaining(radiusBox(center, 10_000)));
+    expect(lastFit()).toEqual(radiusBox(center, 10_000));
     expect(fakeAdapter().getCamera()).toEqual(PANNED);
     expect(router.state.location.pathname).toBe(`/place/${id(2)}`);
   });
@@ -635,9 +635,104 @@ describe('library map 근처 모드의 지도 맞추기', () => {
     await act(async () => fake.succeed(1, BASE, FIX_AT + 60_000));
 
     await waitFor(() => expect(fakeAdapter().fitCalls.length).toBeGreaterThan(fits));
-    expect(lastFit()).toEqual(expect.arrayContaining(radiusBox(center, 3000)));
+    // 20km 밖의 열린 장소는 맞춤 점에 들지 않는다(반경 상자 그대로).
+    expect(lastFit()).toEqual(radiusBox(center, 3000));
     expect(fakeAdapter().getCamera()).toEqual(PANNED);
     expect(status()).toHaveTextContent('내 위치를 지도에 표시했어요');
+  });
+
+  it('먼 장소를 열어 둔 채 가까운 순을 켜도 맞춤 범위는 반경 상자뿐이다', async () => {
+    const user = userEvent.setup();
+    const { fake, router } = await renderWithLocation(nearbyLibrary());
+    await ready();
+    await router.navigate(`/place/${id(4)}`);
+    await waitFor(() => expect(fakeAdapter().getCamera()?.zoom).toBe(16));
+    const fits = fakeAdapter().fitCalls.length;
+
+    await pickNearby(user);
+    await waitFor(() => expect(fake.requests).toHaveLength(1));
+    await answer(fake);
+
+    await waitFor(() => expect(fakeAdapter().fitCalls.length).toBeGreaterThan(fits));
+    expect(lastFit()).toEqual(radiusBox(center, 3000));
+    // 열린 장소의 마커는 그대로 보인다.
+    expect(shownMarkers()).toContain(id(4));
+  });
+
+  it('반경이 전체면 반경 안 장소와 내 위치로만 맞추고, 필터에 가려진 열린 장소는 넣지 않는다', async () => {
+    const user = userEvent.setup();
+    const { fake, router } = await renderWithLocation(nearbyLibrary());
+    await ready();
+    await pickNearby(user);
+    await waitFor(() => expect(fake.requests).toHaveLength(1));
+    await answer(fake);
+    await user.click(
+      within(screen.getByRole('group', { name: '반경' })).getByRole('button', { name: '전체' }),
+    );
+    // 카페 라벨만 남기고 식당(1·3)을 연다 — 필터에 가려져도 열린 장소라 마커는 보인다.
+    await user.click(screen.getAllByRole('button', { name: /^카페/ })[0]!);
+    await waitFor(() => expect(shownMarkers().sort()).toEqual([id(2), id(4)]));
+    const fits = fakeAdapter().fitCalls.length;
+    await router.navigate(`/place/${id(3)}`);
+    await user.click(
+      within(screen.getByRole('group', { name: '반경' })).getByRole('button', { name: '3km' }),
+    );
+    await user.click(
+      within(screen.getByRole('group', { name: '반경' })).getByRole('button', { name: '전체' }),
+    );
+
+    await waitFor(() => expect(fakeAdapter().fitCalls.length).toBeGreaterThan(fits));
+    const pts = lastFit();
+    expect(pts).toContainEqual(center);
+    const place = (n: number) => {
+      const p = nearbyLibrary().places[id(n)]!;
+      return [p.lng, p.lat];
+    };
+    expect(pts).toContainEqual(place(2));
+    expect(pts).toContainEqual(place(4));
+    expect(pts).not.toContainEqual(place(3));
+  });
+
+  it('반경을 바꿨다가 예전 반경으로 돌아와도 옛 카메라가 아니라 반경 상자에 다시 맞춘다', async () => {
+    const user = userEvent.setup();
+    const { fake } = await renderWithLocation(nearbyLibrary(), { prefs: { libraryView: 'list' } });
+    await ready();
+    await pickNearby(user);
+    await waitFor(() => expect(fake.requests).toHaveLength(1));
+    await answer(fake);
+    await waitFor(() => expect(lastFit()).toEqual(radiusBox(center, 3000)));
+    fakeAdapter().setCamera(PANNED);
+    const radius = (name: string) =>
+      within(screen.getByRole('group', { name: '반경' })).getByRole('button', { name });
+
+    await user.click(radius('1km'));
+    await waitFor(() => expect(lastFit()).toEqual(radiusBox(center, 1000)));
+    const before = fakeAdapter().fitCalls.length;
+    await user.click(radius('3km'));
+
+    await waitFor(() => expect(fakeAdapter().fitCalls.length).toBeGreaterThan(before));
+    // 고치기 전에는 옛 3km 키를 다시 써서 맞추지 않고 그 키의 옛 카메라만 되살렸다.
+    expect(lastFit()).toEqual(radiusBox(center, 3000));
+  });
+
+  it('가까운 순을 껐다 다시 켜도 반경 상자에 다시 맞춘다', async () => {
+    const user = userEvent.setup();
+    const { fake } = await renderWithLocation(nearbyLibrary(), { prefs: { libraryView: 'list' } });
+    await ready();
+    await pickNearby(user);
+    await waitFor(() => expect(fake.requests).toHaveLength(1));
+    await answer(fake);
+    await waitFor(() => expect(lastFit()).toEqual(radiusBox(center, 3000)));
+    await user.click(screen.getByRole('button', { name: '가까운 순 끄기' }));
+    fakeAdapter().setCamera(PANNED);
+    const before = fakeAdapter().fitCalls.length;
+
+    await pickNearby(user);
+    await waitFor(() => expect(fake.requests).toHaveLength(2));
+    await answer(fake, 1);
+
+    await waitFor(() => expect(fakeAdapter().fitCalls.length).toBeGreaterThan(before));
+    expect(lastFit()).toEqual(radiusBox(center, 3000));
   });
 
   it('같은 시각의 위치(브라우저 캐시)가 다시 와도 내 위치 보기를 누를 때마다 반경에 다시 맞춘다', async () => {

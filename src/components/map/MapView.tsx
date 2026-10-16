@@ -52,6 +52,8 @@ type Props = {
   controlsRight?: number;
   /** 마커 외에 `fitKey` 맞추기에 더할 점(경도, 위도). 마커가 없어도 이 점들로 맞춘다. */
   extraFitPoints?: [number, number][];
+  /** `false`면 마커 좌표는 맞추기에서 빼고 `extraFitPoints`만으로 맞춘다(기본 `true`). */
+  fitMarkers?: boolean;
 };
 
 const DEFAULT_PADDING: MapPadding = { top: 40, right: 40, bottom: 40, left: 40 };
@@ -210,7 +212,8 @@ export function MapView(props: Props) {
       displayedKey.current = key;
     }
     if (!fittedKeys.current.has(key)) {
-      const points = fitPoints(latest.current.markers, latest.current.extraFitPoints);
+      const { markers, extraFitPoints, fitMarkers } = latest.current;
+      const points = fitPoints(fitMarkers === false ? [] : markers, extraFitPoints);
       if (points.length > 0) {
         fit(points);
         fittedKeys.current.add(key);

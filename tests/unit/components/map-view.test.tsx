@@ -301,6 +301,29 @@ describe('MapView 내 위치·단추 기둥', () => {
     fit.mockRestore();
   });
 
+  it('fitMarkers가 false면 마커는 빼고 extraFitPoints만으로 맞춘다', async () => {
+    vi.stubEnv('VITE_MAP_ADAPTER', 'fake');
+    const fit = vi.spyOn(FakeMapAdapter.prototype, 'fitBounds');
+    render(
+      <MapView
+        markers={[mk('a', { lng: 128, lat: 37 }), mk('b', { lng: 127, lat: 36 })]}
+        extraFitPoints={[
+          [129, 38],
+          [130, 39],
+        ]}
+        fitMarkers={false}
+        {...base}
+      />,
+    );
+    await screen.findByTestId('marker-a');
+    expect(fit).toHaveBeenCalledTimes(1);
+    expect(fit.mock.calls[0]![0]).toEqual([
+      [129, 38],
+      [130, 39],
+    ]);
+    fit.mockRestore();
+  });
+
   it('extraFitPoints가 있으면 마커 좌표와 함께 맞춘다', async () => {
     vi.stubEnv('VITE_MAP_ADAPTER', 'fake');
     const fit = vi.spyOn(FakeMapAdapter.prototype, 'fitBounds');
