@@ -25,26 +25,13 @@ import { MAIN_ID } from 'src/sections/shell/SkipLink';
 import { useLayout } from 'src/sections/shell/use-layout';
 import {
   addFlowAtom,
+  addFlowStepKey,
   addOpenerAtom,
   addTargetAtom,
   linkDraftAtom,
   showsAddPanel,
   type AddFlow,
 } from 'src/stores/add-place';
-
-/** 단계마다(링크 창은 안내 종류, 폴더는 공유 ID까지) 내용을 새로 만든다. */
-const stepKey = (flow: AddFlow): string => {
-  switch (flow.step) {
-    case 'link':
-      return `link-${flow.hint}`;
-    case 'folder':
-      return `folder-${flow.shareId}`;
-    case 'pin-card':
-      return `pin-card-${flow.lng},${flow.lat}`;
-    default:
-      return flow.step;
-  }
-};
 
 /** 단계별 칸 내용. 핀 모드(`pin`)는 칸이 아니라 지도 위 오버레이다(`PinModeOverlay`). */
 function StepView({ flow }: { flow: AddFlow }) {
@@ -257,7 +244,7 @@ export function AddPlaceHost({ floating = false }: { floating?: boolean }) {
           },
         }}
       >
-        {open && <StepContent key={stepKey(flow)} flow={flow} scope={scope} withCancel />}
+        {open && <StepContent key={addFlowStepKey(flow)} flow={flow} scope={scope} withCancel />}
       </Drawer>
     );
   }
@@ -295,7 +282,7 @@ export function AddPlaceHost({ floating = false }: { floating?: boolean }) {
         </IconButton>
       </Box>
       <Box ref={scope} sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-        <StepContent key={stepKey(flow)} flow={flow} scope={scope} />
+        <StepContent key={addFlowStepKey(flow)} flow={flow} scope={scope} />
       </Box>
     </Box>
   );

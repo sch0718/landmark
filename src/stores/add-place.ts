@@ -6,7 +6,8 @@ import type { ShareDoc } from 'src/schema/share';
  * 장소 추가 흐름(스펙 §2). ＋추가 시트에서 항목을 고르면 시작하고, 추가·취소하면 `closed`로 돌아간다.
  * - `link`: 링크 입력 창. `hint`는 안내 문구만 바꾼다(장소/폴더 판별은 서버 결과로 한다).
  * - `candidate`: 링크로 찾은 장소의 확인 카드.
- * - `folder`: 네이버 공유 폴더 미리보기.
+ * - `folder`: 네이버 공유 폴더 미리보기. `seq`는 `openFolderSyncAtom`이 열 때마다 새로 매기는 번호다
+ *   (같은 폴더를 다시 열어도 화면을 새로 만들어 다시 읽게 한다). 링크로 연 폴더에는 없다.
  * - `pin`: 지도에서 위치를 고르는 핀 모드. `name`은 미리 채울 이름, `start`는 시작 좌표(경도, 위도).
  *   `start`는 스펙 §2.4.4(대략적인 위치를 아는 실패 경로)를 위해 남겨 둔 값이라 아직 채우는 호출이 없다.
  * - `pin-card`: 핀으로 고른 위치의 입력 카드.
@@ -17,13 +18,31 @@ export type AddFlow =
   | { step: 'closed' }
   | { step: 'link'; hint: 'place' | 'folder' }
   | { step: 'candidate'; candidate: PlaceCandidate }
-  | { step: 'folder'; shareId: string }
+  | { step: 'folder'; shareId: string; seq?: number }
   | { step: 'pin'; name: string; start: [number, number] | null }
   | { step: 'pin-card'; name: string; lng: number; lat: number }
   | { step: 'share-pick' }
   | { step: 'share'; doc: ShareDoc };
 
 export const addFlowAtom: PrimitiveAtom<AddFlow> = atom<AddFlow>({ step: 'closed' });
+
+/** 단계마다(링크 창은 안내 종류, 폴더는 공유 ID와 다시 가져오기 번호까지) 내용을 새로 만들 키. */
+export const addFlowStepKey = (flow: AddFlow): string => {
+  switch (flow.step) {
+    case 'link':
+      return `link-${flow.hint}`;
+    case 'folder':
+      return flow.seq === undefined
+        ? `folder-${flow.shareId}`
+        : `folder-${flow.shareId}-${flow.seq}`;
+    case 'pin-card':
+      return `pin-card-${flow.lng},${flow.lat}`;
+    default:
+      return flow.step;
+  }
+};
+
+let folderSyncSeq = 0;
 
 /**
  * 링크 입력 창에 쓰던 글. 창 폭이 768px 경계를 넘으면 추가 칸이 다시 그려지므로(시트 ↔ 오른쪽 칸) 글을
@@ -72,7 +91,7 @@ export const openFolderSyncAtom = atom(
   (_get, set, shareId: string, opener: HTMLElement | null) => {
     set(addTargetAtom, null);
     set(addOpenerAtom, opener);
-    set(addFlowAtom, { step: 'folder', shareId });
+    set(addFlowAtom, { step: 'folder', shareId, seq: ++folderSyncSeq });
   },
 );
 

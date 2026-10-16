@@ -331,7 +331,11 @@ describe('LabelsPage — 네이버 폴더', () => {
     await user.click(foodRow());
     await user.click(resyncButton());
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-    expect(store.get(addFlowAtom)).toEqual({ step: 'folder', shareId: SHARE_ID });
+    expect(store.get(addFlowAtom)).toEqual({
+      step: 'folder',
+      shareId: SHARE_ID,
+      seq: expect.any(Number),
+    });
     expect(store.get(addTargetAtom)).toBeNull();
     expect(store.get(addOpenerAtom)).toBe(foodRow());
   });
@@ -349,6 +353,59 @@ describe('LabelsPage — 네이버 폴더', () => {
     expect(store.get(addFlowAtom)).toEqual({ step: 'closed' });
     expect(screen.queryByRole('region', { name: '장소 추가' })).not.toBeInTheDocument();
     await waitFor(() => expect(foodRow()).toHaveFocus());
+  });
+
+  it('넓은 화면: 폴더 전체 보기 뒤 같은 라벨의 가져오기를 다시 누르면 다시 읽고 다시 가져오기 화면으로 돌아온다', async () => {
+    const user = userEvent.setup();
+    const calls: { fresh: boolean }[] = [];
+    let extra = false;
+    const place = (n: number) => ({
+      sid: `900${n}`,
+      name: n === 1 ? '본 곳' : `새 곳 ${n}`,
+      address: `강원 속초시 ${n}`,
+      lng: 128.5 + n / 100,
+      lat: 38.2,
+      memo: '',
+    });
+    const lookup = Layer.succeed(
+      PlaceLookup,
+      PlaceLookup.of({
+        lookupLink: () => Effect.fail(new PlaceLookupError({ code: 'OFFLINE' })),
+        lookupFolder: (_shareId, options) =>
+          Effect.sync(() => {
+            calls.push({ fresh: options?.fresh === true });
+            return {
+              folderName: '속초 맛집',
+              places: [place(1), place(3), ...(extra ? [place(4)] : [])],
+            };
+          }),
+      }),
+    );
+    await renderLibrary(linkedLibrary(), {
+      path: '/labels',
+      width: 1280,
+      ids: ['label099'],
+      placeLookup: lookup,
+    });
+    await user.click(foodRow());
+    await user.click(resyncButton());
+    const panel = await screen.findByRole('region', { name: '장소 추가' });
+    expect(await within(panel).findByRole('heading', { name: '속초 맛집' })).toBeInTheDocument();
+    await user.click(within(panel).getByRole('button', { name: '폴더 전체 보기' }));
+    expect(within(panel).queryByRole('list', { name: '새로 저장한 곳' })).not.toBeInTheDocument();
+    expect(calls).toEqual([{ fresh: true }]);
+
+    extra = true;
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await user.click(foodRow());
+    await user.click(resyncButton());
+
+    await waitFor(() => expect(calls).toEqual([{ fresh: true }, { fresh: true }]));
+    const again = await screen.findByRole('region', { name: '장소 추가' });
+    const fresh = await within(again).findByRole('list', { name: '새로 저장한 곳' });
+    expect(within(fresh).getAllByRole('checkbox')).toHaveLength(2);
+    expect(within(fresh).getByRole('checkbox', { name: /새 곳 4/ })).toBeInTheDocument();
+    expect(within(again).getByRole('button', { name: '폴더 전체 보기' })).toBeInTheDocument();
   });
 
   it('좁은 화면: 포커스가 추가 시트 안으로 가고, `취소`로 닫으면 그 라벨 줄로 돌아온다', async () => {
