@@ -114,6 +114,64 @@ describe('버전·형식 오류', () => {
   });
 });
 
+describe('모든 장소 출처 종류', () => {
+  const allSources = () =>
+    makeLibrary({
+      places: [
+        place(1, { source: { kind: 'naver', sid: '1001' } }),
+        place(2, { source: { kind: 'kakao', kakaoId: '2002' } }),
+        place(3, { source: { kind: 'google', googleId: '0x1a2b:0x3c4d' } }),
+        place(4, { source: { kind: 'pin' } }),
+        place(5, {
+          source: { kind: 'pin', legacy: { publicId: 'legacypin01', placeKey: 'n:5' } },
+        }),
+      ],
+      trips: [trip(1, 1)],
+    });
+
+  const decoded = () => {
+    const r = safeParse(LibrarySchema, allSources());
+    if (!r.success) throw new Error('fixture invalid');
+    return r.data;
+  };
+
+  it('백업 왕복에서 모르는 필드로 오인하지 않는다', () => {
+    const r = readBackupText(
+      buildBackupText({ rawLibrary: allSources(), prefs: DEFAULT_PREFS, now: NOW }),
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.backup.droppedUnknown).toBe(false);
+    expect(r.backup.library).toEqual(decoded());
+  });
+
+  it('옛 백업(저장소 원문)에서도 오인하지 않는다', () => {
+    const r = readBackupText(JSON.stringify(allSources()));
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.backup.kind).toBe('legacy');
+    expect(r.backup.droppedUnknown).toBe(false);
+    expect(r.backup.library).toEqual(decoded());
+  });
+
+  it('출처 안의 진짜 모르는 키는 잡아낸다', () => {
+    const lib = allSources();
+    const p5 = lib.places[place(5).id]!;
+    const withFuture = {
+      ...lib,
+      places: {
+        ...lib.places,
+        [p5.id]: {
+          ...p5,
+          source: { kind: 'pin', legacy: { publicId: 'legacypin01', placeKey: 'n:5', extra: 1 } },
+        },
+      },
+    };
+    const r = readBackupText(JSON.stringify(withFuture));
+    expect(r.ok && r.backup.droppedUnknown).toBe(true);
+  });
+});
+
 describe('모르는 필드', () => {
   it('장소의 모르는 필드는 버리고 droppedUnknown', () => {
     const lib = raw();
