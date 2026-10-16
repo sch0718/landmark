@@ -1,4 +1,4 @@
-import { Schema } from 'effect';
+import { Effect, Schema } from 'effect';
 import { DEFAULT_QUERY } from 'src/domain/library/query';
 import { MutableArray } from 'src/schema/mutable';
 
@@ -8,6 +8,10 @@ export const LibraryQuerySchema = Schema.Struct({
   unlabeled: Schema.Boolean,
   regions: MutableArray(Schema.String),
   text: Schema.String,
+  // 새 선택 키: 키가 없는 옛 선호도 통과한다. `sort`에는 값을 더하지 않는다(옛 버전이 선호 전체를 버린다).
+  visited: Schema.Literals(['all', 'unvisited', 'visited']).pipe(
+    Schema.withDecodingDefault(Effect.succeed('all' as const)),
+  ),
   sort: Schema.Literals(['recent', 'name', 'label']),
 });
 

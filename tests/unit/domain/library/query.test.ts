@@ -7,6 +7,9 @@ import {
   queryPlaces,
   regionCounts,
   searchPlaces,
+  hasVisited,
+  sortByVisited,
+  visitCounts,
   type LibraryQuery,
 } from 'src/domain/library/query';
 import { emptyLibrary, type Label, type Library, type Place } from 'src/schema/library';
@@ -395,5 +398,112 @@ describe('searchPlaces', () => {
     expect(searchPlaces(library, ' 테헤란 ').map((p) => p.id)).toEqual([a.id]);
     expect(searchPlaces(library, '숙소').map((p) => p.id)).toEqual([b.id]);
     expect(searchPlaces(library, '지운')).toEqual([]);
+  });
+});
+
+describe('방문 필터', () => {
+  const lib = library(
+    [
+      place({ name: 'A', labels: ['food0001'], visitedOn: f('2026-10-10') }),
+      place({ name: 'B', labels: ['cafe0001'], visitedOn: f('2026-10-12') }),
+      place({ name: 'C', labels: ['food0001'] }),
+      // 표시를 지운 곳(값 null)은 안 가 본 곳으로 센다.
+      place({ name: 'D', labels: ['cafe0001'], visitedOn: f<string | null>(null) }),
+      place({ name: 'E', address: '강원도 양양군 C' }),
+    ],
+    [FOOD, CAFE],
+  );
+
+  it('visited·unvisited가 다녀온 곳과 안 가 본 곳만 남긴다', () => {
+    expect(names(queryPlaces(lib, q({ visited: 'visited', sort: 'name' })))).toEqual(['A', 'B']);
+    expect(names(queryPlaces(lib, q({ visited: 'unvisited', sort: 'name' })))).toEqual([
+      'C',
+      'D',
+      'E',
+    ]);
+    expect(queryPlaces(lib, q({ visited: 'all' }))).toHaveLength(5);
+  });
+
+  it('라벨 필터와 겹치면 교집합이다', () => {
+    const r = queryPlaces(lib, q({ visited: 'visited', labelIds: ['food0001'] }));
+    expect(names(r)).toEqual(['A']);
+  });
+
+  it('visitCounts는 라벨 필터를 따르고 방문 필터는 무시한다', () => {
+    expect(visitCounts(lib, q())).toEqual({ visited: 2, unvisited: 3 });
+    expect(visitCounts(lib, q({ visited: 'visited' }))).toEqual({ visited: 2, unvisited: 3 });
+    expect(visitCounts(lib, q({ labelIds: ['food0001'] }))).toEqual({ visited: 1, unvisited: 1 });
+    expect(visitCounts(lib, q({ regions: ['양양'] }))).toEqual({ visited: 0, unvisited: 1 });
+    expect(visitCounts(lib, q({ text: 'A' }))).toEqual({ visited: 1, unvisited: 0 });
+  });
+
+  it('labelCounts·regionCounts가 방문 필터를 따른다', () => {
+    const counts = labelCounts(lib, q({ visited: 'visited' }));
+    expect(counts.get('food0001')).toBe(1);
+    expect(counts.get('cafe0001')).toBe(1);
+    expect(counts.get('unlabeled')).toBe(0);
+    expect(labelCounts(lib, q({ visited: 'unvisited' })).get('unlabeled')).toBe(1);
+    expect(regionCounts(lib, q({ visited: 'unvisited' }))).toEqual([
+      { region: '강릉', count: 2 },
+      { region: '양양', count: 1 },
+    ]);
+    expect(regionCounts(lib, q({ visited: 'visited' }))).toEqual([{ region: '강릉', count: 2 }]);
+  });
+
+  it('한 줄 평도 검색 대상이다', () => {
+    const l = library([
+      place({ name: '경포대', review: f('일출 최고') }),
+      place({ name: '다른 곳' }),
+    ]);
+    expect(names(queryPlaces(l, q({ text: '일출' })))).toEqual(['경포대']);
+  });
+});
+
+describe('sortByVisited', () => {
+  it('다녀온 날 내림차순, 안 가 본 곳은 뒤에 최근 저장순이고 입력은 그대로다', () => {
+    const early = place({ name: '10-10', visitedOn: f('2026-10-10') });
+    const late = place({ name: '10-12', visitedOn: f('2026-10-12') });
+    const oldUnvisited = place({ name: '옛 저장', saved: f(true, '2026-10-01T00:00:00.000Z') });
+    const newUnvisited = place({ name: '새 저장', saved: f(true, '2026-10-09T00:00:00.000Z') });
+    const cleared = place({
+      name: '지움',
+      visitedOn: f<string | null>(null),
+      saved: f(true, '2026-10-05T00:00:00.000Z'),
+    });
+    const input = [oldUnvisited, early, newUnvisited, cleared, late];
+    const before = [...input];
+    expect(names(sortByVisited(input))).toEqual(['10-12', '10-10', '새 저장', '지움', '옛 저장']);
+    expect(input).toEqual(before);
+  });
+
+  it('같은 날은 최근 저장순이다', () => {
+    const a = place({
+      name: 'a',
+      visitedOn: f('2026-10-10'),
+      saved: f(true, '2026-10-01T00:00:00.000Z'),
+    });
+    const b = place({
+      name: 'b',
+      visitedOn: f('2026-10-10'),
+      saved: f(true, '2026-10-02T00:00:00.000Z'),
+    });
+    expect(names(sortByVisited([a, b]))).toEqual(['b', 'a']);
+  });
+});
+
+describe('hasVisited', () => {
+  it('빈 보관함은 false', () => {
+    expect(hasVisited(library([]))).toBe(false);
+  });
+
+  it('다녀온 곳이 있으면 true, 표시를 지운 곳만 있으면 false', () => {
+    expect(hasVisited(library([place({ visitedOn: f('2026-10-10') })]))).toBe(true);
+    expect(hasVisited(library([place({ visitedOn: f<string | null>(null) })]))).toBe(false);
+  });
+
+  it('보관함에서 숨긴(saved: false) 곳이나 지운 곳만 다녀왔으면 false', () => {
+    const hidden = place({ visitedOn: f('2026-10-10'), saved: f(false) });
+    const gone = place({ visitedOn: f('2026-10-10'), deletedAt: T });
+    expect(hasVisited(library([hidden, gone]))).toBe(false);
   });
 });

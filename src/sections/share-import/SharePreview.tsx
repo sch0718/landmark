@@ -111,9 +111,15 @@ export function SharePreview({ doc }: { doc: ShareDoc }) {
     // 연산 거절(OpRejected)은 보고되지 않는다. 제목 라벨 이름은 화면이 막으므로 드물고,
     // 그때는 미리보기와 선택을 그대로 두고 버튼만 다시 켠다.
     if (!result.ok) return;
-    // 제목 라벨을 붙였으면 방금 가져온 장소가 모두 보이도록 그 라벨로 거르고 검색어·지역 필터를 비운다.
+    // 제목 라벨을 붙였으면 방금 가져온 장소가 모두 보이도록 그 라벨로 거르고 검색어·지역·방문 필터를 비운다.
     if (result.createdId !== undefined) {
-      patchQuery({ labelIds: [result.createdId], unlabeled: false, text: '', regions: [] });
+      patchQuery({
+        labelIds: [result.createdId],
+        unlabeled: false,
+        text: '',
+        regions: [],
+        visited: 'all',
+      });
     }
     setFlow({ step: 'closed' });
   };

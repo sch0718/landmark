@@ -145,6 +145,7 @@ describe('library filters', () => {
           unlabeled: false,
           regions: [],
           text: '',
+          visited: 'all',
           sort: 'recent',
         },
       },

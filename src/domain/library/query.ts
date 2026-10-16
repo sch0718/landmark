@@ -1,5 +1,9 @@
 import type { Label, Library, Place } from 'src/schema/library';
 import { regionsByPlace } from 'src/domain/library/region';
+import { isVisited, reviewOf, visitedOnOf } from 'src/domain/library/visit';
+
+/** 방문 필터: 전체 / 안 가 본 곳 / 가 본 곳. */
+export type VisitFilter = 'all' | 'unvisited' | 'visited';
 
 export type LibraryQuery = {
   labelIds: string[];
@@ -7,6 +11,8 @@ export type LibraryQuery = {
   unlabeled: boolean;
   regions: string[];
   text: string;
+  /** 방문 조건. 저장되는 선호이므로 `sort`와 달리 새 선택 키로만 더했다(`다녀온 날순`은 저장하지 않는다). */
+  visited: VisitFilter;
   sort: 'recent' | 'name' | 'label';
 };
 
@@ -16,6 +22,7 @@ export const DEFAULT_QUERY: LibraryQuery = {
   unlabeled: false,
   regions: [],
   text: '',
+  visited: 'all',
   sort: 'recent',
 };
 
@@ -88,9 +95,15 @@ function matchesText(place: Place, labels: readonly Label[], needle: string): bo
     place.name.value,
     place.address,
     place.memo.value,
+    reviewOf(place),
     ...labels.map((l) => l.name.value),
   ];
   return haystacks.some((h) => foldText(h).includes(needle));
+}
+
+function matchesVisit(place: Place, q: LibraryQuery): boolean {
+  if (q.visited === 'all') return true;
+  return isVisited(place) === (q.visited === 'visited');
 }
 
 function matchesRegion(place: Place, ctx: Context): boolean {
@@ -149,19 +162,61 @@ export function queryPlaces(lib: Library, q: LibraryQuery): Place[] {
   const ctx = contextOf(lib, q);
   const matched = livePlaces(lib).filter((p) => {
     const labels = labelsOf(p, ctx.byId);
-    return matchesText(p, labels, ctx.needle) && matchesRegion(p, ctx) && matchesLabels(labels, q);
+    return (
+      matchesText(p, labels, ctx.needle) &&
+      matchesRegion(p, ctx) &&
+      matchesLabels(labels, q) &&
+      matchesVisit(p, q)
+    );
   });
   return sortPlaces(matched, q, ctx.byId);
 }
 
-/** 라벨 칩 숫자. 텍스트·지역 필터를 적용하고 라벨 필터는 빼고 센다. 라벨 없음은 `'unlabeled'` 키. */
+/**
+ * 다녀온 날 내림차순(날짜가 없는 곳은 뒤), 같으면 최근 저장순으로 새 배열을 만든다.
+ * 저장하는 정렬이 아니라서 `queryPlaces`는 부르지 않고, 화면이 `다녀온 날순`을 켰을 때만 결과에 적용한다.
+ */
+export function sortByVisited(places: readonly Place[]): Place[] {
+  return [...places].sort((a, b) => {
+    const da = visitedOnOf(a);
+    const db = visitedOnOf(b);
+    if (da !== db) {
+      if (da === null) return 1;
+      if (db === null) return -1;
+      return da > db ? -1 : 1;
+    }
+    return compareRecent(a, b);
+  });
+}
+
+/** 보관함에 다녀온 곳(살아 있고 `saved: true`)이 하나라도 있는가. */
+export function hasVisited(lib: Library): boolean {
+  return livePlaces(lib).some(isVisited);
+}
+
+/** 방문 칩 숫자. 검색·지역·라벨 조건을 적용하고 방문 조건은 빼고 센다. */
+export function visitCounts(lib: Library, q: LibraryQuery): { visited: number; unvisited: number } {
+  const ctx = contextOf(lib, q);
+  const counts = { visited: 0, unvisited: 0 };
+  for (const p of livePlaces(lib)) {
+    const labels = labelsOf(p, ctx.byId);
+    if (!matchesText(p, labels, ctx.needle) || !matchesRegion(p, ctx) || !matchesLabels(labels, q))
+      continue;
+    if (isVisited(p)) counts.visited += 1;
+    else counts.unvisited += 1;
+  }
+  return counts;
+}
+
+/** 라벨 칩 숫자. 텍스트·지역·방문 필터를 적용하고 라벨 필터는 빼고 센다. 라벨 없음은 `'unlabeled'` 키. */
 export function labelCounts(lib: Library, q: LibraryQuery): Map<string | 'unlabeled', number> {
   const ctx = contextOf(lib, q);
   const counts = new Map<string | 'unlabeled', number>([['unlabeled', 0]]);
   for (const id of ctx.byId.keys()) counts.set(id, 0);
   for (const p of livePlaces(lib)) {
     const labels = labelsOf(p, ctx.byId);
-    if (!matchesText(p, labels, ctx.needle) || !matchesRegion(p, ctx)) continue;
+    if (!matchesText(p, labels, ctx.needle) || !matchesRegion(p, ctx) || !matchesVisit(p, q))
+      continue;
     if (labels.length === 0) counts.set('unlabeled', (counts.get('unlabeled') ?? 0) + 1);
     for (const l of labels) counts.set(l.id, (counts.get(l.id) ?? 0) + 1);
   }
@@ -169,7 +224,7 @@ export function labelCounts(lib: Library, q: LibraryQuery): Map<string | 'unlabe
 }
 
 /**
- * 지역 칩 숫자. 텍스트·라벨 필터를 적용하고 지역 필터는 빼고 센다.
+ * 지역 칩 숫자. 텍스트·라벨·방문 필터를 적용하고 지역 필터는 빼고 센다.
  * 개수 내림차순, 같으면 이름순, `기타`는 마지막.
  */
 export function regionCounts(
@@ -180,7 +235,8 @@ export function regionCounts(
   const counts = new Map<string, number>();
   for (const p of livePlaces(lib)) {
     const labels = labelsOf(p, ctx.byId);
-    if (!matchesText(p, labels, ctx.needle) || !matchesLabels(labels, q)) continue;
+    if (!matchesText(p, labels, ctx.needle) || !matchesLabels(labels, q) || !matchesVisit(p, q))
+      continue;
     const region = ctx.regionOf.get(p.id) ?? OTHER_REGION;
     counts.set(region, (counts.get(region) ?? 0) + 1);
   }

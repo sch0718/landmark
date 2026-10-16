@@ -139,8 +139,14 @@ export function FolderList({ folderName, places }: { folderName: string; places:
       backToTrip(tripId);
       return;
     }
-    // 방금 가져온 장소가 모두 보이도록 검색어·지역 필터도 비운다.
-    patchQuery({ labelIds: [result.createdId!], unlabeled: false, text: '', regions: [] });
+    // 방금 가져온 장소가 모두 보이도록 검색어·지역·방문 필터도 비운다.
+    patchQuery({
+      labelIds: [result.createdId!],
+      unlabeled: false,
+      text: '',
+      regions: [],
+      visited: 'all',
+    });
     setFlow({ step: 'closed' });
   };
 
