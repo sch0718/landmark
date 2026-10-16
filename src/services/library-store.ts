@@ -335,9 +335,11 @@ function makeLibraryStore(options: LibraryStoreOptions) {
 
         const read = readText(current);
         if (!read.ok) {
-          // 손상: 원문을 손상 백업 키에 확보한다(사본 키는 건드리지 않는다).
+          // 손상: 원문을 손상 백업 키에 확보한다. 남아 있는 옛 사본은 바꾸기 직전 상태가 아니므로
+          // 지운다(설계서 §3.3, 보관함 쓰기 자리도 생긴다).
           const backedUp = yield* fits(ensureBackup(read.raw, KEEP_PREVIOUS));
           if (!backedUp && mustKeep) return yield* notKept();
+          yield* removePrevious;
           yield* putItem(LIBRARY_KEY, serialized, KEEP_PREVIOUS);
           return done(false);
         }
@@ -398,7 +400,7 @@ function makeLibraryStore(options: LibraryStoreOptions) {
     replace,
     previous,
     restorePrevious,
-    dropPrevious: removePrevious,
+    dropPrevious: withLock(removePrevious),
   });
 }
 

@@ -820,6 +820,27 @@ describe('LibraryStore.replace', () => {
     }),
   );
 
+  it.effect('from a corrupt document: removes a copy left by an earlier restore', () =>
+    Effect.gen(function* () {
+      const storage = createMemoryStorage();
+      seed(storage, libraryOf(place(P1)));
+      yield* withStore({ storage }, (s) => s.replace(NEXT, { requirePrevious: true }));
+      expect(storage.getItem(PREVIOUS_KEY)).not.toBeNull();
+      storage.setItem(LIBRARY_KEY, '{bad');
+      const other = libraryOf(place(P3));
+      yield* withStore({ storage }, (s) =>
+        Effect.gen(function* () {
+          const result = yield* s.replace(other, { requirePrevious: true });
+          expect(result).toEqual({ library: other, previousKept: false });
+          expect(storage.getItem(PREVIOUS_KEY)).toBeNull();
+          expect(corruptKeys(storage).map((k) => storage.getItem(k))).toEqual(['{bad']);
+          expect(storage.getItem(LIBRARY_KEY)).toBe(JSON.stringify(other));
+          expect(yield* Effect.flip(s.restorePrevious)).toBeInstanceOf(NoPrevious);
+        }),
+      );
+    }),
+  );
+
   it.effect('from a corrupt document: reuses an existing backup of the same raw', () =>
     Effect.gen(function* () {
       const storage = createMemoryStorage();
@@ -1090,6 +1111,22 @@ describe('LibraryStore 되살리기 전 사본', () => {
       expect(storage.getItem(LIBRARY_KEY)).toBe(JSON.stringify(NEXT));
     }),
   );
+
+  vitestIt('dropPrevious waits for a held lock', async () => {
+    const storage = createMemoryStorage();
+    const held = createHeldLocks();
+    storage.setItem(PREVIOUS_KEY, '{"copy":true}');
+    held.hold();
+    const pending = Effect.runPromise(
+      withStore({ storage, locks: held.locks }, (s) => s.dropPrevious),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(storage.getItem(PREVIOUS_KEY)).toBe('{"copy":true}');
+    held.release();
+    await pending;
+    expect(held.requested).toEqual([LIBRARY_LOCK]);
+    expect(storage.getItem(PREVIOUS_KEY)).toBeNull();
+  });
 
   it.effect('restorePrevious after replace brings back the library and removes the copy', () =>
     Effect.gen(function* () {
