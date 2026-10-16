@@ -63,6 +63,20 @@ export const openAddSheetAtom = atom(
 );
 
 /**
+ * 연결된 네이버 폴더의 다시 가져오기를 추가 칸에 연다(라벨 관리의 라벨 고치기, 스펙 §4.1). 여행 대상은 버린다
+ * (대상이 있으면 다시 가져오기가 아니라 폴더 전체 미리보기가 된다). `opener`는 칸을 닫을 때 포커스를 돌려줄
+ * 곳이다(그 라벨 줄).
+ */
+export const openFolderSyncAtom = atom(
+  null,
+  (_get, set, shareId: string, opener: HTMLElement | null) => {
+    set(addTargetAtom, null);
+    set(addOpenerAtom, opener);
+    set(addFlowAtom, { step: 'folder', shareId });
+  },
+);
+
+/**
  * 시트를 닫는다. `chosen`은 항목을 골라서 닫는가다. 항목을 고르지 않고 닫았다면(배경·Esc, 흐름이 아직
  * `closed`) 붙여 둔 여행 대상과 연 요소도 버린다(연 요소를 남기면 나중에 ＋ 없이 열린 흐름을 Esc로 닫을 때
  * 엉뚱하게 그 ＋로 돌아간다). 항목을 골랐으면 둘 다 남긴다. 경로 항목(`공유 파일 가져오기`)은 이 순간
