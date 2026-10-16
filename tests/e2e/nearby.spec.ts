@@ -7,13 +7,17 @@ const rows = (page: Page): Locator =>
 /** 강릉 중앙시장 근처(시드의 강릉 중앙시장 570m · 아르떼뮤지엄 강릉 2.4km). */
 const HERE = { latitude: 37.7551, longitude: 128.9003, accuracy: 30 };
 
+/** 좁은 화면(하단 탭·`/map` 이동·근처 칩)인가. 경계는 `use-layout`의 compact(<768)와 같다. */
+const isCompact = (page: Page): boolean => page.viewportSize()!.width < 768;
+
 /** 좁은 화면(iPhone·Galaxy)은 하단 탭이 있고 지도가 다른 화면이다. */
 async function openMap(page: Page): Promise<void> {
-  const tabs = page.getByRole('navigation', { name: '하단 메뉴' });
-  if (await tabs.isVisible()) {
-    await tabs.getByRole('link', { name: '지도' }).click();
-    await expect(page).toHaveURL(/\/map$/);
-  }
+  if (!isCompact(page)) return;
+  await page
+    .getByRole('navigation', { name: '하단 메뉴' })
+    .getByRole('link', { name: '지도' })
+    .click();
+  await expect(page).toHaveURL(/\/map$/);
 }
 
 test.describe('내 근처 저장 장소', () => {
@@ -65,8 +69,7 @@ test.describe('내 근처 저장 장소', () => {
     await openMap(page);
     await page.getByRole('button', { name: '내 위치 보기' }).click();
     await expect(page.getByTestId('my-location')).toHaveAttribute('data-lat', '37.7551');
-    const narrow = (page.viewportSize()?.width ?? 1280) < 900;
-    if (narrow) {
+    if (isCompact(page)) {
       await expect(page.getByText('내 근처 3km')).toBeVisible();
     }
 
@@ -86,7 +89,7 @@ test.describe('내 근처 저장 장소', () => {
     expect(leaked).toBe(false);
 
     await page.reload();
-    if (narrow) {
+    if (isCompact(page)) {
       await page
         .getByRole('navigation', { name: '하단 메뉴' })
         .getByRole('link', { name: '보관함' })
