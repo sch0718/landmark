@@ -6,6 +6,7 @@ import type {
   MapMarker,
   MapPadding,
   MapPolyline,
+  MyLocation,
 } from './MapAdapter';
 import { createMarkerLabelElement } from './marker-label';
 
@@ -19,6 +20,7 @@ export class FakeMapAdapter implements MapAdapter {
   private root: HTMLElement | null = null;
   private markerRoot: HTMLElement | null = null;
   private lineRoot: HTMLElement | null = null;
+  private myLocation: MyLocation | null = null;
   private markerCb: ((id: string) => void) | null = null;
   private boundsCb: ((b: Bounds) => void) | null = null;
   private markers: MapMarker[] = [];
@@ -29,6 +31,8 @@ export class FakeMapAdapter implements MapAdapter {
   >();
   private camera: MapCamera = { center: [128, 37.5], zoom: 8 };
   readonly resizeCalls: [number, number][] = [];
+  /** 테스트용: `setMyLocation` 호출마다 받은 값을 기록한다. */
+  readonly myLocationCalls: (MyLocation | null)[] = [];
 
   mount(el: HTMLElement): Promise<void> {
     const root = document.createElement('div');
@@ -43,6 +47,7 @@ export class FakeMapAdapter implements MapAdapter {
     root.append(this.markerRoot, this.lineRoot);
     this.renderMarkers();
     this.renderLines();
+    this.renderMyLocation();
     this.boundsCb?.(FAKE_BOUNDS);
     return Promise.resolve();
   }
@@ -62,6 +67,12 @@ export class FakeMapAdapter implements MapAdapter {
   setPolylines(lines: MapPolyline[]): void {
     this.lines = lines;
     this.renderLines();
+  }
+
+  setMyLocation(fix: MyLocation | null): void {
+    this.myLocationCalls.push(fix);
+    this.myLocation = fix;
+    this.renderMyLocation();
   }
 
   /** 테스트용: fitBounds 호출마다 받은 좌표를 기록한다. */
@@ -111,6 +122,7 @@ export class FakeMapAdapter implements MapAdapter {
     this.boundsCb = null;
     this.markers = [];
     this.lines = [];
+    this.myLocation = null;
     this.root?.remove();
     this.root = null;
     this.markerRoot = null;
@@ -162,6 +174,25 @@ export class FakeMapAdapter implements MapAdapter {
         root.insertBefore(button, root.children[index] ?? null);
       }
     });
+  }
+
+  private renderMyLocation(): void {
+    const root = this.root;
+    if (!root) return;
+    const fix = this.myLocation;
+    let el = root.querySelector<HTMLElement>(':scope > [data-testid="my-location"]');
+    if (!fix) {
+      el?.remove();
+      return;
+    }
+    if (!el) {
+      el = document.createElement('div');
+      el.setAttribute('data-testid', 'my-location');
+      root.appendChild(el);
+    }
+    el.dataset.lng = String(fix.lng);
+    el.dataset.lat = String(fix.lat);
+    el.dataset.accuracy = String(fix.accuracyM);
   }
 
   private renderLines(): void {

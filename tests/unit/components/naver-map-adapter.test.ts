@@ -32,6 +32,8 @@ function installSdk() {
   const overlays = new Set<Overlay>();
   const labels: HTMLElement[] = [];
   const markerOptions: Record<string, unknown>[] = [];
+  const circles: { opts: Record<string, unknown>; circle: Overlay }[] = [];
+  const markers: { opts: Record<string, unknown>; marker: Overlay }[] = [];
   class LatLng {
     x: number;
     y: number;
@@ -65,10 +67,21 @@ function installSdk() {
       if (icon) {
         labels.push(icon.content);
         markerOptions.push(opts);
+        markers.push({ opts, marker: this });
       }
     }
     setMap(map: unknown) {
       if (map === null) overlays.delete(this);
+    }
+  }
+  const setMapSpies = new Map<Overlay, ReturnType<typeof vi.fn>>();
+  class Circle extends Overlay {
+    constructor(opts: Record<string, unknown>) {
+      super(opts);
+      circles.push({ opts, circle: this });
+      const spy = vi.fn((map: unknown) => Overlay.prototype.setMap.call(this, map));
+      this.setMap = spy;
+      setMapSpies.set(this, spy);
     }
   }
   const map = {
@@ -104,6 +117,7 @@ function installSdk() {
       LatLngBounds,
       Marker: Overlay,
       Polyline: Overlay,
+      Circle,
       Event: {
         addListener: (_: unknown, name: string, callback: () => void) => {
           const listener = { name, callback };
@@ -114,7 +128,18 @@ function installSdk() {
       },
     },
   };
-  return { map, MapCtor, listeners, overlays, labels, markerOptions, removeListener };
+  return {
+    map,
+    MapCtor,
+    listeners,
+    overlays,
+    labels,
+    markerOptions,
+    removeListener,
+    circles,
+    markers,
+    setMapSpies,
+  };
 }
 
 describe('NaverMapAdapter SDK 계약', () => {
@@ -276,5 +301,83 @@ describe('NaverMapAdapter SDK 계약', () => {
     expect(cluster.style.background).toBe('rgb(16, 32, 48)');
     expect(cluster.style.color).toBe('rgb(160, 176, 192)');
     adapter.destroy();
+  });
+});
+
+describe('NaverMapAdapter 내 위치', () => {
+  const fix = { lng: 128.9, lat: 37.75, accuracyM: 30 };
+
+  async function mounted(adapter: NaverMapAdapter) {
+    const pending = adapter.mount(document.createElement('div'));
+    release();
+    await pending;
+  }
+
+  it('마운트 전에 부르면 기억했다가 마운트 뒤 원 하나·점 하나를 그린다', async () => {
+    const sdk = installSdk();
+    const adapter = new NaverMapAdapter('id');
+    adapter.setMyLocation(fix);
+    expect(sdk.overlays.size).toBe(0);
+    await mounted(adapter);
+    expect(sdk.circles).toHaveLength(1);
+    expect(sdk.markers).toHaveLength(1);
+    expect(sdk.circles[0]!.opts).toMatchObject({
+      radius: 30,
+      clickable: false,
+      zIndex: -2,
+      fillColor: '#1a73e8',
+      fillOpacity: 0.12,
+      strokeColor: '#1a73e8',
+      strokeOpacity: 0.35,
+      strokeWeight: 1,
+      center: expect.objectContaining({ x: 128.9, y: 37.75 }),
+    });
+    const dot = sdk.markers[0]!.opts;
+    expect(dot).toMatchObject({ clickable: false, zIndex: -1 });
+    expect(dot.zIndex as number).toBeLessThan(0);
+    expect((dot.icon as { anchor: unknown }).anchor).toEqual({ x: 9, y: 9 });
+    const el = (dot.icon as { content: HTMLElement }).content;
+    expect(el.style.width).toBe('18px');
+    expect(el.style.height).toBe('18px');
+    expect(el.style.borderRadius).toBe('50%');
+    expect(el.style.pointerEvents).toBe('none');
+    adapter.destroy();
+  });
+
+  it('다시 부르면 이전 점·원을 지우고 새로 그리며, null이면 둘 다 지운다', async () => {
+    const sdk = installSdk();
+    const adapter = new NaverMapAdapter('id');
+    await mounted(adapter);
+    adapter.setMyLocation(fix);
+    expect(sdk.overlays.size).toBe(2);
+    const [firstCircle, firstDot] = [sdk.circles[0]!.circle, sdk.markers[0]!.marker];
+    adapter.setMyLocation({ ...fix, accuracyM: 80 });
+    expect(sdk.setMapSpies.get(firstCircle)).toHaveBeenCalledWith(null);
+    expect(sdk.overlays.has(firstCircle)).toBe(false);
+    expect(sdk.overlays.has(firstDot)).toBe(false);
+    expect(sdk.overlays.size).toBe(2);
+    expect(sdk.circles[1]!.opts.radius).toBe(80);
+    adapter.setMyLocation(null);
+    expect(sdk.overlays.size).toBe(0);
+    adapter.destroy();
+  });
+
+  it('destroy는 남은 점·원을 지우고, 이후 호출은 아무것도 그리지 않는다', async () => {
+    resources = installMapResources();
+    const sdk = installSdk();
+    const adapter = new NaverMapAdapter('id');
+    resources.trackNaver(adapter);
+    resources.setSdkProbe(() => ({
+      sdkListeners: sdk.listeners.size,
+      overlays: sdk.overlays.size,
+    }));
+    await mounted(adapter);
+    adapter.setMyLocation(fix);
+    expect(resources.snapshot().overlays).toBe(2);
+    adapter.destroy();
+    expect(sdk.overlays.size).toBe(0);
+    adapter.setMyLocation(fix);
+    expect(sdk.overlays.size).toBe(0);
+    expect(Object.values(resources.snapshot()).every((count) => count === 0)).toBe(true);
   });
 });

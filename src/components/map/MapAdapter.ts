@@ -38,11 +38,21 @@ export type MapPolyline = {
   dashed: boolean;
 };
 
+/** 내 위치. `accuracyM`은 정확도 반지름(m). `GeoFix`의 앞 세 필드와 같은 모양이다. */
+export type MyLocation = { lng: number; lat: number; accuracyM: number };
+
+/** 내 위치 점·정확도 원의 색(구글 지도의 파란 점). */
+export const MY_LOCATION_COLOR = '#1a73e8';
+/** 내 위치 점의 쌓임 순서. 장소 마커(0)보다 낮다. 정확도 원은 그보다 한 칸 아래(-2). */
+export const MY_LOCATION_Z_INDEX = -1;
+
 export interface MapAdapter {
   mount(el: HTMLElement): Promise<void>;
   setMarkers(markers: MapMarker[]): void;
   setClusterStyle(style: ClusterStyle): void;
   setPolylines(lines: MapPolyline[]): void;
+  /** 내 위치 점과 정확도 원을 그린다. `null`이면 지운다. 마운트 전에 불러도 마운트 때 그린다. */
+  setMyLocation(fix: MyLocation | null): void;
   resize(width: number, height: number): void;
   getCamera(): MapCamera | null;
   setCamera(camera: MapCamera): void;
