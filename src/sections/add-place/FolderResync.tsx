@@ -56,12 +56,15 @@ export function FolderResync({
   folderName,
   places,
   link,
+  fallbackLabelName,
   onShowAll,
 }: {
   shareId: string;
   folderName: string;
   places: FolderPlace[];
   link: FolderLink;
+  /** 라벨 기록이 사라졌을 때(다른 탭이 지움) 머리글에 쓸, 읽을 때의 라벨 이름. */
+  fallbackLabelName: string;
   onShowAll(): void;
 }) {
   const library = useAtomValue(libraryAtom);
@@ -98,7 +101,7 @@ export function FolderResync({
   }, []);
 
   const name = folderName.trim() === '' ? '이름 없는 폴더' : folderName;
-  const labelName = library.labels[link.labelId.value]?.name.value ?? '';
+  const labelName = library.labels[link.labelId.value]?.name.value ?? fallbackLabelName;
   const checkedDay = localDate(link.checkedAt);
   // 지금 보이는 두 목록에서 고른 것만 센다(분류가 바뀌어 사라진 곳의 선택은 넘기지 않는다).
   const pickedSids = [...freshItems, ...plan.deleted]

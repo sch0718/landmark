@@ -28,6 +28,8 @@ type Status =
       places: FolderPlace[];
       /** 읽기를 마친 순간 살아 있던 연결. 있으면(여행 대상이 없을 때) 다시 가져오기 화면을 보인다. */
       link: FolderLink | null;
+      /** 위 연결의 라벨 이름(읽은 순간). 그사이 라벨 기록이 사라져도 머리글이 비지 않게 한다. */
+      labelName: string;
     };
 
 const lookupFolder = (shareId: string, fresh: boolean) =>
@@ -75,14 +77,17 @@ export function FolderPreview({ shareId }: { shareId: string }) {
       result = Result.fail(new PlaceLookupError({ code: 'UPSTREAM_ERROR' }));
     }
     if (runSeq.current !== run) return;
+    // 이 순간의 최신 보관함으로 정한다. 뒤에 첫 가져오기가 연결을 만들어도 화면을 바꾸지 않는다.
+    const latest = jotaiStore.get(libraryAtom);
+    const link = liveFolderLink(latest, shareId) ?? null;
     setStatus(
       Result.isSuccess(result)
         ? {
             kind: 'ready',
             folderName: result.success.folderName,
             places: uniqueBySid(result.success.places),
-            // 이 순간의 최신 보관함으로 정한다. 뒤에 첫 가져오기가 연결을 만들어도 화면을 바꾸지 않는다.
-            link: liveFolderLink(jotaiStore.get(libraryAtom), shareId) ?? null,
+            link,
+            labelName: link === null ? '' : (latest.labels[link.labelId.value]?.name.value ?? ''),
           }
         : { kind: 'error', error: result.failure },
     );
@@ -134,6 +139,7 @@ export function FolderPreview({ shareId }: { shareId: string }) {
           folderName={status.folderName}
           places={status.places}
           link={link}
+          fallbackLabelName={status.labelName}
           onShowAll={() => setShowAll(true)}
         />
       );

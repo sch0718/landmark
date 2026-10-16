@@ -325,6 +325,18 @@ describe('폴더 다시 가져오기', () => {
     expect(imported.labelIds.value).toEqual([L_FOOD]);
   });
 
+  it('화면이 열린 사이 라벨 기록이 사라져도 읽을 때의 라벨 이름을 보인다', async () => {
+    const { store } = await openFolder();
+    await within(panel()).findByRole('heading', { name: '속초 맛집' });
+    act(() => {
+      const current = store.get(libraryAtom);
+      const labels = { ...current.labels };
+      delete labels[L_FOOD];
+      store.set(libraryAtom, { ...current, labels });
+    });
+    expect(within(panel()).getByText(`‘맛집’ 라벨 · 지난 확인 ${CHECKED_DAY}`)).toBeInTheDocument();
+  });
+
   it('취소하면 아무것도 바꾸지 않고 닫는다', async () => {
     const { user, store } = await openFolder();
     await within(panel()).findByRole('heading', { name: '속초 맛집' });
