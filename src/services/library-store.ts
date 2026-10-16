@@ -115,7 +115,8 @@ function readStored(storage: Storage): StoredRead {
 }
 
 /** 사본을 봉투 → 보관함 순서로 읽는다. 없거나 읽지 못하면 `null`(지우지 않는다). */
-function readPrevious(storage: Storage): PreviousCopy | null {
+/** 사본을 읽는다. `json`은 사본에 담긴 원문 값(모르는 필드 포함)이고 `library`는 검증으로 해석한 값이다. */
+function readPreviousRaw(storage: Storage): (PreviousCopy & { json: unknown }) | null {
   const text = storage.getItem(PREVIOUS_KEY);
   if (text === null) return null;
   let json: unknown;
@@ -127,7 +128,14 @@ function readPrevious(storage: Storage): PreviousCopy | null {
   const envelope = safeParse(BackupEnvelopeSchema, json);
   if (!envelope.success) return null;
   const library = safeParse(LibrarySchema, envelope.data.library);
-  return library.success ? { savedAt: envelope.data.exportedAt, library: library.data } : null;
+  return library.success
+    ? { savedAt: envelope.data.exportedAt, library: library.data, json: envelope.data.library }
+    : null;
+}
+
+function readPrevious(storage: Storage): PreviousCopy | null {
+  const saved = readPreviousRaw(storage);
+  return saved === null ? null : { savedAt: saved.savedAt, library: saved.library };
 }
 
 function makeLibraryStore(options: LibraryStoreOptions) {
@@ -381,11 +389,12 @@ function makeLibraryStore(options: LibraryStoreOptions) {
   // 지금 문서가 손상이면 그 원문을 먼저 손상 백업에 확보한다.
   const restorePrevious = withLock(
     Effect.gen(function* () {
-      const saved = yield* Effect.sync(() => readPrevious(storage));
+      const saved = yield* Effect.sync(() => readPreviousRaw(storage));
       if (saved === null) return yield* new NoPrevious();
       const read = yield* Effect.sync(() => readStored(storage));
       if (!read.ok) yield* ensureBackup(read.raw, KEEP_PREVIOUS);
-      yield* putItem(LIBRARY_KEY, JSON.stringify(saved.library), KEEP_PREVIOUS);
+      // 사본에 담긴 원문 그대로 쓴다(해석한 값을 쓰면 이 버전이 모르는 필드가 빠진다).
+      yield* putItem(LIBRARY_KEY, JSON.stringify(saved.json), KEEP_PREVIOUS);
       yield* removePrevious;
       return saved.library;
     }),

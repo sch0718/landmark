@@ -1145,6 +1145,21 @@ describe('LibraryStore 되살리기 전 사본', () => {
     }),
   );
 
+  it.effect('restorePrevious writes the raw library of the copy, unknown fields included', () =>
+    Effect.gen(function* () {
+      const storage = createMemoryStorage();
+      const raw = seedTwoWithFuture(storage);
+      yield* withStore({ storage }, (s) =>
+        Effect.gen(function* () {
+          yield* s.replace(NEXT, { requirePrevious: true });
+          yield* s.restorePrevious;
+        }),
+      );
+      expect(storage.getItem(LIBRARY_KEY)).toBe(raw);
+      expect(storage.getItem(LIBRARY_KEY)).toContain('futureField');
+    }),
+  );
+
   it.effect('restorePrevious without a copy fails with NoPrevious', () =>
     Effect.gen(function* () {
       const storage = createMemoryStorage();
