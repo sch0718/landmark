@@ -136,8 +136,8 @@ export class NaverMapAdapter implements MapAdapter {
   }
 
   /**
-   * 정확도 원과 점을 지우고 다시 만든다. 옵션 이름은 스펙 §11 목록을 따랐을 뿐 Naver Maps v3 공식 문서로는
-   * 확인하지 않았다(확인 필요 — 문서와 화면으로 확인, 스펙 §11).
+   * 정확도 원과 점을 지우고 다시 만든다. 옵션 이름은 Naver Maps v3 공식 문서(CircleOptions·MarkerOptions)와
+   * 대조했다(2026-10-17, PR #24 리뷰). 음수 zIndex로 장소 마커 아래에 깔리는지는 실제 화면 확인 필요(스펙 §11).
    */
   private drawMyLocation(): void {
     for (const o of this.myLocationOverlays) o.setMap(null);
