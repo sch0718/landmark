@@ -17,6 +17,17 @@ vi.mock('sonner', async (importOriginal) => ({
 }));
 const downloadMock = vi.hoisted(() => vi.fn());
 vi.mock('src/lib/download-text', () => ({ downloadText: downloadMock }));
+const reminderSpy = vi.hoisted(() => ({ calls: 0 }));
+vi.mock('src/domain/backup/reminder', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('src/domain/backup/reminder')>();
+  return {
+    ...actual,
+    reminderState: (...args: Parameters<typeof actual.reminderState>) => {
+      reminderSpy.calls += 1;
+      return actual.reminderState(...args);
+    },
+  };
+});
 vi.mock('src/theme/fonts', () => ({ loadDisplayFont: vi.fn(() => Promise.resolve()) }));
 
 // 시드 장소의 `createdAt`(2026-10-08)이 8일 전이 되는 시각.
@@ -152,6 +163,21 @@ describe('BackupReminder', () => {
     expect(
       within(banner()!).getByText('마지막 백업이 8일 전이에요. 그 뒤로 바뀐 내용이 있어요'),
     ).toBeInTheDocument();
+  });
+
+  it('does not recompute the reminder state on re-renders with the same library and meta', async () => {
+    const user = userEvent.setup();
+    Object.defineProperty(navigator, 'canShare', { value: () => true, configurable: true });
+    Object.defineProperty(navigator, 'share', {
+      value: () => Promise.reject(new Error('공유 실패')),
+      configurable: true,
+    });
+    await renderLibrary(sampleLibrary(), { path: '/' });
+    const before = reminderSpy.calls;
+    // 공유 실패는 읽는 중·오류 상태만 바꾸므로 보관함·기록은 그대로다(다시 그려지기만 한다).
+    await user.click(within(banner()!).getByRole('button', { name: '백업 받기' }));
+    await waitFor(() => expect(toastMock.error).toHaveBeenCalled());
+    expect(reminderSpy.calls).toBe(before);
   });
 
   it('is hidden in memory mode', async () => {

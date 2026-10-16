@@ -2,7 +2,7 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import { useAtomValue, useSetAtom } from 'jotai';
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { toast } from 'sonner';
 import { reminderState, reminderText } from 'src/domain/backup/reminder';
 import { useBackupFile } from 'src/sections/backup/use-backup-file';
@@ -28,7 +28,11 @@ export function BackupReminder() {
     if (error !== null) toast.error(error);
   }, [error]);
 
-  const state = reminderState({ library, meta, persistence, now: new Date().getTime() });
+  // 보관함 전체를 훑으므로 입력이 바뀔 때만 다시 센다(시각은 그때의 시각으로 충분하다).
+  const state = useMemo(
+    () => reminderState({ library, meta, persistence, now: new Date().getTime() }),
+    [library, meta, persistence],
+  );
   const shown = state !== null;
 
   // 이 자리에서 보이던 띠가 사라졌을 때만 포커스를 옮긴다(화면을 떠나 통째로 내려가는 때는 해당 없음).
