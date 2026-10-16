@@ -13,8 +13,8 @@ import { Link, useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { EllipsisIcon } from 'src/components/icons';
 import { deleteTrip, restoreTrip } from 'src/domain/trips/ops';
-import { todayStatus } from 'src/domain/trips/today';
-import { liveTrips, localToday, visibleCandidates, visibleStops } from 'src/domain/trips/query';
+import { rolloverDate, todayStatus } from 'src/domain/trips/today';
+import { liveTrips, visibleCandidates, visibleStops } from 'src/domain/trips/query';
 import { useDocumentTitle } from 'src/lib/use-document-title';
 import type { Library } from 'src/schema/library';
 import type { Trip } from 'src/schema/trip';
@@ -154,7 +154,8 @@ export function TripsPage() {
   const { run } = useLibraryAction();
   const navigate = useNavigate();
 
-  const today = localToday();
+  // 묶음도 `오늘 일정` 버튼과 같은 새벽 경계를 쓴다(04:00 전에는 어제 끝난 여행이 아직 위에 있다).
+  const today = rolloverDate(new Date());
   const { upcoming, past } = useMemo(() => {
     const all = liveTrips(library, today);
     return {

@@ -9,6 +9,7 @@ import {
   NEAR_M,
   pickNext,
   projectFromNow,
+  rolloverDate,
   todayStatus,
   usableFix,
   visitedInTrip,
@@ -67,6 +68,20 @@ describe('todayStatus', () => {
       dayIndex: 1,
       date: '2026-10-31',
     });
+  });
+});
+
+describe('rolloverDate', () => {
+  it.each([
+    [new Date(2026, 9, 25, 3, 59), '2026-10-24'],
+    [new Date(2026, 9, 25, 0, 0), '2026-10-24'],
+    [new Date(2026, 9, 25, 4, 0), '2026-10-25'],
+    [new Date(2026, 9, 25, 23, 59), '2026-10-25'],
+    // 월·해 경계
+    [new Date(2026, 10, 1, 2, 0), '2026-10-31'],
+    [new Date(2027, 0, 1, 1, 0), '2026-12-31'],
+  ])('rolloverDate(%s) = %s', (now, expected) => {
+    expect(rolloverDate(now)).toBe(expected);
   });
 });
 

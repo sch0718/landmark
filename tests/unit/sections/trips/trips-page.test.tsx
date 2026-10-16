@@ -468,4 +468,25 @@ describe('오늘 일정 버튼(스펙 §3.1)', () => {
     expect(screen.getByText('하루 나들이')).toBeInTheDocument();
     expect(todayLink('하루 나들이')).not.toBeInTheDocument();
   });
+
+  it('하루 여행은 다음 날 03:00에 여행 목록에 있고 04:00에는 지난 여행에 있다(새벽 경계)', async () => {
+    const lib = withTrips(sampleLibrary(), [
+      makeTrip(1, '하루 나들이', '2026-10-24', '2026-10-24'),
+      makeTrip(2, '속초 여행', '2026-11-01', '2026-11-02'),
+    ]);
+    const titlesIn = (name: string) =>
+      within(screen.getByRole('list', { name }))
+        .getAllByRole('link', { name: /, / })
+        .map((link) => link.getAttribute('aria-label')?.split(',')[0]);
+    vi.setSystemTime(new Date(2026, 9, 25, 3, 0, 0));
+    await renderLibrary(lib, { path: '/trips' });
+    // 버튼과 같은 경계: 오늘 일정이 달린 여행이 맨 위 묶음에 있다.
+    expect(titlesIn('여행 목록')).toEqual(['하루 나들이', '속초 여행']);
+    expect(screen.queryByRole('list', { name: '지난 여행 목록' })).not.toBeInTheDocument();
+    cleanup();
+    vi.setSystemTime(new Date(2026, 9, 25, 4, 0, 0));
+    await renderLibrary(lib, { path: '/trips' });
+    expect(titlesIn('여행 목록')).toEqual(['속초 여행']);
+    expect(titlesIn('지난 여행 목록')).toEqual(['하루 나들이']);
+  });
 });

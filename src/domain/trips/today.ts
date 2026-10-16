@@ -36,6 +36,16 @@ function localDate(now: Date): string {
 }
 
 /**
+ * 새벽 경계를 넣은 오늘('YYYY-MM-DD'). `DAY_ROLLOVER_HOUR` 전이면 어제다. 여행 목록의 묶음(다가오는·지난)처럼
+ * 여행 하나에 매이지 않는 판정에 쓴다. 하루 당겨서 달라지는 것은 어제 끝난 여행뿐이고, 그 여행은 바로
+ * `todayStatus`가 기간 안으로 보는 여행이다.
+ */
+export function rolloverDate(now: Date): string {
+  const date = localDate(now);
+  return now.getHours() < DAY_ROLLOVER_HOUR ? addDays(date, -1) : date;
+}
+
+/**
  * 지금이 여행의 어느 때인지. 기준은 기기의 지역 시각이다.
  * 04:00 전이고 어제가 기간 안이면 어제를 오늘로 본다(스펙 §4.1).
  * 'YYYY-MM-DD'는 사전순이 곧 날짜순이라 문자열로 견준다.
@@ -43,11 +53,8 @@ function localDate(now: Date): string {
 export function todayStatus(trip: TripPeriod, now: Date): TodayStatus {
   const start = trip.startDate.value;
   const end = trip.endDate.value;
-  let date = localDate(now);
-  if (now.getHours() < DAY_ROLLOVER_HOUR) {
-    const yesterday = addDays(date, -1);
-    if (yesterday >= start && yesterday <= end) date = yesterday;
-  }
+  const rolled = rolloverDate(now);
+  const date = rolled >= start && rolled <= end ? rolled : localDate(now);
   if (date < start) return { kind: 'before', daysUntil: daysBetween(date, start) - 1 };
   if (date > end) return { kind: 'after' };
   return { kind: 'during', dayIndex: daysBetween(start, date) - 1, date };
