@@ -410,6 +410,19 @@ describe('library map on a compact screen', () => {
 // 내 위치(스펙 §4.3). 기준점은 장소 좌표와 겹치지 않는 자릿수다.
 const BASE: FakeCoords = { longitude: 128.90031, latitude: 37.75517, accuracy: 30 };
 const FIX_AT = Date.parse('2026-10-16T05:05:00.000Z');
+/**
+ * 기기 시각을 위치를 잰 때 조금 뒤로 고정한다. 위치 서비스는 하루보다 오래됐거나 미래인 `timestamp`를
+ * 받은 때로 바꾸므로, 시각을 고정하지 않으면 `FIX_AT`이 실제 날짜에 따라 다른 값이 된다.
+ */
+function freezeClockAfterFix() {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(FIX_AT + 120_000);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+}
 /** `haversineM`의 지구 반지름 기준 위도 1도의 길이(m). */
 const M_PER_LAT_DEGREE = (6_371_008.8 * Math.PI) / 180;
 const northOf = (place: Place, m: number): Place => ({
@@ -470,6 +483,8 @@ const pickNearby = async (user: ReturnType<typeof userEvent.setup>) => {
 };
 
 describe('library map 내 위치 보기', () => {
+  freezeClockAfterFix();
+
   it('누를 때만 묻고, 찾으면 점을 그리고 그리로 옮기며 알린다', async () => {
     const user = userEvent.setup();
     const { fake } = await renderWithLocation(nearbyLibrary(), { path: '/map' });
@@ -584,6 +599,8 @@ describe('library map 내 위치 보기', () => {
 });
 
 describe('library map 근처 모드의 지도 맞추기', () => {
+  freezeClockAfterFix();
+
   const PANNED = { center: [127, 36] as [number, number], zoom: 9 };
   const center: [number, number] = [BASE.longitude, BASE.latitude];
   const status = () =>
@@ -804,6 +821,8 @@ describe('library map 근처 모드의 지도 맞추기', () => {
 });
 
 describe('library map 좁은 화면의 근처 칩', () => {
+  freezeClockAfterFix();
+
   it('근처 모드면 칩 줄 맨 앞에 근처 칩을 두고, 끄면 마커가 모두 돌아온다', async () => {
     const user = userEvent.setup();
     const { fake, router } = await renderWithLocation(nearbyLibrary({ visited: true }), {

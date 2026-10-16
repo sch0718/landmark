@@ -29,8 +29,9 @@ const MOVED = { latitude: 37.809, longitude: GYEONGPODAE.lng, accuracy: 20 };
 
 /**
  * 받은 위치의 `timestamp`를 페이지 시계(`Date.now()`)로 바꾼다. 좌표·권한은 브라우저의 위치 흉내 그대로 쓴다.
- * `page.clock`은 페이지의 `Date`만 2026-10-24로 옮기고 위치의 `timestamp`는 실제 시각(WebKit은 µs 단위)이라,
- * 그대로 두면 앱이 위치를 낡았다고(`FIX_FRESH_MS`) 보거나 거꾸로 늘 새것으로 본다.
+ * `page.clock`은 페이지의 `Date`만 2026-10-24로 옮기고 위치의 `timestamp`는 실제 시각(WebKit은 µs 단위)이다.
+ * 앱이 µs·미래 값은 받은 때로 바꾸지만, 실제 시각과 페이지 시계가 하루 안에서 엇갈리면 그 값이 낡았거나
+ * (`FIX_FRESH_MS`) 미래로 보이므로 페이지 시계로 맞춘다.
  */
 async function rebaseGeoTimestamps(page: Page): Promise<void> {
   await page.addInitScript(() => {

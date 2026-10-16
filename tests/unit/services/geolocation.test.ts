@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { it as effectIt } from '@effect/vitest';
 import { Effect, Exit, Fiber } from 'effect';
 import { TestClock } from 'effect/testing';
@@ -13,6 +13,31 @@ import {
 import { fakeGeolocation } from '../helpers/fake-geolocation';
 
 const SOKCHO = { longitude: 128.9003, latitude: 37.7551, accuracy: 30 };
+/** 시험 속 기기 시각(epoch ms). 위치 `timestamp`는 이 시각에 비춰 정규화된다. */
+const T = Date.parse('2026-10-16T05:05:00.000Z');
+
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(T);
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+/**
+ * 브라우저가 줄 수 있는 `timestamp`와 서비스가 내놓을 `at`. µs·초 단위, NaN, 미래 값은 받은 때(T)로,
+ * 하루 안의 과거 값(캐시 위치)은 그대로 둔다.
+ */
+const TIMESTAMP_CASES = [
+  ['µs 단위', T * 1000, T],
+  ['초 단위', T / 1000, T],
+  ['NaN', Number.NaN, T],
+  ['5초 뒤(미래)', T + 5_000, T],
+  ['하루 넘게 전', T - 86_400_001, T],
+  ['30초 전(캐시)', T - 30_000, T - 30_000],
+  ['딱 하루 전', T - 86_400_000, T - 86_400_000],
+] as const;
 
 const service = (api: GeolocationApi | undefined, secure = true) =>
   Geolocation.layerWith({ api, secure });
@@ -62,13 +87,36 @@ describe('Geolocation.current', () => {
       yield* Effect.yieldNow;
       expect(fake.requests).toHaveLength(1);
       expect(fake.requests[0]?.options).toBe(CURRENT_OPTIONS);
-      fake.succeed(0, SOKCHO, 1000);
+      fake.succeed(0, SOKCHO, T - 1000);
       expect(yield* Fiber.join(fiber)).toEqual({
         lng: 128.9003,
         lat: 37.7551,
         accuracyM: 30,
-        at: 1000,
+        at: T - 1000,
       } satisfies GeoFix);
+    }),
+  );
+
+  for (const [label, raw, at] of TIMESTAMP_CASES) {
+    effectIt.effect(`timestamp ${label} -> at ${at === T ? '받은 때' : '그대로'}`, () =>
+      Effect.gen(function* () {
+        const fake = fakeGeolocation();
+        const fiber = yield* current.pipe(Effect.provide(service(fake.api)), Effect.forkChild);
+        yield* Effect.yieldNow;
+        fake.succeed(0, SOKCHO, raw);
+        expect((yield* Fiber.join(fiber)).at).toBe(at);
+      }),
+    );
+  }
+
+  effectIt.effect('받은 때는 콜백이 불린 때다(요청한 때가 아니다)', () =>
+    Effect.gen(function* () {
+      const fake = fakeGeolocation();
+      const fiber = yield* current.pipe(Effect.provide(service(fake.api)), Effect.forkChild);
+      yield* Effect.yieldNow;
+      vi.setSystemTime(T + 7_000);
+      fake.succeed(0, SOKCHO, Number.NaN);
+      expect((yield* Fiber.join(fiber)).at).toBe(T + 7_000);
     }),
   );
 
@@ -162,12 +210,26 @@ describe('Geolocation.watch', () => {
       const fake = fakeGeolocation();
       const { fixes, stop } = yield* watchWith(fake.api);
       expect(fake.watchers.get(1)?.options).toBe(WATCH_OPTIONS);
-      fake.emit(1, SOKCHO, 1000);
-      fake.emit(1, { ...SOKCHO, accuracy: 12 }, 2000);
+      fake.emit(1, SOKCHO, T - 2000);
+      fake.emit(1, { ...SOKCHO, accuracy: 12 }, T - 1000);
       expect(fixes).toEqual([
-        { lng: 128.9003, lat: 37.7551, accuracyM: 30, at: 1000 },
-        { lng: 128.9003, lat: 37.7551, accuracyM: 12, at: 2000 },
+        { lng: 128.9003, lat: 37.7551, accuracyM: 30, at: T - 2000 },
+        { lng: 128.9003, lat: 37.7551, accuracyM: 12, at: T - 1000 },
       ]);
+      stop();
+    }),
+  );
+
+  effectIt.effect('timestamp를 받은 때에 비춰 정규화한다', () =>
+    Effect.gen(function* () {
+      const fake = fakeGeolocation();
+      const { fixes, stop } = yield* watchWith(fake.api);
+      for (const [, raw] of TIMESTAMP_CASES) fake.emit(1, SOKCHO, raw);
+      expect(fixes.map((fix) => fix.at)).toEqual(TIMESTAMP_CASES.map(([, , at]) => at));
+      // 받은 때는 콜백마다 새로 읽는다.
+      vi.setSystemTime(T + 7_000);
+      fake.emit(1, SOKCHO, Number.NaN);
+      expect(fixes.at(-1)?.at).toBe(T + 7_000);
       stop();
     }),
   );
