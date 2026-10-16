@@ -8,38 +8,26 @@ import { naverPlaceUrlOf } from 'src/domain/library/links';
 import {
   createAndAttachLabel,
   deletePlaces,
+  markVisitedToday,
   restorePlaces,
   setPlaceCategory,
   setPlaceMemo,
   setPlaceName,
+  setPlaceReview,
+  setVisitedOn,
   toggleLabel,
 } from 'src/domain/library/ops';
 import { liveLabels } from 'src/domain/library/query';
-import type { Place } from 'src/schema/library';
+import { localDateOf, reviewOf, visitedOnOf } from 'src/domain/library/visit';
+import { LIBRARY_LIMITS, type Place } from 'src/schema/library';
 import { paths } from 'src/routes/paths';
 import { UNDO_MS } from 'src/sections/library/LibraryPage';
+import { BUTTON_SX } from 'src/sections/place/button-style';
 import { EditableText } from 'src/sections/place/EditableText';
 import { LabelPicker } from 'src/sections/place/LabelPicker';
 import { MemoEditor } from 'src/sections/place/MemoEditor';
+import { VisitEditor } from 'src/sections/place/VisitEditor';
 import { libraryAtom, useLibraryAction } from 'src/stores/library-state';
-
-const BUTTON_SX = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: 0.75,
-  minHeight: 44,
-  px: 1.5,
-  border: '1px solid var(--tm-border)',
-  borderRadius: 'var(--tm-radius-md)',
-  background: 'transparent',
-  color: 'var(--tm-text-primary)',
-  font: 'inherit',
-  fontSize: 14,
-  fontWeight: 700,
-  textDecoration: 'none',
-  cursor: 'pointer',
-  '& svg': { width: 16, height: 16 },
-} as const;
 
 /** 장소 상세 안 제목 단계. 화면의 `h1`이면 1, 다른 `h1`이 이미 있는 화면(여행 계획) 안이면 2. */
 type HeadingLevel = 1 | 2;
@@ -100,6 +88,36 @@ function PlaceBody({ place, level }: { place: Place; level: HeadingLevel }) {
   const saveCategory = (text: string) =>
     run((lib, ctx) => setPlaceCategory(lib, id, text === '' ? null : text, ctx));
   const saveMemo = (text: string) => run((lib, ctx) => setPlaceMemo(lib, id, text, ctx));
+  const saveReview = (text: string) => run((lib, ctx) => setPlaceReview(lib, id, text, ctx));
+  const markVisited = async () => (await run((lib, ctx) => markVisitedToday(lib, [id], ctx))).ok;
+  const setVisitDate = (date: string) =>
+    void run((lib, ctx) => setVisitedOn(lib, { [id]: date }, ctx));
+
+  const clearVisit = async () => {
+    // 지우기 전 날짜는 연산 안에서(저장된 최신본에서) 읽는다. 다른 탭이 이미 지웠으면 되돌리기를 내놓지 않는다.
+    const before: { date: string | null } = { date: null };
+    const result = await run((lib, ctx) => {
+      const current = lib.places[id];
+      before.date = current === undefined ? null : visitedOnOf(current);
+      return setVisitedOn(lib, { [id]: null }, ctx);
+    });
+    const prev = before.date;
+    if (!result.ok || prev === null) return result.ok;
+    toast('다녀옴 표시를 지웠어요', {
+      duration: UNDO_MS,
+      action: {
+        label: '되돌리기',
+        // 그사이 다른 날짜로 다시 표시했다면 덮어쓰지 않는다.
+        onClick: () =>
+          void run((lib, ctx) => {
+            const current = lib.places[id];
+            if (current === undefined || visitedOnOf(current) !== null) return lib;
+            return setVisitedOn(lib, { [id]: prev }, ctx);
+          }),
+      },
+    });
+    return true;
+  };
 
   const remove = async () => {
     // 이미 다른 탭이 지운 장소라면 되돌리기를 내놓지 않는다(저장된 최신본으로 판단한다).
@@ -151,6 +169,25 @@ function PlaceBody({ place, level }: { place: Place; level: HeadingLevel }) {
           </Box>
         </Box>
       )}
+      <Section title="다녀옴" level={level}>
+        <VisitEditor
+          visitedOn={visitedOnOf(place)}
+          today={localDateOf(new Date().toISOString())}
+          onMarkToday={markVisited}
+          onSetDate={setVisitDate}
+          onClear={clearVisit}
+        />
+      </Section>
+      <Section title="한 줄 평" level={level}>
+        <EditableText
+          label="한 줄 평"
+          value={reviewOf(place)}
+          emptyText="한 줄 평 남기기 (140자까지)"
+          allowEmpty
+          maxLength={LIBRARY_LIMITS.reviewChars}
+          onSave={saveReview}
+        />
+      </Section>
       <Section title="라벨" level={level}>
         <LabelPicker
           labels={labels}

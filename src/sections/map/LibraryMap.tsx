@@ -4,11 +4,18 @@ import { useCallback, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import type { MapPadding } from 'src/components/map/MapAdapter';
 import { MapView } from 'src/components/map/MapView';
-import { labelCounts, liveLabels, queryPlaces } from 'src/domain/library/query';
+import {
+  hasVisited,
+  labelCounts,
+  liveLabels,
+  queryPlaces,
+  visitCounts,
+} from 'src/domain/library/query';
 import { paths } from 'src/routes/paths';
 import { PinModeOverlay } from 'src/sections/add-place/PinModeOverlay';
 import { useOpenPlaceId } from 'src/sections/library/use-open-place-id';
 import { LabelChips } from 'src/sections/library/LabelChips';
+import { VisitChips } from 'src/sections/library/VisitChips';
 import { useLibraryQuery } from 'src/sections/library/use-library-query';
 import { placeMarker, toMarkers } from 'src/sections/map/markers';
 import { DETAIL_WIDTH } from 'src/sections/shell/pane-widths';
@@ -33,7 +40,7 @@ const CANDIDATE_MARKER_ID = 'candidate';
  * - 마커를 누르면 그 장소의 상세로 가고, 목록은 그 행으로 스크롤한다(`focusPlaceAtom`).
  * - 목록·상세에서 장소를 고르면(경로의 `/place/:id`) 지도가 그 장소로 움직인다. 방금 지도에서 누른 장소는
  *   상세 오버레이가 새로 생기는 경우에만 옮긴다.
- * - 좁은 화면(`/map`)에서는 위에 라벨 필터 칩 한 줄을 둔다.
+ * - 좁은 화면(`/map`)에서는 위에 방문·라벨 필터 칩 한 줄을 둔다.
  * - 링크로 찾은 후보의 확인 카드가 열려 있으면 그 좌표로 옮기고 임시 마커를 보인다(스펙 §2.2).
  * - 핀 모드면 가운데 조준점 오버레이를 덮고 지도 중심을 넘긴다. 시작 좌표가 있으면 그리로 옮기고, 마커를
  *   눌러도 상세로 가지 않는다. 핀 입력 카드가 열리면 고른 위치에 임시 마커를 둔다(스펙 §2.4).
@@ -68,6 +75,7 @@ export function LibraryMap() {
     [tokens],
   );
 
+  // 마커는 순서가 의미 없으므로 `다녀온 날순`을 따로 적용하지 않는다.
   const places = useMemo(() => queryPlaces(library, query), [library, query]);
   const markers = useMemo(() => {
     const shown = toMarkers(places, library.labels, tokens, placeId);
@@ -172,13 +180,32 @@ export function LibraryMap() {
 
   const labels = useMemo(() => liveLabels(library), [library]);
   const counts = useMemo(() => labelCounts(library, query), [library, query]);
+  const visits = useMemo(() => visitCounts(library, query), [library, query]);
+  const showVisit = useMemo(
+    () => hasVisited(library) || query.visited !== 'all',
+    [library, query.visited],
+  );
   const padding = detailOverlaid ? OVERLAID_PADDING : BASE_PADDING;
 
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       {layout === 'compact' && (
         <Box sx={{ flex: 'none', py: 0.5, bgcolor: 'var(--tm-bg-surface)' }}>
-          <LabelChips query={query} onChange={patch} labels={labels} counts={counts} />
+          <LabelChips
+            query={query}
+            onChange={patch}
+            labels={labels}
+            counts={counts}
+            leading={
+              showVisit ? (
+                <VisitChips
+                  value={query.visited}
+                  counts={visits}
+                  onChange={(visited) => patch({ visited })}
+                />
+              ) : undefined
+            }
+          />
         </Box>
       )}
       <Box sx={{ position: 'relative', flex: 1, minHeight: 0, bgcolor: 'var(--tm-bg-raised)' }}>

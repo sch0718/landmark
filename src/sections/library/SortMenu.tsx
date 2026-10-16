@@ -10,9 +10,18 @@ const SORTS: ReadonlyArray<{ value: LibraryQuery['sort']; label: string }> = [
   { value: 'label', label: '라벨순' },
 ];
 
-type Props = { value: LibraryQuery['sort']; onChange(sort: LibraryQuery['sort']): void };
+/** 저장하지 않는 정렬(`visitedSortAtom`)의 항목 이름. */
+const VISITED_SORT_LABEL = '다녀온 날순';
 
-export function SortMenu({ value, onChange }: Props) {
+type Props = {
+  value: LibraryQuery['sort'];
+  /** `다녀온 날순`이 켜져 있는가. 켜져 있으면 저장되는 정렬은 모두 꺼진 것으로 보인다. */
+  visitedSort: boolean;
+  onChange(sort: LibraryQuery['sort']): void;
+  onVisitedSort(): void;
+};
+
+export function SortMenu({ value, visitedSort, onChange, onVisitedSort }: Props) {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const menuId = useId();
   const current = SORTS.find((s) => s.value === value) ?? SORTS[0]!;
@@ -38,15 +47,15 @@ export function SortMenu({ value, onChange }: Props) {
           whiteSpace: 'nowrap',
         }}
       >
-        {current.label}
+        {visitedSort ? VISITED_SORT_LABEL : current.label}
       </Box>
       <Menu id={menuId} anchorEl={anchor} open={anchor !== null} onClose={() => setAnchor(null)}>
         {SORTS.map((sort) => (
           <MenuItem
             key={sort.value}
             role="menuitemradio"
-            aria-checked={sort.value === value}
-            selected={sort.value === value}
+            aria-checked={!visitedSort && sort.value === value}
+            selected={!visitedSort && sort.value === value}
             sx={{ minHeight: 44 }}
             onClick={() => {
               onChange(sort.value);
@@ -56,6 +65,18 @@ export function SortMenu({ value, onChange }: Props) {
             {sort.label}
           </MenuItem>
         ))}
+        <MenuItem
+          role="menuitemradio"
+          aria-checked={visitedSort}
+          selected={visitedSort}
+          sx={{ minHeight: 44 }}
+          onClick={() => {
+            onVisitedSort();
+            setAnchor(null);
+          }}
+        >
+          {VISITED_SORT_LABEL}
+        </MenuItem>
       </Menu>
     </>
   );

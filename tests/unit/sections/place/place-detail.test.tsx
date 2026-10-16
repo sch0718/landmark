@@ -81,6 +81,17 @@ describe('PlaceDetail', () => {
     await waitFor(() => expect(store.get(libraryAtom).places[P1]!.category.value).toBeNull());
   });
 
+  it('saves the one-line review trimmed and stores it', async () => {
+    const user = userEvent.setup();
+    const { store, storage } = await open(P1);
+    await user.click(within(detail()).getByRole('button', { name: '한 줄 평 수정' }));
+    const box = within(detail()).getByRole('textbox', { name: '한 줄 평' });
+    expect(box).toHaveAttribute('maxLength', '140');
+    await user.type(box, '  일출 최고  {Enter}');
+    await waitFor(() => expect(store.get(libraryAtom).places[P1]!.review?.value).toBe('일출 최고'));
+    expect(storedPlace(storage, P1).review?.value).toBe('일출 최고');
+  });
+
   it('keeps the name when the edit is cancelled or emptied', async () => {
     const user = userEvent.setup();
     const { store } = await open(P1);

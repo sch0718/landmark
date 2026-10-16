@@ -47,6 +47,9 @@ export function makePlace(
     sid?: string;
     saved?: boolean;
     deletedAt?: string | null;
+    /** 주면 `{ value, updatedAt: T0 }`로 넣고, 안 주면 키가 없다. */
+    visitedOn?: string | null;
+    review?: string;
   } = {},
 ): Place {
   const id = `place${String(n).padStart(5, '0')}`;
@@ -65,6 +68,8 @@ export function makePlace(
     saved: f(options.saved ?? true, savedAt),
     createdAt: T0,
     deletedAt: options.deletedAt ?? null,
+    ...(options.visitedOn !== undefined ? { visitedOn: f(options.visitedOn) } : {}),
+    ...(options.review !== undefined ? { review: f(options.review) } : {}),
   };
 }
 

@@ -146,6 +146,7 @@ export class FakeMapAdapter implements MapAdapter {
         marker.textColor,
         marker.borderColor,
         marker.selected,
+        marker.visited,
         marker.dimmed,
         marker.clusterable,
       ]);

@@ -1,4 +1,7 @@
 import Box from '@mui/material/Box';
+import { visuallyHidden } from '@mui/utils';
+import { CheckIcon } from 'src/components/icons';
+import { isVisited } from 'src/domain/library/visit';
 import type { Label, Place } from 'src/schema/library';
 import { labelColors } from 'src/sections/library/label-style';
 import { SelectMark } from 'src/sections/library/SelectMark';
@@ -88,6 +91,20 @@ export function PlaceRow({
       >
         {place.name.value}
       </Box>
+      {isVisited(place) && (
+        <>
+          {/* 색만으로 알리지 않는다: 체크는 장식이고 같은 뜻을 숨은 글자가 읽어 준다. */}
+          <CheckIcon
+            aria-hidden="true"
+            width={16}
+            height={16}
+            style={{ flex: 'none', color: 'var(--tm-accent-text)' }}
+          />
+          <Box component="span" sx={visuallyHidden}>
+            다녀옴
+          </Box>
+        </>
+      )}
       {chips.length > 0 && (
         <Box
           component="span"

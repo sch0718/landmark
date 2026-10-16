@@ -1,18 +1,31 @@
 import Box from '@mui/material/Box';
-import { useAtomValue, useSetAtom } from 'jotai';
+import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import {
   DEFAULT_QUERY,
+  hasVisited,
   labelCounts,
   liveLabels,
   livePlaces,
   placeIdsInRegion,
   queryPlaces,
   regionCounts,
+  sortByVisited,
+  visitCounts,
+  type LibraryQuery,
 } from 'src/domain/library/query';
-import { addLabels, deletePlaces, removeLabels, restorePlaces } from 'src/domain/library/ops';
+import {
+  addLabels,
+  deletePlaces,
+  markVisitedToday,
+  removeLabels,
+  restorePlaces,
+  setVisitedOn,
+} from 'src/domain/library/ops';
+import { isVisited, localDateOf, visitedOnOf } from 'src/domain/library/visit';
+import type { Library } from 'src/schema/library';
 import { addCandidates } from 'src/domain/trips/ops';
 import { paths } from 'src/routes/paths';
 import { BulkBar } from 'src/sections/library/BulkBar';
@@ -34,6 +47,7 @@ import { exportTargets } from 'src/sections/share-export/export-targets';
 import { libraryAtom, useLibraryAction } from 'src/stores/library-state';
 import { focusPlaceAtom } from 'src/stores/library-ui';
 import { prefsAtom, setPrefsAtom } from 'src/stores/prefs-state';
+import { visitedSortAtom } from 'src/stores/visit-sort';
 
 /** 삭제 직후 "되돌리기"를 보여 주는 시간. */
 export const UNDO_MS = 5000;
@@ -44,6 +58,22 @@ const toggled = (set: ReadonlySet<string>, id: string): Set<string> => {
   return next;
 };
 
+/** 최신본의 살아 있는 `ids` 중 `changes(이전 다녀온 날)`가 참인 장소의 이전 값. 실제로 바뀌는 곳만 센다. */
+const visitedBefore = (
+  lib: Library,
+  ids: readonly string[],
+  changes: (prev: string | null) => boolean,
+): Record<string, string | null> => {
+  const out: Record<string, string | null> = {};
+  for (const id of ids) {
+    const place = lib.places[id];
+    if (place === undefined || place.deletedAt !== null) continue;
+    const prev = visitedOnOf(place);
+    if (changes(prev)) out[id] = prev;
+  }
+  return out;
+};
+
 /**
  * 보관함 목록 화면(스펙 §4.2). 위에서부터 검색·보기·정렬, 라벨·지역 칩, 보기 본문, 선택 모드의 하단 바.
  * 벤토·타일은 "라벨 개요" 보기라서 라벨 블록 아래에 현재 조건의 장소 목록(`ListView`)을 항상 함께 보여 준다.
@@ -52,7 +82,16 @@ export function LibraryPage() {
   const library = useAtomValue(libraryAtom);
   const prefs = useAtomValue(prefsAtom);
   const setPrefs = useSetAtom(setPrefsAtom);
-  const [query, patch] = useLibraryQuery();
+  const [query, patchQuery] = useLibraryQuery();
+  const [visitedSort, setVisitedSort] = useAtom(visitedSortAtom);
+  // 저장되는 정렬을 고르면 저장하지 않는 `다녀온 날순`은 꺼진다(같은 값을 다시 골라도).
+  const patch = useCallback(
+    (change: Partial<LibraryQuery>) => {
+      patchQuery(change);
+      if (change.sort !== undefined) setVisitedSort(false);
+    },
+    [patchQuery, setVisitedSort],
+  );
   const { run } = useLibraryAction();
   const navigate = useNavigate();
   const openId = useOpenPlaceId();
@@ -68,7 +107,15 @@ export function LibraryPage() {
   const labels = useMemo(() => liveLabels(library), [library]);
   const labelsById = useMemo(() => new Map(labels.map((l) => [l.id, l])), [labels]);
   const total = useMemo(() => livePlaces(library).length, [library]);
-  const places = useMemo(() => queryPlaces(library, query), [library, query]);
+  const places = useMemo(() => {
+    const matched = queryPlaces(library, query);
+    return visitedSort ? sortByVisited(matched) : matched;
+  }, [library, query, visitedSort]);
+  const showVisit = useMemo(
+    () => hasVisited(library) || query.visited !== 'all',
+    [library, query.visited],
+  );
+  const visits = useMemo(() => visitCounts(library, query), [library, query]);
   const counts = useMemo(() => labelCounts(library, query), [library, query]);
   const regions = useMemo(() => regionCounts(library, query), [library, query]);
 
@@ -123,7 +170,64 @@ export function LibraryPage() {
       },
     });
   };
-  const clearFilters = () => patch({ ...DEFAULT_QUERY, sort: query.sort });
+  // 다녀옴 표시·지우기. 숫자와 되돌리기는 화면이 아니라 저장된 최신본에서 실제로 바뀐 곳 기준이다.
+  // 되돌리기는 지금 값이 이 작업이 쓴 값(`written`) 그대로인 장소만 되돌린다.
+  // 그사이 다른 탭이 새 날짜를 적었다면 덮어쓰지 않는다.
+  const undoVisited = (prevById: Record<string, string | null>, written: string | null) => ({
+    label: '되돌리기',
+    onClick: () =>
+      void run((lib, ctx) => {
+        const toRestore: Record<string, string | null> = {};
+        for (const [id, prev] of Object.entries(prevById)) {
+          const current = lib.places[id];
+          if (current === undefined || current.deletedAt !== null) continue;
+          if (visitedOnOf(current) === written) toRestore[id] = prev;
+        }
+        return Object.keys(toRestore).length === 0 ? lib : setVisitedOn(lib, toRestore, ctx);
+      }),
+  });
+  const markVisited = async () => {
+    const ids = selectedIds;
+    let prevById: Record<string, string | null> = {};
+    let written = '';
+    const result = await run((lib, ctx) => {
+      const today = localDateOf(ctx.now);
+      written = today;
+      prevById = visitedBefore(lib, ids, (prev) => prev === null || prev < today);
+      return markVisitedToday(lib, ids, ctx);
+    });
+    if (!result.ok) return;
+    const n = Object.keys(prevById).length;
+    if (n === 0) {
+      toast('이미 다녀옴으로 표시돼 있어요');
+      return;
+    }
+    toast(`${n}곳을 오늘 다녀옴으로 표시했어요`, {
+      duration: UNDO_MS,
+      action: undoVisited(prevById, written),
+    });
+  };
+  const clearVisited = async () => {
+    const ids = selectedIds;
+    let prevById: Record<string, string | null> = {};
+    const result = await run((lib, ctx) => {
+      prevById = visitedBefore(lib, ids, (prev) => prev !== null);
+      return setVisitedOn(
+        lib,
+        Object.fromEntries(Object.keys(prevById).map((id) => [id, null])),
+        ctx,
+      );
+    });
+    if (!result.ok) return;
+    const n = Object.keys(prevById).length;
+    if (n === 0) return;
+    toast(`${n}곳의 다녀옴 표시를 지웠어요`, {
+      duration: UNDO_MS,
+      action: undoVisited(prevById, null),
+    });
+  };
+  // 정렬은 그대로 둔다. `patch`를 거치면 저장되지 않는 `다녀온 날순`이 꺼지므로 `patchQuery`로 직접 쓴다.
+  const clearFilters = () => patchQuery({ ...DEFAULT_QUERY, sort: query.sort });
   // 고른 장소를 기존 여행의 후보에 더한다. 이미 그 여행에 있는 곳은 건너뛰고 새로 넣은 수만 알린다.
   // 저장이 끝나기 전에 또 누르면(두 번 탭) 무시한다. 토스트가 두 번 뜨지 않게.
   const addingToTrip = useRef(false);
@@ -178,6 +282,9 @@ export function LibraryPage() {
           labels={labels}
           counts={counts}
           regions={regions}
+          visitCounts={showVisit ? visits : undefined}
+          visitedSort={visitedSort}
+          onVisitedSort={() => setVisitedSort(true)}
           view={view}
           onViewChange={changeView}
           onExport={() => setExporting(true)}
@@ -209,6 +316,9 @@ export function LibraryPage() {
           onDelete={() => void remove()}
           onExport={() => setExporting(true)}
           onAddToTrip={() => setPickingTrip(true)}
+          visitedCount={selectedPlaces.filter(isVisited).length}
+          onMarkVisited={() => void markVisited()}
+          onClearVisited={() => void clearVisited()}
           onClear={() => setSelected(new Set())}
         />
       )}

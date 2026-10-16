@@ -33,6 +33,8 @@ export function exportTargets(
     ids = visible.map((p) => p.id);
     summary = `지금 보이는 ${ids.length}곳을 내보냅니다`;
     if (filterNames.length > 0) summary += ` (라벨: ${filterNames.join(', ')})`;
+    if (query.visited === 'visited') summary += ' (가 본 곳만)';
+    if (query.visited === 'unvisited') summary += ' (안 가 본 곳만)';
     const text = query.text.trim();
     if (text !== '') summary += ` (검색: ${text})`;
   }

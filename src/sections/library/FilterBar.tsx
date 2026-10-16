@@ -5,6 +5,7 @@ import { SearchIcon, ShareIcon } from 'src/components/icons';
 import type { LibraryQuery } from 'src/domain/library/query';
 import type { Label } from 'src/schema/library';
 import { LabelChips } from 'src/sections/library/LabelChips';
+import { VisitChips } from 'src/sections/library/VisitChips';
 import { RegionChips } from 'src/sections/library/RegionChips';
 import { SortMenu } from 'src/sections/library/SortMenu';
 import { ViewSwitcher, type LibraryView } from 'src/sections/library/ViewSwitcher';
@@ -20,6 +21,11 @@ type Props = {
   counts: ReadonlyMap<string, number>;
   /** `regionCounts` 결과. */
   regions: ReadonlyArray<{ region: string; count: number }>;
+  /** `visitCounts` 결과. 없으면 `방문` 칩 묶음을 그리지 않는다(다녀온 곳이 없고 필터도 꺼진 보관함). */
+  visitCounts?: { visited: number; unvisited: number };
+  /** `다녀온 날순`이 켜져 있는가(저장하지 않는 정렬). */
+  visitedSort: boolean;
+  onVisitedSort(): void;
   view: LibraryView;
   onViewChange(view: LibraryView): void;
   /** 내보내기 창을 연다. 0곳이어도 누를 수 있다(창에서 이유를 보여 준다). */
@@ -35,6 +41,9 @@ export function FilterBar({
   labels,
   counts,
   regions,
+  visitCounts,
+  visitedSort,
+  onVisitedSort,
   view,
   onViewChange,
   onExport,
@@ -60,7 +69,12 @@ export function FilterBar({
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 1 }}>
         <ViewSwitcher value={view} onChange={onViewChange} />
         <Box sx={{ display: 'flex', alignItems: 'center' }}>
-          <SortMenu value={query.sort} onChange={(sort) => onChange({ sort })} />
+          <SortMenu
+            value={query.sort}
+            visitedSort={visitedSort}
+            onChange={(sort) => onChange({ sort })}
+            onVisitedSort={onVisitedSort}
+          />
           <Box
             component="button"
             type="button"
@@ -86,7 +100,21 @@ export function FilterBar({
         </Box>
       </Box>
 
-      <LabelChips query={query} onChange={onChange} labels={labels} counts={counts} />
+      <LabelChips
+        query={query}
+        onChange={onChange}
+        labels={labels}
+        counts={counts}
+        leading={
+          visitCounts === undefined ? undefined : (
+            <VisitChips
+              value={query.visited}
+              counts={visitCounts}
+              onChange={(visited) => onChange({ visited })}
+            />
+          )
+        }
+      />
 
       <RegionChips
         regions={regions}

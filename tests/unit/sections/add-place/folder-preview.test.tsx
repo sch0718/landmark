@@ -311,6 +311,17 @@ describe('폴더 미리보기', () => {
     ).toHaveAttribute('aria-pressed', 'true');
   });
 
+  it('가 본 곳 필터를 켠 채 가져오면 방문 필터가 풀려 새 장소가 보인다', async () => {
+    const { user } = await openFolder(undefined, {
+      prefs: { query: { ...DEFAULT_QUERY, visited: 'visited' } },
+    });
+    await within(panel()).findByRole('heading', { name: '속초 맛집 · 3곳' });
+    await user.click(importButton(3));
+    await waitFor(() => expect(queryPanel()).not.toBeInTheDocument());
+    await waitFor(() => expect(shownNames()).toHaveLength(3));
+    expect(shownNames().some((text) => text.includes('폴더 장소 2'))).toBe(true);
+  });
+
   it('기존 라벨로 가져오면 그 라벨 하나로만 거른다', async () => {
     const { user } = await openFolder(undefined, { ids: ['newplace01', 'newplace02'] });
     await within(panel()).findByRole('heading', { name: '속초 맛집 · 3곳' });

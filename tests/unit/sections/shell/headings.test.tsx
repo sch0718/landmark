@@ -67,7 +67,7 @@ describe('화면별 제목 구조', () => {
   });
 
   it.each([1280, 1279, 390])(
-    '장소 상세(%i px)는 장소 이름이 h1이고 라벨·메모가 h2다',
+    '장소 상세(%i px)는 장소 이름이 h1이고 다녀옴·한 줄 평·라벨·메모가 h2다',
     async (width) => {
       await renderLibrary(sampleLibrary(), { path: `/place/${P1}`, width });
       expect(h1s().map((h) => h.textContent)).toEqual(['중앙시장 닭강정']);
@@ -76,7 +76,7 @@ describe('화면별 제목 구조', () => {
         within(detail)
           .getAllByRole('heading', { level: 2 })
           .map((h) => h.textContent),
-      ).toEqual(['라벨', '메모']);
+      ).toEqual(['다녀옴', '한 줄 평', '라벨', '메모']);
       expect(within(detail).queryByRole('heading', { level: 3 })).not.toBeInTheDocument();
       // 이름을 고치는 버튼은 그대로 있다.
       expect(within(detail).getByRole('button', { name: '이름 수정' })).toBeInTheDocument();

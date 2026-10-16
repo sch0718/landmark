@@ -1,4 +1,5 @@
 import type { MapMarker } from 'src/components/map/MapAdapter';
+import { isVisited } from 'src/domain/library/visit';
 import type { Label, Place } from 'src/schema/library';
 import type { Tokens } from 'src/theme/tokens';
 
@@ -12,7 +13,7 @@ export type LabelPalette = Tokens['label'][keyof Tokens['label']];
  * React·Effect 없이 타입만 import하므로 공유 지도 페이지(`src/share-map`)도 그대로 쓴다.
  */
 export function placeMarker(
-  place: { id: string; lng: number; lat: number; name: string },
+  place: { id: string; lng: number; lat: number; name: string; visited?: boolean },
   palette: LabelPalette | undefined,
   tokens: Tokens,
   selected: boolean,
@@ -26,6 +27,7 @@ export function placeMarker(
     textColor: palette?.text ?? tokens.text.primary,
     borderColor: selected ? tokens.accent.main : (palette?.marker ?? tokens.border),
     selected,
+    ...(place.visited === true ? { visited: true } : {}),
     // 선택된 장소는 이웃에 묶이지 않고 항상 이름으로 보인다.
     clusterable: !selected,
   };
@@ -44,7 +46,13 @@ export function toMarkers(
       .find((label): label is Label => label !== undefined && label.deletedAt === null);
     const palette = first === undefined ? undefined : tokens.label[first.color.value];
     return placeMarker(
-      { id: place.id, lng: place.lng, lat: place.lat, name: place.name.value },
+      {
+        id: place.id,
+        lng: place.lng,
+        lat: place.lat,
+        name: place.name.value,
+        visited: isVisited(place),
+      },
       palette,
       tokens,
       place.id === selectedId,

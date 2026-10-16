@@ -1,18 +1,12 @@
-import { atom, useAtomValue, useStore } from 'jotai';
+import { useAtomValue, useStore } from 'jotai';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { liveLabels, type LibraryQuery } from 'src/domain/library/query';
 import { libraryAtom } from 'src/stores/library-state';
+import { queryDraftAtom } from 'src/stores/library-query-draft';
 import { prefsAtom, setPrefsAtom } from 'src/stores/prefs-state';
 
 /** 필터 변경을 저장소에 쓰기 전에 기다리는 시간. 타이핑 중에는 쓰지 않는다. */
 export const QUERY_PERSIST_DELAY_MS = 300;
-
-/**
- * 화면이 바로 읽는 메모리상의 조건. 저장은 늦게 하므로(디바운스) 화면은 이 값을 본다.
- * `null`이면 아직 바꾼 적이 없어 저장된 선호(`prefsAtom`)가 기준이다. atom이라서 목록이 잠시
- * 사라졌다 다시 그려져도(좁은 화면에서 지도 탭을 다녀옴) 조건이 유지된다.
- */
-const queryDraftAtom = atom<LibraryQuery | null>(null);
 
 /**
  * 보관함 화면의 필터·정렬 조건.

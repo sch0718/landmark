@@ -1,6 +1,8 @@
 export type MarkerLabelOptions = {
   dimmed?: boolean;
   selected?: boolean;
+  /** 다녀온 곳: 글자 앞에 `✓`, title 뒤에 ` · 다녀옴`. 색만으로 알리지 않는다. */
+  visited?: boolean;
   textColor?: string;
   borderColor?: string;
 };
@@ -14,8 +16,9 @@ export function createMarkerLabelElement(
   opts: MarkerLabelOptions = {},
 ): HTMLElement {
   const el = document.createElement('span');
-  el.textContent = label;
-  if (label !== '') el.title = label;
+  const visited = opts.visited === true && label !== '';
+  el.textContent = visited ? `✓ ${label}` : label;
+  if (label !== '') el.title = visited ? `${label} · 다녀옴` : label;
   const border = opts.selected
     ? `3px solid ${opts.borderColor ?? '#000'}`
     : `2px solid ${opts.borderColor ?? '#fff'}`;

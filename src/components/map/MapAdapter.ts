@@ -16,6 +16,8 @@ export type MapMarker = {
   borderColor?: string;
   dimmed?: boolean;
   selected?: boolean;
+  /** 다녀온 곳이면 글자 앞에 `✓`를 붙인다. */
+  visited?: boolean;
   clusterable: boolean;
   /**
    * `false`면 지도 맞추기(`fitKey`)에서 뺀다. 맞출 마커가 하나도 없을 때만 이 마커들로 맞춘다.

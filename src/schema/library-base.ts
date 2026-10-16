@@ -6,6 +6,8 @@ import { IsoDateTime } from 'src/schema/common';
 
 export const LIBRARY_LIMITS = {
   memoChars: 10_000,
+  /** 한 줄 평의 `String.length` 상한(이모지는 2로 센다). */
+  reviewChars: 140,
   labelNameChars: 30,
   /** 직렬화한 JSON의 `String.length` 상한. */
   libraryChars: 4_000_000,

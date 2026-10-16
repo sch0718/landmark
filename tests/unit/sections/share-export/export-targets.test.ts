@@ -37,6 +37,32 @@ describe('exportTargets', () => {
     expect(t.defaultTitle).toBe('카페');
   });
 
+  it('방문 필터는 라벨 꼬리 뒤·검색 꼬리 앞에 붙는다', () => {
+    const visited = exportTargets(
+      visible,
+      [],
+      q({ visited: 'visited', labelIds: [L_CAFE] }),
+      labels,
+    );
+    expect(visited.summary).toBe('지금 보이는 3곳을 내보냅니다 (라벨: 카페) (가 본 곳만)');
+    const unvisited = exportTargets(
+      visible,
+      [],
+      q({ visited: 'unvisited', labelIds: [L_CAFE], text: '서' }),
+      labels,
+    );
+    expect(unvisited.summary).toBe(
+      '지금 보이는 3곳을 내보냅니다 (라벨: 카페) (안 가 본 곳만) (검색: 서)',
+    );
+    expect(exportTargets(visible, [], q({ visited: 'all' }), labels).summary).toBe(
+      '지금 보이는 3곳을 내보냅니다',
+    );
+    // 고른 것이 있으면 방문 꼬리는 붙지 않는다.
+    expect(exportTargets(visible, ['place00001'], q({ visited: 'visited' }), labels).summary).toBe(
+      '선택한 1곳을 내보냅니다',
+    );
+  });
+
   it('lists several filter labels in label order and titles by count', () => {
     const t = exportTargets(visible, [], q({ labelIds: [L_SEA, L_FOOD] }), labels);
     expect(t.summary).toBe('지금 보이는 3곳을 내보냅니다 (라벨: 맛집, 바다뷰)');

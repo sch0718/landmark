@@ -2,7 +2,15 @@ import Box from '@mui/material/Box';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import { useState, type MouseEvent, type ReactNode } from 'react';
-import { LabelGlyph, RouteIcon, ShareIcon, TagsIcon, TrashIcon, XIcon } from 'src/components/icons';
+import {
+  CheckIcon,
+  LabelGlyph,
+  RouteIcon,
+  ShareIcon,
+  TagsIcon,
+  TrashIcon,
+  XIcon,
+} from 'src/components/icons';
 import type { Label } from 'src/schema/library';
 import { labelColors } from 'src/sections/library/label-style';
 
@@ -19,6 +27,10 @@ type Props = {
   onExport(): void;
   /** 고른 장소를 넣을 여행 고르기 창을 연다. */
   onAddToTrip(): void;
+  /** 고른 곳 중 다녀온 곳 수. 0이면 `다녀옴 표시 지우기`는 비활성이다. */
+  visitedCount: number;
+  onMarkVisited(): void;
+  onClearVisited(): void;
   onClear(): void;
 };
 
@@ -119,9 +131,15 @@ export function BulkBar({
   onDelete,
   onExport,
   onAddToTrip,
+  visitedCount,
+  onMarkVisited,
+  onClearVisited,
   onClear,
 }: Props) {
-  const [menu, setMenu] = useState<{ kind: 'add' | 'remove'; anchor: HTMLElement } | null>(null);
+  const [menu, setMenu] = useState<{
+    kind: 'add' | 'remove' | 'visit';
+    anchor: HTMLElement;
+  } | null>(null);
   return (
     <Box
       role="toolbar"
@@ -156,6 +174,13 @@ export function BulkBar({
       >
         라벨 떼기
       </BarButton>
+      <BarButton
+        aria-haspopup="menu"
+        onClick={(event) => setMenu({ kind: 'visit', anchor: event.currentTarget })}
+      >
+        <CheckIcon aria-hidden="true" />
+        다녀옴
+      </BarButton>
       <BarButton onClick={onAddToTrip}>
         <RouteIcon aria-hidden="true" />
         여행에 넣기
@@ -186,6 +211,31 @@ export function BulkBar({
         empty="뗄 라벨이 없어요"
         onPick={onRemove}
       />
+      <Menu
+        anchorEl={menu?.kind === 'visit' ? menu.anchor : null}
+        open={menu?.kind === 'visit'}
+        onClose={() => setMenu(null)}
+      >
+        <MenuItem
+          sx={{ minHeight: 44 }}
+          onClick={() => {
+            onMarkVisited();
+            setMenu(null);
+          }}
+        >
+          오늘 다녀옴으로 표시
+        </MenuItem>
+        <MenuItem
+          sx={{ minHeight: 44 }}
+          disabled={visitedCount === 0}
+          onClick={() => {
+            onClearVisited();
+            setMenu(null);
+          }}
+        >
+          다녀옴 표시 지우기
+        </MenuItem>
+      </Menu>
     </Box>
   );
 }

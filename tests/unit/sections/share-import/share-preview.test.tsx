@@ -250,6 +250,19 @@ describe('공유 파일 미리보기', () => {
     await waitFor(() => expect(pressed(/^강릉 모음/)).toHaveAttribute('aria-pressed', 'true'));
   });
 
+  it('가 본 곳 필터를 켠 채 가져오면 방문 필터가 풀려 새 장소가 보인다', async () => {
+    const { user, store } = await openShare({
+      prefs: { query: { ...DEFAULT_QUERY, visited: 'visited' } },
+    });
+    await user.click(importButton(3));
+    await waitFor(() => expect(store.get(addFlowAtom)).toEqual({ step: 'closed' }));
+    await waitFor(() => expect(pressed(/^강릉 모음/)).toHaveAttribute('aria-pressed', 'true'));
+    // 필터가 풀려서 방금 가져온 장소가 목록에 보인다.
+    expect(
+      within(screen.getByRole('list', { name: '장소 목록' })).getByText(/경포 해변/),
+    ).toBeInTheDocument();
+  });
+
   it('제목 라벨을 끄고 가져오면 필터를 건드리지 않는다', async () => {
     // 제목 라벨이 없으니 첫 id는 `바다` 라벨이 쓴다.
     const { user, store } = await openShare({

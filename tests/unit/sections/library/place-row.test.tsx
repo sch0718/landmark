@@ -119,3 +119,19 @@ describe('open place in the list', () => {
     }
   });
 });
+
+describe('place row visited mark', () => {
+  it('다녀온 장소 버튼의 접근성 이름에 다녀옴이 들어가고 안 가 본 곳에는 없다', async () => {
+    const library = withPlaces(sampleLibrary(), [
+      makePlace(6, { name: '경포대', visitedOn: '2026-10-12' }),
+      makePlace(7, { name: '지운 곳', visitedOn: null }),
+    ]);
+    await renderLibrary(library, { prefs: { libraryView: 'list' } });
+
+    const visited = rowOf(/경포대/);
+    expect(visited).toHaveAccessibleName(expect.stringContaining('다녀옴'));
+    expect(visited.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+    expect(rowOf(/지운 곳/)).not.toHaveAccessibleName(expect.stringContaining('다녀옴'));
+    expect(rowOf(/속초 횟집/)).not.toHaveAccessibleName(expect.stringContaining('다녀옴'));
+  });
+});

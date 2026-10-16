@@ -355,6 +355,31 @@ describe('library map on a compact screen', () => {
     expect(L_CAFE).toBe('label002');
   });
 
+  it('방문 칩이 같은 칩 줄에 있고 가 본 곳은 마커 하나만 남긴다', async () => {
+    const user = userEvent.setup();
+    const library = withPlaces(sampleLibrary(), [
+      makePlace(3, { name: '속초 횟집', labelIds: [L_FOOD], visitedOn: '2026-10-01' }),
+    ]);
+    await renderLibrary(library, { width: 390, path: '/map' });
+    await ready();
+    const labels = screen.getByRole('group', { name: '라벨' });
+    const visit = screen.getByRole('group', { name: '방문' });
+    expect(visit.parentElement).toBe(labels.parentElement);
+
+    await user.click(within(visit).getByRole('button', { name: '가 본 곳 1' }));
+    await waitFor(() => expect(shownMarkers()).toEqual([id(3)]));
+    expect(within(visit).getByRole('button', { name: '가 본 곳 1' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+  });
+
+  it('다녀온 곳이 없으면 칩 줄에 방문 묶음이 없다', async () => {
+    await renderLibrary(sampleLibrary(), { width: 390, path: '/map' });
+    await ready();
+    expect(screen.queryByRole('group', { name: '방문' })).not.toBeInTheDocument();
+  });
+
   it('opens the detail sheet from a marker and keeps the map behind it', async () => {
     const user = userEvent.setup();
     const { router } = await renderLibrary(sampleLibrary(), { width: 390, path: '/map' });

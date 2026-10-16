@@ -187,6 +187,25 @@ describe('모르는 필드', () => {
     expect(r.backup.library.places[p1.id]).not.toHaveProperty('futureField');
   });
 
+  it('visitedOn·review는 이 버전이 아는 필드라 버리지 않는다', () => {
+    const lib = raw();
+    const p1 = lib.places[place(1).id]!;
+    const withVisit = {
+      ...lib,
+      places: {
+        ...lib.places,
+        [p1.id]: { ...p1, visitedOn: f('2026-10-12'), review: f('일출이 좋음') },
+      },
+    };
+    const r = readBackupText(envelope({ library: withVisit }));
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.backup.droppedUnknown).toBe(false);
+    const got = r.backup.library.places[p1.id]!;
+    expect(got.visitedOn).toEqual(f('2026-10-12'));
+    expect(got.review).toEqual(f('일출이 좋음'));
+  });
+
   it('보관함 최상위의 모르는 컬렉션도 droppedUnknown', () => {
     const r = readBackupText(envelope({ library: { ...raw(), futureCollection: {} } }));
     expect(r.ok && r.backup.droppedUnknown).toBe(true);
