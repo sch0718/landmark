@@ -10,6 +10,7 @@ import { useDocumentTitle } from 'src/lib/use-document-title';
 import type { Prefs } from 'src/schema/prefs';
 import { paths } from 'src/routes/paths';
 import { BackupSection } from 'src/sections/backup/BackupSection';
+import { RestoreDialogHost } from 'src/sections/backup/RestoreDialogHost';
 import { LegacyImportDialog } from 'src/sections/settings/LegacyImportDialog';
 import { OptionGroup, type Option } from 'src/sections/settings/OptionGroup';
 import { ThemePicker } from 'src/sections/settings/ThemePicker';
@@ -63,6 +64,7 @@ export function SettingsPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [importOpen, setImportOpen] = useState(() => searchParams.has(IMPORT_PARAM));
+  const [restoreOpen, setRestoreOpen] = useState(false);
 
   // 쿼리로 들어왔으면 대화상자는 이미 열렸으니 주소에서 지운다(새로고침해도 다시 열리지 않게).
   useEffect(() => {
@@ -136,8 +138,7 @@ export function SettingsPage() {
         />
       </Section>
       <Section title="백업">
-        {/* 되살리기 대화상자는 다음 작업에서 연결한다. */}
-        <BackupSection onRestore={() => undefined} />
+        <BackupSection onRestore={() => setRestoreOpen(true)} />
       </Section>
       <Section title="가져오기">
         <Typography variant="body2" sx={{ color: 'var(--tm-text-secondary)' }}>
@@ -165,6 +166,7 @@ export function SettingsPage() {
         onClose={() => setImportOpen(false)}
         onImported={() => setImportOpen(false)}
       />
+      <RestoreDialogHost open={restoreOpen} onClose={() => setRestoreOpen(false)} mode="normal" />
     </Box>
   );
 }

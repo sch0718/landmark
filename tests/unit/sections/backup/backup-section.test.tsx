@@ -178,6 +178,16 @@ describe('BackupSection', () => {
     expect(within(section()).queryByRole('alert')).not.toBeInTheDocument();
   });
 
+  it('백업 파일로 되살리기 opens the restore dialog with focus on 파일 고르기', async () => {
+    const user = userEvent.setup();
+    await open();
+    await user.click(within(section()).getByRole('button', { name: '백업 파일로 되살리기' }));
+    // 처음에는 단위를 기다리는 틀이 같은 제목으로 먼저 보인다.
+    const pickButton = await screen.findByRole('button', { name: '파일 고르기' });
+    expect(screen.getByRole('dialog', { name: '백업에서 되살리기' })).toContainElement(pickButton);
+    await waitFor(() => expect(pickButton).toHaveFocus());
+  });
+
   it('a corrupt stored library shows the rebuild message and downloads nothing', async () => {
     const user = userEvent.setup();
     const { storage } = await open();
