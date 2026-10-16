@@ -12,9 +12,10 @@ import { useLayout } from 'src/sections/shell/use-layout';
 import { NextCard } from 'src/sections/trips/today/NextCard';
 import { TodayHeader } from 'src/sections/trips/today/TodayHeader';
 import { TodayLists } from 'src/sections/trips/today/TodayLists';
-import { TodayMap } from 'src/sections/trips/today/TodayMap';
+import { TodayMap, type TodayFocusRequest } from 'src/sections/trips/today/TodayMap';
 import { TodayNotices } from 'src/sections/trips/today/TodayNotices';
-import { useToday, type TodayModel } from 'src/sections/trips/today/use-today';
+import { useToday, type TodayModel, type TodayStop } from 'src/sections/trips/today/use-today';
+import { useVisitToggle } from 'src/sections/trips/today/use-visit-toggle';
 import { libraryAtom } from 'src/stores/library-state';
 
 const EDGE = 40;
@@ -59,7 +60,10 @@ function Today({ trip }: { trip: Trip }) {
   // 보는 Day(null이면 오늘 Day)와 카드로 고른 Stop. 화면 상태라 저장하지 않는다(스펙 §4.3·§4.5).
   const [viewDay, setViewDay] = useState<number | null>(null);
   const [selectedStopId, setSelectedStopId] = useState<string | null>(null);
+  // 지도를 옮기는 요청. 사람이 고를 때만 늘린다(행 누름·`다음 장소 보기`). 체크·삭제로 카드가 바뀌면 그대로 둔다.
+  const [focusRequest, setFocusRequest] = useState<TodayFocusRequest | null>(null);
   const model = useToday(trip, viewDay);
+  const visit = useVisitToggle();
 
   // 고른 Stop이 지워졌거나(다른 탭) 그날에서 빠졌으면 다음 장소로 돌아간다. 다음 장소를 고르면 `다음`으로 보인다.
   const found = model.stops.findIndex((s) => s.stop.id === selectedStopId);
@@ -75,7 +79,26 @@ function Today({ trip }: { trip: Trip }) {
     setViewDay(null);
     setSelectedStopId(null);
   };
-  const selectIndex = (index: number) => setSelectedStopId(model.stops[index]?.stop.id ?? null);
+  const focusOn = (placeId: string | null) => {
+    if (placeId === null) return;
+    setFocusRequest((prev) => ({ placeId, seq: (prev?.seq ?? 0) + 1 }));
+  };
+  const selectIndex = (index: number) => {
+    const item = model.stops[index];
+    if (item === undefined) return;
+    setSelectedStopId(item.stop.id);
+    focusOn(item.place.id);
+  };
+  const showNext = () => {
+    setSelectedStopId(null);
+    focusOn(cardPlaceId(model, null));
+  };
+  // 체크 날짜는 보는 Day가 아니라 오늘 Day의 날짜(`model.date`, 새벽 경계 반영)다. 고른 장소를 체크하면
+  // 카드는 다음 장소로 돌아온다(스펙 §4.5). 지도는 옮기지 않는다.
+  const check = async (item: TodayStop, next: boolean) => {
+    const done = await visit.toggle(item.place, next, model.date);
+    if (done && next) setSelectedStopId((id) => (id === item.stop.id ? null : id));
+  };
   const { stops } = model;
   const pickPlace = useCallback(
     (placeId: string) => {
@@ -96,6 +119,7 @@ function Today({ trip }: { trip: Trip }) {
         trip={trip}
         model={model}
         selectedPlaceId={cardPlaceId(model, selected)}
+        focusRequest={focusRequest}
         onPick={pickPlace}
         padding={MAP_PADDING}
       />
@@ -119,9 +143,16 @@ function Today({ trip }: { trip: Trip }) {
         model={model}
         trip={trip}
         selected={selected}
-        onShowNext={() => setSelectedStopId(null)}
+        onShowNext={showNext}
+        onCheck={(item) => void check(item, true)}
+        pending={visit.pending}
       />
-      <TodayLists model={model} onSelect={selectIndex} />
+      <TodayLists
+        model={model}
+        onSelect={selectIndex}
+        onCheck={(item, next) => void check(item, next)}
+        pending={visit.pending}
+      />
     </Box>
   );
 

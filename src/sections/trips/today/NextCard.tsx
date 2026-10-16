@@ -15,6 +15,10 @@ type Props = {
   /** 남은 일정 행·지도 핀으로 고른 Stop의 자리. 없으면 다음 장소를 보인다. */
   selected: number | null;
   onShowNext(): void;
+  /** 카드의 `다녀옴`을 눌렀다. */
+  onCheck(target: TodayStop): void;
+  /** 다녀옴을 저장 중인 장소 id. 그동안 `다녀옴`을 끈다. */
+  pending: ReadonlySet<string>;
 };
 
 const HEAD_SX = { fontSize: 13, fontWeight: 700, color: 'var(--tm-text-secondary)' } as const;
@@ -34,8 +38,9 @@ function plannedLine(target: TodayStop): string {
 /**
  * 다음 장소 카드(스펙 §5.3). 고른 장소가 있으면 그것을, 없으면 다음 장소(Stop 또는 모두 다녀온 뒤의 숙소)를 크게 보인다.
  * 그날 Stop이 없거나 모두 다녀왔고 숙소도 없으면 그 안내를 보인다. `다음 장소 보기` 뒤에는 포커스를 카드에 둔다.
+ * 기간 안이면 Stop 카드에 `다녀옴`(스펙 §4.4)을 둔다. 숙소는 체크 대상이 아니다.
  */
-export function NextCard({ model, trip, selected, onShowNext }: Props) {
+export function NextCard({ model, trip, selected, onShowNext, onCheck, pending }: Props) {
   const cardRef = useRef<HTMLElement>(null);
   const setSelectedDay = useSetAtom(selectedDayAtom);
   const target =
@@ -67,24 +72,40 @@ export function NextCard({ model, trip, selected, onShowNext }: Props) {
     );
   } else if (target !== undefined) {
     const head = selected !== null ? '고른 장소' : model.here ? '지금 여기' : '다음';
+    const name = target.place.name.value;
+    // 기간 밖에는 체크하지 않는다(스펙 §4.2). 이미 다녀온 곳(지도 핀으로 고름)은 다녀온 곳 목록에서 푼다.
+    const canCheck = model.canCheck && !target.visited;
     body = (
       <>
         <Box sx={HEAD_SX}>{`${head} · ${target.number}번째`}</Box>
         <Box component="h2" sx={TITLE_SX}>
-          {target.place.name.value}
+          {name}
         </Box>
         <Box sx={LINE_SX}>{plannedLine(target)}</Box>
-        {selected !== null && (
+        {(canCheck || selected !== null) && (
           <Box sx={ACTIONS_SX}>
-            <Button
-              onClick={() => {
-                onShowNext();
-                cardRef.current?.focus();
-              }}
-              sx={{ minHeight: 44 }}
-            >
-              다음 장소 보기
-            </Button>
+            {canCheck && (
+              <Button
+                aria-label={`‘${name}’ 다녀옴으로 표시`}
+                variant={model.here ? 'contained' : 'outlined'}
+                disabled={pending.has(target.place.id)}
+                onClick={() => onCheck(target)}
+                sx={{ minHeight: 44 }}
+              >
+                다녀옴
+              </Button>
+            )}
+            {selected !== null && (
+              <Button
+                onClick={() => {
+                  onShowNext();
+                  cardRef.current?.focus();
+                }}
+                sx={{ minHeight: 44 }}
+              >
+                다음 장소 보기
+              </Button>
+            )}
           </Box>
         )}
       </>

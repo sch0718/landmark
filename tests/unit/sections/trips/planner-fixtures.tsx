@@ -163,6 +163,7 @@ export async function open(
     width?: number;
     ids?: string[];
     path?: string;
+    libraryLocks?: LockManager;
   } = {},
 ) {
   return renderLibrary(lib, {
@@ -170,5 +171,6 @@ export async function open(
     width: options.width,
     ids: options.ids,
     routeLookup: options.routes?.layer,
+    libraryLocks: options.libraryLocks,
   });
 }

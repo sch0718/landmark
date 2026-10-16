@@ -1,7 +1,10 @@
-import { act, cleanup, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { visitedOnOf } from 'src/domain/library/visit';
 import { setAppRuntimeForTest } from 'src/lib/effect/runtime';
+import type { Library } from 'src/schema/library';
+import { LIBRARY_KEY } from 'src/services/library-store';
 import { libraryAtom } from 'src/stores/library-state';
 import { selectedDayAtom } from 'src/stores/trip-planner';
 import { installMapResources } from '../../components/helpers/map-resources';
@@ -13,6 +16,7 @@ import {
   remainingList,
   remainingRows,
   renderToday,
+  slowLocks,
   todayTrip,
   TRIP,
   withDeleted,
@@ -20,6 +24,14 @@ import {
   withVisited,
 } from './today-fixtures';
 
+const toastMock = vi.hoisted(() => {
+  const error = vi.fn();
+  return Object.assign(vi.fn(), { error });
+});
+vi.mock('sonner', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('sonner')>()),
+  toast: toastMock,
+}));
 vi.mock('src/theme/fonts', () => ({ loadDisplayFont: vi.fn(() => Promise.resolve()) }));
 
 beforeEach(() => {
@@ -32,6 +44,8 @@ afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
+  toastMock.mockClear();
+  toastMock.error.mockClear();
   document.title = '';
 });
 
@@ -291,5 +305,221 @@ describe('당일 모드: 지도 핀', () => {
     expect(cardHead('고른 장소 · 3번째')).toBeInTheDocument();
     await user.click(marker(`start:${HOUSE}`));
     expect(cardHead('고른 장소 · 3번째')).toBeInTheDocument();
+  });
+});
+
+describe('당일 모드: 다녀옴 체크', () => {
+  type ToastOptions = { duration: number; action: { label: string; onClick: () => void } };
+  /** 이 문구로 띄운 마지막 토스트의 옵션. */
+  const toastOf = (message: string): ToastOptions | undefined =>
+    toastMock.mock.calls.findLast((c) => c[0] === message)?.[1] as ToastOptions | undefined;
+  const checkbox = (name: string) => screen.getByRole('checkbox', { name: `‘${name}’ 다녀옴` });
+  const storedVisited = (storage: Storage, id: string) =>
+    visitedOnOf((JSON.parse(storage.getItem(LIBRARY_KEY)!) as Library).places[id]!);
+  const shownVisited = (store: { get: (atom: typeof libraryAtom) => Library }, id: string) =>
+    visitedOnOf(store.get(libraryAtom).places[id]!);
+  /** 다른 탭이 저장소와 화면 문서에 다녀온 날을 적은 것처럼 흉내 낸다. */
+  const otherTabSets = (
+    storage: Storage,
+    store: {
+      get: (atom: typeof libraryAtom) => Library;
+      set: (a: typeof libraryAtom, v: Library) => void;
+    },
+    id: string,
+    value: string | null,
+  ) => {
+    const field = { value, updatedAt: '2099-01-01T00:00:00.000Z' };
+    const edit = (lib: Library): Library => ({
+      ...lib,
+      places: { ...lib.places, [id]: { ...lib.places[id]!, visitedOn: field } },
+    });
+    storage.setItem(LIBRARY_KEY, JSON.stringify(edit(JSON.parse(storage.getItem(LIBRARY_KEY)!))));
+    act(() => store.set(libraryAtom, edit(store.get(libraryAtom))));
+  };
+  const undoToast = async (message: string) => {
+    const options = toastOf(message);
+    expect(options?.action.label).toBe('되돌리기');
+    await act(async () => {
+      options!.action.onClick();
+    });
+  };
+
+  it('남은 일정의 체크 상자로 체크하면 토스트·다음 장소·다녀온 곳, 되돌리기는 옛 날짜로', async () => {
+    const { store, storage } = await renderToday(withVisited(lib(), P1, '2025-05-01'));
+    const user = userEvent.setup();
+    const box = checkbox('중앙시장 닭강정');
+    expect(box).not.toBeChecked();
+    expect(getComputedStyle(box.parentElement!).width).toBe('44px');
+    await user.click(box);
+
+    await waitFor(() => expect(storedVisited(storage, P1)).toBe('2026-10-24'));
+    const message = '‘중앙시장 닭강정’ 다녀옴으로 표시했어요';
+    expect(toastOf(message)?.duration).toBe(8000);
+    expect(cardHead('다음 · 2번째')).toBeInTheDocument();
+    expect(cardTitle()).toHaveTextContent('안목 카페거리');
+    expect(remainingRows()).toHaveLength(1);
+    expect(screen.getByRole('button', { name: '다녀온 곳 1곳' })).toBeInTheDocument();
+
+    await undoToast(message);
+    await waitFor(() => expect(storedVisited(storage, P1)).toBe('2025-05-01'));
+    expect(shownVisited(store, P1)).toBe('2025-05-01');
+    expect(cardHead('다음 · 1번째')).toBeInTheDocument();
+    expect(toastMock).not.toHaveBeenCalledWith('다른 곳에서 바뀐 부분은 그대로 두었어요');
+    expect(toastMock.error).not.toHaveBeenCalled();
+  });
+
+  it('다녀온 곳의 체크 상자로 풀면 토스트, 되돌리기는 지운 날짜로', async () => {
+    const { storage } = await renderToday(withVisited(lib(), P1, '2026-10-24'));
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: '다녀온 곳 1곳' }));
+    const box = within(screen.getByRole('list', { name: '다녀온 곳' })).getByRole('checkbox', {
+      name: '‘중앙시장 닭강정’ 다녀옴',
+    });
+    expect(box).toBeChecked();
+    await user.click(box);
+
+    await waitFor(() => expect(storedVisited(storage, P1)).toBeNull());
+    const message = '‘중앙시장 닭강정’ 다녀옴 표시를 지웠어요';
+    expect(toastOf(message)?.duration).toBe(8000);
+    expect(cardHead('다음 · 1번째')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^다녀온 곳/ })).not.toBeInTheDocument();
+
+    await undoToast(message);
+    await waitFor(() => expect(storedVisited(storage, P1)).toBe('2026-10-24'));
+    expect(cardHead('다음 · 2번째')).toBeInTheDocument();
+  });
+
+  it('카드의 `다녀옴`도 같고, 새벽 01:30에는 오늘 Day(어제)의 날짜를 쓴다', async () => {
+    vi.setSystemTime(new Date(2026, 9, 25, 1, 30));
+    const { storage } = await renderToday(lib());
+    const user = userEvent.setup();
+    await user.click(
+      within(nextCard()).getByRole('button', { name: '‘중앙시장 닭강정’ 다녀옴으로 표시' }),
+    );
+    await waitFor(() => expect(storedVisited(storage, P1)).toBe('2026-10-24'));
+    expect(toastOf('‘중앙시장 닭강정’ 다녀옴으로 표시했어요')?.duration).toBe(8000);
+    expect(cardTitle()).toHaveTextContent('안목 카페거리');
+  });
+
+  it('기간 밖에는 체크 상자도 `다녀옴`도 없다', async () => {
+    vi.setSystemTime(new Date(2026, 9, 23, 12, 0));
+    await renderToday(withVisited(lib(), P2, '2026-10-24'));
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+    expect(within(nextCard()).queryByRole('button', { name: /다녀옴으로 표시$/ })).toBeNull();
+    await userEvent.setup().click(screen.getByRole('button', { name: '다녀온 곳 1곳' }));
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+  });
+
+  it('다른 Day에서도 체크할 수 있고, 날짜는 오늘 Day의 날짜다', async () => {
+    const { storage } = await renderToday(lib());
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: '오늘 일정 메뉴' }));
+    await user.click(screen.getByRole('menuitemradio', { name: 'Day 2 · 10.25(일)' }));
+    await user.click(checkbox('창가 자리'));
+    await waitFor(() => expect(storedVisited(storage, P5)).toBe('2026-10-24'));
+    expect(screen.getByRole('button', { name: '다녀온 곳 1곳' })).toBeInTheDocument();
+  });
+
+  it('고른 장소를 체크하면 카드가 다음 장소로 돌아온다', async () => {
+    await renderToday(lib({ stops: [[P1, P2, P5]] }));
+    const user = userEvent.setup();
+    await user.click(within(remainingList()).getByRole('button', { name: '2. 안목 카페거리' }));
+    expect(cardHead('고른 장소 · 2번째')).toBeInTheDocument();
+    await user.click(
+      within(nextCard()).getByRole('button', { name: '‘안목 카페거리’ 다녀옴으로 표시' }),
+    );
+    await waitFor(() => expect(cardHead('다음 · 3번째')).toBeInTheDocument());
+    expect(cardTitle()).toHaveTextContent('창가 자리');
+    expect(remainingRows()[0]).toHaveTextContent('지나침');
+  });
+
+  it('저장이 끝나기 전에 두 번 눌러도 저장은 한 번이고, 그동안 상자·버튼은 꺼진다', async () => {
+    const slow = slowLocks();
+    const { storage } = await renderToday(lib(), { libraryLocks: slow.locks });
+    const user = userEvent.setup();
+    const before = slow.requests;
+    slow.hold();
+    const box = checkbox('중앙시장 닭강정');
+    await user.click(box);
+    await waitFor(() => expect(box).toBeDisabled());
+    expect(
+      within(nextCard()).getByRole('button', { name: '‘중앙시장 닭강정’ 다녀옴으로 표시' }),
+    ).toBeDisabled();
+    fireEvent.click(box);
+    fireEvent.click(
+      within(nextCard()).getByRole('button', { name: '‘중앙시장 닭강정’ 다녀옴으로 표시' }),
+    );
+    expect(storedVisited(storage, P1)).toBeNull();
+
+    await act(async () => slow.release());
+    await waitFor(() => expect(storedVisited(storage, P1)).toBe('2026-10-24'));
+    expect(slow.requests - before).toBe(1);
+    expect(toastMock).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: '다녀온 곳 1곳' })).toBeInTheDocument();
+  });
+
+  it('되돌리기 전에 다른 곳이 값을 바꿨으면 바꾸지 않고 알린다', async () => {
+    const { store, storage } = await renderToday(withVisited(lib(), P1, '2025-05-01'));
+    const user = userEvent.setup();
+    await user.click(checkbox('중앙시장 닭강정'));
+    await waitFor(() => expect(storedVisited(storage, P1)).toBe('2026-10-24'));
+
+    otherTabSets(storage, store, P1, null); // 다른 탭이 풀었다.
+    await undoToast('‘중앙시장 닭강정’ 다녀옴으로 표시했어요');
+    await waitFor(() =>
+      expect(toastMock).toHaveBeenCalledWith('다른 곳에서 바뀐 부분은 그대로 두었어요'),
+    );
+    expect(storedVisited(storage, P1)).toBeNull();
+    expect(shownVisited(store, P1)).toBeNull();
+    expect(toastMock.error).not.toHaveBeenCalled();
+  });
+});
+
+describe('당일 모드: 지도는 사람이 고를 때만 옮긴다', () => {
+  let resources: ReturnType<typeof installMapResources>;
+  beforeEach(() => {
+    vi.stubEnv('VITE_MAP_ADAPTER', 'fake');
+    resources = installMapResources();
+  });
+  afterEach(() => resources.restore());
+
+  const fakeMap = () => screen.getByTestId('fake-map');
+  // 지도 여백이 사방 같아서(40px) 옮긴 중심은 장소 좌표 그대로다.
+  const centeredAt = (lng: number, lat: number) => {
+    expect(fakeMap()).toHaveAttribute('data-center', `${lng},${lat}`);
+    expect(fakeMap()).toHaveAttribute('data-zoom', '16');
+  };
+
+  it('행을 누르면 옮기고, 체크로 카드가 다음 장소로 넘어가도 옮기지 않는다', async () => {
+    await renderToday(lib({ stops: [[P1, P2, P5]] }));
+    await waitFor(() => expect(screen.getByTestId(`marker-${P1}`)).toBeInTheDocument());
+    expect(fakeMap()).not.toHaveAttribute('data-center');
+
+    const user = userEvent.setup();
+    await user.click(within(remainingList()).getByRole('button', { name: '2. 안목 카페거리' }));
+    await waitFor(() => centeredAt(128.947, 37.772));
+
+    await user.click(
+      within(nextCard()).getByRole('button', { name: '‘안목 카페거리’ 다녀옴으로 표시' }),
+    );
+    await waitFor(() => expect(cardTitle()).toHaveTextContent('창가 자리'));
+    centeredAt(128.947, 37.772);
+
+    // `다음 장소 보기`로 돌아오면 다음 장소로 옮긴다.
+    await user.click(within(remainingList()).getByRole('button', { name: '1. 중앙시장 닭강정' }));
+    await waitFor(() => centeredAt(128.9, 37.75));
+    await user.click(within(nextCard()).getByRole('button', { name: '다음 장소 보기' }));
+    await waitFor(() => centeredAt(128.905, 37.75));
+  });
+
+  it('체크로 다음 장소가 바뀌어도 처음 맞춘 지도를 옮기지 않는다', async () => {
+    await renderToday(lib());
+    await waitFor(() => expect(screen.getByTestId(`marker-${P1}`)).toBeInTheDocument());
+    await userEvent
+      .setup()
+      .click(screen.getByRole('checkbox', { name: '‘중앙시장 닭강정’ 다녀옴' }));
+    await waitFor(() => expect(cardTitle()).toHaveTextContent('안목 카페거리'));
+    expect(fakeMap()).not.toHaveAttribute('data-center');
+    expect(fakeMap()).not.toHaveAttribute('data-zoom');
   });
 });

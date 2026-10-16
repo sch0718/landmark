@@ -1,7 +1,8 @@
 import Box from '@mui/material/Box';
 import ButtonBase from '@mui/material/ButtonBase';
 import Button from '@mui/material/Button';
-import { useState } from 'react';
+import Checkbox from '@mui/material/Checkbox';
+import { useState, type ReactNode } from 'react';
 import { visitedOnOf } from 'src/domain/library/visit';
 import { formatClock } from 'src/domain/trips/schedule';
 import type { TodayModel, TodayStop } from 'src/sections/trips/today/use-today';
@@ -11,6 +12,10 @@ type Props = {
   model: TodayModel;
   /** 남은 일정 행의 이름을 눌렀다(`index`는 `model.stops`의 자리). */
   onSelect(index: number): void;
+  /** 체크 상자를 눌렀다. `next`가 참이면 체크, 거짓이면 풀기. */
+  onCheck(item: TodayStop, next: boolean): void;
+  /** 다녀옴을 저장 중인 장소 id. 그동안 그 체크 상자를 끈다. */
+  pending: ReadonlySet<string>;
 };
 
 const H2_SX = { m: 0, fontSize: 16, fontWeight: 800 } as const;
@@ -24,14 +29,38 @@ function timeLine(item: TodayStop): string {
   return parts.join(' · ');
 }
 
+/** 다녀옴 체크 상자(44×44, 이름 `‘<이름>’ 다녀옴`). 저장된 값만 보인다(낙관 표시 없음). */
+function VisitCheckbox({
+  item,
+  disabled,
+  onCheck,
+}: {
+  item: TodayStop;
+  disabled: boolean;
+  onCheck(item: TodayStop, next: boolean): void;
+}) {
+  return (
+    <Checkbox
+      checked={item.visited}
+      disabled={disabled}
+      onChange={(event) => onCheck(item, event.target.checked)}
+      slotProps={{ input: { 'aria-label': `‘${item.place.name.value}’ 다녀옴` } }}
+      sx={{ flex: 'none', width: 44, height: 44 }}
+    />
+  );
+}
+
 function RemainingRow({
   item,
   current,
   onSelect,
+  check,
 }: {
   item: TodayStop;
   current: boolean;
   onSelect(): void;
+  /** 체크 상자. 기간 밖이면 없다. */
+  check: ReactNode;
 }) {
   return (
     <Box
@@ -47,6 +76,7 @@ function RemainingRow({
         bgcolor: 'var(--tm-bg-surface)',
       }}
     >
+      {check}
       <Box sx={{ flex: 1, minWidth: 0, py: 0.5 }}>
         <ButtonBase
           onClick={onSelect}
@@ -77,9 +107,14 @@ function RemainingRow({
 /**
  * 남은 일정과 다녀온 곳(스펙 §5.1). 남은 일정은 미체크 Stop을 순서대로 보이고, 다음 장소 행은 강조 테두리와
  * `aria-current="step"`, 건너뛴 곳은 `지나침` 꼬리표다. 다녀온 곳은 접힌 채 시작하고 0곳이면 그리지 않는다.
+ * 기간 안이면 행마다 다녀옴 체크 상자를 둔다(남은 일정은 체크, 다녀온 곳은 풀기, 스펙 §4.4).
  */
-export function TodayLists({ model, onSelect }: Props) {
+export function TodayLists({ model, onSelect, onCheck, pending }: Props) {
   const [visitedOpen, setVisitedOpen] = useState(false);
+  const check = (item: TodayStop) =>
+    model.canCheck ? (
+      <VisitCheckbox item={item} disabled={pending.has(item.place.id)} onCheck={onCheck} />
+    ) : null;
   const remaining = model.stops.flatMap((item, index) => (item.visited ? [] : [{ item, index }]));
   const visited = model.stops.filter((item) => item.visited);
   const nextIndex = model.next?.kind === 'stop' ? model.next.index : null;
@@ -96,6 +131,7 @@ export function TodayLists({ model, onSelect }: Props) {
                 item={item}
                 current={index === nextIndex}
                 onSelect={() => onSelect(index)}
+                check={check(item)}
               />
             ))}
           </Box>
@@ -123,14 +159,17 @@ export function TodayLists({ model, onSelect }: Props) {
                     sx={{
                       minHeight: 44,
                       display: 'flex',
-                      flexDirection: 'column',
-                      justifyContent: 'center',
+                      alignItems: 'center',
+                      gap: 1,
                       px: 1,
                       color: 'var(--tm-text-secondary)',
                     }}
                   >
-                    <Box sx={{ fontSize: 15, fontWeight: 700 }}>{item.place.name.value}</Box>
-                    {on !== null && <Box sx={TIME_SX}>{`다녀옴 · ${shortDate(on)}`}</Box>}
+                    {check(item)}
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Box sx={{ fontSize: 15, fontWeight: 700 }}>{item.place.name.value}</Box>
+                      {on !== null && <Box sx={TIME_SX}>{`다녀옴 · ${shortDate(on)}`}</Box>}
+                    </Box>
                   </Box>
                 );
               })}

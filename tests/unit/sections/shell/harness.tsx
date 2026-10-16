@@ -99,6 +99,8 @@ export async function renderApp(
     reverseGeocoder?: Layer.Layer<ReverseGeocoder>;
     /** 위치 서비스 레이어. 없으면 위치 API가 없는 것(`unsupported`)으로 둔다. */
     geolocation?: Layer.Layer<Geolocation>;
+    /** 보관함 저장소의 잠금. 없으면 잠금 없이 바로 저장한다(저장을 늦추는 시험이 가짜 잠금을 준다). */
+    libraryLocks?: LockManager;
     /**
      * 화면 파일(여행·설정·라벨·옛 여행 가져오기)을 그리기 전에 미리 받아 둔다(기본 true). 실제 앱의 미리 받기와
      * 같은 효과라 `React.lazy`가 첫 그림에서 바로 풀린다. 받는 동안의 화면이나 받기 실패를 볼 때만 끈다.
@@ -120,6 +122,7 @@ export async function renderApp(
     routeLookup = OFFLINE_ROUTE_LOOKUP,
     reverseGeocoder = NULL_REVERSE_GEOCODER,
     geolocation = UNSUPPORTED_GEOLOCATION,
+    libraryLocks,
     preloadRoutes = true,
     preloadPanels = true,
   } = options;
@@ -128,7 +131,7 @@ export async function renderApp(
   setAppRuntimeForTest(
     ManagedRuntime.make(
       Layer.mergeAll(
-        LibraryStore.layerWith({ storage, events: new EventTarget() }),
+        LibraryStore.layerWith({ storage, events: new EventTarget(), locks: libraryLocks }),
         PrefsStore.layerWith({ storage }),
         BackupMetaStore.layerWith({ storage }),
         IdGen.layerSequence(ids),

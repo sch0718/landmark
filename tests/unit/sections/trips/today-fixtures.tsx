@@ -29,13 +29,48 @@ export function withDeleted(lib: Library, placeId: string): Library {
 /** 당일 모드 화면(`/trips/<id>/today`)을 실제 라우트 표·jotai 저장소·앱 런타임으로 그린다. 기본 폭은 휴대폰(390). */
 export function renderToday(
   lib: Library,
-  options: { path?: string; width?: number; routes?: ReturnType<typeof fakeRoutes> } = {},
+  options: {
+    path?: string;
+    width?: number;
+    routes?: ReturnType<typeof fakeRoutes>;
+    libraryLocks?: LockManager;
+  } = {},
 ) {
   return open(lib, {
     path: options.path ?? `/trips/${TRIP}/today`,
     width: options.width ?? 390,
     routes: options.routes,
+    libraryLocks: options.libraryLocks,
   });
+}
+
+/**
+ * 보관함 저장을 늦추는 가짜 잠금. `hold()` 뒤의 저장은 `release()`까지 잠금을 얻지 못하고 기다린다.
+ * `requests`는 잠금을 청한 수 = 저장(`LibraryStore.update`) 수다.
+ */
+export function slowLocks() {
+  let gate: Promise<void> = Promise.resolve();
+  let open: () => void = () => {};
+  const state = { requests: 0 };
+  const locks = {
+    request: async (_name: string, callback: () => Promise<unknown>) => {
+      state.requests += 1;
+      await gate;
+      return callback();
+    },
+  } as unknown as LockManager;
+  return {
+    locks,
+    get requests() {
+      return state.requests;
+    },
+    hold() {
+      gate = new Promise((resolve) => (open = resolve));
+    },
+    release() {
+      open();
+    },
+  };
 }
 
 export const nextCard = () => screen.getByRole('region', { name: '다음 장소' });

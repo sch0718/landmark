@@ -129,6 +129,8 @@ export async function renderLibrary(
     preloadPanels?: boolean;
     /** `renderApp`의 `geolocation`을 그대로 넘긴다. */
     geolocation?: NonNullable<Parameters<typeof renderApp>[0]>['geolocation'];
+    /** `renderApp`의 `libraryLocks`를 그대로 넘긴다. */
+    libraryLocks?: LockManager;
   } = {},
 ) {
   const {
@@ -142,6 +144,7 @@ export async function renderLibrary(
     reverseGeocoder,
     preloadPanels,
     geolocation,
+    libraryLocks,
   } = options;
   const storage = options.storage ?? createMemoryStorage();
   storage.setItem(LIBRARY_KEY, JSON.stringify(library));
@@ -159,6 +162,7 @@ export async function renderLibrary(
     reverseGeocoder,
     preloadPanels,
     geolocation,
+    libraryLocks,
   });
   return { ...rendered, storage, setWidth: viewport.setWidth };
 }

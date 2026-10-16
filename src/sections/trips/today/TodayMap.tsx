@@ -11,11 +11,16 @@ import { libraryAtom } from 'src/stores/library-state';
 
 type MapFocus = { point: [number, number]; seq: number };
 
+/** 지도를 그 장소로 옮겨 달라는 요청. `seq`가 바뀔 때마다 한 번 옮긴다. */
+export type TodayFocusRequest = { placeId: string; seq: number };
+
 type Props = {
   trip: Trip;
   model: TodayModel;
-  /** 카드가 보는 장소. 그 핀을 강조하고, 바뀌면 지도를 그곳으로 옮긴다. */
+  /** 카드가 보는 장소. 그 핀을 강조한다. */
   selectedPlaceId: string | null;
+  /** 사람이 장소를 골랐을 때(행 누름·`다음 장소 보기`)만 화면이 준다. 체크·되돌리기·삭제로는 바뀌지 않는다. */
+  focusRequest: TodayFocusRequest | null;
   /** 그날 Stop 핀을 눌렀다(출발점·숙소 핀은 알리지 않는다). */
   onPick(placeId: string): void;
   padding: MapPadding;
@@ -25,10 +30,19 @@ type Props = {
 
 /**
  * 당일 모드 지도(스펙 §5.4). 그날 번호 핀·출발점·숙소·경로선만 보이고, 다녀온 Stop 핀은 흐리게 한다.
- * Day를 바꾸면(`fitKey`) 그날에 맞추고, 카드가 보는 장소가 바뀌면 그곳으로 옮긴다(처음 그릴 때와 Day를 바꿀 때,
- * 방금 누른 핀은 옮기지 않는다). 다녀옴 체크로는 다시 맞추지 않는다.
+ * Day를 바꾸면(`fitKey`) 그날에 맞춘다. 지도를 옮기는 것은 `focusRequest`뿐이다 — 사람이 고른 때만 옮기고,
+ * 체크로 다음 장소가 넘어가거나 되돌리기·다른 탭 삭제로 카드가 바뀔 때는 옮기지도 다시 맞추지도 않는다
+ * (보던 지도가 저절로 움직이지 않게). 방금 누른 핀은 이미 보이므로 옮기지 않는다.
  */
-export function TodayMap({ trip, model, selectedPlaceId, onPick, padding, myLocation }: Props) {
+export function TodayMap({
+  trip,
+  model,
+  selectedPlaceId,
+  focusRequest,
+  onPick,
+  padding,
+  myLocation,
+}: Props) {
   const library = useAtomValue(libraryAtom);
   const { dayIndex, plan, stops } = model;
   const visited = useMemo(
@@ -40,30 +54,19 @@ export function TodayMap({ trip, model, selectedPlaceId, onPick, padding, myLoca
     [library, trip, dayIndex, plan.legs, visited, selectedPlaceId],
   );
 
-  // 카드의 장소가 바뀌면 그곳으로 옮긴다(렌더 중 상태 갱신). 처음과 Day를 바꾼 때는 `fitKey` 맞추기에 맡긴다.
-  const [seen, setSeen] = useState({ dayIndex, placeId: selectedPlaceId });
-  const [fromMarker, setFromMarker] = useState<string | null>(null);
-  const [focus, setFocus] = useState<MapFocus | null>(null);
-  if (seen.dayIndex !== dayIndex || seen.placeId !== selectedPlaceId) {
-    const sameDay = seen.dayIndex === dayIndex;
-    setSeen({ dayIndex, placeId: selectedPlaceId });
-    setFromMarker(null);
-    const place = selectedPlaceId === null ? undefined : library.places[selectedPlaceId];
-    if (
-      sameDay &&
-      place !== undefined &&
-      place.deletedAt === null &&
-      fromMarker !== selectedPlaceId
-    ) {
-      setFocus({ point: [place.lng, place.lat], seq: (focus?.seq ?? 0) + 1 });
-    }
-  }
+  // `MapView`는 `seq`가 바뀔 때만 옮기므로, 문서가 바뀌어 다시 계산해도(같은 `seq`) 지도는 그대로다.
+  // 그사이 장소가 지워졌으면 옮기지 않는다.
+  const focus = useMemo((): MapFocus | null => {
+    if (focusRequest === null) return null;
+    const place = library.places[focusRequest.placeId];
+    if (place === undefined || place.deletedAt !== null) return null;
+    return { point: [place.lng, place.lat], seq: focusRequest.seq };
+  }, [focusRequest, library]);
 
   const onMarkerClick = useCallback(
     (markerId: string) => {
       const placeId = placeIdOfMarker(markerId);
       if (placeId !== markerId) return; // 출발점·숙소 핀
-      setFromMarker(placeId);
       onPick(placeId);
     },
     [onPick],
