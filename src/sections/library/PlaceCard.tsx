@@ -1,4 +1,6 @@
 import Box from '@mui/material/Box';
+import { CheckIcon } from 'src/components/icons';
+import { formatVisitDate, reviewOf, visitedOnOf } from 'src/domain/library/visit';
 import { LabelBadge } from 'src/sections/library/LabelBadge';
 import { ITEM_BUTTON_SX, type PlaceItemProps } from 'src/sections/library/PlaceRow';
 import { SelectMark } from 'src/sections/library/SelectMark';
@@ -16,7 +18,7 @@ const clamp = (lines: number) =>
     overflowWrap: 'anywhere',
   }) as const;
 
-/** 카드 보기: 이름 바로 아래 메모(3줄, 말줄임), 그 아래 지역과 라벨 칩. */
+/** 카드 보기: 이름 바로 아래 메모(3줄, 말줄임)와 한 줄 평(2줄), 그 아래 다녀옴 배지·지역·라벨 칩. */
 export function PlaceCard({
   place,
   region,
@@ -29,6 +31,8 @@ export function PlaceCard({
 }: PlaceItemProps) {
   const gestures = usePlaceGestures({ id: place.id, selecting, onOpen, onToggle });
   const memo = place.memo.value.trim();
+  const visitedOn = visitedOnOf(place);
+  const review = reviewOf(place);
   return (
     <Box
       component="button"
@@ -70,6 +74,15 @@ export function PlaceCard({
             {memo}
           </Box>
         )}
+        {review !== '' && (
+          <Box
+            component="span"
+            data-part="review"
+            sx={{ ...clamp(2), mt: 0.5, fontSize: 14, color: 'text.secondary' }}
+          >
+            {`“${review}”`}
+          </Box>
+        )}
         <Box
           component="span"
           sx={{
@@ -81,6 +94,23 @@ export function PlaceCard({
             minWidth: 0,
           }}
         >
+          {visitedOn !== null && (
+            <Box
+              component="span"
+              data-part="visited"
+              sx={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 0.25,
+                fontSize: 12,
+                fontWeight: 700,
+                color: 'var(--tm-accent-text)',
+              }}
+            >
+              <CheckIcon aria-hidden="true" width={12} height={12} style={{ flex: 'none' }} />
+              {`다녀옴 ${formatVisitDate(visitedOn)}`}
+            </Box>
+          )}
           <Box
             component="span"
             data-part="region"

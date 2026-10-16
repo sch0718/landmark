@@ -415,6 +415,34 @@ describe('createMarkerLabelElement', () => {
     expect(el.style.border).toContain('rgb(171, 205, 239)');
   });
 
+  it('다녀온 마커는 ✓ 글자와 · 다녀옴 title을 쓴다', () => {
+    const el = createMarkerLabelElement('경포대', '#123456', { visited: true });
+    expect(el.textContent).toBe('✓ 경포대');
+    expect(el.title).toBe('경포대 · 다녀옴');
+    const plain = createMarkerLabelElement('경포대', '#123456', { visited: false });
+    expect(plain.textContent).toBe('경포대');
+    expect(plain.title).toBe('경포대');
+    // 빈 라벨이면 title을 달지 않는다.
+    expect(createMarkerLabelElement('', '#123456', { visited: true }).title).toBe('');
+  });
+
+  it('Fake 어댑터: 다녀옴 마커 버튼 글자와 title, 다녀옴으로 바뀌면 다시 그린다', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const fake = new FakeMapAdapter();
+    await fake.mount(host);
+    const button = () => host.querySelector('[data-testid="marker-k"]')!;
+    fake.setMarkers([mk('k', { label: '경포대' })]);
+    expect(button().textContent).toBe('경포대');
+    fake.setMarkers([mk('k', { label: '경포대', visited: true })]);
+    expect(button().textContent).toBe('✓ 경포대');
+    expect(button().querySelector('span')!.title).toBe('경포대 · 다녀옴');
+    fake.setMarkers([mk('k', { label: '경포대' })]);
+    expect(button().textContent).toBe('경포대');
+    fake.destroy();
+    host.remove();
+  });
+
   it('Fake 어댑터도 같은 라벨을 쓴다', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);

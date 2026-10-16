@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { setAppRuntimeForTest } from 'src/lib/effect/runtime';
 import { PREFS_KEY } from 'src/services/prefs-store';
-import { L_FOOD, renderLibrary, sampleLibrary } from './fixtures';
+import { L_FOOD, makePlace, renderLibrary, sampleLibrary, withPlaces } from './fixtures';
 
 vi.mock('src/theme/fonts', () => ({ loadDisplayFont: vi.fn(() => Promise.resolve()) }));
 
@@ -125,5 +125,34 @@ describe('library views', () => {
     const { router } = await renderLibrary(sampleLibrary(), { prefs: { libraryView: 'list' } });
     await user.click(within(placeList()!).getByRole('button', { name: /안목 카페거리/ }));
     expect(router.state.location.pathname).toBe('/place/place00002');
+  });
+});
+
+describe('card visited badge and review', () => {
+  const card = (name: RegExp) => within(placeList()!).getByRole('button', { name });
+
+  it('다녀온 카드는 날짜 배지와 한 줄 평을 보여 준다', async () => {
+    const library = withPlaces(sampleLibrary(), [
+      makePlace(6, { name: '경포대', visitedOn: '2026-10-12', review: '일출 최고' }),
+    ]);
+    await renderLibrary(library, { prefs: { libraryView: 'cards' } });
+
+    const el = card(/경포대/);
+    expect(el.querySelector('[data-part="visited"]')).toHaveTextContent('다녀옴 2026.10.12');
+    expect(el.querySelector('[data-part="review"]')).toHaveTextContent('“일출 최고”');
+    // 안 가 본 카드에는 둘 다 없다.
+    const plain = card(/속초 횟집/);
+    expect(plain.querySelector('[data-part="visited"]')).toBeNull();
+    expect(plain.querySelector('[data-part="review"]')).toBeNull();
+  });
+
+  it('평이 빈 문자열이면 평 줄이 없다', async () => {
+    const library = withPlaces(sampleLibrary(), [
+      makePlace(6, { name: '경포대', visitedOn: '2026-10-12', review: '' }),
+    ]);
+    await renderLibrary(library, { prefs: { libraryView: 'cards' } });
+    const el = card(/경포대/);
+    expect(el.querySelector('[data-part="visited"]')).toHaveTextContent('다녀옴 2026.10.12');
+    expect(el.querySelector('[data-part="review"]')).toBeNull();
   });
 });

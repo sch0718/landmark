@@ -87,3 +87,15 @@ describe('toMarkers', () => {
     expect(markers.map((m) => m.selected === true)).toEqual([false, true]);
   });
 });
+
+describe('toMarkers visited', () => {
+  it('visited는 다녀온 곳만 true다', () => {
+    const places = [
+      makePlace(1, { visitedOn: '2026-10-12' }),
+      makePlace(2),
+      makePlace(3, { visitedOn: null }),
+    ];
+    const markers = toMarkers(places, {}, TOKENS.pastel.light, null);
+    expect(markers.map((m) => m.visited)).toEqual([true, undefined, undefined]);
+  });
+});
