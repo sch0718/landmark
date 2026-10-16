@@ -3,6 +3,7 @@ import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { useEffect, useRef } from 'react';
+import { toast } from 'sonner';
 import { reminderState, reminderText } from 'src/domain/backup/reminder';
 import { useBackupFile } from 'src/sections/backup/use-backup-file';
 import { MAIN_ID } from 'src/sections/shell/SkipLink';
@@ -19,7 +20,13 @@ export function BackupReminder() {
   const persistence = useAtomValue(persistenceAtom);
   const meta = useAtomValue(backupMetaAtom);
   const snooze = useSetAtom(snoozeReminderAtom);
-  const { shareable, busy, save, share } = useBackupFile();
+  const { shareable, busy, error, save, share } = useBackupFile();
+
+  // 받기·공유 실패는 띠 밖의 토스트로 알린다(띠 안에 `alert`를 두면 라이브 영역이 된다).
+  // 오류 값이 바뀔 때만 한 번 알리므로 다시 그려져도 겹치지 않는다(새로 누르면 `null`로 돌아갔다가 다시 채워진다).
+  useEffect(() => {
+    if (error !== null) toast.error(error);
+  }, [error]);
 
   const state = reminderState({ library, meta, persistence, now: new Date().getTime() });
   const shown = state !== null;

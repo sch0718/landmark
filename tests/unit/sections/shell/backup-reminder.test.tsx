@@ -95,16 +95,39 @@ describe('BackupReminder', () => {
     await waitFor(() => expect(banner()).toBeNull());
   });
 
-  it('stays when the share sheet is dismissed', async () => {
+  it('stays without error toast or backup record when the share sheet is dismissed', async () => {
     const abort = Object.assign(new Error('x'), { name: 'AbortError' });
     const share = vi.fn(() => Promise.reject(abort));
     Object.defineProperty(navigator, 'canShare', { value: vi.fn(() => true), configurable: true });
     Object.defineProperty(navigator, 'share', { value: share, configurable: true });
     const user = userEvent.setup();
-    await renderLibrary(sampleLibrary(), { path: '/' });
+    const { storage } = await renderLibrary(sampleLibrary(), { path: '/' });
     await user.click(within(banner()!).getByRole('button', { name: '백업 받기' }));
     await waitFor(() => expect(share).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(within(banner()!).getByRole('button', { name: '백업 받기' })).toBeEnabled(),
+    );
     expect(banner()).not.toBeNull();
+    expect(toastMock.error).not.toHaveBeenCalled();
+    expect(storage.getItem(BACKUP_META_KEY)).toBeNull();
+  });
+
+  it('toasts once and stays when sharing fails', async () => {
+    const share = vi.fn(() => Promise.reject(new Error('boom')));
+    Object.defineProperty(navigator, 'canShare', { value: vi.fn(() => true), configurable: true });
+    Object.defineProperty(navigator, 'share', { value: share, configurable: true });
+    const user = userEvent.setup();
+    const { storage } = await renderLibrary(sampleLibrary(), { path: '/' });
+    await user.click(within(banner()!).getByRole('button', { name: '백업 받기' }));
+    await waitFor(() =>
+      expect(toastMock.error).toHaveBeenCalledWith(
+        '공유하지 못했어요. 백업 파일 받기를 이용해 주세요',
+      ),
+    );
+    expect(toastMock.error).toHaveBeenCalledTimes(1);
+    expect(banner()).not.toBeNull();
+    expect(within(banner()!).queryByRole('alert')).toBeNull();
+    expect(storage.getItem(BACKUP_META_KEY)).toBeNull();
   });
 
   it('says how many days ago when changes came after the last backup', async () => {
