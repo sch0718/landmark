@@ -21,6 +21,8 @@ export type PlaceListProps = {
   scrollElement: HTMLElement | null;
   onOpen(id: string): void;
   onToggle(id: string): void;
+  /** 근처 모드의 직선거리(m, 장소 id별). 있으면 행·카드의 지역 자리에 거리가 보인다. */
+  distances?: ReadonlyMap<string, number> | null;
 };
 
 /** 목록(한 줄 행)과 카드 보기가 함께 쓰는 장소 목록. */
@@ -32,6 +34,7 @@ export function PlaceList({
   scrollElement,
   onOpen,
   onToggle,
+  distances,
 }: PlaceListProps & { variant: 'row' | 'card' }) {
   // 지역은 보관함 전체 기준으로 한 번만 구한다(주소가 없는 장소는 가까운 장소의 지역을 빌린다).
   const library = useAtomValue(libraryAtom);
@@ -65,6 +68,7 @@ export function PlaceList({
           current: place.id === openId,
           onOpen,
           onToggle,
+          distanceM: distances?.get(place.id),
         };
         return card ? <PlaceCard {...props} /> : <PlaceRow {...props} />;
       }}

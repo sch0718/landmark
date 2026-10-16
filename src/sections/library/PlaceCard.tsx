@@ -2,7 +2,11 @@ import Box from '@mui/material/Box';
 import { CheckIcon } from 'src/components/icons';
 import { formatVisitDate, reviewOf, visitedOnOf } from 'src/domain/library/visit';
 import { LabelBadge } from 'src/sections/library/LabelBadge';
-import { ITEM_BUTTON_SX, type PlaceItemProps } from 'src/sections/library/PlaceRow';
+import {
+  ITEM_BUTTON_SX,
+  RegionOrDistance,
+  type PlaceItemProps,
+} from 'src/sections/library/PlaceRow';
 import { SelectMark } from 'src/sections/library/SelectMark';
 import { usePlaceGestures } from 'src/sections/library/use-place-gestures';
 
@@ -18,7 +22,7 @@ const clamp = (lines: number) =>
     overflowWrap: 'anywhere',
   }) as const;
 
-/** 카드 보기: 이름 바로 아래 메모(3줄, 말줄임)와 한 줄 평(2줄), 그 아래 다녀옴 배지·지역·라벨 칩. */
+/** 카드 보기: 이름 바로 아래 메모(3줄, 말줄임)와 한 줄 평(2줄), 그 아래 다녀옴 배지·지역(근처면 거리)·라벨 칩. */
 export function PlaceCard({
   place,
   region,
@@ -28,6 +32,7 @@ export function PlaceCard({
   current = false,
   onOpen,
   onToggle,
+  distanceM,
 }: PlaceItemProps) {
   const gestures = usePlaceGestures({ id: place.id, selecting, onOpen, onToggle });
   const memo = place.memo.value.trim();
@@ -116,7 +121,7 @@ export function PlaceCard({
             data-part="region"
             sx={{ fontSize: 12, color: 'var(--tm-text-muted)', overflowWrap: 'anywhere' }}
           >
-            {region}
+            <RegionOrDistance region={region} distanceM={distanceM} />
           </Box>
           {labels.map((label) => (
             <LabelBadge key={label.id} label={label} />

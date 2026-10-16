@@ -93,6 +93,36 @@ export class LabelNameTaken extends Schema.TaggedError<LabelNameTaken>()('LabelN
   }
 }
 
+export const GEOLOCATION_ERROR_REASONS = [
+  'denied',
+  'unavailable',
+  'timeout',
+  'unsupported',
+] as const;
+export type GeolocationErrorReason = (typeof GEOLOCATION_ERROR_REASONS)[number];
+
+/**
+ * 내 위치를 얻지 못했다(스펙 §6). 값으로 받아 화면에 `userMessage`를 보이고, 앱 오류 보고자로는 보내지 않는다.
+ * `denied` 권한 거부 / `unavailable` 위치를 못 얻음·좌표가 숫자가 아님 / `timeout` 브라우저 시한 초과 /
+ * `unsupported` 위치 API가 없거나 보안 연결이 아님.
+ */
+export class GeolocationError extends Schema.TaggedError<GeolocationError>()('GeolocationError', {
+  reason: Schema.Literals(GEOLOCATION_ERROR_REASONS),
+}) {
+  get userMessage(): string {
+    switch (this.reason) {
+      case 'denied':
+        return '위치 권한이 꺼져 있어요. 브라우저 설정에서 이 사이트의 위치 권한을 켜 주세요';
+      case 'unavailable':
+        return '지금은 위치를 알 수 없어요. 잠시 뒤 다시 해 주세요';
+      case 'timeout':
+        return '위치를 찾는 데 시간이 너무 오래 걸려요. 다시 해 주세요';
+      case 'unsupported':
+        return '이 브라우저에서는 위치를 쓸 수 없어요';
+    }
+  }
+}
+
 /** 내보내기 파일을 만들지 못했을 때 화면에 보이는 안내. */
 export const SHARE_EXPORT_FAILED =
   '내보내기 파일을 만들지 못했어요. 인터넷 연결을 확인하고 다시 시도해 주세요';

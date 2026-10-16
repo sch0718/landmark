@@ -23,6 +23,7 @@ import { ShareLabelRows } from 'src/sections/share-import/ShareLabelRows';
 import { SharePlaceRows } from 'src/sections/share-import/SharePlaceRows';
 import { addFlowAtom } from 'src/stores/add-place';
 import { libraryAtom, useLibraryAction } from 'src/stores/library-state';
+import { nearbyOffAtom } from 'src/stores/my-location';
 
 const NOTE_SX = { mt: 0.5, fontSize: 12, color: 'var(--tm-text-secondary)' } as const;
 
@@ -37,6 +38,7 @@ export function SharePreview({ doc }: { doc: ShareDoc }) {
   const setFlow = useSetAtom(addFlowAtom);
   const { run } = useLibraryAction();
   const [, patchQuery] = useLibraryQuery();
+  const nearbyOff = useSetAtom(nearbyOffAtom);
 
   const [selected, setSelected] = useState<ReadonlySet<string>>(
     () => new Set(doc.places.map((place) => place.id)),
@@ -114,6 +116,8 @@ export function SharePreview({ doc }: { doc: ShareDoc }) {
         regions: [],
         visited: 'all',
       });
+      // 근처 모드가 켜져 있으면 가져온 곳이 가려질 수 있어 함께 끈다.
+      nearbyOff();
     }
     setFlow({ step: 'closed' });
   };

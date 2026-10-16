@@ -1,9 +1,12 @@
 import Box from '@mui/material/Box';
-import { useAtomValue, useSetAtom } from 'jotai';
+import { visuallyHidden } from '@mui/utils';
+import { useAtomValue, useSetAtom, useStore } from 'jotai';
 import { useCallback, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
+import { toast } from 'sonner';
 import type { MapPadding } from 'src/components/map/MapAdapter';
 import { MapView } from 'src/components/map/MapView';
+import { MyLocationButton } from 'src/components/map/MyLocationButton';
 import {
   hasVisited,
   labelCounts,
@@ -11,6 +14,7 @@ import {
   queryPlaces,
   visitCounts,
 } from 'src/domain/library/query';
+import { radiusBox } from 'src/domain/nearby';
 import { paths } from 'src/routes/paths';
 import { PinModeOverlay } from 'src/sections/add-place/PinModeOverlay';
 import { useOpenPlaceId } from 'src/sections/library/use-open-place-id';
@@ -18,11 +22,14 @@ import { LabelChips } from 'src/sections/library/LabelChips';
 import { VisitChips } from 'src/sections/library/VisitChips';
 import { useLibraryQuery } from 'src/sections/library/use-library-query';
 import { placeMarker, toMarkers } from 'src/sections/map/markers';
+import { NearbyMapChip } from 'src/sections/nearby/NearbyMapChip';
+import { useNearby } from 'src/sections/nearby/use-nearby';
 import { DETAIL_WIDTH } from 'src/sections/shell/pane-widths';
 import { useLayout } from 'src/sections/shell/use-layout';
 import { addFlowAtom, showsAddPanel } from 'src/stores/add-place';
 import { libraryAtom } from 'src/stores/library-state';
 import { focusPlaceAtom } from 'src/stores/library-ui';
+import { locateAtom, myLocationAtom, nearbyAtom } from 'src/stores/my-location';
 import { useThemeTokens } from 'src/theme/use-theme';
 
 const EDGE = 40;
@@ -35,12 +42,17 @@ type MapFocus = { point: [number, number]; seq: number };
 /** 확인 카드의 후보·핀 입력 카드의 위치를 보이는 임시 마커 id. 장소 id(10자 영숫자)와 겹치지 않는다. */
 const CANDIDATE_MARKER_ID = 'candidate';
 
+/** `내 위치 보기`가 위치를 지도에 그렸을 때 눈에 안 보이는 알림(스펙 §4.3). */
+const LOCATED_MESSAGE = '내 위치를 지도에 표시했어요';
+
 /**
  * 보관함 지도(스펙 §4.5). 목록과 같은 필터(`useLibraryQuery`)로 거른 장소를 라벨 색 마커로 보여 준다.
  * - 마커를 누르면 그 장소의 상세로 가고, 목록은 그 행으로 스크롤한다(`focusPlaceAtom`).
  * - 목록·상세에서 장소를 고르면(경로의 `/place/:id`) 지도가 그 장소로 움직인다. 방금 지도에서 누른 장소는
  *   상세 오버레이가 새로 생기는 경우에만 옮긴다.
- * - 좁은 화면(`/map`)에서는 위에 방문·라벨 필터 칩 한 줄을 둔다.
+ * - 좁은 화면(`/map`)에서는 위에 근처·방문·라벨 필터 칩 한 줄을 둔다.
+ * - 오른쪽 위 `내 위치 보기`로 내 위치 점을 그리고 그리로 옮긴다. 근처 모드면 목록처럼 반경 안 장소만 보이고
+ *   지도를 반경 상자에 맞춘다(스펙 §4.3).
  * - 링크로 찾은 후보의 확인 카드가 열려 있으면 그 좌표로 옮기고 임시 마커를 보인다(스펙 §2.2).
  * - 핀 모드면 가운데 조준점 오버레이를 덮고 지도 중심을 넘긴다. 시작 좌표가 있으면 그리로 옮기고, 마커를
  *   눌러도 상세로 가지 않는다. 핀 입력 카드가 열리면 고른 위치에 임시 마커를 둔다(스펙 §2.4).
@@ -75,8 +87,11 @@ export function LibraryMap() {
     [tokens],
   );
 
-  // 마커는 순서가 의미 없으므로 `다녀온 날순`을 따로 적용하지 않는다.
-  const places = useMemo(() => queryPlaces(library, query), [library, query]);
+  // 마커는 순서가 의미 없으므로 `다녀온 날순`을 따로 적용하지 않는다. 근처 모드면 목록과 같이 반경 안만 남긴다.
+  const filtered = useMemo(() => queryPlaces(library, query), [library, query]);
+  const nearby = useNearby(filtered);
+  const places = nearby.places;
+  const { fix, locating } = useAtomValue(myLocationAtom);
   const markers = useMemo(() => {
     const shown = toMarkers(places, library.labels, tokens, placeId);
     // 필터에 가려진 장소를 열어 두었다면 그 장소만은 개별 마커로 항상 보인다.
@@ -123,12 +138,35 @@ export function LibraryMap() {
     }
   }
 
-  // 필터가 바뀌면 지도는 새 필터에 맞춰지거나 그 필터의 옛 카메라로 돌아간다. 열어 둔 장소가 거기서 벗어나
-  // 안 보이지 않도록, 맞춘 뒤에 그 장소로 다시 모은다.
-  const fitKey = JSON.stringify(query);
-  const [seenKey, setSeenKey] = useState(fitKey);
-  if (seenKey !== fitKey) {
-    setSeenKey(fitKey);
+  // 필터가 바뀌면 지도는 새 필터에 맞춰지거나 그 필터의 옛 카메라로 돌아간다. 근처 모드는 켜지거나 반경·위치가
+  // 바뀔 때마다, 그리고 근처 모드에서 `내 위치 보기`를 누를 때마다 `nearbySeq`를 올려 늘 새 키로 다시 맞춘다.
+  // 같은 반경으로 돌아오거나 껐다 켜도 옛 카메라를 되살리지 않고, 브라우저가 캐시한 위치(`maximumAge`)가 처음
+  // 시각 그대로 와도 누른 것이 보인다.
+  const activeFix = nearby.active ? fix : null;
+  const nearbySig = activeFix === null ? null : `${nearby.radiusM ?? 'all'}:${activeFix.at}`;
+  const [seenNearbySig, setSeenNearbySig] = useState(nearbySig);
+  const [nearbySeq, setNearbySeq] = useState(0);
+  if (seenNearbySig !== nearbySig) {
+    setSeenNearbySig(nearbySig);
+    setNearbySeq((prev) => prev + 1);
+  }
+  const nearbyKey = nearbySig === null ? null : `${nearbySig}:${nearbySeq}`;
+  const fitKey = JSON.stringify([query, nearbyKey]);
+  // 근처 모드면 마커 대신 이 점들로만 맞춘다(`fitMarkers={false}`): 반경이 있으면 반경 원을 감싸는 상자, 전체면
+  // 반경 안 장소와 내 위치. 필터에 가려졌지만 열어 둔 장소는 넣지 않는다(스펙 §4.3은 반경 상자를 약속한다. 먼
+  // 장소를 넣으면 반경을 바꿔도 지도가 그대로처럼 보인다). 그 장소의 마커는 그대로 보인다.
+  const extraFitPoints = useMemo((): [number, number][] | undefined => {
+    if (activeFix === null) return undefined;
+    const origin: [number, number] = [activeFix.lng, activeFix.lat];
+    if (nearby.radiusM !== null) return radiusBox(origin, nearby.radiusM);
+    return [...places.map((p): [number, number] => [p.lng, p.lat]), origin];
+  }, [activeFix, nearby.radiusM, places]);
+  // 필터(근처 말고 `query`)가 바뀌면 열어 둔 장소가 새 범위에서 벗어나 안 보이지 않도록, 맞춘 뒤에 그 장소로
+  // 다시 모은다. 근처 쪽 변화(켜기·반경·새 위치·`내 위치 보기`)는 반경 맞추기가 이겨야 하므로 모으지 않는다.
+  const queryKey = JSON.stringify(query);
+  const [seenQueryKey, setSeenQueryKey] = useState(queryKey);
+  if (seenQueryKey !== queryKey) {
+    setSeenQueryKey(queryKey);
     const open = placeId === null ? undefined : library.places[placeId];
     if (open !== undefined && open.deletedAt === null) {
       setFocus({ point: [open.lng, open.lat], seq: (focus?.seq ?? 0) + 1 });
@@ -167,6 +205,27 @@ export function LibraryMap() {
 
   const [unavailable, setUnavailable] = useState<string | null>(null);
 
+  // `내 위치 보기`: 한 번 찾고, 근처 모드가 아니면 그리로 옮긴다(근처 모드면 반경 상자에 다시 맞춘다).
+  const locate = useSetAtom(locateAtom);
+  const store = useStore();
+  const [announcement, setAnnouncement] = useState('');
+  const onLocate = useCallback(async () => {
+    // 같은 문장을 다시 읽히도록 먼저 비운다.
+    setAnnouncement('');
+    const result = await locate();
+    if (result.kind === 'error') {
+      toast.error(result.error.userMessage);
+      return;
+    }
+    const { lng, lat } = result.fix;
+    if (store.get(nearbyAtom).on) {
+      setNearbySeq((prev) => prev + 1);
+    } else {
+      setFocus((prev) => ({ point: [lng, lat], seq: (prev?.seq ?? 0) + 1 }));
+    }
+    setAnnouncement(LOCATED_MESSAGE);
+  }, [locate, store]);
+
   const onMarkerClick = useCallback(
     (id: string) => {
       if (id === CANDIDATE_MARKER_ID) return; // 아직 보관함에 없는 후보다.
@@ -197,12 +256,17 @@ export function LibraryMap() {
             labels={labels}
             counts={counts}
             leading={
-              showVisit ? (
-                <VisitChips
-                  value={query.visited}
-                  counts={visits}
-                  onChange={(visited) => patch({ visited })}
-                />
+              nearby.active || showVisit ? (
+                <>
+                  <NearbyMapChip />
+                  {showVisit && (
+                    <VisitChips
+                      value={query.visited}
+                      counts={visits}
+                      onChange={(visited) => patch({ visited })}
+                    />
+                  )}
+                </>
               ) : undefined
             }
           />
@@ -219,7 +283,17 @@ export function LibraryMap() {
           fitKey={fitKey}
           onUnavailable={setUnavailable}
           onCenterChange={setCenter}
+          myLocation={fix}
+          controls={<MyLocationButton locating={locating} onClick={() => void onLocate()} />}
+          controlsRight={detailOverlaid ? DETAIL_WIDTH : 0}
+          extraFitPoints={extraFitPoints}
+          fitMarkers={activeFix === null}
         />
+        {unavailable === null && (
+          <Box role="status" sx={visuallyHidden}>
+            {announcement}
+          </Box>
+        )}
         {unavailable !== null && (
           <Box
             role="status"

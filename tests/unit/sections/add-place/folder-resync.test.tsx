@@ -14,6 +14,8 @@ import { PlaceLookup } from 'src/services/place-lookup';
 import { addFlowAtom, addTargetAtom } from 'src/stores/add-place';
 import { queryDraftAtom } from 'src/stores/library-query-draft';
 import { libraryAtom } from 'src/stores/library-state';
+import { myLocationAtom, nearbyAtom } from 'src/stores/my-location';
+import { nearbyHarness, turnNearbyOn } from '../../helpers/nearby-on';
 import { L_FOOD, makePlace, renderLibrary, sampleLibrary, withPlaces } from '../library/fixtures';
 import { makeTrip, TRIP, withTrip } from '../trips/planner-fixtures';
 
@@ -122,6 +124,7 @@ async function openFolder(
     ids?: string[];
     prefs?: Partial<Prefs>;
     target?: { tripId: string };
+    geolocation?: NonNullable<Parameters<typeof renderLibrary>[1]>['geolocation'];
   } = {},
 ) {
   const user = userEvent.setup();
@@ -130,6 +133,7 @@ async function openFolder(
     ids: options.ids ?? IDS,
     placeLookup: lookup.layer,
     prefs: { libraryView: 'list', ...options.prefs },
+    geolocation: options.geolocation,
   });
   act(() => {
     if (options.target !== undefined) rendered.store.set(addTargetAtom, options.target);
@@ -180,6 +184,24 @@ describe('폴더 다시 가져오기', () => {
     expect(query.regions).toEqual([]);
     expect(query.unlabeled).toBe(false);
     expect(router.state.location.pathname).toBe('/');
+  });
+
+  it('토스트의 보관함에서 보기는 근처 모드도 끈다(반경과 내 위치는 그대로)', async () => {
+    const { fake, geolocation } = nearbyHarness();
+    const { user, store } = await openFolder(undefined, { geolocation });
+    await within(panel()).findByRole('heading', { name: '속초 맛집' });
+    await turnNearbyOn(store, fake);
+
+    await user.click(within(panel()).getByRole('button', { name: '1곳 가져오기' }));
+    await waitFor(() => expect(store.get(addFlowAtom)).toEqual({ step: 'closed' }));
+    // 토스트만 띄운 단계에서는 필터도 근처 모드도 건드리지 않는다.
+    expect(store.get(nearbyAtom).on).toBe(true);
+
+    const [, options] = toastMock.mock.calls[0] as [string, { action: { onClick: () => void } }];
+    act(() => options.action.onClick());
+    expect(store.get(queryDraftAtom)!.visited).toBe('all');
+    expect(store.get(nearbyAtom)).toEqual({ on: false, radiusM: 3000 });
+    expect(store.get(myLocationAtom).fix).not.toBeNull();
   });
 
   it('보관함에서 지운 곳은 따로 묶어 체크 없이 보이고, 고르면 되살린다', async () => {

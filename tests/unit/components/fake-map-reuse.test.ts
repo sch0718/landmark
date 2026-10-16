@@ -78,3 +78,28 @@ it('500개 marker와 click을 보존하고 독립 layer 갱신에서 DOM을 재�
   expect(click).toHaveBeenCalledTimes(1);
   expect(host.children).toHaveLength(0);
 });
+
+it('Fake 어댑터: setMyLocation은 my-location 요소 하나를 갱신하고 null이면 지운다', async () => {
+  const host = document.createElement('div');
+  const adapter = new FakeMapAdapter();
+  const q = () => host.querySelectorAll<HTMLElement>('[data-testid="my-location"]');
+
+  // 마운트 전에 불러도 마운트 뒤에 그려진다.
+  adapter.setMyLocation({ lng: 128.9, lat: 37.75, accuracyM: 30 });
+  await adapter.mount(host);
+  expect(q()).toHaveLength(1);
+  expect(q()[0]!.dataset).toMatchObject({ lng: '128.9', lat: '37.75', accuracy: '30' });
+
+  adapter.setMyLocation({ lng: 129, lat: 38, accuracyM: 50 });
+  expect(q()).toHaveLength(1);
+  expect(q()[0]!.dataset).toMatchObject({ lng: '129', lat: '38', accuracy: '50' });
+
+  adapter.setMyLocation(null);
+  expect(q()).toHaveLength(0);
+  expect(adapter.myLocationCalls).toEqual([
+    { lng: 128.9, lat: 37.75, accuracyM: 30 },
+    { lng: 129, lat: 38, accuracyM: 50 },
+    null,
+  ]);
+  adapter.destroy();
+});

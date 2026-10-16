@@ -1,4 +1,5 @@
 import Box from '@mui/material/Box';
+import type { ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { fitPoints, focusCamera } from './camera';
 import { FakeMapAdapter } from './FakeMapAdapter';
@@ -11,6 +12,7 @@ import {
   type MapMarker,
   type MapPadding,
   type MapPolyline,
+  type MyLocation,
 } from './MapAdapter';
 import { onNaverAuthFailure } from './load-naver-sdk';
 import { MapZoomButtons } from './MapZoomButtons';
@@ -42,6 +44,16 @@ type Props = {
    * 마운트 직후에도 한 번 맞춘다. 같은 값에서 마커만 바뀌는 경우(편집·선택)에는 맞추지 않는다.
    */
   fitKey?: string;
+  /** 내 위치 점과 정확도 원. 값(경도·위도·정확도)이 바뀔 때만 어댑터에 알린다. `null`·없음이면 지운다. */
+  myLocation?: MyLocation | null;
+  /** 지도 오른쪽 위 단추 기둥에서 확대·축소(터치 전용 기기) 아래에 놓을 단추들. */
+  controls?: ReactNode;
+  /** 단추 기둥을 오른쪽에서 이만큼(px) 더 띄운다. 상세·추가 칸이 지도를 덮을 때 쓴다. */
+  controlsRight?: number;
+  /** 마커 외에 `fitKey` 맞추기에 더할 점(경도, 위도). 마커가 없어도 이 점들로 맞춘다. */
+  extraFitPoints?: [number, number][];
+  /** `false`면 마커 좌표는 맞추기에서 빼고 `extraFitPoints`만으로 맞춘다(기본 `true`). */
+  fitMarkers?: boolean;
 };
 
 const DEFAULT_PADDING: MapPadding = { top: 40, right: 40, bottom: 40, left: 40 };
@@ -168,6 +180,19 @@ export function MapView(props: Props) {
     if (ready) adapterRef.current?.setPolylines(props.polylines);
   }, [ready, props.polylines]);
 
+  const myLocation = props.myLocation ?? null;
+  const myLng = myLocation?.lng;
+  const myLat = myLocation?.lat;
+  const myAccuracy = myLocation?.accuracyM;
+  useEffect(() => {
+    if (!ready) return;
+    adapterRef.current?.setMyLocation(
+      myLng === undefined || myLat === undefined || myAccuracy === undefined
+        ? null
+        : { lng: myLng, lat: myLat, accuracyM: myAccuracy },
+    );
+  }, [ready, myLng, myLat, myAccuracy]);
+
   const key = props.fitKey ?? 'explore';
   useEffect(() => {
     const adapter = adapterRef.current;
@@ -187,7 +212,8 @@ export function MapView(props: Props) {
       displayedKey.current = key;
     }
     if (!fittedKeys.current.has(key)) {
-      const points = fitPoints(latest.current.markers);
+      const { markers, extraFitPoints, fitMarkers } = latest.current;
+      const points = fitPoints(fitMarkers === false ? [] : markers, extraFitPoints);
       if (points.length > 0) {
         fit(points);
         fittedKeys.current.add(key);
@@ -199,7 +225,7 @@ export function MapView(props: Props) {
       adapter.setCamera(focusCamera(focus.point, latest.current.padding ?? DEFAULT_PADDING));
       appliedFocus.current = focus.seq;
     }
-  }, [ready, key, props.focus, props.markers]);
+  }, [ready, key, props.focus, props.markers, props.extraFitPoints]);
 
   return (
     <Box
@@ -215,7 +241,24 @@ export function MapView(props: Props) {
       data-testid="map-host"
     >
       <Box ref={canvasRef} sx={{ position: 'absolute', inset: 0 }} data-testid="map-canvas" />
-      {touchOnly && ready && mountedAdapter && <MapZoomButtons adapter={mountedAdapter} />}
+      {ready && mountedAdapter && (touchOnly || props.controls) && (
+        <Box
+          data-testid="map-controls"
+          sx={{
+            position: 'absolute',
+            top: 8,
+            right: 8 + (props.controlsRight ?? 0),
+            // 지도 SDK의 레이어(`isolation`으로 가둔 쌓임 맥락) 위에 둔다.
+            zIndex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 1,
+          }}
+        >
+          {touchOnly && <MapZoomButtons adapter={mountedAdapter} />}
+          {props.controls}
+        </Box>
+      )}
     </Box>
   );
 }

@@ -25,6 +25,7 @@ import {
   setVisitedOn,
 } from 'src/domain/library/ops';
 import { isVisited, localDateOf, visitedOnOf } from 'src/domain/library/visit';
+import { nextRadius, radiusLabel } from 'src/domain/nearby';
 import type { Library } from 'src/schema/library';
 import { addCandidates } from 'src/domain/trips/ops';
 import { paths } from 'src/routes/paths';
@@ -42,10 +43,13 @@ import { candidatesNotice } from 'src/sections/trips/candidate-notice';
 import { TripFormDialog } from 'src/sections/trips/TripFormDialog';
 import { TripPickerDialog } from 'src/sections/trips/TripPickerDialog';
 import type { Trip } from 'src/schema/trip';
+import { NearbyBar, type NearbyBarHandle } from 'src/sections/nearby/NearbyBar';
+import { useNearby, useStartNearby } from 'src/sections/nearby/use-nearby';
 import { ExportHtmlDialogHost } from 'src/sections/share-export/ExportHtmlDialogHost';
 import { exportTargets } from 'src/sections/share-export/export-targets';
 import { libraryAtom, useLibraryAction } from 'src/stores/library-state';
 import { focusPlaceAtom } from 'src/stores/library-ui';
+import { nearbyAtom, nearbyOffAtom } from 'src/stores/my-location';
 import { prefsAtom, setPrefsAtom } from 'src/stores/prefs-state';
 import { visitedSortAtom } from 'src/stores/visit-sort';
 
@@ -84,13 +88,22 @@ export function LibraryPage() {
   const setPrefs = useSetAtom(setPrefsAtom);
   const [query, patchQuery] = useLibraryQuery();
   const [visitedSort, setVisitedSort] = useAtom(visitedSortAtom);
-  // 저장되는 정렬을 고르면 저장하지 않는 `다녀온 날순`은 꺼진다(같은 값을 다시 골라도).
+  const [nearbyState, setNearby] = useAtom(nearbyAtom);
+  const nearbyOff = useSetAtom(nearbyOffAtom);
+  // 근처 줄의 ×·빈 상태의 `반경 넓히기`는 누르면 사라질 수 있어, 포커스를 남는 단추로 옮긴다.
+  const sortButtonRef = useRef<HTMLButtonElement>(null);
+  const nearbyBarRef = useRef<NearbyBarHandle>(null);
+  const startNearby = useStartNearby();
+  // 저장되는 정렬을 고르면 저장하지 않는 `다녀온 날순`·`가까운 순`은 꺼진다(같은 값을 다시 골라도).
   const patch = useCallback(
     (change: Partial<LibraryQuery>) => {
       patchQuery(change);
-      if (change.sort !== undefined) setVisitedSort(false);
+      if (change.sort !== undefined) {
+        setVisitedSort(false);
+        nearbyOff();
+      }
     },
-    [patchQuery, setVisitedSort],
+    [patchQuery, setVisitedSort, nearbyOff],
   );
   const { run } = useLibraryAction();
   const navigate = useNavigate();
@@ -107,10 +120,13 @@ export function LibraryPage() {
   const labels = useMemo(() => liveLabels(library), [library]);
   const labelsById = useMemo(() => new Map(labels.map((l) => [l.id, l])), [labels]);
   const total = useMemo(() => livePlaces(library).length, [library]);
-  const places = useMemo(() => {
+  const sorted = useMemo(() => {
     const matched = queryPlaces(library, query);
     return visitedSort ? sortByVisited(matched) : matched;
   }, [library, query, visitedSort]);
+  // 근처 모드이고 위치가 있으면 반경 안만 가까운 순. 선택·내보내기도 이 목록 기준이다.
+  const nearby = useNearby(sorted);
+  const places = nearby.places;
   const showVisit = useMemo(
     () => hasVisited(library) || query.visited !== 'all',
     [library, query.visited],
@@ -260,6 +276,7 @@ export function LibraryPage() {
     scrollElement,
     onOpen,
     onToggle,
+    distances: nearby.distances,
   };
   const overviewProps = { labels, counts, query, onSelect: patch };
 
@@ -284,11 +301,22 @@ export function LibraryPage() {
           regions={regions}
           visitCounts={showVisit ? visits : undefined}
           visitedSort={visitedSort}
-          onVisitedSort={() => setVisitedSort(true)}
+          onVisitedSort={() => {
+            setVisitedSort(true);
+            nearbyOff();
+          }}
+          nearby={nearbyState.on}
+          onNearby={startNearby}
+          sortButtonRef={sortButtonRef}
           view={view}
           onViewChange={changeView}
           onExport={() => setExporting(true)}
           onCreateRegionTrip={createRegionTrip}
+        />
+        <NearbyBar
+          ref={nearbyBarRef}
+          count={places.length}
+          onTurnedOff={() => sortButtonRef.current?.focus()}
         />
       </Box>
       <Box ref={setScrollElement} sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
@@ -297,13 +325,25 @@ export function LibraryPage() {
           {view === 'tiles' && <TilesView {...overviewProps} />}
           {places.length > 0 &&
             (view === 'cards' ? <CardsView {...listProps} /> : <ListView {...listProps} />)}
-          {places.length === 0 && (
-            <EmptyState
-              title="조건에 맞는 장소가 없어요"
-              actionLabel="필터 지우기"
-              onAction={clearFilters}
-            />
-          )}
+          {places.length === 0 &&
+            // 필터만으로 이미 0곳이면 반경을 넓혀도 소용없으므로 필터 빈 상태를 보인다.
+            (nearby.active && nearby.radiusM !== null && sorted.length > 0 ? (
+              <EmptyState
+                title={`반경 ${radiusLabel(nearby.radiusM)} 안에 저장한 곳이 없어요`}
+                actionLabel="반경 넓히기"
+                onAction={() => {
+                  const radiusM = nextRadius(nearbyState.radiusM);
+                  setNearby((prev) => ({ ...prev, radiusM }));
+                  nearbyBarRef.current?.focusRadius(radiusM);
+                }}
+              />
+            ) : (
+              <EmptyState
+                title="조건에 맞는 장소가 없어요"
+                actionLabel="필터 지우기"
+                onAction={clearFilters}
+              />
+            ))}
         </Box>
       </Box>
       {selectedIds.length > 0 && (

@@ -2,6 +2,8 @@ import { buildClusterIndex, clusterFeatures, type ClusterIndex } from './cluster
 import { loadNaverSdk } from './load-naver-sdk';
 import {
   DEFAULT_CLUSTER_STYLE,
+  MY_LOCATION_COLOR,
+  MY_LOCATION_Z_INDEX,
   type Bounds,
   type ClusterStyle,
   type MapAdapter,
@@ -9,6 +11,7 @@ import {
   type MapMarker,
   type MapPadding,
   type MapPolyline,
+  type MyLocation,
 } from './MapAdapter';
 import { createMarkerLabelElement } from './marker-label';
 
@@ -21,6 +24,9 @@ type NaverMaps = {
   LatLngBounds: new (sw: unknown, ne: unknown) => unknown;
   Marker: new (opts: Record<string, unknown>) => Overlay;
   Polyline: new (opts: Record<string, unknown>) => Overlay;
+  Circle: new (
+    opts: Record<string, unknown>,
+  ) => Overlay & { setCenter?(c: unknown): void; setRadius?(r: number): void };
   Event: {
     addListener(target: unknown, name: string, cb: () => void): unknown;
     removeListener(listener: unknown): void;
@@ -40,6 +46,26 @@ type NaverMap = {
 /** 선택된 마커가 다른 마커·클러스터 위에 오도록 하는 쌓임 순서. */
 const SELECTED_Z_INDEX = 1000;
 
+/** 내 위치 점의 지름(px)과 흰 테두리 두께(px). */
+const MY_LOCATION_DOT_SIZE = 18;
+const MY_LOCATION_DOT_BORDER = 3;
+
+function createMyLocationDotElement(): HTMLElement {
+  const el = document.createElement('div');
+  // 테두리까지 18px이 되도록 border-box. 누를 수 없고 아래 지도에 이벤트를 넘긴다.
+  el.style.cssText = [
+    'box-sizing:border-box',
+    `width:${MY_LOCATION_DOT_SIZE}px`,
+    `height:${MY_LOCATION_DOT_SIZE}px`,
+    'border-radius:50%',
+    `background:${MY_LOCATION_COLOR}`,
+    `border:${MY_LOCATION_DOT_BORDER}px solid #fff`,
+    'box-shadow:0 0 3px rgba(0,0,0,.4)',
+    'pointer-events:none',
+  ].join(';');
+  return el;
+}
+
 const maps = (): NaverMaps => (window as unknown as { naver: { maps: NaverMaps } }).naver.maps;
 
 export class NaverMapAdapter implements MapAdapter {
@@ -50,6 +76,8 @@ export class NaverMapAdapter implements MapAdapter {
   private markerOverlays: Overlay[] = [];
   private lineOverlays: Overlay[] = [];
   private lines: MapPolyline[] = [];
+  private myLocation: MyLocation | null = null;
+  private myLocationOverlays: Overlay[] = [];
   private destroyed = false;
   private listeners: unknown[] = [];
   private markerClickCleanups: (() => void)[] = [];
@@ -83,6 +111,7 @@ export class NaverMapAdapter implements MapAdapter {
       }),
     );
     this.drawPolylines();
+    this.drawMyLocation();
   }
 
   setMarkers(markers: MapMarker[]): void {
@@ -99,6 +128,46 @@ export class NaverMapAdapter implements MapAdapter {
   setPolylines(lines: MapPolyline[]): void {
     this.lines = lines;
     this.drawPolylines();
+  }
+
+  setMyLocation(fix: MyLocation | null): void {
+    this.myLocation = fix;
+    this.drawMyLocation();
+  }
+
+  /**
+   * 정확도 원과 점을 지우고 다시 만든다. 옵션 이름은 Naver Maps v3 공식 문서(CircleOptions·MarkerOptions)와
+   * 대조했다(2026-10-17, PR #24 리뷰). 음수 zIndex로 장소 마커 아래에 깔리는지는 실제 화면 확인 필요(스펙 §11).
+   */
+  private drawMyLocation(): void {
+    for (const o of this.myLocationOverlays) o.setMap(null);
+    this.myLocationOverlays = [];
+    const map = this.map;
+    const fix = this.myLocation;
+    if (!map || !fix) return;
+    const m = maps();
+    const center = new m.LatLng(fix.lat, fix.lng);
+    const circle = new m.Circle({
+      map,
+      center,
+      radius: fix.accuracyM,
+      fillColor: MY_LOCATION_COLOR,
+      fillOpacity: 0.12,
+      strokeColor: MY_LOCATION_COLOR,
+      strokeOpacity: 0.35,
+      strokeWeight: 1,
+      clickable: false,
+      zIndex: MY_LOCATION_Z_INDEX - 1,
+    });
+    const half = MY_LOCATION_DOT_SIZE / 2;
+    const dot = new m.Marker({
+      map,
+      position: center,
+      icon: { content: createMyLocationDotElement(), anchor: { x: half, y: half } },
+      clickable: false,
+      zIndex: MY_LOCATION_Z_INDEX,
+    });
+    this.myLocationOverlays = [circle, dot];
   }
 
   private drawPolylines(): void {
@@ -168,15 +237,18 @@ export class NaverMapAdapter implements MapAdapter {
     this.boundsCb = null;
     this.markers = [];
     this.lines = [];
+    this.myLocation = null;
     this.cluster = buildClusterIndex([]);
     for (const cleanup of this.markerClickCleanups) cleanup();
     this.markerClickCleanups = [];
     const m = (window as unknown as { naver?: { maps?: NaverMaps } }).naver?.maps;
     for (const l of this.listeners) m?.Event.removeListener(l);
     this.listeners = [];
-    for (const o of [...this.markerOverlays, ...this.lineOverlays]) o.setMap(null);
+    for (const o of [...this.markerOverlays, ...this.lineOverlays, ...this.myLocationOverlays])
+      o.setMap(null);
     this.markerOverlays = [];
     this.lineOverlays = [];
+    this.myLocationOverlays = [];
     this.map?.destroy();
     this.map = null;
   }

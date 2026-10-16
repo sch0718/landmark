@@ -203,6 +203,148 @@ describe('MapView 크기 추적', () => {
   });
 });
 
+describe('MapView 내 위치·단추 기둥', () => {
+  const touchOnly = (on: boolean) =>
+    vi.stubGlobal('matchMedia', (q: string) => ({
+      matches: on && q === '(any-hover: none) and (any-pointer: coarse)',
+    }));
+  afterEach(() => vi.unstubAllGlobals());
+  const base = { polylines: [], onMarkerClick: vi.fn(), onUnavailable: vi.fn() };
+
+  it('myLocation을 넘기면 준비된 뒤 my-location 요소가 생기고 값이 바뀌면 갱신, null이면 사라진다', async () => {
+    vi.stubEnv('VITE_MAP_ADAPTER', 'fake');
+    const { rerender } = render(
+      <MapView markers={[]} myLocation={{ lng: 128.9, lat: 37.75, accuracyM: 30 }} {...base} />,
+    );
+    const el = await screen.findByTestId('my-location');
+    expect(el).toHaveAttribute('data-accuracy', '30');
+    rerender(
+      <MapView markers={[]} myLocation={{ lng: 128.9, lat: 37.75, accuracyM: 45 }} {...base} />,
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId('my-location')).toHaveAttribute('data-accuracy', '45'),
+    );
+    rerender(<MapView markers={[]} myLocation={null} {...base} />);
+    await waitFor(() => expect(screen.queryByTestId('my-location')).toBeNull());
+  });
+
+  it('같은 좌표·정확도의 새 객체로는 setMyLocation을 다시 부르지 않는다', async () => {
+    vi.stubEnv('VITE_MAP_ADAPTER', 'fake');
+    const spy = vi.spyOn(FakeMapAdapter.prototype, 'setMyLocation');
+    const { rerender } = render(
+      <MapView markers={[]} myLocation={{ lng: 128.9, lat: 37.75, accuracyM: 30 }} {...base} />,
+    );
+    await screen.findByTestId('my-location');
+    const calls = spy.mock.calls.length;
+    rerender(
+      <MapView markers={[]} myLocation={{ lng: 128.9, lat: 37.75, accuracyM: 30 }} {...base} />,
+    );
+    expect(spy.mock.calls.length).toBe(calls);
+    spy.mockRestore();
+  });
+
+  it('controls는 map-controls 안에 있고, 터치 전용이면 지도 축소 다음에 온다', async () => {
+    vi.stubEnv('VITE_MAP_ADAPTER', 'fake');
+    touchOnly(true);
+    render(<MapView markers={[]} controls={<button type="button">x</button>} {...base} />);
+    const column = await screen.findByTestId('map-controls');
+    const zoomOut = await screen.findByRole('button', { name: '지도 축소' });
+    const extra = screen.getByRole('button', { name: 'x' });
+    expect(column).toContainElement(zoomOut);
+    expect(column).toContainElement(extra);
+    expect(zoomOut.compareDocumentPosition(extra) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(getComputedStyle(column).top).toBe('8px');
+    expect(getComputedStyle(column).right).toBe('8px');
+  });
+
+  it('마우스 기기에서도 controls는 보이고 ＋/−는 없다', async () => {
+    vi.stubEnv('VITE_MAP_ADAPTER', 'fake');
+    touchOnly(false);
+    render(<MapView markers={[]} controls={<button type="button">x</button>} {...base} />);
+    expect(await screen.findByTestId('map-controls')).toContainElement(
+      await screen.findByRole('button', { name: 'x' }),
+    );
+    expect(screen.queryByRole('button', { name: '지도 축소' })).toBeNull();
+  });
+
+  it('controlsRight만큼 기둥을 왼쪽으로 옮긴다', async () => {
+    vi.stubEnv('VITE_MAP_ADAPTER', 'fake');
+    render(
+      <MapView
+        markers={[]}
+        controls={<button type="button">x</button>}
+        controlsRight={360}
+        {...base}
+      />,
+    );
+    const column = await screen.findByTestId('map-controls');
+    expect(getComputedStyle(column).right).toBe('368px');
+  });
+
+  it('extraFitPoints는 fitBounds에 더해지고, 마커가 없어도 한 번 맞춘다', async () => {
+    vi.stubEnv('VITE_MAP_ADAPTER', 'fake');
+    const fit = vi.spyOn(FakeMapAdapter.prototype, 'fitBounds');
+    const { rerender } = render(
+      <MapView markers={[]} extraFitPoints={[[129, 38]]} fitKey="k1" {...base} />,
+    );
+    await screen.findByTestId('fake-map');
+    await waitFor(() => expect(fit).toHaveBeenCalledTimes(1));
+    // 점이 하나뿐이면 그 근처로 넓혀 맞추므로(영역이 0이 되지 않게) 그 점이 영역 안에 든다.
+    const points = fit.mock.calls[0]![0];
+    expect(Math.min(...points.map((p) => p[0]))).toBeLessThan(129);
+    expect(Math.max(...points.map((p) => p[0]))).toBeGreaterThan(129);
+    expect(Math.min(...points.map((p) => p[1]))).toBeLessThan(38);
+    expect(Math.max(...points.map((p) => p[1]))).toBeGreaterThan(38);
+    // 같은 fitKey에서는 다시 맞추지 않는다.
+    rerender(<MapView markers={[]} extraFitPoints={[[129, 38]]} fitKey="k1" {...base} />);
+    expect(fit).toHaveBeenCalledTimes(1);
+    fit.mockRestore();
+  });
+
+  it('fitMarkers가 false면 마커는 빼고 extraFitPoints만으로 맞춘다', async () => {
+    vi.stubEnv('VITE_MAP_ADAPTER', 'fake');
+    const fit = vi.spyOn(FakeMapAdapter.prototype, 'fitBounds');
+    render(
+      <MapView
+        markers={[mk('a', { lng: 128, lat: 37 }), mk('b', { lng: 127, lat: 36 })]}
+        extraFitPoints={[
+          [129, 38],
+          [130, 39],
+        ]}
+        fitMarkers={false}
+        {...base}
+      />,
+    );
+    await screen.findByTestId('marker-a');
+    expect(fit).toHaveBeenCalledTimes(1);
+    expect(fit.mock.calls[0]![0]).toEqual([
+      [129, 38],
+      [130, 39],
+    ]);
+    fit.mockRestore();
+  });
+
+  it('extraFitPoints가 있으면 마커 좌표와 함께 맞춘다', async () => {
+    vi.stubEnv('VITE_MAP_ADAPTER', 'fake');
+    const fit = vi.spyOn(FakeMapAdapter.prototype, 'fitBounds');
+    render(
+      <MapView
+        markers={[mk('a', { lng: 128, lat: 37 }), mk('b', { lng: 127, lat: 36 })]}
+        extraFitPoints={[[129, 38]]}
+        {...base}
+      />,
+    );
+    await screen.findByTestId('marker-a');
+    expect(fit).toHaveBeenCalledTimes(1);
+    expect(fit.mock.calls[0]![0]).toEqual([
+      [128, 37],
+      [127, 36],
+      [129, 38],
+    ]);
+    fit.mockRestore();
+  });
+});
+
 describe('MapView fitKey', () => {
   it('마운트 직후 한 번, fitKey가 바뀔 때만 그때의 마커로 fitBounds한다', async () => {
     vi.stubEnv('VITE_MAP_ADAPTER', 'fake');

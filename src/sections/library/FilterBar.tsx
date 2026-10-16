@@ -1,5 +1,6 @@
 import Box from '@mui/material/Box';
 import InputBase from '@mui/material/InputBase';
+import type { Ref } from 'react';
 import { SEARCH_BOX_SX, SEARCH_INPUT_SX } from 'src/components/field-style';
 import { SearchIcon, ShareIcon } from 'src/components/icons';
 import type { LibraryQuery } from 'src/domain/library/query';
@@ -26,6 +27,11 @@ type Props = {
   /** `다녀온 날순`이 켜져 있는가(저장하지 않는 정렬). */
   visitedSort: boolean;
   onVisitedSort(): void;
+  /** `가까운 순`(근처 모드)이 켜져 있는가(저장하지 않는 정렬). */
+  nearby: boolean;
+  onNearby(): void;
+  /** 정렬 단추(`SortMenu`의 `buttonRef`). */
+  sortButtonRef?: Ref<HTMLButtonElement>;
   view: LibraryView;
   onViewChange(view: LibraryView): void;
   /** 내보내기 창을 연다. 0곳이어도 누를 수 있다(창에서 이유를 보여 준다). */
@@ -44,6 +50,9 @@ export function FilterBar({
   visitCounts,
   visitedSort,
   onVisitedSort,
+  nearby,
+  onNearby,
+  sortButtonRef,
   view,
   onViewChange,
   onExport,
@@ -74,6 +83,9 @@ export function FilterBar({
             visitedSort={visitedSort}
             onChange={(sort) => onChange({ sort })}
             onVisitedSort={onVisitedSort}
+            nearby={nearby}
+            onNearby={onNearby}
+            buttonRef={sortButtonRef}
           />
           <Box
             component="button"

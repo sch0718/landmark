@@ -23,19 +23,15 @@ const buttonSx = {
 
 /**
  * 터치 전용 기기의 확대·축소 버튼. 두 손가락을 쓰지 못해도 한 손가락으로 축소할 수 있게
- * 남긴다(WCAG 2.5.1). SDK 막대 대신 44px 버튼 둘을 지도 오른쪽 위에 둔다.
+ * 남긴다(WCAG 2.5.1). SDK 막대 대신 44px 버튼 둘을 두며, 지도 오른쪽 위 단추 기둥 안에 놓인다.
  */
 export function MapZoomButtons({ adapter }: { adapter: MapAdapter }) {
   return (
     <Box
       role="group"
       aria-label="지도 확대·축소"
+      // 자리(위치·쌓임)는 `MapView`의 단추 기둥이 정한다.
       sx={{
-        position: 'absolute',
-        top: 8,
-        right: 8,
-        // 지도 SDK의 레이어(`MapView`가 쌓임 맥락을 가둔다) 위에 둔다.
-        zIndex: 1,
         display: 'flex',
         flexDirection: 'column',
         bgcolor: 'var(--tm-bg-surface)',

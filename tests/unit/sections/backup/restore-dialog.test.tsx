@@ -16,6 +16,8 @@ import { BACKUP_META_KEY } from 'src/services/backup-meta-store';
 import { LIBRARY_KEY, PREVIOUS_KEY } from 'src/services/library-store';
 import { PREFS_KEY } from 'src/services/prefs-store';
 import { label, makeLibrary, place, trip } from '../../domain/backup/fixtures';
+import { myLocationAtom, nearbyAtom } from 'src/stores/my-location';
+import { nearbyHarness, turnNearbyOn } from '../../helpers/nearby-on';
 import { renderLibrary, sampleLibrary } from '../library/fixtures';
 
 const toastMock = vi.hoisted(() => {
@@ -292,6 +294,30 @@ describe('RestoreDialog (설정)', () => {
     expect(
       within(screen.getByRole('list', { name: '장소 목록' })).getAllByRole('button').length,
     ).toBeGreaterThan(0);
+  });
+
+  it('turns nearby mode off when restoring, keeping the radius and the location', async () => {
+    const u = user();
+    const { fake, geolocation } = nearbyHarness();
+    const { router, store } = await renderLibrary(sampleLibrary(), {
+      path: '/',
+      prefs: { libraryView: 'list' },
+      geolocation,
+    });
+    await turnNearbyOn(store, fake);
+    expect(screen.getByRole('group', { name: '반경' })).toBeInTheDocument();
+
+    await act(() => router.navigate('/settings'));
+    await openDialog(u);
+    await pick(u, backupFile());
+    await u.click(await within(dialog()).findByRole('button', { name: '이 백업으로 바꾸기' }));
+    await waitClosed();
+
+    expect(store.get(nearbyAtom)).toEqual({ on: false, radiusM: 3000 });
+    expect(store.get(myLocationAtom).fix).not.toBeNull();
+    await act(() => router.navigate('/'));
+    expect(await screen.findByRole('searchbox', { name: '장소 검색' })).toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: '반경' })).not.toBeInTheDocument();
   });
 
   it('a backup without prefs still resets the saved filters and keeps the other prefs', async () => {
