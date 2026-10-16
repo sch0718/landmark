@@ -1,9 +1,17 @@
 import { Clock, Context, Effect, Exit, Layer, Result, Stream } from 'effect';
+import { hasAnyEntry } from 'src/domain/backup/summary';
 import { createMemoryStorage, PROBE_KEY } from 'src/repositories/edit-layer-repo';
+import { BACKUP_FORMAT, BACKUP_VERSION, BackupEnvelopeSchema } from 'src/schema/backup';
 import { emptyLibrary, LIBRARY_LIMITS, LibrarySchema, type Library } from 'src/schema/library';
 import { safeParse, type Issue } from 'src/schema/parse';
 import { browserStorage } from 'src/services/browser-storage';
-import { LibraryCorrupt, LibraryInvalid, StorageQuotaExceeded } from 'src/services/errors';
+import {
+  LibraryCorrupt,
+  LibraryInvalid,
+  NoPrevious,
+  PreviousNotKept,
+  StorageQuotaExceeded,
+} from 'src/services/errors';
 import { ROUTE_CACHE_KEY } from 'src/services/route-lookup';
 
 /** 보관함 문서의 저장 키(스펙 §3). */
@@ -13,12 +21,28 @@ export const LIBRARY_LOCK = 'tripmap:library:v2';
 /** 손상된 문서의 원문을 보관하는 키. */
 const CORRUPT_PREFIX = 'tripmap:library:v2:corrupt-';
 export const corruptKey = (iso: string): string => `${CORRUPT_PREFIX}${iso}`;
+/**
+ * 되살리기 전 사본(한 벌, 설계서 §3.3). 값은 백업 파일과 같은 봉투다. 손상 백업 접두사로 시작하지 않으므로
+ * `findBackup`이 손상 백업으로 보지 않는다.
+ */
+export const PREVIOUS_KEY = 'tripmap:library:v2:before-restore';
 
 export type LoadResult = { library: Library; persistence: 'local' | 'memory' };
 
 export type LibraryLimits = { libraryChars: number };
 
 type UpdateError = StorageQuotaExceeded | LibraryInvalid | LibraryCorrupt;
+
+/** `snapshot`: `raw`는 저장소 원문의 JSON 값(모르는 필드 포함), `text`는 원문 문자열(키 없으면 `null`). */
+type LibrarySnapshot = { raw: unknown; text: string | null; library: Library };
+
+/**
+ * `replace`의 선택(설계서 §5). `requirePrevious`: 사본을 못 남기면 바꾸지 않는다.
+ * `savedText`: 화면이 이미 파일로 받아 둔(또는 연 때 읽은) 원문. 잠금 안의 지금 원문과 다르면 사본이 필수가 된다.
+ */
+type ReplaceOptions = { requirePrevious: boolean; savedText?: string | null };
+
+type PreviousCopy = { savedAt: string; library: Library };
 
 export type LibraryStoreOptions = {
   /** 없거나 쓸 수 없으면 메모리 저장소로 대체하고 `persistence: 'memory'`를 보고한다. */
@@ -60,7 +84,9 @@ function usableStorage(storage: Storage | undefined): Storage | undefined {
   }
 }
 
-type StoredRead = { ok: true; library: Library } | { ok: false; raw: string; issues: Issue[] };
+/** `json`은 원문의 JSON 값(검증 전, 모르는 필드 포함). 키가 없으면 빈 문서. */
+type StoredRead =
+  { ok: true; library: Library; json: unknown } | { ok: false; raw: string; issues: Issue[] };
 
 /** 저장소 원문을 보관함 문서로 읽는다. 쓰지 않는다. */
 function parseLibrary(raw: string): StoredRead {
@@ -73,14 +99,35 @@ function parseLibrary(raw: string): StoredRead {
   }
   const parsed = safeParse(LibrarySchema, json);
   return parsed.success
-    ? { ok: true, library: parsed.data }
+    ? { ok: true, library: parsed.data, json }
     : { ok: false, raw, issues: parsed.issues };
 }
 
-/** 키가 없으면 빈 문서. */
+/** 저장소에서 읽은 원문 문자열(`null`이면 키 없음)을 읽는다. 키가 없으면 빈 문서. */
+function readText(text: string | null): StoredRead {
+  return text === null
+    ? { ok: true, library: emptyLibrary(), json: emptyLibrary() }
+    : parseLibrary(text);
+}
+
 function readStored(storage: Storage): StoredRead {
-  const raw = storage.getItem(LIBRARY_KEY);
-  return raw === null ? { ok: true, library: emptyLibrary() } : parseLibrary(raw);
+  return readText(storage.getItem(LIBRARY_KEY));
+}
+
+/** 사본을 봉투 → 보관함 순서로 읽는다. 없거나 읽지 못하면 `null`(지우지 않는다). */
+function readPrevious(storage: Storage): PreviousCopy | null {
+  const text = storage.getItem(PREVIOUS_KEY);
+  if (text === null) return null;
+  let json: unknown;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  const envelope = safeParse(BackupEnvelopeSchema, json);
+  if (!envelope.success) return null;
+  const library = safeParse(LibrarySchema, envelope.data.library);
+  return library.success ? { savedAt: envelope.data.exportedAt, library: library.data } : null;
 }
 
 function makeLibraryStore(options: LibraryStoreOptions) {
@@ -92,10 +139,16 @@ function makeLibraryStore(options: LibraryStoreOptions) {
 
   /**
    * `storage.setItem`. 용량 초과면 버려도 되는 경로 캐시(`tripmap:routes:v1`)를 지우고 한 번 더 쓴다.
-   * 보관함은 사용자의 데이터이고 경로 캐시는 다시 받으면 된다. 그래도 넘치면 `StorageQuotaExceeded`,
-   * 그 밖의 예외는 결함으로 보고한다.
+   * 보관함은 사용자의 데이터이고 경로 캐시는 다시 받으면 된다. 그래도 넘치면 되살리기 전 사본을 지우고
+   * 한 번 더 쓴다(사용자 편집을 저장하는 것이 사본보다 중요하다, 설계서 §3.3). 사본을 쓰는 중이거나
+   * `keepPrevious`(바꾸기·되돌리기 도중, 사본을 직접 다룬다)면 사본은 건드리지 않는다.
+   * 그래도 넘치면 `StorageQuotaExceeded`, 그 밖의 예외는 결함으로 보고한다.
    */
-  const putItem = (key: string, value: string): Effect.Effect<void, StorageQuotaExceeded> =>
+  const putItem = (
+    key: string,
+    value: string,
+    options: { keepPrevious?: boolean } = {},
+  ): Effect.Effect<void, StorageQuotaExceeded> =>
     Effect.suspend(() => {
       const attempt = (): unknown => {
         try {
@@ -105,18 +158,22 @@ function makeLibraryStore(options: LibraryStoreOptions) {
           return error ?? new Error('setItem 실패');
         }
       };
-      // 경로 캐시를 지우는 길에서 저장소가 던지면 처음 쿼터 오류를 그대로 낸다.
-      const dropRouteCache = (): boolean => {
+      // 지우는 길에서 저장소가 던지면 처음 쿼터 오류를 그대로 낸다.
+      const drop = (dropKey: string): boolean => {
         try {
-          if (storage.getItem(ROUTE_CACHE_KEY) === null) return false;
-          storage.removeItem(ROUTE_CACHE_KEY);
+          if (storage.getItem(dropKey) === null) return false;
+          storage.removeItem(dropKey);
           return true;
         } catch {
           return false;
         }
       };
+      const mayDropPrevious = key !== PREVIOUS_KEY && options.keepPrevious !== true;
       let error = attempt();
-      if (error !== null && isQuotaError(error) && dropRouteCache()) error = attempt();
+      if (error !== null && isQuotaError(error) && drop(ROUTE_CACHE_KEY)) error = attempt();
+      if (error !== null && isQuotaError(error) && mayDropPrevious && drop(PREVIOUS_KEY)) {
+        error = attempt();
+      }
       if (error === null) return Effect.void;
       return isQuotaError(error)
         ? Effect.fail(new StorageQuotaExceeded({ bytes: value.length }))
@@ -133,7 +190,10 @@ function makeLibraryStore(options: LibraryStoreOptions) {
   };
 
   /** 같은 원문의 백업이 있으면 그 키를, 없으면 새로 써서 그 키를 돌려준다. */
-  const ensureBackup = Effect.fnUntraced(function* (raw: string) {
+  const ensureBackup = Effect.fnUntraced(function* (
+    raw: string,
+    putOptions: { keepPrevious?: boolean } = {},
+  ) {
     const existing = findBackup(raw);
     if (existing !== null) return existing;
     const now = yield* Clock.currentTimeMillis;
@@ -141,7 +201,7 @@ function makeLibraryStore(options: LibraryStoreOptions) {
     // 같은 밀리초에 다른 백업이 있으면 덮어쓰지 않도록 번호를 붙인다.
     let key = base;
     for (let n = 2; storage.getItem(key) !== null; n++) key = `${base}-${n}`;
-    yield* putItem(key, raw);
+    yield* putItem(key, raw, putOptions);
     return key;
   });
 
@@ -231,7 +291,115 @@ function makeLibraryStore(options: LibraryStoreOptions) {
     }),
   );
 
-  return LibraryStore.of({ load, update, changes, resetWithBackup });
+  // 잠금 없이 읽기만 한다. 손상이면 `update`처럼 아무것도 쓰지 않고 실패한다.
+  const snapshot = Effect.gen(function* () {
+    const text = yield* Effect.sync(() => storage.getItem(LIBRARY_KEY));
+    const read = readText(text);
+    if (!read.ok) return yield* failCorruptReadOnly(read);
+    return { raw: read.json, text, library: read.library } satisfies LibrarySnapshot;
+  });
+
+  const KEEP_PREVIOUS = { keepPrevious: true } as const;
+
+  /** 쓰면 `true`, 용량 초과면 `false`. */
+  const fits = <A>(write: Effect.Effect<A, StorageQuotaExceeded>) =>
+    write.pipe(
+      Effect.as(true),
+      Effect.catchTag('StorageQuotaExceeded', () => Effect.succeed(false)),
+    );
+
+  const removePrevious = Effect.sync(() => storage.removeItem(PREVIOUS_KEY));
+
+  // 설계서 §5의 순서(잠금 안): 지금 원문 읽기 → 사본 필수 여부 → `next` 검증·크기(실패면 아무것도 쓰지
+  // 않음) → 사본 쓰기(정상이고 항목이 있을 때) 또는 손상 백업 확보(손상일 때) → 보관함 쓰기.
+  // `setItem` 실패는 원래 값을 남기므로 어느 실패에서도 지금 보관함은 그대로다.
+  const replace = Effect.fn('LibraryStore/replace')(function* (
+    next: Library,
+    options: ReplaceOptions,
+  ) {
+    return yield* withLock(
+      Effect.gen(function* () {
+        const current = yield* Effect.sync(() => storage.getItem(LIBRARY_KEY));
+        const { requirePrevious, savedText } = options;
+        // 받아 둔 원문이 지금과 다르면 그 받기(또는 빈 보관함)는 없었던 것으로 본다.
+        const mustKeep = requirePrevious || (savedText !== undefined && savedText !== current);
+        const notKept = () => new PreviousNotKept({ changedSinceSaved: !requirePrevious });
+
+        const parsed = safeParse(LibrarySchema, next);
+        if (!parsed.success) return yield* new LibraryInvalid({ issues: parsed.issues });
+        const serialized = JSON.stringify(parsed.data);
+        if (serialized.length > libraryChars) {
+          return yield* new StorageQuotaExceeded({ bytes: serialized.length });
+        }
+        const done = (previousKept: boolean) => ({ library: parsed.data, previousKept });
+
+        const read = readText(current);
+        if (!read.ok) {
+          // 손상: 원문을 손상 백업 키에 확보한다(사본 키는 건드리지 않는다).
+          const backedUp = yield* fits(ensureBackup(read.raw, KEEP_PREVIOUS));
+          if (!backedUp && mustKeep) return yield* notKept();
+          yield* putItem(LIBRARY_KEY, serialized, KEEP_PREVIOUS);
+          return done(false);
+        }
+
+        if (!hasAnyEntry(read.library)) {
+          // 바꾸기 직전 보관함이 비어 있으면 남길 것이 없다. 옛 사본도 지운다(사본은 "바꾸기 직전 상태").
+          yield* removePrevious;
+          yield* putItem(LIBRARY_KEY, serialized, KEEP_PREVIOUS);
+          return done(false);
+        }
+
+        const now = yield* Clock.currentTimeMillis;
+        const envelope = JSON.stringify({
+          format: BACKUP_FORMAT,
+          v: BACKUP_VERSION,
+          exportedAt: new Date(now).toISOString(),
+          library: read.json,
+        });
+        if (!(yield* fits(putItem(PREVIOUS_KEY, envelope)))) {
+          if (mustKeep) return yield* notKept();
+          // 옛 사본은 바꾸기 직전 상태가 아니므로 지운다.
+          yield* removePrevious;
+          yield* putItem(LIBRARY_KEY, serialized, KEEP_PREVIOUS);
+          return done(false);
+        }
+        if (yield* fits(putItem(LIBRARY_KEY, serialized, KEEP_PREVIOUS))) return done(true);
+        // 방금 쓴 사본을 지워 자리를 낸다(옛 사본은 이미 덮어썼다, 한 벌 규칙).
+        yield* removePrevious;
+        if (mustKeep) return yield* notKept();
+        yield* putItem(LIBRARY_KEY, serialized, KEEP_PREVIOUS);
+        return done(false);
+      }),
+    );
+  });
+
+  const previous = Effect.sync(() => readPrevious(storage));
+
+  // 잠금 안에서 사본을 다시 읽어 그 보관함을 쓰고 사본을 지운다(되돌리기는 한 번뿐).
+  // 지금 문서가 손상이면 그 원문을 먼저 손상 백업에 확보한다.
+  const restorePrevious = withLock(
+    Effect.gen(function* () {
+      const saved = yield* Effect.sync(() => readPrevious(storage));
+      if (saved === null) return yield* new NoPrevious();
+      const read = yield* Effect.sync(() => readStored(storage));
+      if (!read.ok) yield* ensureBackup(read.raw, KEEP_PREVIOUS);
+      yield* putItem(LIBRARY_KEY, JSON.stringify(saved.library), KEEP_PREVIOUS);
+      yield* removePrevious;
+      return saved.library;
+    }),
+  );
+
+  return LibraryStore.of({
+    load,
+    update,
+    changes,
+    resetWithBackup,
+    snapshot,
+    replace,
+    previous,
+    restorePrevious,
+    dropPrevious: removePrevious,
+  });
 }
 
 export class LibraryStore extends Context.Service<
@@ -243,6 +411,21 @@ export class LibraryStore extends Context.Service<
     ): Effect.Effect<Library, E | UpdateError>;
     readonly changes: Stream.Stream<Library>;
     readonly resetWithBackup: Effect.Effect<Library, StorageQuotaExceeded>;
+    readonly snapshot: Effect.Effect<LibrarySnapshot, LibraryCorrupt>;
+    replace(
+      next: Library,
+      options: ReplaceOptions,
+    ): Effect.Effect<
+      { library: Library; previousKept: boolean },
+      StorageQuotaExceeded | LibraryInvalid | PreviousNotKept
+    >;
+    /** 사본. 없거나 읽지 못하면 `null`. `savedAt`은 사본을 만든 시각. */
+    readonly previous: Effect.Effect<PreviousCopy | null>;
+    readonly restorePrevious: Effect.Effect<
+      Library,
+      StorageQuotaExceeded | LibraryInvalid | NoPrevious
+    >;
+    readonly dropPrevious: Effect.Effect<void>;
   }
 >()('tripmap/LibraryStore') {
   static layerWith(options: LibraryStoreOptions) {

@@ -45,6 +45,28 @@ export class LibraryInvalid extends Schema.TaggedError<LibraryInvalid>()('Librar
   }
 }
 
+/**
+ * 되살리기 전 사본(손상이면 손상 백업)을 남기지 못해 보관함을 바꾸지 않았다(설계서 §5).
+ * `changedSinceSaved`: 화면이 받아 둔 원문과 잠금 안에서 읽은 지금 원문이 달라 사본이 필요해졌다.
+ * 손상 화면은 같은 판정으로 자기 문구를 쓴다.
+ */
+export class PreviousNotKept extends Schema.TaggedError<PreviousNotKept>()('PreviousNotKept', {
+  changedSinceSaved: Schema.Boolean,
+}) {
+  get userMessage(): string {
+    return this.changedSinceSaved
+      ? "그사이 보관함이 바뀌었어요. '지금 보관함 먼저 받기'로 다시 받은 뒤 바꿔 주세요"
+      : "저장 공간이 부족해 지금 보관함을 기기에 남겨 둘 수 없어요. 먼저 '지금 보관함 먼저 받기'로 파일을 받은 뒤 바꿔 주세요";
+  }
+}
+
+/** 되돌릴 사본이 없거나 읽지 못했다. */
+export class NoPrevious extends Schema.TaggedError<NoPrevious>()('NoPrevious', {}) {
+  get userMessage(): string {
+    return '되돌리지 못했어요';
+  }
+}
+
 export class LegacyImportInvalid extends Schema.TaggedError<LegacyImportInvalid>()(
   'LegacyImportInvalid',
   { message: Schema.String },
