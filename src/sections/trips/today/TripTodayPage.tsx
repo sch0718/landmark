@@ -14,6 +14,7 @@ import { TodayHeader } from 'src/sections/trips/today/TodayHeader';
 import { TodayLists } from 'src/sections/trips/today/TodayLists';
 import { TodayMap, type TodayFocusRequest } from 'src/sections/trips/today/TodayMap';
 import { TodayNotices } from 'src/sections/trips/today/TodayNotices';
+import { useMyLocation } from 'src/sections/trips/today/use-my-location';
 import { useToday, type TodayModel, type TodayStop } from 'src/sections/trips/today/use-today';
 import { useVisitToggle } from 'src/sections/trips/today/use-visit-toggle';
 import { libraryAtom } from 'src/stores/library-state';
@@ -88,7 +89,13 @@ function Today({ trip }: { trip: Trip }) {
   const [focusRequest, setFocusRequest] = useState<TodayFocusRequest | null>(null);
   // `seq`는 `focusRequest`를 비운 뒤에도 늘기만 한다(`MapView`는 이미 옮긴 `seq`를 다시 옮기지 않는다).
   const focusSeq = useRef(0);
-  const model = useToday(trip, viewDay);
+  // 내 위치는 이 화면 상태로만 둔다(보이는 동안만 지켜봄). 받은 지 2분이 지난 위치는 `useToday`가 버린다.
+  const location = useMyLocation();
+  const model = useToday(
+    trip,
+    viewDay,
+    location.state.status === 'watching' ? location.state.fix : null,
+  );
   const visit = useVisitToggle();
   const paneRef = useRef<HTMLElement>(null);
   const cardRef = useRef<HTMLElement>(null);
@@ -134,6 +141,12 @@ function Today({ trip }: { trip: Trip }) {
     setSelectedStopId(item.stop.id);
     focusOn(item.place.id);
   };
+  // `내 위치로`: 사람이 누른 것이라 지도를 내 위치로 옮긴다.
+  const focusOnMe = () => {
+    if (model.fix === null) return;
+    focusSeq.current += 1;
+    setFocusRequest({ point: [model.fix.lng, model.fix.lat], seq: focusSeq.current });
+  };
   const showNext = () => {
     setSelectedStopId(null);
     focusOn(cardPlaceId(model, null));
@@ -171,6 +184,8 @@ function Today({ trip }: { trip: Trip }) {
         focusRequest={focusRequest}
         onPick={pickPlace}
         padding={MAP_PADDING}
+        myLocation={model.fix}
+        onLocateMe={focusOnMe}
       />
     </Box>
   );
@@ -188,7 +203,13 @@ function Today({ trip }: { trip: Trip }) {
         bgcolor: 'var(--tm-bg-base)',
       }}
     >
-      <TodayNotices model={model} trip={trip} onToday={toToday} />
+      <TodayNotices
+        model={model}
+        trip={trip}
+        onToday={toToday}
+        location={location.state}
+        onLocate={location.start}
+      />
       <NextCard
         model={model}
         trip={trip}

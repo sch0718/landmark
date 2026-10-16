@@ -3,6 +3,7 @@ import { useAtomValue } from 'jotai';
 import { useCallback, useMemo, useState } from 'react';
 import type { MapPadding } from 'src/components/map/MapAdapter';
 import { MapView } from 'src/components/map/MapView';
+import { MyLocationButton } from 'src/components/map/MyLocationButton';
 import type { Trip } from 'src/schema/trip';
 import { placeIdOfMarker } from 'src/sections/trips/planner/trip-map-layers';
 import { todayMapLayers } from 'src/sections/trips/today/today-map-layers';
@@ -11,8 +12,9 @@ import { libraryAtom } from 'src/stores/library-state';
 
 type MapFocus = { point: [number, number]; seq: number };
 
-/** 지도를 그 장소로 옮겨 달라는 요청. `seq`가 바뀔 때마다 한 번 옮긴다. */
-export type TodayFocusRequest = { placeId: string; seq: number };
+/** 지도를 그 장소(또는 내 위치 `point`)로 옮겨 달라는 요청. `seq`가 바뀔 때마다 한 번 옮긴다. */
+export type TodayFocusRequest =
+  { placeId: string; seq: number } | { point: [number, number]; seq: number };
 
 type Props = {
   trip: Trip;
@@ -25,7 +27,9 @@ type Props = {
   onPick(placeId: string): void;
   padding: MapPadding;
   /** 내 위치 점과 정확도 원. 없으면 그리지 않는다. */
-  myLocation?: { lng: number; lat: number; accuracyM: number } | null;
+  myLocation: { lng: number; lat: number; accuracyM: number } | null;
+  /** `내 위치로`를 눌렀다(내 위치가 있을 때만 보인다). 지도를 옮기는 것은 화면의 `focusRequest`다. */
+  onLocateMe(): void;
 };
 
 /**
@@ -33,6 +37,7 @@ type Props = {
  * Day를 바꾸면(`fitKey`) 그날에 맞춘다. 지도를 옮기는 것은 `focusRequest`뿐이다 — 사람이 고른 때만 옮기고,
  * 체크로 다음 장소가 넘어가거나 되돌리기·다른 탭 삭제로 카드가 바뀔 때는 옮기지도 다시 맞추지도 않는다
  * (보던 지도가 저절로 움직이지 않게). 방금 누른 핀은 이미 보이므로 옮기지 않는다.
+ * 내 위치가 있으면 점을 그리고 단추 기둥(＋/− 아래)에 `내 위치로`를 둔다. 위치가 와도 지도는 옮기지 않는다.
  */
 export function TodayMap({
   trip,
@@ -42,12 +47,18 @@ export function TodayMap({
   onPick,
   padding,
   myLocation,
+  onLocateMe,
 }: Props) {
   const library = useAtomValue(libraryAtom);
   const { dayIndex, plan, stops } = model;
+  // 모델은 시각 틱·내 위치가 올 때마다 새로 만들어진다. 다녀온 곳이 그대로면 핀을 다시 그리지 않게 글자 키로 묶는다.
+  const visitedKey = stops
+    .filter((s) => s.visited)
+    .map((s) => s.place.id)
+    .join(' ');
   const visited = useMemo(
-    () => new Set(stops.filter((s) => s.visited).map((s) => s.place.id)),
-    [stops],
+    () => new Set(visitedKey === '' ? [] : visitedKey.split(' ')),
+    [visitedKey],
   );
   const { markers, polylines } = useMemo(
     () => todayMapLayers(library, trip, dayIndex, plan.legs, { visited, selectedPlaceId }),
@@ -58,6 +69,7 @@ export function TodayMap({
   // 그사이 장소가 지워졌으면 옮기지 않는다.
   const focus = useMemo((): MapFocus | null => {
     if (focusRequest === null) return null;
+    if ('point' in focusRequest) return focusRequest;
     const place = library.places[focusRequest.placeId];
     if (place === undefined || place.deletedAt !== null) return null;
     return { point: [place.lng, place.lat], seq: focusRequest.seq };
@@ -83,7 +95,12 @@ export function TodayMap({
         onMarkerClick={onMarkerClick}
         focus={focus}
         fitKey={`${trip.id}:today:${dayIndex}`}
-        myLocation={myLocation ?? null}
+        myLocation={myLocation}
+        controls={
+          myLocation === null ? undefined : (
+            <MyLocationButton locating={false} onClick={onLocateMe} label="내 위치로" />
+          )
+        }
         onUnavailable={setUnavailable}
       />
       {unavailable !== null && (

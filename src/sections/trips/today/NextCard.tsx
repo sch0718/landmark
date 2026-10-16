@@ -3,6 +3,8 @@ import Button from '@mui/material/Button';
 import { useSetAtom } from 'jotai';
 import { useId, type ReactNode, type RefObject } from 'react';
 import { Link } from 'react-router';
+import { formatDistanceM } from 'src/domain/nearby';
+import { haversineM } from 'src/domain/trips/geo';
 import { formatClock, formatSpan } from 'src/domain/trips/schedule';
 import { paths } from 'src/routes/paths';
 import type { Place } from 'src/schema/library';
@@ -10,7 +12,7 @@ import type { Trip } from 'src/schema/trip';
 import { useLayout } from 'src/sections/shell/use-layout';
 import {
   directionsFrom,
-  legInto,
+  pointBefore,
   todayDirections,
   type DirectionsTarget,
 } from 'src/sections/trips/today/today-directions';
@@ -63,17 +65,25 @@ function DelayLine({
   if (model.delayMin === null || target.projected === null) return null;
   if (!isLate(model)) return <Box sx={LINE_SX}>계획대로</Box>;
   const late = `${formatSpan(model.delayMin)} 늦음`;
-  const hasPrevious = index > 0 || model.start !== null;
+  // 지금 여기이거나 앞 지점이 없으면 예상은 "계획 도착부터"라 지금 출발 시각을 말하지 않는다(스펙 §4.6).
   const text =
-    model.here || !hasPrevious
+    model.here || pointBefore(model, index) === null
       ? `계획보다 ${late}`
       : `지금 출발하면 ${model.approximate ? '약 ' : ''}${formatClock(target.projected.arriveMin)} 도착 · ${late}`;
   return <Box sx={LATE_SX}>{text}</Box>;
 }
 
+/** 줄 3(스펙 §5.3): 쓸 수 있는 내 위치가 있으면 그 장소까지 `직선 <거리>`. */
+function DistanceLine({ model, to }: { model: TodayModel; to: Place }) {
+  const { fix } = model;
+  if (fix === null) return null;
+  const m = haversineM([fix.lng, fix.lat], [to.lng, to.lat]);
+  return <Box sx={LINE_SX}>{`직선 ${formatDistanceM(m)}`}</Box>;
+}
+
 /**
- * 길찾기(스펙 §4.8). 앞 지점에서 `to`까지, 수단은 그 구간 수단. 좁은 화면은 네이버 지도 앱 주소(같은 탭),
- * 그 밖은 웹 주소(새 탭). 출발점을 모르면 끈 버튼(`action`)과 버튼 줄 아래에 둘 안내(`hint`).
+ * 길찾기(스펙 §4.8). 쓸 수 있는 내 위치 → 앞 지점에서 `to`까지(`directionsFrom`). 좁은 화면은 네이버 지도 앱
+ * 주소(같은 탭), 그 밖은 웹 주소(새 탭). 출발점을 모르면 끈 버튼(`action`)과 버튼 줄 아래에 둘 안내(`hint`).
  */
 function directions(args: {
   model: TodayModel;
@@ -87,8 +97,8 @@ function directions(args: {
   hintId: string;
 }): { action: ReactNode; hint: ReactNode } {
   const { model, to, target, platform, label, name, variant, hintId } = args;
-  const from = directionsFrom(model, target);
-  if (from === null) {
+  const origin = directionsFrom(model, target, model.fix);
+  if (origin === null) {
     return {
       action: (
         <Button
@@ -108,7 +118,7 @@ function directions(args: {
       ),
     };
   }
-  const url = todayDirections({ to, from, leg: legInto(model, target), platform });
+  const url = todayDirections({ to, origin, platform });
   if (url === null) return { action: null, hint: null };
   return {
     action: (
@@ -178,10 +188,14 @@ export function NextCard({ model, trip, selected, onShowNext, onCheck, pending, 
       </>
     );
   } else if (target !== undefined && targetIndex !== null) {
-    const head = selected !== null ? '고른 장소' : model.here ? '지금 여기' : '다음';
+    // 지금 여기는 다음 장소의 것이다. 고른 장소를 보는 동안에는 쓰지 않는다.
+    const here = selected === null && model.here;
+    const head = selected !== null ? '고른 장소' : here ? '지금 여기' : '다음';
     const name = target.place.name.value;
     // 기간 밖에는 체크하지 않는다(스펙 §4.2). 이미 다녀온 곳(지도 핀으로 고름)은 다녀온 곳 목록에서 푼다.
     const canCheck = model.canCheck && !target.visited;
+    // 지금 여기면 `다녀옴`이 주 버튼, `길찾기`는 보조. `다녀옴`이 없으면 `길찾기`가 그대로 주 버튼이다.
+    const checkFirst = here && canCheck;
     const route = directions({
       model,
       to: target.place,
@@ -189,7 +203,7 @@ export function NextCard({ model, trip, selected, onShowNext, onCheck, pending, 
       platform,
       label: '길찾기',
       name: `${name}까지 길찾기`,
-      variant: model.here ? 'outlined' : 'contained',
+      variant: checkFirst ? 'outlined' : 'contained',
       hintId,
     });
     body = (
@@ -201,12 +215,13 @@ export function NextCard({ model, trip, selected, onShowNext, onCheck, pending, 
         <Box sx={LINE_SX}>{plannedLine(target)}</Box>
         {/* 줄 2는 다음 장소의 늦어짐이다. 고른 장소에는 보이지 않는다. */}
         {selected === null && <DelayLine model={model} target={target} index={targetIndex} />}
+        <DistanceLine model={model} to={target.place} />
         <Box sx={ACTIONS_SX}>
           {route.action}
           {canCheck && (
             <Button
               aria-label={`‘${name}’ 다녀옴으로 표시`}
-              variant={model.here ? 'contained' : 'outlined'}
+              variant={checkFirst ? 'contained' : 'outlined'}
               aria-disabled={pending.has(target.place.id) || undefined}
               onClick={() => onCheck(target)}
               sx={{ minHeight: 44, '&[aria-disabled="true"]': { opacity: 0.5 } }}
@@ -249,6 +264,7 @@ export function NextCard({ model, trip, selected, onShowNext, onCheck, pending, 
           {lodgingName}
         </Box>
         <Box sx={LINE_SX}>{`계획 도착 ${formatClock(arrive)}`}</Box>
+        <DistanceLine model={model} to={model.next.place} />
         {route.action !== null && <Box sx={ACTIONS_SX}>{route.action}</Box>}
         {route.hint}
       </>

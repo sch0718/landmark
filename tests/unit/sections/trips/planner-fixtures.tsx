@@ -4,6 +4,7 @@ import type { Library, Place } from 'src/schema/library';
 import type { Trip } from 'src/schema/trip';
 import type { RouteResult } from 'src/server/route';
 import { RouteLookupError, type RouteLookupErrorCode } from 'src/services/errors';
+import type { Geolocation } from 'src/services/geolocation';
 import { RouteLookup } from 'src/services/route-lookup';
 import { makePlace, renderLibrary, sampleLibrary, T0, withPlaces } from '../library/fixtures';
 
@@ -164,6 +165,7 @@ export async function open(
     ids?: string[];
     path?: string;
     libraryLocks?: LockManager;
+    geolocation?: Layer.Layer<Geolocation>;
   } = {},
 ) {
   return renderLibrary(lib, {
@@ -172,5 +174,6 @@ export async function open(
     ids: options.ids,
     routeLookup: options.routes?.layer,
     libraryLocks: options.libraryLocks,
+    geolocation: options.geolocation,
   });
 }

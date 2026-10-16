@@ -2,7 +2,9 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import type { ReactNode } from 'react';
 import type { Trip } from 'src/schema/trip';
+import { GeolocationError } from 'src/services/errors';
 import { objectParticle } from 'src/sections/trips/planner/format';
+import type { LocationState } from 'src/sections/trips/today/use-my-location';
 import type { TodayModel } from 'src/sections/trips/today/use-today';
 import { shortDate } from 'src/sections/trips/trip-dates';
 
@@ -45,17 +47,47 @@ function periodNotice(model: TodayModel, trip: Trip): string | null {
   return null;
 }
 
+const LOCATION_OFF = '내 위치를 켜면 다음 장소까지 거리와 도착을 알려 드려요';
+
+/**
+ * 위치 띠(스펙 §5.5). 아직 안 켰으면 `내 위치 켜기`, 오류면 F4의 `GeolocationError.userMessage` 그대로(못 찾음·시간
+ * 초과는 `다시 시도`). 받는 중·받음·미지원이면 띠가 없다.
+ */
+function LocationNotice({ location, onLocate }: { location: LocationState; onLocate(): void }) {
+  const { status } = location;
+  if (status === 'watching' || status === 'unsupported') return null;
+  const button = (label: string) => (
+    <Button onClick={onLocate} sx={{ minHeight: 44, fontWeight: 700 }}>
+      {label}
+    </Button>
+  );
+  if (status === 'off') {
+    return <NoticeBand action={button('내 위치 켜기')}>{LOCATION_OFF}</NoticeBand>;
+  }
+  return (
+    <NoticeBand action={status === 'denied' ? undefined : button('다시 시도')}>
+      {new GeolocationError({ reason: status }).userMessage}
+    </NoticeBand>
+  );
+}
+
 type Props = {
   model: TodayModel;
   trip: Trip;
   /** `오늘로`: 오늘 Day로 돌아간다. */
   onToday(): void;
-  /** 뒤에 이어 쌓을 띠(오프라인·위치 등). */
+  /** 내 위치 상태(위치 띠). */
+  location: LocationState;
+  /** `내 위치 켜기`·`다시 시도`. */
+  onLocate(): void;
+  /** 위치 띠 앞에 이어 쌓을 띠(오프라인 등). */
   children?: ReactNode;
 };
 
-/** 스크롤 칸 맨 위의 띠들(스펙 §5.1): 기간 밖 / 다른 Day / 그 밖의 띠(`children`). 하나씩 쌓인다. */
-export function TodayNotices({ model, trip, onToday, children }: Props) {
+/**
+ * 스크롤 칸 맨 위의 띠들(스펙 §5.1): 기간 밖 / 다른 Day / 그 밖의 띠(`children`) / 위치. 하나씩 쌓인다.
+ */
+export function TodayNotices({ model, trip, onToday, location, onLocate, children }: Props) {
   const period = periodNotice(model, trip);
   const otherDay = model.todayIndex !== null && !model.isToday;
   const dayName = `Day ${model.dayIndex + 1}`;
@@ -74,6 +106,7 @@ export function TodayNotices({ model, trip, onToday, children }: Props) {
         </NoticeBand>
       )}
       {children}
+      <LocationNotice location={location} onLocate={onLocate} />
     </Box>
   );
 }

@@ -1,5 +1,7 @@
 import { screen, within } from '@testing-library/react';
+import type { Layer } from 'effect';
 import type { Library, Place } from 'src/schema/library';
+import type { Geolocation } from 'src/services/geolocation';
 import { f, fakeRoutes, makeTrip, open, plannerLibrary, TRIP, withTrip } from './planner-fixtures';
 
 // 여행 당일 모드 화면 테스트가 함께 쓰는 여행·장소·화면 도우미. 장소·가짜 경로는 계획 화면의 것을 그대로 쓴다.
@@ -34,6 +36,8 @@ export function renderToday(
     width?: number;
     routes?: ReturnType<typeof fakeRoutes>;
     libraryLocks?: LockManager;
+    /** 위치 서비스 레이어. 없으면 위치 API가 없는 것(`unsupported`). */
+    geolocation?: Layer.Layer<Geolocation>;
   } = {},
 ) {
   return open(lib, {
@@ -41,6 +45,7 @@ export function renderToday(
     width: options.width ?? 390,
     routes: options.routes,
     libraryLocks: options.libraryLocks,
+    geolocation: options.geolocation,
   });
 }
 
