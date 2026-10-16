@@ -1,4 +1,10 @@
-import type { OpCtx } from 'src/domain/library/ops';
+import {
+  importFolder,
+  indexBySource,
+  uniqueBySid,
+  type FolderItem,
+} from 'src/domain/library/add-place';
+import type { OpCtx, OpResult } from 'src/domain/library/ops';
 import { setField } from 'src/domain/library/lww';
 import { LIBRARY_LIMITS, type FolderLink, type Library } from 'src/schema/library';
 
@@ -75,4 +81,94 @@ export function unlinkFolder(lib: Library, shareId: string, ctx: OpCtx): Library
   const link = folderLinks(lib)[shareId];
   if (link === undefined || link.deletedAt !== null) return lib;
   return { ...lib, folders: { ...lib.folders, [shareId]: { ...link, deletedAt: ctx.now } } };
+}
+
+/** 다시 가져오기 미리보기용 분류(스펙 §3.2). */
+export type FolderSyncPlan = {
+  /** 본 장소에 없던 곳. `mark`는 보관함에서의 상태(없음·살아 있음·지운 것만 있음). */
+  fresh: { item: FolderItem; mark: 'in-library' | 'deleted' | null }[];
+  /** 전에 본 곳인데 보관함에서는 지운 곳. 고른 것만 되살린다. */
+  deleted: FolderItem[];
+  /** 건드리지 않는 곳의 수. */
+  unchanged: number;
+  /** 전에 봤는데 지금 폴더에서 빠졌고 보관함에는 살아 있는 곳. */
+  missing: { sid: string; placeId: string; name: string; address: string }[];
+};
+
+/**
+ * 폴더의 지금 장소를 연결의 본 장소(`seenSids`)와 보관함으로 나눈다. 네이버의 저장 시각은 쓰지 않는다.
+ * 같은 `sid`는 처음 것만 센다.
+ */
+export function planFolderSync(
+  lib: Library,
+  link: FolderLink,
+  items: readonly FolderItem[],
+): FolderSyncPlan {
+  const seen = new Set(link.seenSids.value);
+  const index = indexBySource(lib);
+  const unique = uniqueBySid(items);
+  const plan: FolderSyncPlan = { fresh: [], deleted: [], unchanged: 0, missing: [] };
+  for (const item of unique) {
+    const existing = index.get(`naver:${item.sid}`);
+    if (!seen.has(item.sid)) {
+      const mark =
+        existing === undefined ? null : existing.deletedAt === null ? 'in-library' : 'deleted';
+      plan.fresh.push({ item, mark });
+    } else if (existing !== undefined && existing.deletedAt !== null) {
+      plan.deleted.push(item);
+    } else {
+      plan.unchanged += 1;
+    }
+  }
+  const current = new Set(unique.map((i) => i.sid));
+  for (const sid of link.seenSids.value) {
+    if (current.has(sid)) continue;
+    const existing = index.get(`naver:${sid}`);
+    if (existing !== undefined && existing.deletedAt === null) {
+      plan.missing.push({
+        sid,
+        placeId: existing.id,
+        name: existing.name.value,
+        address: existing.address,
+      });
+    }
+  }
+  return plan;
+}
+
+/**
+ * 고른 곳만 연결된 라벨로 가져오고(`importFolder`와 같은 규칙), 본 장소를 지금 폴더의 전부로
+ * 바꾸며 확인한 시각을 `ctx.now`로 쓴다. 연결이 없거나 지웠거나 라벨이 지워졌다면 `NotFound`.
+ * `createdId`·`summary`는 `importFolder`의 것이다.
+ */
+export function syncFolder(
+  lib: Library,
+  input: {
+    shareId: string;
+    folderName: string;
+    items: readonly FolderItem[];
+    pickedSids: readonly string[];
+  },
+  ctx: OpCtx,
+): OpResult {
+  const link = liveFolderLink(lib, input.shareId);
+  if (link === undefined) return { ok: false, error: { _tag: 'NotFound', id: input.shareId } };
+  const picked = new Set(input.pickedSids);
+  const chosen = uniqueBySid(input.items).filter((item) => picked.has(item.sid));
+  const labelId = link.labelId.value;
+  const imported = importFolder(lib, chosen, { labelId }, ctx);
+  if (!imported.ok) return imported;
+  return {
+    ...imported,
+    lib: recordFolderLink(
+      imported.lib,
+      {
+        shareId: input.shareId,
+        folderName: input.folderName,
+        labelId,
+        seenSids: input.items.map((i) => i.sid),
+      },
+      ctx,
+    ),
+  };
 }

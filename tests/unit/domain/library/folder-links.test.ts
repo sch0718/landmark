@@ -3,11 +3,14 @@ import {
   folderLinks,
   folderLinksOfLabel,
   liveFolderLink,
+  planFolderSync,
   recordFolderLink,
+  syncFolder,
   unlinkFolder,
   type FolderLinkInput,
 } from 'src/domain/library/folder-links';
-import type { OpCtx } from 'src/domain/library/ops';
+import type { FolderItem } from 'src/domain/library/add-place';
+import type { OpCtx, OpResult } from 'src/domain/library/ops';
 import { safeParse } from 'src/schema/parse';
 import {
   emptyLibrary,
@@ -15,6 +18,7 @@ import {
   type FolderLink,
   type Label,
   type Library,
+  type Place,
 } from 'src/schema/library';
 
 const T0 = '2026-10-08T01:00:00.000Z';
@@ -190,5 +194,168 @@ describe('queries', () => {
     expect(folderLinksOfLabel(l, A).map((x) => x.shareId)).toEqual(['s2', 's1']);
     expect(folderLinksOfLabel(l, B).map((x) => x.shareId)).toEqual(['s3']);
     expect(folderLinksOfLabel(lib(undefined), A)).toEqual([]);
+  });
+});
+
+// ---------- 다시 가져오기 ----------
+
+let seq = 0;
+const syncCtx = (): OpCtx => ({ now: NOW, newId: () => `np${String(seq++).padStart(8, '0')}` });
+
+function place(id: string, sid: string, over: Partial<Place> = {}): Place {
+  return {
+    id,
+    source: { kind: 'naver', sid },
+    name: f(`보관함 ${sid}`),
+    address: '강원특별자치도 속초시',
+    lng: 128.59,
+    lat: 38.2,
+    category: f<string | null>(null),
+    labelIds: f<string[]>([]),
+    memo: f(''),
+    saved: f(true),
+    createdAt: T0,
+    deletedAt: null,
+    ...over,
+  };
+}
+
+const item = (sid: string, over: Partial<FolderItem> = {}): FolderItem => ({
+  sid,
+  name: `폴더 ${sid}`,
+  address: '강원특별자치도 고성군',
+  lng: 128.5,
+  lat: 38.3,
+  memo: `네이버 메모 ${sid}`,
+  ...over,
+});
+
+function ok(r: OpResult): Extract<OpResult, { ok: true }> {
+  if (!r.ok) throw new Error(`expected ok, got ${r.error._tag}`);
+  return r;
+}
+
+/** 본 장소 1~4, 보관함: 1 살아 있음(라벨 없음), 2 지움, 3 살아 있음, 6 살아 있음(다른 라벨), 7 지움, 4 없음. */
+function syncLib(links: FolderLink[] = [link(SHARE, { seenSids: f(['1', '2', '3', '4']) })]) {
+  return {
+    ...lib(links),
+    places: {
+      place00001: place('place00001', '1'),
+      place00002: place('place00002', '2', { deletedAt: T0, labelIds: f([A]) }),
+      place00003: place('place00003', '3', { name: f('세 번째 집'), address: '속초시 중앙로' }),
+      place00006: place('place00006', '6', { labelIds: f([B]) }),
+      place00007: place('place00007', '7', { deletedAt: T0 }),
+    },
+  };
+}
+const FOLDER = [item('1'), item('2'), item('5'), item('6'), item('7'), item('5', { name: '중복' })];
+
+describe('planFolderSync', () => {
+  it('splits the folder into fresh, deleted, unchanged and missing', () => {
+    const l = syncLib();
+    const plan = planFolderSync(l, l.folders![SHARE]!, FOLDER);
+    expect(plan.fresh.map((x) => [x.item.sid, x.mark])).toEqual([
+      ['5', null],
+      ['6', 'in-library'],
+      ['7', 'deleted'],
+    ]);
+    expect(plan.fresh[0]!.item.name).toBe('폴더 5');
+    expect(plan.deleted.map((i) => i.sid)).toEqual(['2']);
+    expect(plan.unchanged).toBe(1);
+    expect(plan.missing).toEqual([
+      { sid: '3', placeId: 'place00003', name: '세 번째 집', address: '속초시 중앙로' },
+    ]);
+  });
+
+  it('treats everything as fresh when nothing was seen, and nothing is missing', () => {
+    const l = syncLib([link(SHARE, { seenSids: f<string[]>([]) })]);
+    const plan = planFolderSync(l, l.folders![SHARE]!, [item('1'), item('9')]);
+    expect(plan.fresh.map((x) => [x.item.sid, x.mark])).toEqual([
+      ['1', 'in-library'],
+      ['9', null],
+    ]);
+    expect(plan).toMatchObject({ deleted: [], unchanged: 0, missing: [] });
+  });
+
+  it('lists missing places in seenSids order and skips ones deleted from the library', () => {
+    const l = syncLib([link(SHARE, { seenSids: f(['3', '2', '1', '4']) })]);
+    const plan = planFolderSync(l, l.folders![SHARE]!, []);
+    expect(plan.missing.map((m) => m.sid)).toEqual(['3', '1']);
+    expect(plan).toMatchObject({ fresh: [], deleted: [], unchanged: 0 });
+  });
+
+  it('does not change its inputs', () => {
+    const l = syncLib();
+    const before = structuredClone(l);
+    planFolderSync(l, l.folders![SHARE]!, FOLDER);
+    expect(l).toEqual(before);
+  });
+});
+
+describe('syncFolder', () => {
+  const run = (l: Library, pickedSids: string[], items = FOLDER, folderName = '속초 맛집') =>
+    syncFolder(l, { shareId: SHARE, folderName, items, pickedSids }, syncCtx());
+
+  it('imports only the picked places into the linked label and records what was seen', () => {
+    const before = syncLib();
+    const r = ok(run(before, ['5', '2']));
+    expect(r.summary).toEqual({ created: 1, merged: 0, restored: 1 });
+    expect(r.createdId).toBe(A);
+    const live = Object.values(r.lib.places).filter((p) => p.deletedAt === null);
+    const created = live.find((p) => p.source.kind === 'naver' && p.source.sid === '5')!;
+    expect(created.labelIds.value).toEqual([A]);
+    expect(created.memo.value).toBe('네이버 메모 5');
+    expect(r.lib.places.place00002!.deletedAt).toBeNull();
+    expect(r.lib.places.place00002!.labelIds.value).toEqual([A]);
+    // 고르지 않은 곳은 그대로다: 뗐던 라벨을 다시 붙이지 않는다.
+    expect(r.lib.places.place00001).toBe(before.places.place00001);
+    expect(r.lib.places.place00006).toBe(before.places.place00006);
+    expect(r.lib.places.place00007).toBe(before.places.place00007);
+    expect(live.map((p) => p.id)).not.toContain('place00007');
+    const next = r.lib.folders![SHARE]!;
+    expect(next.seenSids.value).toEqual(['1', '2', '5', '6', '7']);
+    expect(next.checkedAt).toBe(NOW);
+    expect(valid(r.lib)).toBe(true);
+  });
+
+  it('with nothing picked only updates seenSids and checkedAt', () => {
+    const before = syncLib();
+    const r = ok(run(before, []));
+    expect(r.summary).toEqual({ created: 0, merged: 0, restored: 0 });
+    expect(r.lib.places).toEqual(before.places);
+    const next = r.lib.folders![SHARE]!;
+    expect(next.seenSids.value).toEqual(['1', '2', '5', '6', '7']);
+    expect(next.checkedAt).toBe(NOW);
+    expect(next.createdAt).toBe(T0);
+    expect(valid(r.lib)).toBe(true);
+  });
+
+  it('uses the link own label, ignoring picked sids that are not in the folder', () => {
+    const r = ok(run(syncLib(), ['6', 'zzz']));
+    expect(r.summary).toEqual({ created: 0, merged: 1, restored: 0 });
+    expect(r.lib.places.place00006!.labelIds.value).toEqual([B, A]);
+  });
+
+  it('fails with NotFound for a missing, deleted or orphaned link', () => {
+    const cases: Library[] = [
+      lib(undefined),
+      syncLib([link(SHARE, { deletedAt: T0 })]),
+      { ...syncLib(), labels: { [A]: label(A, '속초', { deletedAt: T0 }) } },
+    ];
+    for (const l of cases) {
+      const r = run(l, ['5']);
+      expect(r).toEqual({ ok: false, error: { _tag: 'NotFound', id: SHARE } });
+    }
+  });
+
+  it('stays valid for a folder with a repeated sid and a 101-char name', () => {
+    const long = '가'.repeat(101);
+    const r = ok(run(syncLib(), ['5'], [item('5'), item('5', { name: '중복' })], long));
+    expect(
+      Object.values(r.lib.places).filter((p) => p.source.kind === 'naver' && p.source.sid === '5'),
+    ).toHaveLength(1);
+    expect(r.lib.folders![SHARE]!.name.value).toBe('가'.repeat(100));
+    expect(r.lib.folders![SHARE]!.seenSids.value).toEqual(['5']);
+    expect(valid(r.lib)).toBe(true);
   });
 });
