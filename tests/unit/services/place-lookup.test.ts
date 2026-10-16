@@ -36,10 +36,10 @@ const lookupLink = (fetchFn: unknown, url: string, base?: string) =>
     return yield* lookup.lookupLink(url);
   }).pipe(Effect.provide(PlaceLookup.layerWith({ fetch: fetchFn as typeof fetch, base })));
 
-const lookupFolder = (fetchFn: unknown, shareId: string) =>
+const lookupFolder = (fetchFn: unknown, shareId: string, options?: { fresh?: boolean }) =>
   Effect.gen(function* () {
     const lookup = yield* PlaceLookup;
-    return yield* lookup.lookupFolder(shareId);
+    return yield* lookup.lookupFolder(shareId, options);
   }).pipe(Effect.provide(PlaceLookup.layerWith({ fetch: fetchFn as typeof fetch })));
 
 afterEach(() => {
@@ -287,6 +287,24 @@ describe('PlaceLookup.lookupLink', () => {
 });
 
 describe('PlaceLookup.lookupFolder', () => {
+  it.effect('fresh면 주소에 &fresh=1을 붙이고, 옵션이 없거나 fresh가 거짓이면 붙이지 않는다', () =>
+    Effect.gen(function* () {
+      const fetchFn = vi.fn(async () => json(FOLDER_RESULT));
+      yield* lookupFolder(fetchFn, 'a b/c', { fresh: true });
+      expect(fetchFn).toHaveBeenLastCalledWith(
+        `/api/naver-folder?share=${encodeURIComponent('a b/c')}&fresh=1`,
+      );
+      yield* lookupFolder(fetchFn, 'a b/c');
+      expect(fetchFn).toHaveBeenLastCalledWith(
+        `/api/naver-folder?share=${encodeURIComponent('a b/c')}`,
+      );
+      yield* lookupFolder(fetchFn, 'a b/c', { fresh: false });
+      expect(fetchFn).toHaveBeenLastCalledWith(
+        `/api/naver-folder?share=${encodeURIComponent('a b/c')}`,
+      );
+    }),
+  );
+
   it.effect('GET /api/naver-folder?share= 로 조회한다', () =>
     Effect.gen(function* () {
       const fetchFn = vi.fn(async () => json(FOLDER_RESULT));
