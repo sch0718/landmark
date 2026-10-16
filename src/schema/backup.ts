@@ -24,3 +24,16 @@ export type BackupEnvelope = {
   library: unknown;
   prefs?: unknown;
 };
+
+/**
+ * 마지막 백업 기록(`tripmap:backup:v1`). 시각은 화면에 `YYYY.MM.DD HH:mm`으로 찍히므로
+ * 읽을 때 `IsoDateTime`으로 걸러 NaN 문구가 나오지 않게 한다.
+ */
+export const BackupMetaSchema = Schema.Struct({
+  lastBackupAt: Schema.NullOr(IsoDateTime),
+  snoozedAt: Schema.NullOr(IsoDateTime),
+});
+
+export type BackupMeta = { lastBackupAt: string | null; snoozedAt: string | null };
+
+export const EMPTY_BACKUP_META: BackupMeta = { lastBackupAt: null, snoozedAt: null };

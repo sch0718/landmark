@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setAppRuntimeForTest, type AppRuntime } from 'src/lib/effect/runtime';
 import { createMemoryStorage } from 'src/repositories/edit-layer-repo';
 import { DEFAULT_PREFS, type Prefs } from 'src/schema/prefs';
+import { BackupMetaStore } from 'src/services/backup-meta-store';
 import { IdGen } from 'src/services/id-gen';
 import { LegacyTripSource } from 'src/services/legacy-trip-source';
 import { LibraryStore } from 'src/services/library-store';
@@ -55,6 +56,7 @@ function setup(saved?: Partial<Prefs>) {
     Layer.mergeAll(
       LibraryStore.layerWith({ storage, events: new EventTarget() }),
       PrefsStore.layerWith({ storage }),
+      BackupMetaStore.layerWith({ storage }),
       IdGen.layerSequence([]),
       LegacyTripSource.layerWith({ storage, fetch: (...args) => globalThis.fetch(...args) }),
       ShareTemplate.layer,

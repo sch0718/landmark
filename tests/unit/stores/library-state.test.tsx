@@ -10,6 +10,7 @@ import { forkEffect, setAppRuntimeForTest, type AppRuntime } from 'src/lib/effec
 import { createMemoryStorage } from 'src/repositories/edit-layer-repo';
 import { emptyLibrary, type Library, type Place } from 'src/schema/library';
 import { StorageQuotaExceeded } from 'src/services/errors';
+import { BackupMetaStore } from 'src/services/backup-meta-store';
 import { IdGen } from 'src/services/id-gen';
 import { LegacyTripSource } from 'src/services/legacy-trip-source';
 import { LIBRARY_KEY, LibraryStore } from 'src/services/library-store';
@@ -102,6 +103,7 @@ function setup(
   const layers = Layer.mergeAll(
     LibraryStore.layerWith({ storage, events, limits }),
     PrefsStore.layerWith({ storage }),
+    BackupMetaStore.layerWith({ storage }),
     IdGen.layerSequence(options.ids ?? ['label001']),
     LegacyTripSource.layerWith({ storage, fetch: (...args) => globalThis.fetch(...args) }),
     ShareTemplate.layer,
