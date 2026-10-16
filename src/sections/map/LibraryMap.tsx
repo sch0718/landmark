@@ -9,7 +9,6 @@ import {
   labelCounts,
   liveLabels,
   queryPlaces,
-  sortByVisited,
   visitCounts,
 } from 'src/domain/library/query';
 import { paths } from 'src/routes/paths';
@@ -24,7 +23,6 @@ import { useLayout } from 'src/sections/shell/use-layout';
 import { addFlowAtom, showsAddPanel } from 'src/stores/add-place';
 import { libraryAtom } from 'src/stores/library-state';
 import { focusPlaceAtom } from 'src/stores/library-ui';
-import { visitedSortAtom } from 'src/stores/visit-sort';
 import { useThemeTokens } from 'src/theme/use-theme';
 
 const EDGE = 40;
@@ -77,11 +75,8 @@ export function LibraryMap() {
     [tokens],
   );
 
-  const visitedSort = useAtomValue(visitedSortAtom);
-  const places = useMemo(() => {
-    const matched = queryPlaces(library, query);
-    return visitedSort ? sortByVisited(matched) : matched;
-  }, [library, query, visitedSort]);
+  // 마커는 순서가 의미 없으므로 `다녀온 날순`을 따로 적용하지 않는다.
+  const places = useMemo(() => queryPlaces(library, query), [library, query]);
   const markers = useMemo(() => {
     const shown = toMarkers(places, library.labels, tokens, placeId);
     // 필터에 가려진 장소를 열어 두었다면 그 장소만은 개별 마커로 항상 보인다.
@@ -186,7 +181,10 @@ export function LibraryMap() {
   const labels = useMemo(() => liveLabels(library), [library]);
   const counts = useMemo(() => labelCounts(library, query), [library, query]);
   const visits = useMemo(() => visitCounts(library, query), [library, query]);
-  const showVisit = hasVisited(library) || query.visited !== 'all';
+  const showVisit = useMemo(
+    () => hasVisited(library) || query.visited !== 'all',
+    [library, query.visited],
+  );
   const padding = detailOverlaid ? OVERLAID_PADDING : BASE_PADDING;
 
   return (
