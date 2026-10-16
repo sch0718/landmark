@@ -19,6 +19,7 @@ import { labelColors } from 'src/sections/library/label-style';
 import { useLibraryQuery } from 'src/sections/library/use-library-query';
 import { addFlowAtom } from 'src/stores/add-place';
 import { libraryAtom, useLibraryAction } from 'src/stores/library-state';
+import { nearbyOffAtom } from 'src/stores/my-location';
 
 /** 가져온 뒤의 문서에서 폴더 항목들의 장소 id(같은 네이버 `sid`의 살아 있는 장소). 여행 후보에 넣을 때 쓴다. */
 function importedPlaceIds(lib: Library, items: readonly FolderPlace[]): string[] {
@@ -58,6 +59,7 @@ export function FolderList({
   const setFlow = useSetAtom(addFlowAtom);
   const { run } = useLibraryAction();
   const [, patchQuery] = useLibraryQuery();
+  const nearbyOff = useSetAtom(nearbyOffAtom);
   const { tripId, notify, backToTrip } = useTripTarget();
   const labels = useMemo(() => liveLabels(library), [library]);
   const marks = useMemo(
@@ -179,6 +181,8 @@ export function FolderList({
       regions: [],
       visited: 'all',
     });
+    // 근처 모드가 켜져 있으면 먼 곳이 가려지므로 함께 끈다(반경과 내 위치는 그대로).
+    nearbyOff();
     setFlow({ step: 'closed' });
   };
 

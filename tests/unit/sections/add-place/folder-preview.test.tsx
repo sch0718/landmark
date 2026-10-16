@@ -12,6 +12,8 @@ import { LIBRARY_KEY } from 'src/services/library-store';
 import { PlaceLookup } from 'src/services/place-lookup';
 import { addFlowAtom, addTargetAtom } from 'src/stores/add-place';
 import { libraryAtom } from 'src/stores/library-state';
+import { myLocationAtom, nearbyAtom } from 'src/stores/my-location';
+import { nearbyHarness, turnNearbyOn } from '../../helpers/nearby-on';
 import { L_FOOD, makePlace, renderLibrary, sampleLibrary, withPlaces } from '../library/fixtures';
 import { makeTrip, TRIP, withTrip } from '../trips/planner-fixtures';
 
@@ -93,7 +95,13 @@ const LIST = { libraryView: 'list' as const };
 /** 라이브러리를 그리고 폴더 단계로 연다. */
 async function openFolder(
   reply: () => Reply | Promise<Reply> = threePlaces,
-  options: { library?: Library; ids?: string[]; width?: number; prefs?: Partial<Prefs> } = {},
+  options: {
+    library?: Library;
+    ids?: string[];
+    width?: number;
+    prefs?: Partial<Prefs>;
+    geolocation?: NonNullable<Parameters<typeof renderLibrary>[1]>['geolocation'];
+  } = {},
 ) {
   const user = userEvent.setup();
   const lookup = fakeFolderLookup(reply);
@@ -104,6 +112,7 @@ async function openFolder(
     ids: options.ids ?? IDS,
     placeLookup: lookup.layer,
     prefs: { ...LIST, ...options.prefs },
+    geolocation: options.geolocation,
     ...(options.width === undefined ? {} : { width: options.width }),
   });
   act(() => rendered.store.set(addFlowAtom, { step: 'folder', shareId: SHARE_ID }));
@@ -202,6 +211,44 @@ describe('폴더 미리보기', () => {
     const link = lib.folders?.[SHARE_ID];
     expect(link!.labelId.value).toBe('newlab01');
     expect(link!.seenSids.value).toEqual(['9001', '9002', '9003']);
+  });
+
+  describe('근처 모드', () => {
+    it('보관함으로 가져오면 근처 모드를 끄고 새 장소를 보인다(반경과 내 위치는 그대로)', async () => {
+      const { fake, geolocation } = nearbyHarness();
+      // 폴더 장소는 모두 기준점에서 20km를 넘게 떨어져 있어, 근처 모드가 켜져 있으면 가려진다.
+      const { user, store } = await openFolder(undefined, { ids: IDS, geolocation });
+      await within(panel()).findByRole('heading', { name: '속초 맛집 · 3곳' });
+      await turnNearbyOn(store, fake);
+      expect(screen.getByRole('group', { name: '반경' })).toBeInTheDocument();
+
+      await user.click(importButton(3));
+      await waitFor(() => expect(store.get(addFlowAtom)).toEqual({ step: 'closed' }));
+
+      expect(screen.queryByRole('group', { name: '반경' })).not.toBeInTheDocument();
+      const shown = shownNames().join();
+      expect(shown).toContain('폴더 장소 2');
+      expect(shown).toContain('폴더 장소 3');
+      expect(store.get(nearbyAtom)).toEqual({ on: false, radiusM: 3000 });
+      expect(store.get(myLocationAtom).fix).not.toBeNull();
+    });
+
+    it('여행으로 가져오면 필터를 건드리지 않으므로 근처 모드도 그대로다', async () => {
+      const { fake, geolocation } = nearbyHarness();
+      const { user, store } = await openFolder(undefined, {
+        library: withTrip(sampleLibrary(), makeTrip()),
+        ids: IDS,
+        geolocation,
+      });
+      await within(panel()).findByRole('heading', { name: '속초 맛집 · 3곳' });
+      act(() => store.set(addTargetAtom, { tripId: TRIP }));
+      await turnNearbyOn(store, fake);
+
+      await user.click(importButton(3));
+      await waitFor(() => expect(queryPanel()).not.toBeInTheDocument());
+      expect(store.get(libraryAtom).trips[TRIP]!.candidates.value).toHaveLength(3);
+      expect(store.get(nearbyAtom)).toEqual({ on: true, radiusM: 3000 });
+    });
   });
 
   it('모두 새것이면 새로 넣었다는 문장만 쓴다', async () => {

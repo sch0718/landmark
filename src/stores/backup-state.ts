@@ -15,6 +15,7 @@ import { NoPrevious, PreviousNotKept, StorageQuotaExceeded } from 'src/services/
 import { LibraryStore } from 'src/services/library-store';
 import { queryDraftAtom } from 'src/stores/library-query-draft';
 import { libraryAtom, reflectSaved } from 'src/stores/library-state';
+import { nearbyOffAtom } from 'src/stores/my-location';
 import { prefsAtom, setPrefsAtom } from 'src/stores/prefs-state';
 
 /** 저장된 백업 기록. localStorage를 동기로 읽으므로 첫 렌더 전에 읽을 수 있다. */
@@ -158,6 +159,8 @@ export function useRestoreActions() {
       await afterSaved(() =>
         jotaiStore.set(setPrefsAtom, { ...prefs, query: structuredClone(DEFAULT_QUERY) }),
       );
+      // 근처 모드도 필터이므로 끈다. 켜 둔 채면 되살린 장소가 반경 밖이라 가려질 수 있다.
+      await afterSaved(() => jotaiStore.set(nearbyOffAtom));
       const { exportedAt } = backup;
       // 그 파일이 이미 있으므로, 기록보다 늦게 만든 백업이면 마지막 백업으로 본다.
       await afterSaved(() => {

@@ -8,6 +8,8 @@ import type { Prefs } from 'src/schema/prefs';
 import type { ShareDoc } from 'src/schema/share';
 import { addFlowAtom } from 'src/stores/add-place';
 import { libraryAtom } from 'src/stores/library-state';
+import { myLocationAtom, nearbyAtom } from 'src/stores/my-location';
+import { nearbyHarness, turnNearbyOn } from '../../helpers/nearby-on';
 import { L_CAFE, makePlace, renderLibrary, sampleLibrary, withPlaces } from '../library/fixtures';
 
 const toastMock = vi.hoisted(() => {
@@ -105,12 +107,19 @@ const pressed = (name: RegExp) =>
 
 /** 보관함을 그리고 공유 미리보기 단계로 연다. */
 async function openShare(
-  options: { library?: Library; doc?: ShareDoc; prefs?: Partial<Prefs>; ids?: string[] } = {},
+  options: {
+    library?: Library;
+    doc?: ShareDoc;
+    prefs?: Partial<Prefs>;
+    ids?: string[];
+    geolocation?: NonNullable<Parameters<typeof renderLibrary>[1]>['geolocation'];
+  } = {},
 ) {
   const user = userEvent.setup();
   const rendered = await renderLibrary(options.library ?? baseLibrary(), {
     ids: options.ids ?? IDS,
     prefs: { libraryView: 'list', ...options.prefs },
+    geolocation: options.geolocation,
   });
   const doc = options.doc ?? makeDoc();
   act(() => rendered.store.set(addFlowAtom, { step: 'share', doc }));
@@ -277,6 +286,45 @@ describe('공유 파일 미리보기', () => {
     const lib = store.get(libraryAtom);
     expect(Object.values(lib.labels).some((l) => l.name.value === '강릉 모음')).toBe(false);
     expect(pressed(/^카페/)).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  describe('근처 모드', () => {
+    it('제목 라벨을 붙여 가져오면 근처 모드를 끄고 새 장소를 보인다(반경과 내 위치는 그대로)', async () => {
+      const { fake, geolocation } = nearbyHarness();
+      const { user, store } = await openShare({ geolocation });
+      await turnNearbyOn(store, fake);
+      // 경포 해변은 기준점에서 3km를 넘게 떨어져 있어 근처 모드가 켜져 있으면 가려진다.
+      expect(
+        within(screen.getByRole('list', { name: '장소 목록' })).queryByText(/경포 해변/),
+      ).not.toBeInTheDocument();
+
+      await user.click(importButton(3));
+      await waitFor(() => expect(store.get(addFlowAtom)).toEqual({ step: 'closed' }));
+
+      await waitFor(() => expect(pressed(/^강릉 모음/)).toHaveAttribute('aria-pressed', 'true'));
+      expect(screen.queryByRole('group', { name: '반경' })).not.toBeInTheDocument();
+      expect(
+        within(screen.getByRole('list', { name: '장소 목록' })).getByText(/경포 해변/),
+      ).toBeInTheDocument();
+      expect(store.get(nearbyAtom)).toEqual({ on: false, radiusM: 3000 });
+      expect(store.get(myLocationAtom).fix).not.toBeNull();
+    });
+
+    it('제목 라벨 없이 가져오면 필터를 건드리지 않으므로 근처 모드도 그대로다', async () => {
+      const { fake, geolocation } = nearbyHarness();
+      const { user, store } = await openShare({
+        ids: ['newlab02', 'newplace01', 'newplace02'],
+        geolocation,
+      });
+      await turnNearbyOn(store, fake);
+
+      await user.click(titleSwitch());
+      await user.click(importButton(3));
+      await waitFor(() => expect(store.get(addFlowAtom)).toEqual({ step: 'closed' }));
+
+      expect(store.get(nearbyAtom)).toEqual({ on: true, radiusM: 3000 });
+      expect(screen.getByRole('group', { name: '반경' })).toBeInTheDocument();
+    });
   });
 
   it('빠르게 두 번 눌러도 한 번만 넣고, 저장 중에는 취소도 막는다', async () => {

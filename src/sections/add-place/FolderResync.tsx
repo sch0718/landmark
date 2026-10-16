@@ -14,6 +14,7 @@ import { resultMessage, type FolderPlace } from 'src/sections/add-place/shared';
 import { useLibraryQuery } from 'src/sections/library/use-library-query';
 import { addFlowAtom } from 'src/stores/add-place';
 import { libraryAtom, useLibraryAction } from 'src/stores/library-state';
+import { nearbyOffAtom } from 'src/stores/my-location';
 
 const MARK_TEXT = { 'in-library': '이미 있음', deleted: '지웠던 곳' } as const;
 
@@ -70,6 +71,7 @@ export function FolderResync({
   const setFlow = useSetAtom(addFlowAtom);
   const { run } = useLibraryAction();
   const [, patchQuery] = useLibraryQuery();
+  const nearbyOff = useSetAtom(nearbyOffAtom);
   const navigate = useNavigate();
   const plan = useMemo(() => planFolderSync(library, link, places), [library, link, places]);
   const freshItems = useMemo(() => plan.fresh.map(({ item }) => item), [plan]);
@@ -129,6 +131,8 @@ export function FolderResync({
   const showInLibrary = (labelId: string) => {
     // 새로 넣은 곳은 안 가 본 곳이므로 방문 필터도 `전체`로 푼다.
     patchQuery({ labelIds: [labelId], unlabeled: false, text: '', regions: [], visited: 'all' });
+    // 근처 모드가 켜져 있으면 새로 넣은 곳이 가려질 수 있어 함께 끈다.
+    nearbyOff();
     void navigate(paths.library);
   };
 
