@@ -12,6 +12,7 @@ import { AddPlaceHost, useAddFlowRoute } from 'src/sections/add-place/AddPlaceHo
 import { ShareDropOverlay } from 'src/sections/share-import/ShareDropOverlay';
 import { useImportEntry } from 'src/sections/share-import/use-import-entry';
 import { AddSheet } from 'src/sections/shell/AddSheet';
+import { BackupReminder } from 'src/sections/shell/BackupReminder';
 import { BottomTabs } from 'src/sections/shell/BottomTabs';
 import { NavRail } from 'src/sections/shell/NavRail';
 import { DETAIL_WIDTH, LIST_WIDTH } from 'src/sections/shell/pane-widths';
@@ -286,6 +287,7 @@ export function AppShell() {
         }}
       >
         <StorageBanner />
+        {isLibraryView && <BackupReminder />}
         {isLibraryView && (
           <LibraryViewTitle placeId={placeId} isMap={isMap} detailShown={detailShown} />
         )}
