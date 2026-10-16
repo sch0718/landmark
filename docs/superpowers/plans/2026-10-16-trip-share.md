@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - 출발점: F1~F6이 모두 병합된 `main`. 브랜치 `feat/trip-share`. 병합은 병합 커밋(Create a merge commit), 병합 뒤 태그 `v0.14.0`.
-- 앞 묶음이 먼저 고친 파일(병합본을 읽고 시작한다): `SharePreview.tsx`(F2 `visited: 'all'`, F3 `localDate`를 `src/lib/local-date.ts`로 옮김), `TripsPage.tsx`(F5 `오늘 일정` 버튼), `DayTimeline.tsx`(F6 `StopRow`의 영업시간 줄), `TripPlannerPage.tsx`(F5·F6), `format.ts`(F6 `hoursCheckedLabel` — 보기 화면이 import해도 되는 순수 함수인지 확인), `schedule.ts`(F5 `ScheduleInput.startMin?` — 보기 화면은 넘기지 않는다), `lazy-routes.ts`·`package.json`(F1 `RestoreDialog`, F5 `TripTodayPage`가 이미 있음).
+- 앞 묶음이 먼저 고친 파일(병합본을 읽고 시작한다): `SharePreview.tsx`(F2 `visited: 'all'`, F3 `localDate`를 `src/lib/local-date.ts`로 옮김, F4 제목 라벨로 거른 뒤 근처 모드 끄기), `TripsPage.tsx`(F5 `오늘 일정` 버튼), `DayTimeline.tsx`(F6 `StopRow`의 영업시간 줄), `TripPlannerPage.tsx`(F5·F6), `format.ts`(F6 `hoursCheckedLabel` — 보기 화면이 import해도 되는 순수 함수인지 확인), `schedule.ts`(F5 `ScheduleInput.startMin?` — 보기 화면은 넘기지 않는다), `lazy-routes.ts`·`package.json`(F1 `RestoreDialog`, F5 `TripTodayPage`가 이미 있음).
 - 셸은 Node 24: `export PATH="/opt/homebrew/opt/node@24/bin:$PATH"`. 주석·UI 문구는 한국어, 주변 코드 관례를 따른다.
 - 커밋 메시지 끝: `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`
 - 사용자 문자열은 React 텍스트·`textContent`로만 넣는다(`dangerouslySetInnerHTML`·`innerHTML` 금지). 보기 화면은 기존 `el()` 도우미를 쓴다.
@@ -26,6 +26,7 @@
 - 고정 문구(스펙 §3·§4·§5·§7):
   - 들어가는 곳: `일정 공유`(시간표 머리 버튼, 여행 목록 메뉴 항목).
   - 창: 제목 `일정 공유`, `‘<여행 제목>’ 일정을 HTML 파일 하나로 만들어요`, `Day <D>개 · 일정 <S>곳`(+ ` · 후보 <C>곳`), `제목`, `제목은 1~60자로 써 주세요`, `메모 포함`, `후보 <C>곳도 넣기`, `이동 경로를 받는 중이에요 (<받은 수>/<전체>)`, `<N>구간은 경로를 받지 못해 어림값으로 들어가요`, `이동 시간은 <M>월 <D>일 조회 기준이에요`, `일정에 넣은 장소가 없어요`, `닫기`, `공유`, `공유 준비 중…`, `파일 저장`, `파일을 만들었어요`.
+  - 크기 초과(스펙 §3.2): `파일이 너무 커요(약 <X.X>MB). Landmark는 5MB까지 가져올 수 있어요. <줄이는 방법>`. 줄이는 방법: `'메모 포함'이나 '후보 <C>곳도 넣기'를 끄고 다시 해 주세요` / `'메모 포함'을 끄고 다시 해 주세요` / `'후보 <C>곳도 넣기'를 끄고 다시 해 주세요` / `일정을 나눠 보내 주세요`. v1 `내보내기`(스펙 §13 결정 9가 (a)일 때): `'메모 포함'을 끄거나 장소 수를 줄여 다시 해 주세요` / `장소 수를 줄여 다시 해 주세요`.
   - 보기 화면: 부제 `<periodLabel> · 일정 <S>곳`(+ ` · 후보 <C>곳`), 탭 이름 `Day 고르기`, 탭 `Day <n> <shortDate>`·`후보 <C>`, 목록 이름 `Day <n> 일정`, `<HH:mm> 출발`, `첫 장소에서 출발`, `<도착> ~ <출발>`, `체류 <formatSpan>`, `<HH:mm> 고정`, `여유 …`/`늦음 …`(`formatSlack`), `한 줄 평 <평>`, `네이버 지도에서 보기`, `자동차`/`도보`, `직선 추정`, `경로 없음 · 직선 추정`, `통행료 <n>원`, `길찾기`, `<HH:mm> 도착`, 합계 `formatTotals`, `<M>월 <D>일 조회`(`queriedLabel`), `경로를 받지 못해 어림값이에요`, `이 날은 아직 일정이 없어요`, `아직 Day에 넣지 않은 장소예요`, 큰 일정 `일정이 커서 바로 담을 수 없어요. Landmark에서 이 파일을 가져와 주세요` + `Landmark 열기`. 출발점 아이콘 `🏠`(1일차)·`🛏`.
   - 읽기 오류(새): `새 버전 Landmark에서 만든 파일이에요. 앱을 새로 고친 뒤 다시 열어 주세요`.
   - 미리보기: `여행 계획도 가져오기`, `새 여행으로 만들어요. 이동 시간은 내 Landmark에서 다시 조회해요`, `같은 이름·기간의 여행이 이미 있어요. 가져오면 하나 더 생겨요`, `여행에 쓰이는 장소는 모두 가져와요`, `여행 가져오기`, `일정 <S>곳 · 후보 <C>곳`, 빈 제목 `받은 여행`, 결과 `여행 ‘<제목>’<을/를> 가져왔어요`(+ `. <장소 결과 문장>`).
@@ -55,6 +56,7 @@
 | `src/domain/library/{import-share,import-share-trip}.ts` | 여행째 가져오기 연산 |
 | `src/sections/share-import/{SharePreview,ShareTripBox}.tsx` | 미리보기 여행 칸 |
 | `tests/e2e/trip-share.spec.ts`, `docs/rollback.md` | E2E, 롤백 표 |
+6. **긴 메모(최대 10,000자)가 많은 일정을 `메모 포함`·`후보도 넣기`(둘 다 기본 켬)로 내보냄** → 받는 쪽 가져오기 한도 5,242,880바이트를 넘는 파일을 만들면 안 된다 → 최종 HTML 바이트를 재서 저장·공유를 막고 줄이는 방법을 창 안에. Task 4(`shareHtmlBytes`)·Task 8(창) 시험으로 고정.
 
 ---
 
@@ -176,6 +178,10 @@
   // src/sections/share-export/make-share-html.ts
   export function renderTripShareHtml(template: string, lib: Library, tripId: string,
     routeOf: (leg: Leg) => ShareLegTime, opts: BuildTripShareOptions): Result.Result<ShareHtml, ShareDocInvalid>;
+  /** 최종 파일 바이트(UTF-8). `new TextEncoder().encode(html).byteLength` — `File([html]).size`와 같다. */
+  export function shareHtmlBytes(html: string): number;
+  /** 가져오기 한도와 같은 값(`SHARE_IMPORT_LIMITS.fileBytes`, 5,242,880). 이 값과 같으면 통과. */
+  export const SHARE_FILE_MAX_BYTES: number;
   ```
 - 장소 하나의 필드는 기존 `buildShareDoc`의 장소 변환을 함수로 빼서(`toSharePlace(place, lib, includeMemo)`, 같은 파일 안 export) 같이 쓴다. v1 결과는 바뀌지 않는다. `review`는 `includeMemo`이고 `place.review?.value`가 빈 문자열이 아닐 때만(C1).
 - `renderTripShareHtml`은 빌더가 `null`이면 `ShareDocInvalid('여행을 찾지 못했어요')`, 스키마·`checkShareTrip` 실패도 `ShareDocInvalid`. `count`는 장소 수, 파일 이름은 `shareFileName(title, now)`.
@@ -191,6 +197,7 @@
   - `thinPaths`: 3개 선(300·300·400점), `max` 500 → 합 ≤ 500, 각 선 첫·끝 점 그대로, 입력 배열 불변.
   - 모든 결과가 `ShareDocV2Schema`(`onExcessProperty: 'error'`)와 `checkShareTrip`을 통과.
   - `renderTripShareHtml`: 지운 여행 → 실패 `ShareDocInvalid`; 여행 제목·Stop 메모에 `</script><script>window.__injected = 1</script>` → 데이터 블록 안에 `<` 없음, `readShareHtml`로 같은 문서.
+  - `shareHtmlBytes`: `'a'` → 1, `'가'` → 3, `'😀'` → 4, 메모 10,000자(한글) 장소 하나가 든 HTML → `new File([html], 'x.html').size`와 같음. `SHARE_FILE_MAX_BYTES === SHARE_IMPORT_LIMITS.fileBytes`.
   - 기존 `build-share.test.ts` 그대로 PASS(v1 불변).
 - [ ] **Step 2:** `yarn vitest run tests/unit/domain/share tests/unit/sections/share-export` → FAIL
 - [ ] **Step 3:** 구현.
@@ -341,7 +348,9 @@
   export type ShareFileOptions = { title: string; includeMemo: boolean; now: Date };
   export function ShareFileDialog(props: { open: boolean; onClose(): void; heading: string; summary: ReactNode;
     defaultTitle: string; emptyMessage: string | null; children?: ReactNode;
-    make(template: string, opts: ShareFileOptions): Result.Result<ShareHtml, ShareDocInvalid> }): JSX.Element;
+    make(template: string, opts: ShareFileOptions): Result.Result<ShareHtml, ShareDocInvalid>;
+    /** 있으면 크기 검사를 켠다. 한도를 넘을 때 문구 끝에 붙일 줄이는 방법. */
+    tooBigHint?(opts: ShareFileOptions): string }): JSX.Element;
   // LazyDialogHost.tsx — 지금 ExportHtmlDialogHost의 everOpened·ShellDialog·ChunkErrorBoundary·Suspense
   export function LazyDialogHost(props: { open: boolean; onClose(): void; heading: string; children: ReactNode }): JSX.Element | null;
   // use-trip-legs.ts
@@ -357,13 +366,16 @@
   export const loadTripShareDialog; export const TripShareDialog; // PANEL_CHUNKS에 더함
   ```
 - `useTripLegs`: `active`일 때 여행의 모든 Day `dayLegs` 중 같은 지점이 아닌 구간의 `routeKeyOf` 키를 모아, `routeStatesAtom`에 없는 것만 `forkEffect(lookupAll(store, …))`(계획 화면 `useDayPlan`과 같은 방식, 닫히면 취소). `routeOf(leg)`: `isSamePointLeg` → `same-point`·0·0·`null`·`[]`; 그 밖은 `planLeg(leg, states[routeKeyOf(leg)])`의 `status`를 `routed→routed`, `no-route→no-route`, `estimated`·`failed→estimated`로 바꾸고 시간·거리·통행료·조회 시각·경로선을 옮긴다. `total`은 같은 지점이 아닌 구간 수, `answered`는 상태가 있는 수(`offline` 포함), `estimated`는 답이 있는데 `routed`가 아닌 수, `oldestQueriedAt`은 `routed`의 가장 이른 조회 시각.
-- `TripShareDialog`: `heading` `일정 공유`, 문구·체크·상태 줄·빈 일정은 Global Constraints. `후보도 넣기`는 `ShareFileDialog`의 `children`으로 넣는다(열릴 때 켬으로 초기화). `make`는 `renderTripShareHtml(template, library, tripId, legs.routeOf, { ...opts, includeCandidates })`. 상태 줄: `answered < total` → 받는 중, 아니면 `estimated > 0` → 어림값, 아니면 `total > 0 && oldestQueriedAt` → 조회 기준.
+- `ShareFileDialog` 크기 검사: `make` 성공 뒤, `tooBigHint`가 있고 `shareHtmlBytes(html) > SHARE_FILE_MAX_BYTES`이면 `downloadText`·`navigator.share`를 부르지 않고 `setError(`파일이 너무 커요(약 ${(bytes / 1_048_576).toFixed(1)}MB). Landmark는 5MB까지 가져올 수 있어요. ${tooBigHint(opts)}`)`(창 안 `role="alert"`, 지금 오류 문구 자리). 재기는 `navigator.share` 앞에서 동기로 한다. 다음에 누르면 다시 잰다. `ExportHtmlDialog`는 스펙 §13 결정 9가 (a)면 `tooBigHint`(Global Constraints의 v1 문구)를 넘기고, (b)면 넘기지 않는다.
+- `TripShareDialog`: `heading` `일정 공유`, 문구·체크·상태 줄·빈 일정은 Global Constraints. `tooBigHint`는 켜진 체크(`메모 포함`, `후보 <C>곳도 넣기`)에 따라 Global Constraints의 네 문장 중 하나. `후보도 넣기`는 `ShareFileDialog`의 `children`으로 넣는다(열릴 때 켬으로 초기화). `make`는 `renderTripShareHtml(template, library, tripId, legs.routeOf, { ...opts, includeCandidates })`. 상태 줄: `answered < total` → 받는 중, 아니면 `estimated > 0` → 어림값, 아니면 `total > 0 && oldestQueriedAt` → 조회 기준.
 - 여행 목록: 메뉴 `이름 바꾸기` 다음 `일정 공유` → `TripShareDialogHost`를 연다. 계획 화면: `DayTimeline`이 `DayHeader`의 `onShare`로 `TripShareDialogHost`를 연다.
 
 - [ ] **Step 1: 실패하는 시험**
   - 기존 `ExportHtmlDialog`·`ExportHtmlDialogHost` 시험이 고치지 않고 통과(먼저 돌려 확인만).
   - `useTripLegs`(가짜 `RouteLookup` 레이어): 열 때 상태 없는 구간만 묻고(이미 `routed`인 키는 묻지 않음), 같은 지점 구간은 묻지 않음; `active: false` → 묻지 않음; 상태 대응 네 갈래와 `same-point`; `answered`·`estimated`·`oldestQueriedAt` 값.
   - `TripShareDialog`: 대상 문구 두 줄(후보 끄면 ` · 후보` 없음); 후보 0곳이면 체크 없음; 상태 줄 세 문구(받는 중 `(1/3)`, `1구간은 …`, `이동 시간은 10월 16일 조회 기준이에요`); 일정 0곳·후보 끔 → `일정에 넣은 장소가 없어요`·`파일 저장` 꺼짐; `파일 저장` → `downloadText`가 `<제목>-YYYYMMDD.html`과 v2 데이터 블록이 든 HTML로 불림(가짜 `ShareTemplate`), 토스트 `파일을 만들었어요`.
+  - 크기 한도(스펙 §3.2·§12): 메모 10,000자(한글)인 장소 300곳(일정 200·후보 100, 약 9MB)으로 한도를 넘김 → `파일 저장` → `downloadText` 0번, `파일이 너무 커요(약 …MB). Landmark는 5MB까지 가져올 수 있어요. '메모 포함'이나 '후보 100곳도 넣기'를 끄고 다시 해 주세요`(`role="alert"`). `공유`(공유 되는 가짜 `navigator`) → `navigator.share` 0번, 같은 문구. `후보 100곳도 넣기`만 끔(일정 200곳, 약 6MB) → 문구 끝이 `'메모 포함'을 끄고 다시 해 주세요`(아직 넘음). `메모 포함`을 끔 → 저장됨·토스트. `ShareFileDialog`에 가짜 `make`로 정확히 5,242,880바이트 → 저장됨, 5,242,881바이트 → 막힘, `tooBigHint` 없음 → 넘어도 저장됨(결정 9가 (b)일 때의 v1).
+  - (결정 9가 (a)면) `ExportHtmlDialog`: 메모 큰 장소로 한도를 넘김 → 막힘·`'메모 포함'을 끄거나 장소 수를 줄여 다시 해 주세요`. 기존 시험은 그대로 PASS.
   - `DayHeader`: `일정 공유` 버튼 → `onShare`. 여행 목록: 메뉴에 `일정 공유` → 창 제목 `일정 공유`.
   - `PANEL_CHUNKS`에 `loadTripShareDialog` 포함.
 - [ ] **Step 2:** `yarn vitest run tests/unit/sections/share-export tests/unit/sections/trips tests/unit/routes` → FAIL
