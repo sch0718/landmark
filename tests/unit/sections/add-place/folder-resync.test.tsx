@@ -298,6 +298,33 @@ describe('폴더 다시 가져오기', () => {
     expect(lookup.calls).toHaveLength(1);
   });
 
+  it('연결된 라벨 이름이 폴더 이름과 달라도 폴더 전체 보기의 기본 가져오기는 그 라벨에 붙인다', async () => {
+    const base = linkedLibrary();
+    const library: Library = {
+      ...base,
+      labels: {
+        ...base.labels,
+        [L_FOOD]: {
+          ...base.labels[L_FOOD]!,
+          name: { value: '속초 단골집', updatedAt: CHECKED_AT },
+        },
+      },
+    };
+    const labelCount = Object.keys(library.labels).length;
+    // 새 라벨을 만들지 않으므로 장소 id만 쓴다(라벨 id를 만들려 하면 형식이 맞지 않아 거절된다).
+    const { user, store } = await openFolder(undefined, { library });
+    await within(panel()).findByRole('heading', { name: '속초 맛집' });
+    await user.click(within(panel()).getByRole('button', { name: '폴더 전체 보기' }));
+    await within(panel()).findByRole('heading', { name: '속초 맛집 · 3곳' });
+    await user.click(within(panel()).getByRole('button', { name: '3곳 가져오기' }));
+    await waitFor(() => expect(store.get(addFlowAtom)).toEqual({ step: 'closed' }));
+    const lib = store.get(libraryAtom);
+    expect(Object.keys(lib.labels)).toHaveLength(labelCount);
+    expect(lib.folders![SHARE_ID]!.labelId.value).toBe(L_FOOD);
+    const imported = Object.values(lib.places).find((p) => p.name.value === '폴더 장소 3')!;
+    expect(imported.labelIds.value).toEqual([L_FOOD]);
+  });
+
   it('취소하면 아무것도 바꾸지 않고 닫는다', async () => {
     const { user, store } = await openFolder();
     await within(panel()).findByRole('heading', { name: '속초 맛집' });

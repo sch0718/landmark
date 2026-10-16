@@ -46,10 +46,13 @@ export function FolderList({
   shareId,
   folderName,
   places,
+  initialLabelId,
 }: {
   shareId: string;
   folderName: string;
   places: FolderPlace[];
+  /** 처음에 골라 둘 기존 라벨. 연결된 폴더의 `폴더 전체 보기`는 연결된 라벨을 기본으로 한다(이름이 달라져도 새 라벨을 만들지 않게). */
+  initialLabelId?: string;
 }) {
   const library = useAtomValue(libraryAtom);
   const setFlow = useSetAtom(addFlowAtom);
@@ -69,7 +72,7 @@ export function FolderList({
     () => new Set(places.map((place) => place.sid)),
   );
   const [name, setName] = useState(folderName);
-  const [pickedLabelId, setPickedLabelId] = useState<string | null>(null);
+  const [pickedLabelId, setPickedLabelId] = useState<string | null>(initialLabelId ?? null);
   const [saving, setSaving] = useState(false);
   // 같은 이벤트 루프 안의 두 번째 클릭은 아직 `saving`을 못 본다.
   const savingRef = useRef(false);

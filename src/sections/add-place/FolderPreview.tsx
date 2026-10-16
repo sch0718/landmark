@@ -138,7 +138,15 @@ export function FolderPreview({ shareId }: { shareId: string }) {
         />
       );
     }
-    return <FolderList shareId={shareId} folderName={status.folderName} places={status.places} />;
+    return (
+      <FolderList
+        shareId={shareId}
+        folderName={status.folderName}
+        places={status.places}
+        // 연결된 폴더의 전체 보기는 연결된 라벨에 붙인다(라벨·폴더 이름이 달라졌어도 새 라벨을 만들지 않게).
+        initialLabelId={link !== null && target === null ? link.labelId.value : undefined}
+      />
+    );
   }
   const error = status.kind === 'error' ? status.error : null;
   const linkedNotFound = linked && error?.code === 'NOT_FOUND';
