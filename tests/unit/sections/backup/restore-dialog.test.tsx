@@ -256,6 +256,29 @@ describe('RestoreDialog (설정)', () => {
     expect(storage.getItem(PREVIOUS_KEY)).toBeNull();
   });
 
+  it('clears the in-memory library filters that were set before restoring', async () => {
+    const u = user();
+    const { router } = await renderLibrary(sampleLibrary(), {
+      path: '/',
+      prefs: { libraryView: 'list' },
+    });
+    await u.type(screen.getByRole('searchbox', { name: '장소 검색' }), '없는이름');
+    expect(await screen.findByText('조건에 맞는 장소가 없어요')).toBeInTheDocument();
+
+    await act(() => router.navigate('/settings'));
+    await openDialog(u);
+    await pick(u, backupFile());
+    await u.click(await within(dialog()).findByRole('button', { name: '이 백업으로 바꾸기' }));
+    await waitClosed();
+
+    await act(() => router.navigate('/'));
+    expect(await screen.findByRole('searchbox', { name: '장소 검색' })).toHaveValue('');
+    expect(screen.queryByText('조건에 맞는 장소가 없어요')).not.toBeInTheDocument();
+    expect(
+      within(screen.getByRole('list', { name: '장소 목록' })).getAllByRole('button').length,
+    ).toBeGreaterThan(0);
+  });
+
   it('a full storage keeps the library and asks to download first; after downloading it replaces without undo', async () => {
     const u = user();
     const { storage } = await openSettings(sampleLibrary(), overflowPreviousStorage());

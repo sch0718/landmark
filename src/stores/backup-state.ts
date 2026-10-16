@@ -13,6 +13,7 @@ import type { Library } from 'src/schema/library';
 import { BackupMetaStore } from 'src/services/backup-meta-store';
 import { NoPrevious, PreviousNotKept, StorageQuotaExceeded } from 'src/services/errors';
 import { LibraryStore } from 'src/services/library-store';
+import { queryDraftAtom } from 'src/stores/library-query-draft';
 import { libraryAtom, reflectSaved } from 'src/stores/library-state';
 import { setPrefsAtom } from 'src/stores/prefs-state';
 
@@ -148,6 +149,9 @@ export function useRestoreActions() {
       // 여기부터는 보관함이 이미 바뀌었다. 화면 반영이 던져도 성공으로 돌려줘야 대화상자가 닫힌다
       // (실패로 보이면 두 번째 바꾸기가 진짜 바꾸기 전 사본을 덮어쓴다).
       await afterSaved(() => reflectSaved(jotaiStore, before, result.library));
+      // 이 세션에서 바꾼 필터(메모리상의 초안)가 남아 되살린 장소를 가리지 않게 비운다.
+      // 대기 중이던 저장도 초안이 없으면 아무것도 쓰지 않는다.
+      await afterSaved(() => jotaiStore.set(queryDraftAtom, null));
       if (backup.prefs !== null) {
         const { prefs } = backup;
         // 되살린 뒤 필터 때문에 목록이 비어 보이지 않게 `query`는 기본값으로 둔다.
