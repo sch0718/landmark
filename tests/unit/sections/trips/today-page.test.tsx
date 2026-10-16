@@ -845,3 +845,53 @@ describe('당일 모드: 길찾기', () => {
     expect(within(nextCard()).queryByText(NO_ORIGIN)).toBeNull();
   });
 });
+
+describe('당일 모드: 오프라인 안내', () => {
+  const OFFLINE_TEXT =
+    '인터넷에 연결되지 않았어요. 일정과 체크는 그대로 쓸 수 있고, 이동 시간은 어림값이에요';
+  let onLine = true;
+  const setOnLine = (value: boolean) => {
+    onLine = value;
+    act(() => {
+      window.dispatchEvent(new Event(value ? 'online' : 'offline'));
+    });
+  };
+  const band = () => screen.queryByText(OFFLINE_TEXT)?.closest('[role="status"]') ?? null;
+  const online = () => renderToday(lib(), { routes: fakeRoutes(() => route(20, 5000)) });
+
+  beforeEach(() => {
+    onLine = true;
+    Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => onLine });
+  });
+  afterEach(() => {
+    delete (navigator as { onLine?: unknown }).onLine;
+  });
+
+  it('연결돼 있고 경로도 받았으면 띠가 없다', async () => {
+    await online();
+    await screen.findByRole('heading', { name: '오늘 일정' });
+    expect(screen.queryByText(OFFLINE_TEXT)).toBeNull();
+  });
+
+  it('`offline` 이벤트에 띠가 뜨고 `online`에 사라진다', async () => {
+    await online();
+    await screen.findByRole('heading', { name: '오늘 일정' });
+    setOnLine(false);
+    expect(band()).toBeInTheDocument();
+    setOnLine(true);
+    expect(band()).toBeNull();
+  });
+
+  it('들어올 때 이미 끊겨 있으면 바로 띠', async () => {
+    onLine = false;
+    await online();
+    expect(await screen.findByText(OFFLINE_TEXT)).toBeInTheDocument();
+  });
+
+  it('인터넷은 연결돼 있어도 그날 구간 조회가 연결 실패(OFFLINE)면 띠', async () => {
+    await renderToday(lib(), { routes: fakeRoutes(() => 'OFFLINE') });
+    expect(await screen.findByText(OFFLINE_TEXT)).toBeInTheDocument();
+    // 일정·체크는 그대로다.
+    expect(remainingRows().length).toBeGreaterThan(0);
+  });
+});

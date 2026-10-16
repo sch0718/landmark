@@ -1,8 +1,10 @@
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import MenuItem from '@mui/material/MenuItem';
 import { useAtomValue } from 'jotai';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router';
+import { CheckIcon } from 'src/components/icons';
 import type { MapPadding } from 'src/components/map/MapAdapter';
 import { useDocumentTitle } from 'src/lib/use-document-title';
 import { paths } from 'src/routes/paths';
@@ -13,16 +15,21 @@ import { NextCard } from 'src/sections/trips/today/NextCard';
 import { TodayHeader } from 'src/sections/trips/today/TodayHeader';
 import { TodayLists } from 'src/sections/trips/today/TodayLists';
 import { TodayMap, type TodayFocusRequest } from 'src/sections/trips/today/TodayMap';
-import { TodayNotices } from 'src/sections/trips/today/TodayNotices';
+import { NoticeBand, TodayNotices } from 'src/sections/trips/today/TodayNotices';
 import { lastFixOf, useMyLocation } from 'src/sections/trips/today/use-my-location';
+import { useOnline } from 'src/sections/trips/today/use-online';
 import { useToday, type TodayModel, type TodayStop } from 'src/sections/trips/today/use-today';
 import { useVisitToggle } from 'src/sections/trips/today/use-visit-toggle';
+import { useWakeLock } from 'src/sections/trips/today/use-wake-lock';
 import { libraryAtom } from 'src/stores/library-state';
 
 const EDGE = 40;
 const MAP_PADDING: MapPadding = { top: EDGE, right: EDGE, bottom: EDGE, left: EDGE };
 /** 좁은 화면 지도 높이(스펙 §5.1). 나머지 높이는 카드·목록이 스크롤한다. */
 const COMPACT_MAP_HEIGHT = 'clamp(180px, 34dvh, 320px)';
+const WAKE_LOCK_LABEL = '화면 켜 두기';
+const OFFLINE_NOTICE =
+  '인터넷에 연결되지 않았어요. 일정과 체크는 그대로 쓸 수 있고, 이동 시간은 어림값이에요';
 
 function NotFound() {
   return (
@@ -93,6 +100,9 @@ function Today({ trip }: { trip: Trip }) {
   const location = useMyLocation();
   const model = useToday(trip, viewDay, lastFixOf(location.state));
   const visit = useVisitToggle();
+  // 화면 켜 두기·오프라인 안내(스펙 §4.9·§4.10)는 머리·띠의 슬롯으로만 끼운다.
+  const wake = useWakeLock();
+  const online = useOnline();
   const paneRef = useRef<HTMLElement>(null);
   const cardRef = useRef<HTMLElement>(null);
   // 체크가 끝난 뒤 옮길 포커스. 바뀐 목록이 그려진 다음(effect)에 옮긴다. `from`은 누른 때 포커스가 있던 요소.
@@ -166,7 +176,35 @@ function Today({ trip }: { trip: Trip }) {
     [stops],
   );
 
-  const header = <TodayHeader trip={trip} model={model} onPickDay={pickDay} />;
+  const header = (
+    <TodayHeader
+      trip={trip}
+      model={model}
+      onPickDay={pickDay}
+      extraMenu={
+        wake.supported ? (
+          <MenuItem
+            role="menuitemcheckbox"
+            aria-checked={wake.on}
+            sx={{ minHeight: 44 }}
+            onClick={() => wake.setOn(!wake.on)}
+          >
+            <Box component="span" sx={{ display: 'inline-flex', width: 20, mr: 1 }}>
+              {wake.on && <CheckIcon aria-hidden="true" width={18} height={18} />}
+            </Box>
+            {WAKE_LOCK_LABEL}
+          </MenuItem>
+        ) : null
+      }
+      badge={
+        wake.on ? (
+          <Box sx={{ fontSize: 12, fontWeight: 700, color: 'var(--tm-text-secondary)' }}>
+            화면 켜 둠
+          </Box>
+        ) : null
+      }
+    />
+  );
   const map = (sx: object) => (
     <Box
       component="section"
@@ -205,7 +243,9 @@ function Today({ trip }: { trip: Trip }) {
         onToday={toToday}
         location={location.state}
         onLocate={location.start}
-      />
+      >
+        {(!online || model.plan.offline) && <NoticeBand>{OFFLINE_NOTICE}</NoticeBand>}
+      </TodayNotices>
       <NextCard
         model={model}
         trip={trip}
