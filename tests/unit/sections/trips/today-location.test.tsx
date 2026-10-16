@@ -191,6 +191,9 @@ describe('당일 모드 내 위치: 카드·길찾기', () => {
     expect(within(nextCard()).getByText('다음 · 1번째')).toBeInTheDocument();
     expect(within(nextCard()).queryByText(/^지금 여기/)).toBeNull();
     expect(directions('중앙시장 닭강정')).toHaveClass('MuiButton-contained');
+    // 정확도는 `지금 여기`만 막는다. 쓸 수 있는 위치(2분 이내)라 거리와 출발점은 내 위치다(스펙 §4.7).
+    expect(within(nextCard()).getByText('직선 100m')).toBeInTheDocument();
+    expect(directions('중앙시장 닭강정').getAttribute('href')).toContain(`sname=${MY_NAME}&`);
     expect(
       within(nextCard()).getByText('지금 출발하면 10:50 도착 · 1시간 30분 늦음'),
     ).toBeInTheDocument();
@@ -302,16 +305,21 @@ describe('당일 모드 내 위치: 오류 띠', () => {
     permission = 'granted';
   });
 
-  it('거절이면 문구만(버튼 없음), 다시 보여도 다시 걸지 않는다', async () => {
+  it('거절이면 문구만(버튼 없음), 위치를 버리고, 다시 보여도 다시 걸지 않는다', async () => {
     const { geo } = await setup();
     await waitFor(() => expect(geo.watchers.size).toBe(1));
+    emit(geo, nearP1(1200));
+    expect(within(nextCard()).getByText('직선 1.2km')).toBeInTheDocument();
     emitError(geo, 1);
     expect(band(DENIED_TEXT)).toBeInTheDocument();
+    expect(geo.cleared).toEqual([1]);
+    expect(within(nextCard()).queryByText(/^직선 /)).toBeNull();
     expect(screen.queryByRole('button', { name: '다시 시도' })).toBeNull();
     expect(screen.queryByRole('button', { name: '내 위치 켜기' })).toBeNull();
     setVisibility('hidden');
     setVisibility('visible');
     expect(geo.watchers.size).toBe(1);
+    expect(geo.cleared).toEqual([1]);
     expect(screen.getByText(DENIED_TEXT)).toBeInTheDocument();
   });
 
@@ -352,6 +360,112 @@ describe('당일 모드 내 위치: 오류 띠', () => {
     await userEvent.setup().click(screen.getByRole('button', { name: '내 위치 켜기' }));
     await waitFor(() => expect(screen.queryByText(OFF_TEXT)).toBeNull());
     expect(screen.queryByRole('button', { name: '내 위치 켜기' })).toBeNull();
+  });
+});
+
+describe('당일 모드 내 위치: 오류 뒤 마지막 위치·낡은 위치', () => {
+  let resources: ReturnType<typeof installMapResources>;
+  beforeEach(() => {
+    permission = 'granted';
+    vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });
+    vi.setSystemTime(NOW);
+    vi.stubEnv('VITE_MAP_ADAPTER', 'fake');
+    resources = installMapResources();
+  });
+  afterEach(() => resources.restore());
+
+  /** `useNow`의 30초 틱 `n`개(시계도 그만큼 흐른다). */
+  const ticks = (n: number) => {
+    for (let i = 0; i < n; i += 1) act(() => vi.advanceTimersByTime(30_000));
+  };
+  const card = () => within(nextCard());
+  const myButton = () => screen.queryByRole('button', { name: '내 위치로' });
+
+  /**
+   * `setInterval`을 가짜로 두면 `waitFor`의 주기 확인과 jsdom의 `requestAnimationFrame`(지도 준비)이 돌지 않는다.
+   * 가짜 시계를 조금씩(20ms) 흘리며 본다. 틱(30초)에는 닿지 않는다.
+   */
+  async function until(check: () => void) {
+    for (let i = 0; ; i += 1) {
+      try {
+        check();
+        return;
+      } catch (error) {
+        if (i >= 50) throw error;
+      }
+      await act(async () => {
+        vi.advanceTimersByTime(20);
+        await Promise.resolve();
+      });
+    }
+  }
+
+  async function located(coords: FakeCoords) {
+    const ready = await setup();
+    await until(() => expect(ready.geo.watchers.size).toBe(1));
+    await until(() => expect(screen.getByTestId(`marker-${P1}`)).toBeInTheDocument());
+    emit(ready.geo, coords);
+    await until(() => expect(screen.getByTestId('my-location')).toBeInTheDocument());
+    return ready;
+  }
+
+  it('시간 초과 뒤에도 마지막 위치를 두고, 2분이 지나면 다음 틱에 버린다', async () => {
+    const { geo } = await located(nearP1(100));
+    expect(card().getByText('지금 여기 · 1번째')).toBeInTheDocument();
+    emitError(geo, 3);
+    expect(band(TIMEOUT_TEXT)).toBeInTheDocument();
+    expect(card().getByText('지금 여기 · 1번째')).toBeInTheDocument();
+    expect(card().getByText('직선 100m')).toBeInTheDocument();
+    expect(screen.getByTestId('my-location')).toBeInTheDocument();
+    expect(myButton()).not.toBeNull();
+
+    // 120초(틱 4개)까지는 쓴다.
+    ticks(4);
+    expect(card().getByText('직선 100m')).toBeInTheDocument();
+    // 그다음 틱(150초)에 버린다. 띠는 그대로다.
+    ticks(1);
+    expect(card().queryByText(/^직선 /)).toBeNull();
+    expect(card().queryByText(/^지금 여기/)).toBeNull();
+    expect(card().getByText('다음 · 1번째')).toBeInTheDocument();
+    expect(screen.queryByTestId('my-location')).toBeNull();
+    expect(myButton()).toBeNull();
+    expect(screen.getByText(TIMEOUT_TEXT)).toBeInTheDocument();
+  });
+
+  it('못 찾음 뒤에도 마지막 위치를 둔다', async () => {
+    const { geo } = await located(nearP1(1200));
+    emitError(geo, 2);
+    expect(band(UNAVAILABLE_TEXT)).toBeInTheDocument();
+    expect(card().getByText('직선 1.2km')).toBeInTheDocument();
+    expect(screen.getByTestId('my-location')).toBeInTheDocument();
+  });
+
+  it('`다시 시도` 뒤에도 아직 쓸 수 있는 위치를 둔다', async () => {
+    const { geo } = await located(nearP1(1200));
+    emitError(geo, 3);
+    act(() => {
+      screen.getByRole('button', { name: '다시 시도' }).click();
+    });
+    expect(screen.queryByText(TIMEOUT_TEXT)).toBeNull();
+    expect(geo.watchers.size).toBe(2);
+    expect(card().getByText('직선 1.2km')).toBeInTheDocument();
+    expect(directions('중앙시장 닭강정').getAttribute('href')).toContain(`sname=${MY_NAME}&`);
+    expect(screen.getByTestId('my-location')).toBeInTheDocument();
+  });
+
+  it('새 위치가 오지 않으면 2분 뒤 틱에 거리·점·`내 위치로`·지금 여기가 사라진다', async () => {
+    await located(nearP1(100));
+    expect(card().getByText('지금 여기 · 1번째')).toBeInTheDocument();
+    expect(myButton()).not.toBeNull();
+    ticks(5);
+    expect(card().queryByText(/^직선 /)).toBeNull();
+    expect(card().queryByText(/^지금 여기/)).toBeNull();
+    expect(screen.queryByTestId('my-location')).toBeNull();
+    expect(myButton()).toBeNull();
+    // 출발점은 앞 지점(바다 숙소)으로 돌아간다.
+    expect(directions('중앙시장 닭강정').getAttribute('href')).toMatch(
+      /^nmap:\/\/route\/car\?slat=37\.76&slng=128\.93&/,
+    );
   });
 });
 

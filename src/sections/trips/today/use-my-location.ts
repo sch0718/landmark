@@ -6,21 +6,32 @@ import { Geolocation, type GeoFix } from 'src/services/geolocation';
 /**
  * 당일 모드의 내 위치 상태(스펙 §4.7·§5.5). 화면 상태라 저장하지 않고, F4의 `myLocationAtom`에도 쓰지 않는다.
  * - `off`: 아직 켜지 않음(`내 위치 켜기`). `watching`: 지켜보는 중(받은 위치가 없으면 `fix`가 null).
- * - `denied`·`unavailable`·`timeout`·`unsupported`: 마지막 오류. `timeout`·`unavailable`은 계속 지켜본다.
+ * - `unavailable`·`timeout`: 마지막 오류. 계속 지켜보고, 그 전에 받은 마지막 위치(`fix`)를 그대로 둔다
+ *   (낡았는지는 쓰는 쪽이 `usableFix`로 본다).
+ * - `denied`·`unsupported`: 더 받을 수 없다. 위치도 버린다.
  */
 export type LocationState =
   | { status: 'unsupported' }
   | { status: 'off' }
   | { status: 'watching'; fix: GeoFix | null }
   | { status: 'denied' }
-  | { status: 'unavailable' }
-  | { status: 'timeout' };
+  | { status: 'unavailable'; fix: GeoFix | null }
+  | { status: 'timeout'; fix: GeoFix | null };
 
-const WATCHING: LocationState = { status: 'watching', fix: null };
+/** 지켜보는 동안(오류 뒤 포함)의 마지막 위치. 켜지 않았거나 거절·미지원이면 null. */
+export function lastFixOf(state: LocationState): GeoFix | null {
+  return 'fix' in state ? state.fix : null;
+}
 
 /** 감시를 걸어 둘 상태인가. 거절·미지원이면 더 받을 수 없으므로 다시 걸지 않는다. */
 const armed = (state: LocationState): boolean =>
   state.status === 'watching' || state.status === 'unavailable' || state.status === 'timeout';
+
+/** 감시를 (다시) 건 상태. 마지막 위치는 이어 둔다. */
+const watching = (prev: LocationState): LocationState => ({
+  status: 'watching',
+  fix: lastFixOf(prev),
+});
 
 const isVisible = () => typeof document === 'undefined' || document.visibilityState !== 'hidden';
 
@@ -43,7 +54,7 @@ export function useMyLocation(): { state: LocationState; start(): void } {
   const [visible, setVisible] = useState(isVisible);
 
   const start = useCallback(() => {
-    setState(WATCHING);
+    setState(watching);
     setSession((n) => n + 1);
   }, []);
 
@@ -61,7 +72,7 @@ export function useMyLocation(): { state: LocationState; start(): void } {
       query?.then(
         (permission) => {
           if (live && permission.state === 'granted') {
-            setState((prev) => (prev.status === 'off' ? WATCHING : prev));
+            setState((prev) => (prev.status === 'off' ? watching(prev) : prev));
           }
         },
         () => {},
@@ -83,8 +94,12 @@ export function useMyLocation(): { state: LocationState; start(): void } {
         if (live) setState({ status: 'watching', fix });
       },
       (error) => {
-        // 거절이면 서비스가 스스로 해제했다. `on`이 꺼지므로 다시 보여도 걸지 않는다.
-        if (live) setState({ status: error.reason });
+        if (!live) return;
+        const { reason } = error;
+        // 거절·미지원이면 서비스가 스스로 해제했다(미지원은 처음부터 걸지 않음). `on`이 꺼지므로 다시 보여도
+        // 걸지 않고, 위치도 버린다. 못 찾음·시간 초과는 계속 지켜보며 마지막 위치를 둔다.
+        if (reason === 'denied' || reason === 'unsupported') setState({ status: reason });
+        else setState((prev) => ({ status: reason, fix: lastFixOf(prev) }));
       },
     );
     return () => {

@@ -14,7 +14,7 @@ import { TodayHeader } from 'src/sections/trips/today/TodayHeader';
 import { TodayLists } from 'src/sections/trips/today/TodayLists';
 import { TodayMap, type TodayFocusRequest } from 'src/sections/trips/today/TodayMap';
 import { TodayNotices } from 'src/sections/trips/today/TodayNotices';
-import { useMyLocation } from 'src/sections/trips/today/use-my-location';
+import { lastFixOf, useMyLocation } from 'src/sections/trips/today/use-my-location';
 import { useToday, type TodayModel, type TodayStop } from 'src/sections/trips/today/use-today';
 import { useVisitToggle } from 'src/sections/trips/today/use-visit-toggle';
 import { libraryAtom } from 'src/stores/library-state';
@@ -91,11 +91,7 @@ function Today({ trip }: { trip: Trip }) {
   const focusSeq = useRef(0);
   // 내 위치는 이 화면 상태로만 둔다(보이는 동안만 지켜봄). 받은 지 2분이 지난 위치는 `useToday`가 버린다.
   const location = useMyLocation();
-  const model = useToday(
-    trip,
-    viewDay,
-    location.state.status === 'watching' ? location.state.fix : null,
-  );
+  const model = useToday(trip, viewDay, lastFixOf(location.state));
   const visit = useVisitToggle();
   const paneRef = useRef<HTMLElement>(null);
   const cardRef = useRef<HTMLElement>(null);
