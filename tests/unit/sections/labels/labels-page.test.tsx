@@ -1,4 +1,4 @@
-import { cleanup, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Effect, Layer } from 'effect';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -366,6 +366,67 @@ describe('LabelsPage — 네이버 폴더', () => {
       expect(screen.queryByRole('dialog', { name: '장소 추가' })).not.toBeInTheDocument(),
     );
     await waitFor(() => expect(foodRow()).toHaveFocus());
+  });
+
+  it('연결이 둘이면 하나를 끊은 뒤 남은 연결의 `새로 저장한 곳 가져오기`로 포커스한다', async () => {
+    const user = userEvent.setup();
+    const base = linkedLibrary();
+    const other: FolderLink = {
+      ...base.folders![SHARE_ID]!,
+      shareId: 'def456',
+      name: { value: '양양 맛집', updatedAt: CHECKED_AT },
+    };
+    const { storage } = await renderLibrary(
+      { ...base, folders: { ...base.folders, def456: other } },
+      { path: '/labels', ids: ['label099'] },
+    );
+    await user.click(foodRow());
+    const section = within(editor()).getByRole('region', { name: '네이버 폴더' });
+    expect(
+      within(section)
+        .getAllByRole('listitem')
+        .map((li) => li.textContent),
+    ).toEqual([expect.stringContaining('속초 맛집'), expect.stringContaining('양양 맛집')]);
+    await user.click(within(section).getByRole('button', { name: '‘속초 맛집’ 연결 끊기' }));
+    await waitFor(() => expect(stored(storage).folders![SHARE_ID]!.deletedAt).not.toBeNull());
+    await waitFor(() =>
+      expect(
+        within(editor()).getByRole('button', { name: '‘양양 맛집’에서 새로 저장한 곳 가져오기' }),
+      ).toHaveFocus(),
+    );
+    expect(stored(storage).folders!.def456!.deletedAt).toBeNull();
+  });
+
+  it('마지막 연결을 끊으면 구역이 사라지고 `닫기`로 포커스한다', async () => {
+    const user = userEvent.setup();
+    await openLinked();
+    await user.click(foodRow());
+    await user.click(within(editor()).getByRole('button', { name: '‘속초 맛집’ 연결 끊기' }));
+    await waitFor(() =>
+      expect(
+        within(editor()).queryByRole('region', { name: '네이버 폴더' }),
+      ).not.toBeInTheDocument(),
+    );
+    await waitFor(() =>
+      expect(within(editor()).getByRole('button', { name: '닫기' })).toHaveFocus(),
+    );
+  });
+
+  it('`연결 끊기`를 빠르게 두 번 눌러도 한 번만 끊고 한 번만 알린다', async () => {
+    const user = userEvent.setup();
+    const { storage } = await openLinked();
+    await user.click(foodRow());
+    const unlink = within(editor()).getByRole('button', { name: '‘속초 맛집’ 연결 끊기' });
+    // 첫 저장이 끝나기 전에 두 번째 누름이 오도록 한 틱 안에 두 번 누른다.
+    act(() => {
+      fireEvent.click(unlink);
+      fireEvent.click(unlink);
+    });
+    await waitFor(() => expect(stored(storage).folders![SHARE_ID]!.deletedAt).not.toBeNull());
+    await waitFor(() =>
+      expect(within(editor()).getByRole('button', { name: '닫기' })).toHaveFocus(),
+    );
+    expect(toastMock).toHaveBeenCalledTimes(1);
   });
 
   it('`연결 끊기`는 바로 끊고 알린 뒤 구역을 지운다(라벨·장소는 그대로)', async () => {

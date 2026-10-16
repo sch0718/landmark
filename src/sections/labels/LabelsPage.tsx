@@ -258,10 +258,11 @@ export function LabelsPage() {
     openFolderSync(shareId, openers.current.get(labelId) ?? null);
   };
 
-  const unlink = async (shareId: string) => {
+  const unlink = async (shareId: string): Promise<boolean> => {
     // 저장소 오류는 앱 오류 보고자가 알린다.
     const result = await run((lib, ctx) => unlinkFolder(lib, shareId, ctx));
     if (result.ok) toast('폴더 연결을 끊었어요. 라벨과 장소는 그대로예요');
+    return result.ok;
   };
 
   return (
@@ -371,7 +372,7 @@ export function LabelsPage() {
           onDelete={() => setDialog({ kind: 'delete', id: target.id })}
           folders={folders.get(target.id) ?? NO_FOLDERS}
           onResync={(shareId) => resync(target.id, shareId)}
-          onUnlink={(shareId) => void unlink(shareId)}
+          onUnlink={unlink}
         />
       )}
       {target !== undefined && dialog?.kind === 'merge' && (

@@ -4,7 +4,7 @@ import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
-import { useId, useState, type KeyboardEvent } from 'react';
+import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { fieldSx } from 'src/components/field-style';
 import { renameLabel, setLabelColor, setLabelIcon } from 'src/domain/library/ops';
 import { localDate } from 'src/lib/local-date';
@@ -25,8 +25,8 @@ type Props = {
   folders: readonly FolderLink[];
   /** 그 폴더의 다시 가져오기를 연다. */
   onResync(shareId: string): void;
-  /** 그 폴더의 연결을 끊는다. */
-  onUnlink(shareId: string): void;
+  /** 그 폴더의 연결을 끊는다. 끊었으면 true(저장이 실패하면 false). */
+  onUnlink(shareId: string): Promise<boolean>;
 };
 
 /** 라벨 고치기의 `네이버 폴더` 구역(스펙 §4.2): 폴더마다 이름·확인한 날짜·다시 가져오기·연결 끊기. */
@@ -34,7 +34,12 @@ function FolderSection({
   folders,
   onResync,
   onUnlink,
-}: Pick<Props, 'folders' | 'onResync' | 'onUnlink'>) {
+  resyncRef,
+}: Pick<Props, 'folders' | 'onResync'> & {
+  onUnlink(shareId: string): void;
+  /** 폴더마다 `새로 저장한 곳 가져오기` 단추. 연결을 끊은 뒤 포커스를 옮길 곳으로 쓴다. */
+  resyncRef(shareId: string, node: HTMLButtonElement | null): void;
+}) {
   const titleId = useId();
   return (
     <Box component="section" aria-labelledby={titleId}>
@@ -53,6 +58,7 @@ function FolderSection({
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
                 <Button
                   variant="outlined"
+                  ref={(node: HTMLButtonElement | null) => resyncRef(folder.shareId, node)}
                   aria-label={`‘${name}’에서 새로 저장한 곳 가져오기`}
                   onClick={() => onResync(folder.shareId)}
                   sx={{ minHeight: 44 }}
@@ -94,6 +100,30 @@ export function LabelEditor({
   const [name, setName] = useState(label.name.value);
   const [error, setError] = useState<string | null>(null);
   const errorId = useId();
+
+  // `연결 끊기`를 누르면 그 줄(마지막 연결이면 구역째)이 사라지므로, 끊긴 뒤 포커스를 옮겨 준다
+  // (남은 연결 중 그 자리에 오는 줄의 `새로 저장한 곳 가져오기`, 없으면 `닫기`). 저장이 실패하면 예약을 버린다.
+  const resyncButtons = useRef(new Map<string, HTMLButtonElement>());
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const unlinking = useRef(false);
+  const focusAfterUnlink = useRef<{ shareId: string; index: number } | null>(null);
+  const unlink = async (shareId: string) => {
+    // 빠르게 두 번 눌러도 한 번만 끊는다.
+    if (unlinking.current) return;
+    unlinking.current = true;
+    focusAfterUnlink.current = { shareId, index: folders.findIndex((f) => f.shareId === shareId) };
+    const ok = await onUnlink(shareId);
+    unlinking.current = false;
+    if (!ok) focusAfterUnlink.current = null;
+  };
+  useEffect(() => {
+    const pending = focusAfterUnlink.current;
+    if (pending === null || folders.some((f) => f.shareId === pending.shareId)) return;
+    focusAfterUnlink.current = null;
+    const next = folders[Math.min(pending.index, folders.length - 1)];
+    const target = next === undefined ? null : resyncButtons.current.get(next.shareId);
+    (target ?? closeRef.current)?.focus();
+  }, [folders]);
 
   /** 이름을 저장한다. 바뀐 게 없거나 저장됐으면 true, 거절되면 false. */
   const commitName = async (): Promise<boolean> => {
@@ -168,7 +198,15 @@ export function LabelEditor({
           onChange={(icon) => void run((lib, ctx) => setLabelIcon(lib, label.id, icon, ctx))}
         />
         {folders.length > 0 && (
-          <FolderSection folders={folders} onResync={onResync} onUnlink={onUnlink} />
+          <FolderSection
+            folders={folders}
+            onResync={onResync}
+            onUnlink={(shareId) => void unlink(shareId)}
+            resyncRef={(shareId, node) => {
+              if (node === null) resyncButtons.current.delete(shareId);
+              else resyncButtons.current.set(shareId, node);
+            }}
+          />
         )}
       </DialogContent>
       <DialogActions sx={{ justifyContent: 'space-between', px: 3, pb: 2 }}>
@@ -180,7 +218,12 @@ export function LabelEditor({
             지우기
           </Button>
         </Box>
-        <Button variant="contained" onClick={() => void close()} sx={{ minHeight: 44 }}>
+        <Button
+          ref={closeRef}
+          variant="contained"
+          onClick={() => void close()}
+          sx={{ minHeight: 44 }}
+        >
           닫기
         </Button>
       </DialogActions>
