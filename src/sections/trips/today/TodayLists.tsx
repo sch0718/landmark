@@ -4,8 +4,8 @@ import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
 import { useState, type ReactNode } from 'react';
 import { visitedOnOf } from 'src/domain/library/visit';
-import { formatClock } from 'src/domain/trips/schedule';
-import type { TodayModel, TodayStop } from 'src/sections/trips/today/use-today';
+import { formatClock, formatSlack } from 'src/domain/trips/schedule';
+import { isLate, type TodayModel, type TodayStop } from 'src/sections/trips/today/use-today';
 import { shortDate } from 'src/sections/trips/trip-dates';
 
 type Props = {
@@ -22,11 +22,37 @@ const H2_SX = { m: 0, fontSize: 16, fontWeight: 800 } as const;
 const LIST_SX = { m: 0, p: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 1 };
 const TIME_SX = { fontSize: 13, color: 'var(--tm-text-secondary)' } as const;
 
-/** 시각 줄: `09:00 도착 예정 · 12:00 고정`(스펙 §5.1). */
-function timeLine(item: TodayStop): string {
-  const parts = [`${formatClock(item.planned.arriveMin)} 도착 예정`];
+/**
+ * 시각 줄(스펙 §5.1): `09:00 도착 예정 · 12:00 고정`. 늦음이면 `예상 10:30 · 계획 09:00`(어림이면 `예상 약 10:30`).
+ * 고정 시각이 있고 예상이 그보다 늦으면 끝에 `늦음 1시간 20분`(굵게, `error.main`).
+ */
+function TimeLine({ item, model }: { item: TodayStop; model: TodayModel }) {
+  const { projected } = item;
+  const planned = formatClock(item.planned.arriveMin);
+  const parts =
+    projected !== null && isLate(model)
+      ? [
+          `예상 ${model.approximate ? '약 ' : ''}${formatClock(projected.arriveMin)}`,
+          `계획 ${planned}`,
+        ]
+      : [`${planned} 도착 예정`];
   if (item.stop.fixedTime !== null) parts.push(`${item.stop.fixedTime} 고정`);
-  return parts.join(' · ');
+  // 예상의 여유(`slackMin`, 정수 분)가 음수면 고정 시각에 늦는다.
+  const slack = projected?.slackMin ?? null;
+  const lateForFixed = slack !== null && slack < 0;
+  return (
+    <Box sx={TIME_SX}>
+      {parts.join(' · ')}
+      {lateForFixed && (
+        <>
+          {' · '}
+          <Box component="span" sx={{ fontWeight: 700, color: 'error.main' }}>
+            {formatSlack(slack)}
+          </Box>
+        </>
+      )}
+    </Box>
+  );
 }
 
 /**
@@ -62,11 +88,13 @@ function VisitCheckbox({
 
 function RemainingRow({
   item,
+  model,
   current,
   onSelect,
   check,
 }: {
   item: TodayStop;
+  model: TodayModel;
   current: boolean;
   onSelect(): void;
   /** 체크 상자. 기간 밖이면 없다. */
@@ -103,7 +131,7 @@ function RemainingRow({
         >
           {`${item.number}. ${item.place.name.value}`}
         </ButtonBase>
-        <Box sx={TIME_SX}>{timeLine(item)}</Box>
+        <TimeLine item={item} model={model} />
       </Box>
       {item.skipped && (
         <Box component="span" sx={{ flex: 'none', fontSize: 12, color: 'var(--tm-text-muted)' }}>
@@ -144,6 +172,7 @@ export function TodayLists({ model, onSelect, onCheck, pending }: Props) {
               <RemainingRow
                 key={item.stop.id}
                 item={item}
+                model={model}
                 current={index === nextIndex}
                 onSelect={() => onSelect(index)}
                 check={check(item, 'remaining', at)}

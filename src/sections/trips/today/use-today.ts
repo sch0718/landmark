@@ -2,8 +2,16 @@ import { useAtomValue } from 'jotai';
 import { useMemo } from 'react';
 import { visitedOnOf } from 'src/domain/library/visit';
 import { dayEndpoints, tripDates, visibleStops } from 'src/domain/trips/query';
-import type { PointTime } from 'src/domain/trips/schedule';
-import { pickNext, todayStatus, visitedInTrip, type TodayStatus } from 'src/domain/trips/today';
+import type { PointTime, ScheduleInput } from 'src/domain/trips/schedule';
+import {
+  dayClockMin,
+  LATE_MIN,
+  pickNext,
+  projectFromNow,
+  todayStatus,
+  visitedInTrip,
+  type TodayStatus,
+} from 'src/domain/trips/today';
 import type { Place } from 'src/schema/library';
 import type { Stop, Trip } from 'src/schema/trip';
 import type { GeoFix } from 'src/services/geolocation';
@@ -58,6 +66,10 @@ export type TodayModel = {
   approximate: boolean;
 };
 
+/** 늦어짐을 계산했고 다음 장소의 예상 도착이 계획보다 `LATE_MIN`분 이상 늦은가(스펙 §4.6). */
+export const isLate = (model: Pick<TodayModel, 'delayMin'>): boolean =>
+  model.delayMin !== null && model.delayMin >= LATE_MIN;
+
 /** 시간표가 문서와 잠깐 어긋날 때(같은 렌더 안에서는 생기지 않는다) 쓰는 빈 시각. */
 const NO_TIME: PointTime = { arriveMin: 0, departMin: 0, slackMin: null };
 
@@ -82,7 +94,6 @@ export function useToday(trip: Trip, viewDay: number | null, fix?: GeoFix | null
   const plan = useDayPlan(trip.id, dayIndex);
 
   return useMemo(() => {
-    const todayIndex = status.kind === 'during' ? status.dayIndex : null;
     const day = trip.days[dayIndex];
     const { start, end } = dayEndpoints(library, trip, dayIndex);
     const offset = start === null ? 0 : 1;
@@ -91,6 +102,38 @@ export function useToday(trip: Trip, viewDay: number | null, fix?: GeoFix | null
       visitedInTrip(visitedOnOf(library.places[stop.placeId]!), trip),
     );
     const pick = pickNext(visited);
+    const todayIndex = status.kind === 'during' ? status.dayIndex : null;
+    const isToday = todayIndex === dayIndex;
+
+    // 늦어짐(스펙 §4.6): 오늘 Day를 보고, 다음 장소가 Stop이고, 되감음이 아닐 때만. 계획과 같은 입력으로
+    // "지금 나서면"을 다시 계산해 다음 장소부터 끝까지 예상 시각을 붙인다.
+    const nextIndex = pick.nextIndex;
+    let projected: PointTime[] = [];
+    let delayMin: number | null = null;
+    let approximate = false;
+    if (isToday && status.kind === 'during' && nextIndex !== null && !pick.wrapped) {
+      const input: ScheduleInput = {
+        startTime: day?.startTime.value ?? '09:00',
+        hasStart: start !== null,
+        stops: shown.map((s) => ({ stayMin: s.stayMin, fixedTime: s.fixedTime })),
+        hasEnd: end !== null,
+        legs: plan.legs.map((leg) => leg.time),
+      };
+      const projection = projectFromNow({
+        input,
+        planned: plan.schedule,
+        nextIndex,
+        nowMin: dayClockMin(status.date, now),
+        here: false,
+      });
+      if (projection.points.length > 0) {
+        projected = projection.points;
+        delayMin = projection.delayMin;
+        // 다음 장소로 들어오는 구간(앞 지점이 없으면 없다)이 어림값이면 예상 앞에 `약`.
+        approximate = plan.legs[offset + nextIndex - 1]?.time.estimated ?? false;
+      }
+    }
+
     const stops = shown.map((stop, i): TodayStop => ({
       stop,
       place: library.places[stop.placeId]!,
@@ -98,16 +141,16 @@ export function useToday(trip: Trip, viewDay: number | null, fix?: GeoFix | null
       visited: visited[i]!,
       skipped: pick.skipped.has(i),
       planned: plan.schedule.points[offset + i] ?? NO_TIME,
-      projected: null,
+      projected: nextIndex !== null && i >= nextIndex ? (projected[i - nextIndex] ?? null) : null,
     }));
     let next: TodayNext = null;
-    if (pick.nextIndex !== null) next = { kind: 'stop', index: pick.nextIndex };
+    if (nextIndex !== null) next = { kind: 'stop', index: nextIndex };
     else if (stops.length > 0 && end !== null) next = { kind: 'end', place: end };
     return {
       status,
       todayIndex,
       dayIndex,
-      isToday: todayIndex === dayIndex,
+      isToday,
       date: status.kind === 'during' ? status.date : (tripDates(trip)[dayIndex] ?? ''),
       canCheck: status.kind === 'during',
       plan,
@@ -117,8 +160,8 @@ export function useToday(trip: Trip, viewDay: number | null, fix?: GeoFix | null
       next,
       wrapped: pick.wrapped,
       here: false,
-      delayMin: null,
-      approximate: false,
+      delayMin,
+      approximate,
     };
-  }, [library, trip, dayIndex, plan, status]);
+  }, [library, trip, dayIndex, plan, status, now]);
 }

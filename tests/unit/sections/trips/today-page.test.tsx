@@ -8,8 +8,9 @@ import { LIBRARY_KEY } from 'src/services/library-store';
 import { libraryAtom } from 'src/stores/library-state';
 import { selectedDayAtom } from 'src/stores/trip-planner';
 import { installMapResources } from '../../components/helpers/map-resources';
-import { HOUSE, P1, P2, P5 } from './planner-fixtures';
+import { HOUSE, P1, P2, P5, route } from './planner-fixtures';
 import {
+  fakeRoutes,
   nextCard,
   NOW,
   plannerLibrary,
@@ -104,7 +105,8 @@ describe('당일 모드: 다음 장소 카드와 남은 일정', () => {
     const rows = remainingRows();
     expect(rows).toHaveLength(2);
     expect(rows[0]).toHaveTextContent('1. 중앙시장 닭강정');
-    expect(rows[0]).toHaveTextContent('09:00 도착 예정');
+    // 지금(10:00)은 계획(09:00)보다 늦어 예상과 계획을 함께 보인다.
+    expect(rows[0]).toHaveTextContent('예상 10:00 · 계획 09:00');
     expect(rows[0]).toHaveAttribute('aria-current', 'step');
     expect(rows[1]).not.toHaveAttribute('aria-current');
   });
@@ -604,5 +606,242 @@ describe('당일 모드: 지도는 사람이 고를 때만 옮긴다', () => {
     await waitFor(() => expect(cardTitle()).toHaveTextContent('안목 카페거리'));
     expect(fakeMap()).not.toHaveAttribute('data-center');
     expect(fakeMap()).not.toHaveAttribute('data-zoom');
+  });
+});
+
+/** `dayIndex`째 Day의 `stopIndex`째 Stop에 고정 시각을 둔다. */
+function withFixed(lib: Library, dayIndex: number, stopIndex: number, fixedTime: string): Library {
+  const trip = lib.trips[TRIP]!;
+  const days = trip.days.map((day, d) =>
+    d !== dayIndex
+      ? day
+      : {
+          ...day,
+          stops: {
+            ...day.stops,
+            value: day.stops.value.map((s, i) => (i === stopIndex ? { ...s, fixedTime } : s)),
+          },
+        },
+  );
+  return withTrip(lib, { ...trip, days });
+}
+
+describe('당일 모드: 늦어짐', () => {
+  /** 모든 구간 20분(자동차 5km). Day 1은 출발점 없이 09:00 시작, 중앙시장 닭강정 → 안목 카페거리. */
+  const routes = () => fakeRoutes(() => route(20, 5000));
+  const at = (h: number, m: number, s = 0) => new Date(2026, 9, 24, h, m, s);
+  /** 시각을 `h:m`의 30초 전으로 두고 틱 하나를 흘린다. */
+  const tickTo = (h: number, m: number) => {
+    vi.setSystemTime(new Date(at(h, m).getTime() - 30_000));
+    act(() => vi.advanceTimersByTime(30_000));
+  };
+  const line2 = () => within(nextCard()).queryByText(/^(계획대로|.*늦음)$/);
+  let visibility: DocumentVisibilityState = 'visible';
+  const setVisibility = (state: DocumentVisibilityState) => {
+    visibility = state;
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });
+    vi.setSystemTime(at(8, 50));
+    visibility = 'visible';
+    vi.spyOn(document, 'visibilityState', 'get').mockImplementation(() => visibility);
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  it('30초 틱으로 시각이 흐르면 늦어짐이 바뀐다. 앞 지점이 없으면 `계획보다 N분 늦음`', async () => {
+    await renderToday(lib(), { routes: routes() });
+    await waitFor(() => expect(remainingRows()[1]).toHaveTextContent('09:20 도착 예정'));
+    expect(within(nextCard()).getByText('계획대로')).toBeInTheDocument();
+    expect(remainingRows()[0]).toHaveTextContent('09:00 도착 예정');
+
+    // 틱 전에는 시각을 다시 읽지 않는다.
+    vi.setSystemTime(at(10, 29, 30));
+    expect(within(nextCard()).getByText('계획대로')).toBeInTheDocument();
+    act(() => vi.advanceTimersByTime(30_000));
+    const late = within(nextCard()).getByText('계획보다 1시간 30분 늦음');
+    expect(late).toHaveStyle({ fontWeight: 700 });
+    expect(remainingRows()[0]).toHaveTextContent('예상 10:30 · 계획 09:00');
+    expect(remainingRows()[1]).toHaveTextContent('예상 10:50 · 계획 09:20');
+  });
+
+  it('앞 Stop을 다녀왔으면 `지금 출발하면 <예상> 도착 · N분 늦음`', async () => {
+    vi.setSystemTime(at(10, 30));
+    await renderToday(withVisited(lib(), P1, '2026-10-24'), { routes: routes() });
+    expect(
+      await within(nextCard()).findByText('지금 출발하면 10:50 도착 · 1시간 30분 늦음'),
+    ).toBeInTheDocument();
+    expect(remainingRows()[0]).toHaveTextContent('예상 10:50 · 계획 09:20');
+  });
+
+  it('4분 늦으면 `계획대로`, 5분부터 늦음', async () => {
+    vi.setSystemTime(at(9, 4));
+    await renderToday(withVisited(lib(), P1, '2026-10-24'), { routes: routes() });
+    await waitFor(() => expect(remainingRows()[0]).toHaveTextContent('09:20 도착 예정'));
+    expect(within(nextCard()).getByText('계획대로')).toBeInTheDocument();
+    tickTo(9, 5);
+    expect(within(nextCard()).getByText('지금 출발하면 09:25 도착 · 5분 늦음')).toBeInTheDocument();
+    expect(remainingRows()[0]).toHaveTextContent('예상 09:25 · 계획 09:20');
+  });
+
+  it('고정 시각 Stop은 예상이 고정보다 늦으면 행에 `늦음 N분`', async () => {
+    const fixed = withFixed(lib(), 0, 1, '09:30');
+    await renderToday(fixed, { routes: routes() });
+    await waitFor(() => expect(remainingRows()[1]).toHaveTextContent('09:20 도착 예정'));
+    expect(remainingRows()[1]).toHaveTextContent('09:30 고정');
+    expect(remainingRows()[1]).not.toHaveTextContent('늦음');
+
+    tickTo(10, 30);
+    const row = remainingRows()[1]!;
+    expect(row).toHaveTextContent('예상 10:50 · 계획 09:20 · 09:30 고정 · 늦음 1시간 20분');
+    expect(within(row).getByText('늦음 1시간 20분')).toHaveStyle({ fontWeight: 700 });
+  });
+
+  it('다음 장소로 가는 구간이 직선 추정이면 예상 앞에 `약 `', async () => {
+    vi.setSystemTime(at(10, 30));
+    // 경로를 받지 못한다(기본 가짜: 연결 실패) → 직선 추정.
+    await renderToday(withVisited(lib(), P1, '2026-10-24'));
+    expect(
+      await within(nextCard()).findByText(/^지금 출발하면 약 \d\d:\d\d 도착 · 1시간 \d+분 늦음$/),
+    ).toBeInTheDocument();
+    expect(remainingRows()[0]).toHaveTextContent(/^.*예상 약 \d\d:\d\d · 계획 \d\d:\d\d/);
+  });
+
+  it('다른 Day를 보면 줄 2가 없다', async () => {
+    vi.setSystemTime(at(10, 30));
+    await renderToday(lib(), { routes: routes() });
+    expect(line2()).toHaveTextContent('계획보다 1시간 30분 늦음');
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: '오늘 일정 메뉴' }));
+    });
+    act(() => {
+      fireEvent.click(screen.getByRole('menuitemradio', { name: 'Day 2 · 10.25(일)' }));
+    });
+    expect(cardTitle()).toHaveTextContent('창가 자리');
+    expect(line2()).toBeNull();
+    expect(remainingRows()[0]).toHaveTextContent('09:00 도착 예정');
+  });
+
+  it('기간 밖이면 줄 2가 없다', async () => {
+    vi.setSystemTime(new Date(2026, 9, 23, 10, 30));
+    await renderToday(lib(), { routes: routes() });
+    expect(cardTitle()).toHaveTextContent('중앙시장 닭강정');
+    expect(line2()).toBeNull();
+  });
+
+  it('되감음이면 줄 2가 없다', async () => {
+    vi.setSystemTime(at(10, 30));
+    let three = lib({ stops: [[P1, P2, P5]] });
+    three = withVisited(withVisited(three, P2, '2026-10-24'), P5, '2026-10-24');
+    await renderToday(three, { routes: routes() });
+    expect(cardHead('다음 · 1번째')).toBeInTheDocument();
+    expect(line2()).toBeNull();
+    expect(remainingRows()[0]).toHaveTextContent('09:00 도착 예정');
+  });
+
+  it('화면이 숨었다 다시 보이면(네이버 지도 앱에 다녀옴) 틱을 기다리지 않고 늦음을 다시 계산한다', async () => {
+    vi.setSystemTime(at(10, 30));
+    await renderToday(withVisited(lib(), P1, '2026-10-24'), { routes: routes() });
+    expect(
+      await within(nextCard()).findByText('지금 출발하면 10:50 도착 · 1시간 30분 늦음'),
+    ).toBeInTheDocument();
+    setVisibility('hidden');
+    vi.setSystemTime(at(10, 50));
+    setVisibility('visible');
+    expect(
+      within(nextCard()).getByText('지금 출발하면 11:10 도착 · 1시간 50분 늦음'),
+    ).toBeInTheDocument();
+  });
+});
+
+describe('당일 모드: 길찾기', () => {
+  const directions = (name: string) =>
+    within(nextCard()).getByRole('link', { name: `${name}까지 길찾기` });
+  const NO_ORIGIN = '출발 지점을 몰라요. 내 위치를 켜 주세요';
+
+  it('좁은 화면은 앱 주소(같은 탭), 출발은 직전 Stop, 수단은 그 구간 수단', async () => {
+    await renderToday(withVisited(lib(), P1, '2026-10-24'));
+    const link = directions('안목 카페거리');
+    expect(link).toHaveTextContent('길찾기');
+    expect(link.getAttribute('href')).toMatch(
+      /^nmap:\/\/route\/car\?slat=37\.75&slng=128\.9&sname=.+&dlat=37\.772&dlng=128\.947&/,
+    );
+    expect(link).not.toHaveAttribute('target');
+    expect(getComputedStyle(link).minHeight).toBe('44px');
+  });
+
+  it('넓은 화면은 웹 주소를 새 탭으로', async () => {
+    await renderToday(withVisited(lib(), P1, '2026-10-24'), { width: 1280 });
+    const link = directions('안목 카페거리');
+    expect(link.getAttribute('href')).toMatch(
+      /^https:\/\/map\.naver\.com\/p\/directions\/128\.9,37\.75,.+\/128\.947,37\.772,.+\/-\/car$/,
+    );
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+  });
+
+  it('첫 Stop이고 출발점이 없으면 끈 버튼과 안내', async () => {
+    await renderToday(lib());
+    const button = within(nextCard()).getByRole('button', { name: '중앙시장 닭강정까지 길찾기' });
+    expect(button).toBeDisabled();
+    expect(within(nextCard()).getByText(NO_ORIGIN)).toBeInTheDocument();
+    expect(within(nextCard()).queryByRole('link', { name: /길찾기$/ })).toBeNull();
+  });
+
+  it('첫 Stop은 그날 출발점에서', async () => {
+    await renderToday(lib({ origin: HOUSE }));
+    expect(directions('중앙시장 닭강정').getAttribute('href')).toMatch(
+      /^nmap:\/\/route\/car\?slat=37\.76&slng=128\.93&/,
+    );
+    expect(within(nextCard()).queryByText(NO_ORIGIN)).toBeNull();
+  });
+
+  it('고른 장소는 그 앞 지점에서', async () => {
+    await renderToday(lib({ stops: [[P1, P2, P5]] }));
+    await userEvent
+      .setup()
+      .click(within(remainingList()).getByRole('button', { name: '3. 창가 자리' }));
+    expect(directions('창가 자리').getAttribute('href')).toMatch(
+      /^nmap:\/\/route\/car\?slat=37\.772&slng=128\.947&/,
+    );
+  });
+
+  it('모두 다녀와 숙소로 갈 때는 마지막 Stop에서', async () => {
+    let all = lib({ lodging: [HOUSE] });
+    all = withVisited(withVisited(all, P1, '2026-10-24'), P2, '2026-10-24');
+    await renderToday(all);
+    expect(cardHead('마지막 · 숙소')).toBeInTheDocument();
+    expect(directions('바다 숙소').getAttribute('href')).toMatch(
+      /^nmap:\/\/route\/car\?slat=37\.772&slng=128\.947&.*dlat=37\.76&dlng=128\.93&/,
+    );
+  });
+
+  it('그날 Stop이 0곳이고 숙소가 있으면 `숙소로 길찾기` 하나(출발점에서), `마지막 · 숙소` 카드는 없다', async () => {
+    await renderToday(lib({ origin: P5, stops: [[], [P5]], lodging: [HOUSE] }));
+    expect(cardTitle()).toHaveTextContent('이 Day에는 일정이 없어요');
+    expect(within(nextCard()).queryByText('마지막 · 숙소')).toBeNull();
+    const links = within(nextCard()).getAllByRole('link', { name: /길찾기$/ });
+    expect(links).toHaveLength(1);
+    expect(links[0]).toHaveAccessibleName('숙소로 길찾기');
+    expect(links[0]!.getAttribute('href')).toMatch(
+      /^nmap:\/\/route\/car\?slat=37\.75&slng=128\.905&.*dlat=37\.76&dlng=128\.93&/,
+    );
+  });
+
+  it('숙소만 있는 Day에서 출발점이 없으면 `숙소로 길찾기`는 끈 버튼과 안내', async () => {
+    await renderToday(lib({ stops: [[], [P5]], lodging: [HOUSE] }));
+    expect(cardTitle()).toHaveTextContent('이 Day에는 일정이 없어요');
+    expect(within(nextCard()).queryByText('마지막 · 숙소')).toBeNull();
+    expect(within(nextCard()).getByRole('button', { name: '숙소로 길찾기' })).toBeDisabled();
+    expect(within(nextCard()).getByText(NO_ORIGIN)).toBeInTheDocument();
+  });
+
+  it('숙소도 없는 빈 Day에는 길찾기가 없다', async () => {
+    await renderToday(lib({ stops: [[], [P5]] }));
+    expect(within(nextCard()).queryByText(/길찾기/)).toBeNull();
+    expect(within(nextCard()).queryByText(NO_ORIGIN)).toBeNull();
   });
 });
