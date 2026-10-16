@@ -1,5 +1,6 @@
 import { Effect, Layer, ManagedRuntime } from 'effect';
 import { withAppErrorReporter } from 'src/lib/effect/error-reporter';
+import { BackupMetaStore } from 'src/services/backup-meta-store';
 import { IdGen } from 'src/services/id-gen';
 import { LegacyTripSource } from 'src/services/legacy-trip-source';
 import { LibraryStore } from 'src/services/library-store';
@@ -13,6 +14,7 @@ import { ShareTemplate } from 'src/services/share-template';
 export const AppLayer = Layer.mergeAll(
   LibraryStore.layer,
   PrefsStore.layer,
+  BackupMetaStore.layer,
   IdGen.layer,
   LegacyTripSource.layer,
   ShareTemplate.layer,

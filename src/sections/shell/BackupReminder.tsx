@@ -1,0 +1,92 @@
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Typography from '@mui/material/Typography';
+import { useAtomValue, useSetAtom } from 'jotai';
+import { useEffect, useMemo, useRef } from 'react';
+import { toast } from 'sonner';
+import { reminderState, reminderText } from 'src/domain/backup/reminder';
+import { useBackupFile } from 'src/sections/backup/use-backup-file';
+import { MAIN_ID } from 'src/sections/shell/SkipLink';
+import { backupMetaAtom, snoozeReminderAtom } from 'src/stores/backup-state';
+import { libraryAtom, persistenceAtom } from 'src/stores/library-state';
+
+/**
+ * 백업 알림 띠(스펙 §2.5). 보관함 화면에서 오래 백업하지 않았고 그 뒤로 바뀐 내용이 있을 때만 보인다.
+ * 라이브 영역이 아니다(화면 읽기 프로그램이 불쑥 읽지 않는다). `백업 받기`는 공유가 되는 기기에서는 공유 창을,
+ * 아니면 파일 받기를 연다. 띠가 사라지면 포커스가 갈 곳을 잃지 않도록 본문(`#main`)으로 옮긴다.
+ */
+export function BackupReminder() {
+  const library = useAtomValue(libraryAtom);
+  const persistence = useAtomValue(persistenceAtom);
+  const meta = useAtomValue(backupMetaAtom);
+  const snooze = useSetAtom(snoozeReminderAtom);
+  const { shareable, busy, error, save, share } = useBackupFile();
+
+  // 받기·공유 실패는 띠 밖의 토스트로 알린다(띠 안에 `alert`를 두면 라이브 영역이 된다).
+  // 오류 값이 바뀔 때만 한 번 알리므로 다시 그려져도 겹치지 않는다(새로 누르면 `null`로 돌아갔다가 다시 채워진다).
+  useEffect(() => {
+    if (error !== null) toast.error(error);
+  }, [error]);
+
+  // 보관함 전체를 훑으므로 입력이 바뀔 때만 다시 센다(시각은 그때의 시각으로 충분하다).
+  const state = useMemo(
+    () => reminderState({ library, meta, persistence, now: new Date().getTime() }),
+    [library, meta, persistence],
+  );
+  const shown = state !== null;
+
+  // 이 자리에서 보이던 띠가 사라졌을 때만 포커스를 옮긴다(화면을 떠나 통째로 내려가는 때는 해당 없음).
+  const wasShown = useRef(shown);
+  useEffect(() => {
+    if (wasShown.current && !shown) {
+      const active = document.activeElement;
+      // 다른 곳에 포커스가 가 있으면 건드리지 않는다.
+      if (active === null || active === document.body) {
+        document.getElementById(MAIN_ID)?.focus({ preventScroll: true });
+      }
+    }
+    wasShown.current = shown;
+  }, [shown]);
+
+  if (state === null) return null;
+  return (
+    <Box
+      component="section"
+      aria-label="백업 알림"
+      sx={{
+        flex: 'none',
+        display: 'flex',
+        flexWrap: 'wrap',
+        alignItems: 'center',
+        columnGap: 2,
+        rowGap: 1,
+        px: 2,
+        py: 1,
+        bgcolor: 'var(--tm-bg-raised)',
+        color: 'var(--tm-text-primary)',
+        borderBottom: '1px solid var(--tm-border-strong)',
+      }}
+    >
+      <Typography variant="body2" sx={{ flex: '1 1 16rem', minWidth: 0 }}>
+        {reminderText(state)}
+      </Typography>
+      <Box sx={{ display: 'flex', gap: 1 }}>
+        <Button
+          variant="contained"
+          disabled={busy}
+          onClick={() => void (shareable ? share() : save())}
+          sx={{ minHeight: 44 }}
+        >
+          백업 받기
+        </Button>
+        <Button
+          variant="text"
+          onClick={() => snooze(new Date().toISOString())}
+          sx={{ minHeight: 44, color: 'var(--tm-text-secondary)' }}
+        >
+          나중에
+        </Button>
+      </Box>
+    </Box>
+  );
+}

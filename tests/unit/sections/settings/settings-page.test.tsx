@@ -1,4 +1,4 @@
-import { cleanup, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setAppRuntimeForTest } from 'src/lib/effect/runtime';
@@ -31,6 +31,7 @@ afterEach(() => {
   setAppRuntimeForTest(null);
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+  Reflect.deleteProperty(navigator, 'storage');
 });
 
 const open = () => renderLibrary(sampleLibrary(), { path: '/settings', ids: NEW_IDS });
@@ -86,6 +87,46 @@ describe('SettingsPage', () => {
     const bytes = JSON.stringify(store.get(libraryAtom)).length * 2;
     const kb = Math.max(1, Math.round(bytes / 1024));
     expect(screen.getByText(`장소 5곳 · 라벨 3개 · 사용 용량 약 ${kb} KB`)).toBeInTheDocument();
+  });
+
+  it('sections appear in the documented order', async () => {
+    await open();
+    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
+      '테마',
+      '모드',
+      '보관함 보기',
+      '백업',
+      '가져오기',
+      '데이터 정보',
+    ]);
+  });
+
+  it('data info adds the storage protection state when the browser reports it', async () => {
+    Object.defineProperty(navigator, 'storage', {
+      value: { persisted: vi.fn(() => Promise.resolve(true)) },
+      configurable: true,
+    });
+    const { store } = await open();
+    const kb = Math.max(1, Math.round((JSON.stringify(store.get(libraryAtom)).length * 2) / 1024));
+    expect(
+      await screen.findByText(`장소 5곳 · 라벨 3개 · 사용 용량 약 ${kb} KB · 저장 보호 켜짐`),
+    ).toBeInTheDocument();
+  });
+
+  it('data info says protection is off when persisted() is false', async () => {
+    Object.defineProperty(navigator, 'storage', {
+      value: { persisted: vi.fn(() => Promise.resolve(false)) },
+      configurable: true,
+    });
+    await open();
+    expect(await screen.findByText(/ · 저장 보호 꺼짐$/)).toBeInTheDocument();
+  });
+
+  it('data info adds nothing without navigator.storage', async () => {
+    await open();
+    await act(async () => {});
+    expect(screen.getByText(/사용 용량 약 \d+ KB$/)).toBeInTheDocument();
+    expect(screen.queryByText(/저장 보호/)).not.toBeInTheDocument();
   });
 
   it('opens the import dialog from the library empty state and clears the query', async () => {

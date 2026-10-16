@@ -7,6 +7,7 @@ import { downloadText } from 'src/lib/download-text';
 import { startEffect } from 'src/lib/effect/runtime';
 import { LibraryCorrupt } from 'src/services/errors';
 import { browserStorage } from 'src/services/browser-storage';
+import { RestoreDialogHost } from 'src/sections/backup/RestoreDialogHost';
 import { LIBRARY_KEY, LibraryStore } from 'src/services/library-store';
 
 /**
@@ -22,6 +23,19 @@ function readBackupText(backupKey: string | null): string | null {
     return null;
   }
 }
+
+/** 지금 `LIBRARY_KEY`에 저장된 원문(손상 사본이 아니라 저장소의 지금 값). 읽지 못하거나 없으면 `null`. */
+function readCurrentText(): string | null {
+  try {
+    return browserStorage()?.getItem(LIBRARY_KEY) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** 손상 화면이 내려받는 파일 이름. `백업 파일 받기`·`지금 원문 받기`가 같은 규칙을 쓴다. */
+const downloadRaw = (text: string) =>
+  downloadText(text, `landmark-backup-${new Date().toISOString()}.json`, 'application/json');
 
 const reset = Effect.gen(function* () {
   return yield* (yield* LibraryStore).resetWithBackup;
@@ -48,6 +62,9 @@ export function CorruptScreen({
 }) {
   const [message, setMessage] = useState<string | null>(null);
   const [resetting, setResetting] = useState(false);
+  const [restoreOpen, setRestoreOpen] = useState(false);
+  /** `백업 파일 받기`가 내려받은 원문. 되살리기가 사본 없이 바꿔도 되는지 비교하는 기준이다(다시 받으면 새 값). */
+  const [savedText, setSavedText] = useState<string | undefined>(undefined);
 
   const download = () => {
     const text = readBackupText(error.backupKey);
@@ -56,7 +73,21 @@ export function CorruptScreen({
       return;
     }
     setMessage(null);
-    downloadText(text, `landmark-backup-${new Date().toISOString()}.json`, 'application/json');
+    downloadRaw(text);
+    setSavedText(text);
+  };
+
+  /**
+   * `지금 원문 받기`: 손상 사본이 아니라 지금 원문을 받는다. `readBackupText`는 사본을 먼저 읽어, 다른 탭이 원문을
+   * 바꾼 뒤에는 다시 받아도 옛 사본만 나오기 때문이다(스펙 §2.4). 받은 원문을 돌려주면 대화상자가 기준으로 삼는다.
+   */
+  const downloadCurrent = (): Promise<string | null> => {
+    const text = readCurrentText();
+    // 못 찾았다는 알림은 대화상자가 자기 알림으로 보인다(모달 뒤 화면에는 두지 않는다).
+    if (text === null) return Promise.resolve(null);
+    setMessage(null);
+    downloadRaw(text);
+    return Promise.resolve(text);
   };
 
   const startOver = async () => {
@@ -105,6 +136,14 @@ export function CorruptScreen({
           백업 파일 받기
         </Button>
         <Button
+          variant="outlined"
+          onClick={() => setRestoreOpen(true)}
+          disabled={resetting}
+          sx={{ minHeight: 44 }}
+        >
+          백업 파일로 되살리기
+        </Button>
+        <Button
           variant="contained"
           onClick={() => void startOver()}
           disabled={resetting}
@@ -113,6 +152,14 @@ export function CorruptScreen({
           새로 시작
         </Button>
       </Box>
+      <RestoreDialogHost
+        open={restoreOpen}
+        onClose={() => setRestoreOpen(false)}
+        mode="corrupt"
+        savedText={savedText}
+        onDownloadCurrent={downloadCurrent}
+        onRestored={onRecovered}
+      />
     </Box>
   );
 }

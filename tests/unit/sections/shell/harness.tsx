@@ -7,6 +7,7 @@ import { SHARE_DATA_PLACEHOLDER } from 'src/domain/share/inject';
 import { setAppRuntimeForTest } from 'src/lib/effect/runtime';
 import { PANEL_CHUNKS, ROUTE_CHUNKS } from 'src/routes/lazy-routes';
 import { routes } from 'src/routes/router';
+import { BackupMetaStore } from 'src/services/backup-meta-store';
 import { IdGen } from 'src/services/id-gen';
 import { LegacyTripSource } from 'src/services/legacy-trip-source';
 import { PlaceLookupError, RouteLookupError } from 'src/services/errors';
@@ -122,6 +123,7 @@ export async function renderApp(
       Layer.mergeAll(
         LibraryStore.layerWith({ storage, events: new EventTarget() }),
         PrefsStore.layerWith({ storage }),
+        BackupMetaStore.layerWith({ storage }),
         IdGen.layerSequence(ids),
         LegacyTripSource.layerWith({ storage, fetch: (...args) => globalThis.fetch(...args) }),
         ShareTemplate.layerWith({
