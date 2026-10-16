@@ -207,6 +207,23 @@ describe('library 가까운 순', () => {
     expect(fake.requests).toHaveLength(1);
   });
 
+  it('shows the filter empty state when the filter alone leaves nothing, and 필터 지우기 keeps nearby on', async () => {
+    const user = userEvent.setup();
+    const { fake } = await setup();
+    await startNearby(user, fake);
+    await answer(fake);
+
+    await user.type(screen.getByRole('searchbox', { name: '장소 검색' }), '없는 장소');
+    expect(screen.getByText('조건에 맞는 장소가 없어요')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '반경 넓히기' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/저장한 곳이 없어요/)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '필터 지우기' }));
+    expect(order()).toEqual(['가 식당', '라 카페']);
+    expect(nearbyBarShown()).toBe(true);
+    expect(screen.getByText('내 위치에서 3km 안 · 2곳 · 14:05 기준')).toBeInTheDocument();
+  });
+
   it('warns when the accuracy is worse than 1km', async () => {
     const user = userEvent.setup();
     const { fake } = await setup();

@@ -318,7 +318,8 @@ export function LibraryPage() {
           {places.length > 0 &&
             (view === 'cards' ? <CardsView {...listProps} /> : <ListView {...listProps} />)}
           {places.length === 0 &&
-            (nearby.active && nearby.radiusM !== null ? (
+            // 필터만으로 이미 0곳이면 반경을 넓혀도 소용없으므로 필터 빈 상태를 보인다.
+            (nearby.active && nearby.radiusM !== null && sorted.length > 0 ? (
               <EmptyState
                 title={`반경 ${radiusLabel(nearby.radiusM)} 안에 저장한 곳이 없어요`}
                 actionLabel="반경 넓히기"
