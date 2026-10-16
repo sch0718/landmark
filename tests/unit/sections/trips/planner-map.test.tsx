@@ -420,7 +420,7 @@ describe('지도 위 카드', () => {
       within(detail)
         .getAllByRole('heading', { level: 3 })
         .map((h) => h.textContent),
-    ).toEqual(['라벨', '메모']);
+    ).toEqual(['다녀옴', '한 줄 평', '라벨', '메모']);
 
     await user.click(within(detail).getByRole('button', { name: '← 일정으로' }));
     expect(timeline()).toBeInTheDocument();

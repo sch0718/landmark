@@ -14,6 +14,8 @@ type Props = {
   variant?: 'title' | 'body';
   /** 제목(`h1`·`h2`)으로 만든다(장소 이름). 고치는 동안에도 제목 이름은 지금 값이다. */
   headingLevel?: 1 | 2;
+  /** 입력칸의 글자 수 한도. 브라우저가 이 길이에서 멈춘다(붙여넣기도 잘린다). */
+  maxLength?: number;
   /** 저장한다. 실패는 호출한 쪽이 알린다(토스트). */
   onSave(text: string): Promise<{ ok: boolean }>;
 };
@@ -32,6 +34,7 @@ export function EditableText({
   allowEmpty,
   variant = 'body',
   headingLevel,
+  maxLength,
   onSave,
 }: Props) {
   const [editing, setEditing] = useState(false);
@@ -109,6 +112,7 @@ export function EditableText({
         type="text"
         aria-label={label}
         autoFocus
+        maxLength={maxLength}
         value={draft}
         onChange={(event) => setDraft(event.target.value)}
         onKeyDown={onKeyDown}
