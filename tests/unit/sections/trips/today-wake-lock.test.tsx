@@ -35,13 +35,34 @@ const setVisibility = (state: DocumentVisibilityState) => {
   });
 };
 
-type Lock = { release: ReturnType<typeof vi.fn> };
-/** `request`·`release`를 세는 가짜 Screen Wake Lock. `reject`면 요청이 거절된다. */
-function fakeWakeLock(options: { reject?: boolean } = {}) {
+type Lock = EventTarget & { release: ReturnType<typeof vi.fn> };
+/** 진짜 `WakeLockSentinel`처럼 놓이면(`release()`든 시스템이든) `release` 이벤트를 낸다. */
+function fakeLock(): Lock {
+  const lock = Object.assign(new EventTarget(), {
+    release: vi.fn(async () => {
+      lock.dispatchEvent(new Event('release'));
+    }),
+  });
+  return lock;
+}
+/** 시스템(배터리 절약·숨김 등)이 잠금을 놓는다. */
+const systemReleases = (lock: Lock) => {
+  act(() => {
+    lock.dispatchEvent(new Event('release'));
+  });
+};
+/**
+ * `request`·`release`를 세는 가짜 Screen Wake Lock. `reject`면 요청이 거절된다.
+ * `grantFirst`가 있으면 처음 그만큼만 받아 주고 그 뒤 요청은 거절된다.
+ */
+function fakeWakeLock(options: { reject?: boolean; grantFirst?: number } = {}) {
   const locks: Lock[] = [];
   const request = vi.fn(async () => {
-    if (options.reject) throw new DOMException('저전력', 'NotAllowedError');
-    const lock: Lock = { release: vi.fn(async () => {}) };
+    const refused =
+      options.reject === true ||
+      (options.grantFirst !== undefined && locks.length >= options.grantFirst);
+    if (refused) throw new DOMException('저전력', 'NotAllowedError');
+    const lock = fakeLock();
     locks.push(lock);
     return lock;
   });
@@ -158,7 +179,7 @@ describe('당일 모드 화면 켜 두기', () => {
       () =>
         new Promise<Lock>((resolve) => {
           grant = () => {
-            const lock: Lock = { release: vi.fn(async () => {}) };
+            const lock = fakeLock();
             locks.push(lock);
             resolve(lock);
           };
@@ -172,5 +193,69 @@ describe('당일 모드 화면 켜 두기', () => {
     await act(async () => grant());
     expect(locks).toHaveLength(1);
     expect(locks[0]!.release).toHaveBeenCalledTimes(1);
+  });
+
+  it('보이는 동안 시스템이 잠금을 놓으면 한 번 다시 요청하고 켜 둠을 유지한다', async () => {
+    const wake = fakeWakeLock();
+    await setup();
+    const user = await openMenu();
+    await user.click(item());
+    await waitFor(() => expect(wake.locks).toHaveLength(1));
+
+    systemReleases(wake.locks[0]!);
+    await waitFor(() => expect(wake.request).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(wake.locks).toHaveLength(2));
+    expect(screen.getByText(BADGE)).toBeInTheDocument();
+    expect(item()).toHaveAttribute('aria-checked', 'true');
+    expect(toastMock).not.toHaveBeenCalled();
+  });
+
+  it('다시 요청이 거절되면 끔으로 돌리고 토스트', async () => {
+    const wake = fakeWakeLock({ grantFirst: 1 });
+    await setup();
+    const user = await openMenu();
+    await user.click(item());
+    await waitFor(() => expect(wake.locks).toHaveLength(1));
+
+    systemReleases(wake.locks[0]!);
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith(FAILED));
+    expect(wake.request).toHaveBeenCalledTimes(2);
+    expect(item()).toHaveAttribute('aria-checked', 'false');
+    expect(screen.queryByText(BADGE)).toBeNull();
+  });
+
+  it('다시 받은 잠금도 시스템이 놓으면 더 요청하지 않고 끔과 토스트', async () => {
+    const wake = fakeWakeLock();
+    await setup();
+    const user = await openMenu();
+    await user.click(item());
+    await waitFor(() => expect(wake.locks).toHaveLength(1));
+    systemReleases(wake.locks[0]!);
+    await waitFor(() => expect(wake.locks).toHaveLength(2));
+
+    systemReleases(wake.locks[1]!);
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith(FAILED));
+    expect(wake.request).toHaveBeenCalledTimes(2);
+    expect(item()).toHaveAttribute('aria-checked', 'false');
+    expect(screen.queryByText(BADGE)).toBeNull();
+  });
+
+  it('숨으면서 시스템이 놓은 잠금은 바로 다시 요청하지 않고 다시 보일 때 요청한다', async () => {
+    const wake = fakeWakeLock();
+    await setup();
+    const user = await openMenu();
+    await user.click(item());
+    await waitFor(() => expect(wake.locks).toHaveLength(1));
+
+    // 브라우저는 숨김 알림보다 먼저 잠금을 놓을 수 있다.
+    visibility = 'hidden';
+    systemReleases(wake.locks[0]!);
+    setVisibility('hidden');
+    await act(async () => {});
+    expect(wake.request).toHaveBeenCalledTimes(1);
+    setVisibility('visible');
+    await waitFor(() => expect(wake.request).toHaveBeenCalledTimes(2));
+    expect(screen.getByText(BADGE)).toBeInTheDocument();
+    expect(toastMock).not.toHaveBeenCalled();
   });
 });

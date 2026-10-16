@@ -27,6 +27,8 @@ const MAP_PADDING: MapPadding = { top: EDGE, right: EDGE, bottom: EDGE, left: ED
 /** 좁은 화면 지도 높이(스펙 §5.1). 나머지 높이는 카드·목록이 스크롤한다. */
 const COMPACT_MAP_HEIGHT = 'clamp(180px, 34dvh, 320px)';
 const WAKE_LOCK_LABEL = '화면 켜 두기';
+/** 켜 두는 동안 머리 부제 아래에 붙이는 표시. */
+const WAKE_LOCK_BADGE = '화면 켜 둠';
 const OFFLINE_NOTICE =
   '인터넷에 연결되지 않았어요. 일정과 체크는 그대로 쓸 수 있고, 이동 시간은 어림값이에요';
 
@@ -193,7 +195,7 @@ function Today({ trip }: { trip: Trip }) {
       badge={
         wake.on ? (
           <Box sx={{ fontSize: 12, fontWeight: 700, color: 'var(--tm-text-secondary)' }}>
-            화면 켜 둠
+            {WAKE_LOCK_BADGE}
           </Box>
         ) : null
       }

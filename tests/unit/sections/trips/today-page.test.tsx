@@ -1,10 +1,19 @@
-import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import {
+  act,
+  cleanup,
+  fireEvent,
+  renderHook,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { visitedOnOf } from 'src/domain/library/visit';
 import { setAppRuntimeForTest } from 'src/lib/effect/runtime';
 import type { Library } from 'src/schema/library';
 import { LIBRARY_KEY } from 'src/services/library-store';
+import { useOnline } from 'src/sections/trips/today/use-online';
 import { libraryAtom } from 'src/stores/library-state';
 import { selectedDayAtom } from 'src/stores/trip-planner';
 import { installMapResources } from '../../components/helpers/map-resources';
@@ -1018,6 +1027,24 @@ describe('당일 모드: 오프라인 안내', () => {
     onLine = false;
     await online();
     expect(await screen.findByText(OFFLINE_TEXT)).toBeInTheDocument();
+  });
+
+  it('useOnline은 사라질 때 건 리스너를 모두 푼다', () => {
+    const add = vi.spyOn(window, 'addEventListener');
+    const remove = vi.spyOn(window, 'removeEventListener');
+    const { result, unmount } = renderHook(() => useOnline());
+    expect(result.current).toBe(true);
+    const added = add.mock.calls.filter(([type]) => type === 'online' || type === 'offline');
+    expect(added.map(([type]) => type).sort()).toEqual(['offline', 'online']);
+    unmount();
+    for (const [type, listener] of added) {
+      expect(remove).toHaveBeenCalledWith(type, listener);
+    }
+    // 푼 뒤의 이벤트는 다시 그리지 않는다(오류도 없다).
+    expect(() => setOnLine(false)).not.toThrow();
+    expect(result.current).toBe(true);
+    add.mockRestore();
+    remove.mockRestore();
   });
 
   it('인터넷은 연결돼 있어도 그날 구간 조회가 연결 실패(OFFLINE)면 띠', async () => {
