@@ -171,15 +171,28 @@ export function LibraryPage() {
     });
   };
   // 다녀옴 표시·지우기. 숫자와 되돌리기는 화면이 아니라 저장된 최신본에서 실제로 바뀐 곳 기준이다.
-  const undoVisited = (prevById: Record<string, string | null>) => ({
+  // 되돌리기는 지금 값이 이 작업이 쓴 값(`written`) 그대로인 장소만 되돌린다.
+  // 그사이 다른 탭이 새 날짜를 적었다면 덮어쓰지 않는다.
+  const undoVisited = (prevById: Record<string, string | null>, written: string | null) => ({
     label: '되돌리기',
-    onClick: () => void run((lib, ctx) => setVisitedOn(lib, prevById, ctx)),
+    onClick: () =>
+      void run((lib, ctx) => {
+        const toRestore: Record<string, string | null> = {};
+        for (const [id, prev] of Object.entries(prevById)) {
+          const current = lib.places[id];
+          if (current === undefined || current.deletedAt !== null) continue;
+          if (visitedOnOf(current) === written) toRestore[id] = prev;
+        }
+        return Object.keys(toRestore).length === 0 ? lib : setVisitedOn(lib, toRestore, ctx);
+      }),
   });
   const markVisited = async () => {
     const ids = selectedIds;
     let prevById: Record<string, string | null> = {};
+    let written = '';
     const result = await run((lib, ctx) => {
       const today = localDateOf(ctx.now);
+      written = today;
       prevById = visitedBefore(lib, ids, (prev) => prev === null || prev < today);
       return markVisitedToday(lib, ids, ctx);
     });
@@ -191,7 +204,7 @@ export function LibraryPage() {
     }
     toast(`${n}곳을 오늘 다녀옴으로 표시했어요`, {
       duration: UNDO_MS,
-      action: undoVisited(prevById),
+      action: undoVisited(prevById, written),
     });
   };
   const clearVisited = async () => {
@@ -208,7 +221,10 @@ export function LibraryPage() {
     if (!result.ok) return;
     const n = Object.keys(prevById).length;
     if (n === 0) return;
-    toast(`${n}곳의 다녀옴 표시를 지웠어요`, { duration: UNDO_MS, action: undoVisited(prevById) });
+    toast(`${n}곳의 다녀옴 표시를 지웠어요`, {
+      duration: UNDO_MS,
+      action: undoVisited(prevById, null),
+    });
   };
   // 정렬은 그대로 둔다. `patch`를 거치면 저장되지 않는 `다녀온 날순`이 꺼지므로 `patchQuery`로 직접 쓴다.
   const clearFilters = () => patchQuery({ ...DEFAULT_QUERY, sort: query.sort });

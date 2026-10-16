@@ -338,4 +338,74 @@ describe('library bulk visited', () => {
     await waitFor(() => expect(visitedOf(store.get(libraryAtom), 'place00001')).toBe('2026-10-01'));
     expect(visitedOf(store.get(libraryAtom), 'place00002')).toBe('2026-10-02');
   });
+  // 다른 탭이 저장소에 직접 새 다녀온 날을 적은 것처럼 흉내 낸다. 화면(스토어)은 모른다.
+  const otherTabSets = (
+    storage: { getItem: (k: string) => string | null; setItem: (k: string, v: string) => void },
+    id: string,
+    value: string | null,
+  ) => {
+    const stored = JSON.parse(storage.getItem(LIBRARY_KEY)!) as Library;
+    const place = {
+      ...stored.places[id]!,
+      visitedOn: { value, updatedAt: '2099-01-01T00:00:00.000Z' },
+    };
+    storage.setItem(
+      LIBRARY_KEY,
+      JSON.stringify({ ...stored, places: { ...stored.places, [id]: place } }),
+    );
+  };
+  const storedVisitedOf = (
+    storage: { getItem: (k: string) => string | null },
+    id: string,
+  ): string | null =>
+    visitedOnOf((JSON.parse(storage.getItem(LIBRARY_KEY)!) as Library).places[id]!);
+
+  it('undo of a bulk clear does not overwrite a date another tab recorded meanwhile', async () => {
+    const user = userEvent.setup();
+    const lib = withPlaces(sampleLibrary(), [
+      makePlace(1, { name: '중앙시장 닭강정', labelIds: [L_FOOD], visitedOn: '2026-10-01' }),
+      makePlace(2, { name: '안목 카페거리', labelIds: [L_CAFE], visitedOn: '2026-10-02' }),
+    ]);
+    const { store, storage } = await renderLibrary(lib, { prefs: LIST });
+    await shiftClick(user, /중앙시장 닭강정/, /안목 카페거리/);
+    await openVisitMenu(user);
+    await user.click(screen.getByRole('menuitem', { name: '다녀옴 표시 지우기' }));
+    await waitFor(() => expect(visitedOf(store.get(libraryAtom), 'place00001')).toBeNull());
+
+    otherTabSets(storage, 'place00001', '2026-10-12');
+
+    const options = toastMock.mock.calls[0]![1] as { action: { onClick: () => void } };
+    await act(async () => {
+      options.action.onClick();
+    });
+    await waitFor(() => expect(storedVisitedOf(storage, 'place00002')).toBe('2026-10-02'));
+    expect(storedVisitedOf(storage, 'place00001')).toBe('2026-10-12');
+    expect(toastMock.error).not.toHaveBeenCalled();
+  });
+
+  it('undo of a bulk mark-today leaves places another tab changed or cleared alone', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 9, 16, 9));
+    const user = userEvent.setup();
+    const lib = withPlaces(sampleLibrary(), [
+      makePlace(3, { name: '속초 횟집', labelIds: [L_FOOD], visitedOn: '2026-10-10' }),
+    ]);
+    const { store, storage } = await renderLibrary(lib, { prefs: LIST });
+    await shiftClick(user, /창가 자리/, /강남 한 곳/, /속초 횟집/);
+    await openVisitMenu(user);
+    await user.click(screen.getByRole('menuitem', { name: '오늘 다녀옴으로 표시' }));
+    await waitFor(() => expect(visitedOf(store.get(libraryAtom), 'place00005')).toBe('2026-10-16'));
+
+    otherTabSets(storage, 'place00005', null); // 다른 탭이 지웠다.
+    otherTabSets(storage, 'place00003', '2026-10-14'); // 다른 탭이 다른 날짜로 바꿨다.
+
+    const options = toastMock.mock.calls[0]![1] as { action: { onClick: () => void } };
+    await act(async () => {
+      options.action.onClick();
+    });
+    await waitFor(() => expect(storedVisitedOf(storage, 'place00004')).toBeNull());
+    expect(storedVisitedOf(storage, 'place00005')).toBeNull();
+    expect(storedVisitedOf(storage, 'place00003')).toBe('2026-10-14');
+    expect(toastMock.error).not.toHaveBeenCalled();
+  });
 });
