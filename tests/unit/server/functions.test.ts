@@ -443,12 +443,46 @@ describe('GET /api/route', () => {
     expect(calls).toHaveLength(2);
   });
 
-  it('장소·폴더는 fresh=1을 몰라 그대로 캐시를 본다', async () => {
+  it('장소는 fresh=1을 몰라 그대로 캐시를 본다', async () => {
     const cache = stubCaches();
     stubFetch({});
     await onPlaceGet(makeContext(`${placePath(NAVER_WEB_LINK)}&fresh=1`).ctx);
-    await onFolderGet(makeContext(`${folderPath(SHARE_ID)}&fresh=1`).ctx);
-    expect(cache.match).toHaveBeenCalledTimes(2);
+    expect(cache.match).toHaveBeenCalledTimes(1);
+  });
+
+  it('폴더도 fresh=1이면 캐시를 보지 않고 다시 받아, 같은 키에 저장한다', async () => {
+    const cache = stubCaches();
+    const calls = stubFetch({
+      [`${FOLDER_API}?start=0&limit=500`]: () =>
+        new Response(fixtureText('naver-folder-page1.json')),
+    });
+    const folderKey = `https://cache.landmark/folder/${SHARE_ID}`;
+    // 캐시에는 옛 응답이 들어 있다.
+    cache.store.set(
+      folderKey,
+      new Response(JSON.stringify({ folderName: '옛 이름', places: [] }), {
+        headers: { 'Cache-Control': 'max-age=600' },
+      }),
+    );
+
+    const fresh = makeContext(`${folderPath(SHARE_ID)}&fresh=1`);
+    const res = await onFolderGet(fresh.ctx);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(((await res.json()) as { folderName: string }).folderName).toBe('속초, 고성, 양양 맛집');
+    await Promise.all(fresh.pending);
+    expect(cache.match).not.toHaveBeenCalled();
+    expect(calls).toEqual([`${FOLDER_API}?start=0&limit=500`]);
+    expect(cache.put).toHaveBeenCalledTimes(1);
+    expect(String(cache.put.mock.calls[0]![0])).toBe(folderKey);
+
+    // 이어지는 보통 요청은 새 결과를 캐시에서 받는다(네이버 호출이 늘지 않는다).
+    const again = makeContext(folderPath(SHARE_ID));
+    const hit = await onFolderGet(again.ctx);
+    expect(hit.status).toBe(200);
+    expect(((await hit.json()) as { folderName: string }).folderName).toBe('속초, 고성, 양양 맛집');
+    expect(cache.match).toHaveBeenCalledTimes(1);
+    expect(calls).toHaveLength(1);
   });
 });
 

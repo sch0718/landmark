@@ -10,9 +10,10 @@ import type { FolderResult } from 'src/server/resolve';
 import { PlaceLookupError } from 'src/services/errors';
 import { LIBRARY_KEY } from 'src/services/library-store';
 import { PlaceLookup } from 'src/services/place-lookup';
-import { addFlowAtom } from 'src/stores/add-place';
+import { addFlowAtom, addTargetAtom } from 'src/stores/add-place';
 import { libraryAtom } from 'src/stores/library-state';
 import { L_FOOD, makePlace, renderLibrary, sampleLibrary, withPlaces } from '../library/fixtures';
+import { makeTrip, TRIP, withTrip } from '../trips/planner-fixtures';
 
 const toastMock = vi.hoisted(() => {
   const error = vi.fn();
@@ -158,6 +159,49 @@ describe('폴더 미리보기', () => {
     // 해제한 장소는 들어오지 않는다.
     expect(Object.values(lib.places).some((p) => p.name.value === '폴더 장소 3')).toBe(false);
     expect(queryPanel()).not.toBeInTheDocument();
+  });
+
+  it('가져오면 폴더 연결이 남는다: 고르지 않은 곳도 확인한 곳(seenSids)으로 적는다', async () => {
+    const { user, store } = await openFolder(undefined, { ids: IDS });
+    await within(panel()).findByRole('heading', { name: '속초 맛집 · 3곳' });
+    await user.click(row('폴더 장소 3'));
+    await user.click(importButton(2));
+
+    await waitFor(() => expect(store.get(addFlowAtom)).toEqual({ step: 'closed' }));
+    const link = store.get(libraryAtom).folders?.[SHARE_ID];
+    expect(link).toBeDefined();
+    expect(link!.shareId).toBe(SHARE_ID);
+    expect(link!.name.value).toBe('속초 맛집');
+    expect(link!.labelId.value).toBe('newlab01');
+    expect(link!.seenSids.value).toEqual(['9001', '9002', '9003']);
+    expect(link!.deletedAt).toBeNull();
+  });
+
+  it('기존 라벨을 골라 가져와도 그 라벨에 연결한다', async () => {
+    const { user, store } = await openFolder(undefined, { ids: ['newplace01', 'newplace02'] });
+    await within(panel()).findByRole('heading', { name: '속초 맛집 · 3곳' });
+    await user.click(within(panel()).getByRole('button', { name: '맛집' }));
+    await user.click(importButton(3));
+    await waitFor(() => expect(store.get(addFlowAtom)).toEqual({ step: 'closed' }));
+    const link = store.get(libraryAtom).folders?.[SHARE_ID];
+    expect(link!.labelId.value).toBe(L_FOOD);
+    expect(link!.name.value).toBe('속초 맛집');
+  });
+
+  it('여행 대상이 있는 흐름에서도 연결이 남는다', async () => {
+    const { user, store } = await openFolder(undefined, {
+      library: withTrip(sampleLibrary(), makeTrip()),
+      ids: IDS,
+    });
+    await within(panel()).findByRole('heading', { name: '속초 맛집 · 3곳' });
+    act(() => store.set(addTargetAtom, { tripId: TRIP }));
+    await user.click(importButton(3));
+    await waitFor(() => expect(queryPanel()).not.toBeInTheDocument());
+    const lib = store.get(libraryAtom);
+    expect(lib.trips[TRIP]!.candidates.value).toHaveLength(3);
+    const link = lib.folders?.[SHARE_ID];
+    expect(link!.labelId.value).toBe('newlab01');
+    expect(link!.seenSids.value).toEqual(['9001', '9002', '9003']);
   });
 
   it('모두 새것이면 새로 넣었다는 문장만 쓴다', async () => {

@@ -18,20 +18,25 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import Box from '@mui/material/Box';
-import { useAtomValue } from 'jotai';
-import { useMemo, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { useAtomValue, useSetAtom } from 'jotai';
+import { useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { toast } from 'sonner';
 import { fieldSx } from 'src/components/field-style';
 import { GripIcon, LabelGlyph } from 'src/components/icons';
 import { useDocumentTitle } from 'src/lib/use-document-title';
+import { folderLinksOfLabel, unlinkFolder } from 'src/domain/library/folder-links';
 import { createLabel, deleteLabel, mergeLabels, reorderLabels } from 'src/domain/library/ops';
 import { liveLabels, livePlaces } from 'src/domain/library/query';
-import { LIBRARY_LIMITS, type Label } from 'src/schema/library';
+import { LIBRARY_LIMITS, type FolderLink, type Label } from 'src/schema/library';
 import { DeleteLabelDialog } from 'src/sections/labels/DeleteLabelDialog';
 import { LabelEditor } from 'src/sections/labels/LabelEditor';
 import { MergeDialog } from 'src/sections/labels/MergeDialog';
 import { labelRejectionMessage } from 'src/sections/labels/rejection-message';
 import { labelColors } from 'src/sections/library/label-style';
+import { openFolderSyncAtom } from 'src/stores/add-place';
 import { libraryAtom, useLibraryAction } from 'src/stores/library-state';
+
+const NO_FOLDERS: readonly FolderLink[] = [];
 
 const INSTRUCTIONS: ScreenReaderInstructions = {
   draggable:
@@ -51,10 +56,18 @@ function announcements(names: ReadonlyMap<string, string>): Announcements {
   };
 }
 
-type RowProps = { label: Label; count: number; onOpen(): void };
+type RowProps = {
+  label: Label;
+  count: number;
+  /** 연결된 네이버 폴더가 있는가. 있으면 개수 글자에 `네이버 폴더`를 붙인다. */
+  linked: boolean;
+  onOpen(): void;
+  /** 편집기를 여는 단추. 다시 가져오기 칸을 닫을 때 포커스를 돌려줄 곳으로 쓴다. */
+  openerRef(node: HTMLButtonElement | null): void;
+};
 
 /** 라벨 한 줄: 드래그 손잡이 · 아이콘 · 이름 · 장소 수 · 색 점. 손잡이 말고 줄을 누르면 편집기가 열린다. */
-function LabelRow({ label, count, onOpen }: RowProps) {
+function LabelRow({ label, count, linked, onOpen, openerRef }: RowProps) {
   const {
     attributes,
     listeners,
@@ -110,6 +123,7 @@ function LabelRow({ label, count, onOpen }: RowProps) {
       <Box
         component="button"
         type="button"
+        ref={openerRef}
         onClick={onOpen}
         sx={{
           flex: 1,
@@ -161,7 +175,7 @@ function LabelRow({ label, count, onOpen }: RowProps) {
           component="span"
           sx={{ flex: 'none', fontSize: 13, color: 'var(--tm-text-secondary)' }}
         >
-          {`장소 ${count}곳`}
+          {linked ? `장소 ${count}곳 · 네이버 폴더` : `장소 ${count}곳`}
         </Box>
         <Box
           component="span"
@@ -189,6 +203,13 @@ export function LabelsPage() {
     return map;
   }, [library]);
   const names = useMemo(() => new Map(labels.map((l) => [l.id, l.name.value])), [labels]);
+  const folders = useMemo(
+    () => new Map(labels.map((l) => [l.id, folderLinksOfLabel(library, l.id)])),
+    [library, labels],
+  );
+  const openFolderSync = useSetAtom(openFolderSyncAtom);
+  // 줄마다 편집기를 여는 단추. 다시 가져오기 칸을 닫으면 그 라벨 줄로 포커스를 돌려준다(스펙 §4.1).
+  const openers = useRef(new Map<string, HTMLButtonElement>());
 
   const [newName, setNewName] = useState('');
   const [createError, setCreateError] = useState<string | null>(null);
@@ -230,6 +251,18 @@ export function LabelsPage() {
   const confirm = async (op: Parameters<typeof run>[0]) => {
     const result = await run(op);
     if (result.ok) setDialog(null);
+  };
+
+  const resync = (labelId: string, shareId: string) => {
+    setDialog(null);
+    openFolderSync(shareId, openers.current.get(labelId) ?? null);
+  };
+
+  const unlink = async (shareId: string): Promise<boolean> => {
+    // 저장소 오류는 앱 오류 보고자가 알린다.
+    const result = await run((lib, ctx) => unlinkFolder(lib, shareId, ctx));
+    if (result.ok) toast('폴더 연결을 끊었어요. 라벨과 장소는 그대로예요');
+    return result.ok;
   };
 
   return (
@@ -316,7 +349,12 @@ export function LabelsPage() {
                   key={label.id}
                   label={label}
                   count={counts.get(label.id) ?? 0}
+                  linked={(folders.get(label.id) ?? NO_FOLDERS).length > 0}
                   onOpen={() => setDialog({ kind: 'edit', id: label.id })}
+                  openerRef={(node) => {
+                    if (node === null) openers.current.delete(label.id);
+                    else openers.current.set(label.id, node);
+                  }}
                 />
               ))}
             </Box>
@@ -332,6 +370,9 @@ export function LabelsPage() {
           onClose={() => setDialog(null)}
           onMerge={() => setDialog({ kind: 'merge', id: target.id })}
           onDelete={() => setDialog({ kind: 'delete', id: target.id })}
+          folders={folders.get(target.id) ?? NO_FOLDERS}
+          onResync={(shareId) => resync(target.id, shareId)}
+          onUnlink={unlink}
         />
       )}
       {target !== undefined && dialog?.kind === 'merge' && (
@@ -349,6 +390,7 @@ export function LabelsPage() {
         <DeleteLabelDialog
           label={target}
           placeCount={counts.get(target.id) ?? 0}
+          hasFolders={(folders.get(target.id) ?? NO_FOLDERS).length > 0}
           onCancel={() => setDialog(null)}
           onConfirm={() => void confirm((lib, ctx) => deleteLabel(lib, target.id, ctx))}
         />

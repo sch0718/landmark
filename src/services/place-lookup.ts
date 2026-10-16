@@ -37,7 +37,11 @@ export class PlaceLookup extends Context.Service<
   PlaceLookup,
   {
     lookupLink(url: string): Effect.Effect<ResolvedPlace | FolderRef, PlaceLookupError>;
-    lookupFolder(shareId: string): Effect.Effect<FolderResult, PlaceLookupError>;
+    /** `fresh`면 서버의 10분 엣지 캐시를 건너뛰고 새로 받는다(새 결과는 같은 캐시 키에 저장된다). */
+    lookupFolder(
+      shareId: string,
+      options?: { fresh?: boolean },
+    ): Effect.Effect<FolderResult, PlaceLookupError>;
   }
 >()('tripmap/PlaceLookup') {
   static layerWith(options: { fetch: typeof fetch; base?: string }) {
@@ -91,8 +95,12 @@ export class PlaceLookup extends Context.Service<
       return yield* new PlaceLookupError({ code: 'UPSTREAM_ERROR' });
     });
 
-    const lookupFolder = Effect.fnUntraced(function* (shareId: string) {
-      const body = yield* request(`/api/naver-folder?share=${encodeURIComponent(shareId)}`);
+    const lookupFolder = Effect.fnUntraced(function* (
+      shareId: string,
+      folderOptions?: { fresh?: boolean },
+    ) {
+      const fresh = folderOptions?.fresh === true ? '&fresh=1' : '';
+      const body = yield* request(`/api/naver-folder?share=${encodeURIComponent(shareId)}${fresh}`);
       if (isObject(body) && typeof body.folderName === 'string' && Array.isArray(body.places)) {
         return body as unknown as FolderResult;
       }

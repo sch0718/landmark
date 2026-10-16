@@ -7,13 +7,17 @@ import {
   LABEL_NAME_RANGE_MESSAGE,
   labelNameIssue,
   LIBRARY_LIMITS,
+  LabelSchema,
   LibrarySchema,
   normalizeLabelName,
+  PlaceSchema,
+  type FolderLink,
   type Label,
   type Library,
   type Place,
 } from 'src/schema/library';
 import { safeParse } from 'src/schema/parse';
+import { TripSchema } from 'src/schema/trip';
 
 const T = '2026-10-08T01:00:00.000Z';
 const f = <V>(value: V) => ({ value, updatedAt: T });
@@ -233,6 +237,8 @@ describe('constants', () => {
       tripMaxDays: 30,
       stopNoteChars: 500,
       stayMaxMin: 1440,
+      folderNameChars: 100,
+      folderSids: 1000,
     });
   });
 });
@@ -260,5 +266,111 @@ describe('labelNameIssue', () => {
 describe('LABEL_NAME_RANGE_MESSAGE', () => {
   it('states the 1 to max range', () => {
     expect(LABEL_NAME_RANGE_MESSAGE).toBe('1–30자로 입력하세요');
+  });
+});
+
+describe('LibrarySchema folders', () => {
+  function folder(labelId: string, over: Partial<FolderLink> = {}): FolderLink {
+    return {
+      shareId: 'fb65e7f93f8a4144a4ded594d604a7aa',
+      name: f('속초, 고성, 양양 맛집'),
+      labelId: f(labelId),
+      seenSids: f<string[]>(['1001', '1002']),
+      checkedAt: T,
+      createdAt: T,
+      deletedAt: null,
+      ...over,
+    };
+  }
+  /** 키를 `shareId`로 맞춘 `folders` 컬렉션. */
+  const folders = (...links: FolderLink[]) => ({
+    folders: Object.fromEntries(links.map((k) => [k.shareId, k])),
+  });
+
+  it('accepts a library without folders, with empty folders, and with a live link', () => {
+    const l = label('속초');
+    expect(safeParse(LibrarySchema, lib([], [l])).success).toBe(true);
+    expect(safeParse(LibrarySchema, lib([], [l], { folders: {} })).success).toBe(true);
+    expect(safeParse(LibrarySchema, lib([], [l], folders(folder(l.id)))).success).toBe(true);
+  });
+
+  it('round-trips a link through encode', () => {
+    const l = label('속초');
+    const input = lib([], [l], folders(folder(l.id)));
+    const decoded = safeParse(LibrarySchema, input);
+    expect(decoded.success).toBe(true);
+    if (decoded.success) expect(Schema.encodeSync(LibrarySchema)(decoded.data)).toEqual(input);
+  });
+
+  it('rejects a key that differs from shareId', () => {
+    const l = label('속초');
+    const link = folder(l.id);
+    const r = safeParse(LibrarySchema, lib([], [l], { folders: { abc123: link } }));
+    expect(r.success).toBe(false);
+    if (!r.success) {
+      expect(r.issues).toContainEqual({
+        path: 'folders.abc123',
+        message: '키와 id가 다릅니다: abc123',
+      });
+    }
+  });
+
+  it('rejects a live link pointing to a missing or deleted label', () => {
+    const l = label('속초');
+    const missing = folder('zzzzzzzz');
+    expect(messages(lib([], [l], folders(missing)))).toContain('없는 라벨입니다: zzzzzzzz');
+    const gone = label('지움', { deletedAt: T });
+    const bad = safeParse(LibrarySchema, lib([], [l, gone], folders(folder(gone.id))));
+    expect(bad.success).toBe(false);
+    if (!bad.success)
+      expect(bad.issues.map((i) => i.path)).toContain(`folders.${folder(l.id).shareId}`);
+  });
+
+  it('accepts a deleted link even when its label is missing or deleted', () => {
+    const gone = label('지움', { deletedAt: T });
+    const dead = folder(gone.id, { deletedAt: T });
+    expect(safeParse(LibrarySchema, lib([], [gone], folders(dead))).success).toBe(true);
+    const nowhere = folder('zzzzzzzz', { deletedAt: T });
+    expect(safeParse(LibrarySchema, lib([], [], folders(nowhere))).success).toBe(true);
+  });
+
+  it('enforces the name length limit', () => {
+    const l = label('속초');
+    const ok = folder(l.id, { name: f('가'.repeat(LIBRARY_LIMITS.folderNameChars)) });
+    expect(safeParse(LibrarySchema, lib([], [l], folders(ok))).success).toBe(true);
+    const long = folder(l.id, { name: f('가'.repeat(LIBRARY_LIMITS.folderNameChars + 1)) });
+    expect(safeParse(LibrarySchema, lib([], [l], folders(long))).success).toBe(false);
+  });
+
+  it('enforces the seenSids count limit and the digit-only pattern', () => {
+    const l = label('속초');
+    const sids = (n: number) => Array.from({ length: n }, (_, i) => String(i + 1));
+    const ok = folder(l.id, { seenSids: f(sids(LIBRARY_LIMITS.folderSids)) });
+    expect(safeParse(LibrarySchema, lib([], [l], folders(ok))).success).toBe(true);
+    const many = folder(l.id, { seenSids: f(sids(LIBRARY_LIMITS.folderSids + 1)) });
+    expect(safeParse(LibrarySchema, lib([], [l], folders(many))).success).toBe(false);
+    const alpha = folder(l.id, { seenSids: f(['12a']) });
+    expect(safeParse(LibrarySchema, lib([], [l], folders(alpha))).success).toBe(false);
+  });
+
+  it('rejects a shareId that is not alphanumeric', () => {
+    const l = label('속초');
+    const bad = folder(l.id, { shareId: 'ab-c' });
+    expect(safeParse(LibrarySchema, lib([], [l], folders(bad))).success).toBe(false);
+  });
+
+  it('is read by the old shape (no folders) and the key is dropped', () => {
+    // 옛 버전의 `LibraryStore`는 `folders`를 모르는 구조체로 `safeParse`한다. 모르는 키는 기본값
+    // `onExcessProperty: "ignore"`로 떼어 낸 채 읽고 다시 쓴다(스펙 §5.3).
+    const OldLibrarySchema = Schema.Struct({
+      schemaVersion: Schema.Literal(2),
+      places: Schema.Record(Schema.String, PlaceSchema),
+      labels: Schema.Record(Schema.String, LabelSchema),
+      trips: Schema.Record(Schema.String, TripSchema),
+    });
+    const l = label('속초');
+    const r = safeParse(OldLibrarySchema, lib([], [l], folders(folder(l.id))));
+    expect(r.success).toBe(true);
+    if (r.success) expect('folders' in r.data).toBe(false);
   });
 });

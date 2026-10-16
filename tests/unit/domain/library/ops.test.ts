@@ -25,6 +25,7 @@ import {
   emptyLibrary,
   LABEL_COLORS,
   LibrarySchema,
+  type FolderLink,
   type Label,
   type Library,
   type Place,
@@ -464,5 +465,61 @@ describe('label ops', () => {
       ok: false,
       error: { _tag: 'NotFound', id: 'nope000000' },
     });
+  });
+});
+
+describe('folder links follow label delete/merge', () => {
+  const S1 = 'share1';
+  const S2 = 'share2';
+  const S3 = 'share3';
+  const folderLink = (
+    shareId: string,
+    labelId: string,
+    over: Partial<FolderLink> = {},
+  ): FolderLink => ({
+    shareId,
+    name: f('폴더'),
+    labelId: f(labelId),
+    seenSids: f<string[]>(['1']),
+    checkedAt: T0,
+    createdAt: T0,
+    deletedAt: null,
+    ...over,
+  });
+  const withFolders = (l: Library, links: FolderLink[]): Library => ({
+    ...l,
+    folders: Object.fromEntries(links.map((x) => [x.shareId, x])),
+  });
+  const base = () =>
+    withFolders(lib([place(P1, { labels: [A] })], [label(A, '맛집', 0), label(B, '카페', 1)]), [
+      folderLink(S1, A),
+      folderLink(S2, B),
+      folderLink(S3, A, { deletedAt: T0 }),
+    ]);
+
+  it('deleteLabel unlinks only that label links', () => {
+    const l = base();
+    const r = deleteLabel(l, A, ctx);
+    expect(r.folders![S1]!.deletedAt).toBe(NOW);
+    expect(r.folders![S2]).toBe(l.folders![S2]);
+    // 이미 지운 연결은 처음 지운 시각 그대로다.
+    expect(r.folders![S3]).toBe(l.folders![S3]);
+    expect(valid(r)).toBe(true);
+  });
+
+  it('mergeLabels moves links to the into-label', () => {
+    const l = base();
+    const r = mergeLabels(l, A, B, ctx);
+    expect(r.folders![S1]!.labelId).toEqual({ value: B, updatedAt: NOW });
+    expect(r.folders![S1]!.deletedAt).toBeNull();
+    expect(r.folders![S2]).toBe(l.folders![S2]);
+    expect(r.folders![S3]).toBe(l.folders![S3]);
+    expect(valid(r)).toBe(true);
+  });
+
+  it('does not create a folders key on documents without one', () => {
+    const l = lib([place(P1, { labels: [A] })], [label(A, '맛집', 0), label(B, '카페', 1)]);
+    expect('folders' in deleteLabel(l, A, ctx)).toBe(false);
+    expect('folders' in mergeLabels(l, A, B, ctx)).toBe(false);
   });
 });

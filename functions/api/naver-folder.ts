@@ -1,4 +1,5 @@
-// GET /api/naver-folder?share=<공유 ID> → 폴더 이름과 장소 목록(최대 1,000곳).
+// GET /api/naver-folder?share=<공유 ID>[&fresh=1] → 폴더 이름과 장소 목록(최대 1,000곳).
+// `fresh=1`(다시 가져오기)은 엣지 캐시를 보지 않고 새로 받는다. 캐시 키에는 넣지 않아 새 결과가 보통 요청에도 쓰인다.
 // wrangler(esbuild)에는 `src/` 별칭이 없어 상대 경로로 가져온다.
 import { ApiError } from '../../src/server/http';
 import { cacheKey } from '../../src/server/cache-key';
@@ -16,5 +17,6 @@ export const onRequestGet = (ctx: FunctionContext): Promise<Response> =>
     },
     maxAgeSeconds: TEN_MINUTES_SECONDS,
     cacheKey: (input) => cacheKey('folder', input),
+    bypassCache: (url) => url.searchParams.get('fresh') === '1',
     resolve: (input) => resolveFolder(input, { fetch: globalFetch }),
   });

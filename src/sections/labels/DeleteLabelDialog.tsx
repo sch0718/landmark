@@ -10,18 +10,20 @@ type Props = {
   label: Label;
   /** 이 라벨이 붙은 (살아 있는) 장소 수. */
   placeCount: number;
+  /** 이 라벨에 연결된 (살아 있는) 네이버 폴더가 있는가. 있으면 지울 때 연결도 끊긴다고 알린다. */
+  hasFolders: boolean;
   onCancel(): void;
   onConfirm(): void;
 };
 
 /** 라벨 삭제 확인. 영향받는 장소 수를 보여 준다. 장소는 지워지지 않는다. */
-export function DeleteLabelDialog({ label, placeCount, onCancel, onConfirm }: Props) {
+export function DeleteLabelDialog({ label, placeCount, hasFolders, onCancel, onConfirm }: Props) {
   return (
     <Dialog open onClose={onCancel} aria-labelledby="delete-label-title">
       <DialogTitle id="delete-label-title">라벨 지우기</DialogTitle>
       <DialogContent>
         <DialogContentText>
-          {`‘${label.name.value}’ 라벨을 지울까요? 장소 ${placeCount}곳에서 이 라벨이 빠져요. 장소는 지워지지 않아요.`}
+          {`‘${label.name.value}’ 라벨을 지울까요? 장소 ${placeCount}곳에서 이 라벨이 빠져요. 장소는 지워지지 않아요.${hasFolders ? ' 연결된 네이버 폴더도 끊겨요.' : ''}`}
         </DialogContentText>
       </DialogContent>
       <DialogActions>
