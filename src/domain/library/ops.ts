@@ -5,6 +5,7 @@ import {
   LABEL_COLORS,
   LIBRARY_LIMITS,
   normalizeLabelName,
+  type FolderLink,
   type Label,
   LabelColor,
   LabelIcon,
@@ -372,6 +373,25 @@ function rewritePlaceLabels(lib: Library, from: string, into: string | null, ctx
   });
 }
 
+/**
+ * 살아 있는 폴더 연결 중 `from` 라벨에 붙은 것을 `into`로 옮기거나(`into` 없으면 끊는다).
+ * `folders` 키가 없는 문서는 그대로 둔다. `folder-links.ts`는 첫 화면 번들에 넣지 않으려고 import하지 않는다.
+ */
+function relinkFolders(lib: Library, from: string, into: string | null, ctx: OpCtx): Library {
+  if (lib.folders === undefined) return lib;
+  const changed: Record<string, FolderLink> = {};
+  for (const [key, link] of Object.entries(lib.folders)) {
+    if (link.deletedAt !== null || link.labelId.value !== from) continue;
+    changed[key] =
+      into === null
+        ? { ...link, deletedAt: ctx.now }
+        : { ...link, labelId: setField(link.labelId, into, ctx.now) };
+  }
+  return Object.keys(changed).length === 0
+    ? lib
+    : { ...lib, folders: { ...lib.folders, ...changed } };
+}
+
 function tombstoneLabel(lib: Library, labelId: string, ctx: OpCtx): Library {
   return withLabels(lib, { [labelId]: { ...lib.labels[labelId]!, deletedAt: ctx.now } });
 }
@@ -380,7 +400,8 @@ function tombstoneLabel(lib: Library, labelId: string, ctx: OpCtx): Library {
 export function deleteLabel(lib: Library, labelId: string, ctx: OpCtx): Library {
   const label = lib.labels[labelId];
   if (label === undefined || label.deletedAt !== null) return lib;
-  return tombstoneLabel(rewritePlaceLabels(lib, labelId, null, ctx), labelId, ctx);
+  const relinked = relinkFolders(lib, labelId, null, ctx);
+  return tombstoneLabel(rewritePlaceLabels(relinked, labelId, null, ctx), labelId, ctx);
 }
 
 /** `from`이 붙은 장소에 `into`를 한 번만 붙이고 `from`을 지운다. */
@@ -390,7 +411,8 @@ export function mergeLabels(lib: Library, fromId: string, intoId: string, ctx: O
   if (fromId === intoId) return lib;
   if (from === undefined || from.deletedAt !== null) return lib;
   if (into === undefined || into.deletedAt !== null) return lib;
-  return tombstoneLabel(rewritePlaceLabels(lib, fromId, intoId, ctx), fromId, ctx);
+  const relinked = relinkFolders(lib, fromId, intoId, ctx);
+  return tombstoneLabel(rewritePlaceLabels(relinked, fromId, intoId, ctx), fromId, ctx);
 }
 
 /**
