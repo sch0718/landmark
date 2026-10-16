@@ -34,12 +34,13 @@ export function NoticeBand({ children, action }: { children: ReactNode; action?:
   );
 }
 
-/** 기간 밖 띠의 문구(스펙 §4.2). 기간 안이면 null. */
+/** 기간 밖 띠의 문구(스펙 §4.2). 시작 전이면 지금 보는 Day를 미리 보인다고 말한다. 기간 안이면 null. */
 function periodNotice(model: TodayModel, trip: Trip): string | null {
   const { status } = model;
   if (status.kind === 'before') {
     const when = status.daysUntil <= 1 ? '내일' : `${status.daysUntil}일 뒤`;
-    return `여행은 ${when}(${shortDate(trip.startDate.value)}) 시작해요. Day 1을 미리 보여 드려요`;
+    const dayName = `Day ${model.dayIndex + 1}`;
+    return `여행은 ${when}(${shortDate(trip.startDate.value)}) 시작해요. ${dayName}${objectParticle(dayName)} 미리 보여 드려요`;
   }
   if (status.kind === 'after') {
     return `여행이 끝났어요(${shortDate(trip.endDate.value)}). 마지막 Day를 보여 드려요`;

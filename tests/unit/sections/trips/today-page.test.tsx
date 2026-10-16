@@ -204,6 +204,18 @@ describe('당일 모드: 다른 Day·기간 밖', () => {
     expect(cardTitle()).toHaveTextContent('중앙시장 닭강정');
   });
 
+  it('`오늘로`를 누르면 띠와 함께 버튼이 사라지므로 포커스는 다음 장소 카드로', async () => {
+    await renderToday(lib());
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: '오늘 일정 메뉴' }));
+    await user.click(screen.getByRole('menuitemradio', { name: 'Day 2 · 10.25(일)' }));
+    screen.getByRole('button', { name: '오늘로' }).focus();
+    await user.keyboard('{Enter}');
+    expect(screen.queryByRole('button', { name: '오늘로' })).toBeNull();
+    await waitFor(() => expect(nextCard()).toHaveFocus());
+    expect(cardTitle()).toHaveTextContent('중앙시장 닭강정');
+  });
+
   it('시작 전날에는 Day 1을 미리 보이고 띠로 알린다', async () => {
     vi.setSystemTime(new Date(2026, 9, 23, 12, 0));
     await renderToday(lib());
@@ -211,6 +223,19 @@ describe('당일 모드: 다른 Day·기간 밖', () => {
       screen.getByText('여행은 내일(10.24(토)) 시작해요. Day 1을 미리 보여 드려요'),
     ).toBeInTheDocument();
     expect(subtitle('강릉 여행 · Day 1 · 10.24(토)')).toBeInTheDocument();
+  });
+
+  it('시작 전에 다른 Day를 보면 띠는 그 Day를 미리 보인다고 말한다', async () => {
+    vi.setSystemTime(new Date(2026, 9, 23, 12, 0));
+    await renderToday(lib());
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: '오늘 일정 메뉴' }));
+    await user.click(screen.getByRole('menuitemradio', { name: 'Day 2 · 10.25(일)' }));
+    expect(
+      screen.getByText('여행은 내일(10.24(토)) 시작해요. Day 2를 미리 보여 드려요'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Day 1을 미리/)).not.toBeInTheDocument();
+    expect(subtitle('강릉 여행 · Day 2 · 10.25(일)')).toBeInTheDocument();
   });
 
   it('며칠 전이면 `N일 뒤`', async () => {
@@ -477,6 +502,33 @@ describe('당일 모드: 다녀옴 체크', () => {
     expect(screen.getByRole('button', { name: '다녀온 곳 1곳' })).toBeInTheDocument();
   });
 
+  it('토스트의 되돌리기 뒤 포커스가 body면(토스트가 닫힘) 다음 장소 카드로', async () => {
+    const { storage } = await renderToday(lib());
+    const user = userEvent.setup();
+    await user.click(checkbox('중앙시장 닭강정'));
+    await waitFor(() => expect(storedVisited(storage, P1)).toBe('2026-10-24'));
+    // 토스트의 `되돌리기`를 누르면 토스트가 닫히며 그 버튼과 함께 포커스가 사라진다.
+    (document.activeElement as HTMLElement | null)?.blur();
+    expect(document.activeElement).toBe(document.body);
+    await undoToast('‘중앙시장 닭강정’ 다녀옴으로 표시했어요');
+    await waitFor(() => expect(storedVisited(storage, P1)).toBeNull());
+    await waitFor(() => expect(nextCard()).toHaveFocus());
+    expect(cardTitle()).toHaveTextContent('중앙시장 닭강정');
+  });
+
+  it('토스트의 되돌리기 뒤 포커스가 다른 곳에 있으면 옮기지 않는다', async () => {
+    const { storage } = await renderToday(lib());
+    const user = userEvent.setup();
+    await user.click(checkbox('중앙시장 닭강정'));
+    await waitFor(() => expect(storedVisited(storage, P1)).toBe('2026-10-24'));
+    const menuButton = screen.getByRole('button', { name: '오늘 일정 메뉴' });
+    menuButton.focus();
+    await undoToast('‘중앙시장 닭강정’ 다녀옴으로 표시했어요');
+    await waitFor(() => expect(storedVisited(storage, P1)).toBeNull());
+    await waitFor(() => expect(cardTitle()).toHaveTextContent('중앙시장 닭강정'));
+    expect(menuButton).toHaveFocus();
+  });
+
   it('되돌리기 전에 다른 곳이 값을 바꿨으면 바꾸지 않고 알린다', async () => {
     const { store, storage } = await renderToday(withVisited(lib(), P1, '2025-05-01'));
     const user = userEvent.setup();
@@ -496,6 +548,8 @@ describe('당일 모드: 다녀옴 체크', () => {
 
 describe('당일 모드: 체크 뒤 포커스', () => {
   const checkbox = (name: string) => screen.getByRole('checkbox', { name: `‘${name}’ 다녀옴` });
+  const storedVisited = (storage: Storage, id: string) =>
+    visitedOnOf((JSON.parse(storage.getItem(LIBRARY_KEY)!) as Library).places[id]!);
 
   it('키보드로 남은 일정 1번을 체크하면 포커스는 새 1번 행의 상자로', async () => {
     await renderToday(lib({ stops: [[P1, P2, P5]] }));
@@ -534,6 +588,59 @@ describe('당일 모드: 체크 뒤 포커스', () => {
     await waitFor(() => expect(screen.queryByRole('list', { name: '다녀온 곳' })).toBeNull());
     expect(document.activeElement).not.toBe(document.body);
     expect(nextCard()).toHaveFocus();
+  });
+
+  it('남은 일정의 마지막 행을 체크했는데 행이 남으면 포커스는 새 마지막 행의 상자로', async () => {
+    await renderToday(lib({ stops: [[P1, P2, P5]] }));
+    const user = userEvent.setup();
+    checkbox('창가 자리').focus();
+    await user.keyboard(' ');
+    await waitFor(() => expect(checkbox('안목 카페거리')).toHaveFocus());
+    expect(remainingRows()).toHaveLength(2);
+  });
+
+  it('저장 중에 다녀온 곳이 접혀 상자가 없으면 포커스는 `다녀온 곳 N곳` 버튼으로', async () => {
+    const slow = slowLocks();
+    const { storage } = await renderToday(
+      withVisited(withVisited(lib(), P1, '2026-10-24'), P2, '2026-10-24'),
+      { libraryLocks: slow.locks },
+    );
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: '다녀온 곳 2곳' }));
+    slow.hold();
+    const box = within(screen.getByRole('list', { name: '다녀온 곳' })).getByRole('checkbox', {
+      name: '‘중앙시장 닭강정’ 다녀옴',
+    });
+    box.focus();
+    act(() => void fireEvent.click(box));
+    // 저장하는 동안 손가락으로 접는다(탭은 버튼에 포커스를 주지 않는다). 상자와 함께 포커스가 사라진다.
+    act(() => void fireEvent.click(screen.getByRole('button', { name: '다녀온 곳 2곳' })));
+    expect(screen.queryByRole('list', { name: '다녀온 곳' })).toBeNull();
+    expect(document.activeElement).toBe(document.body);
+
+    await act(async () => slow.release());
+    await waitFor(() => expect(storedVisited(storage, P1)).toBeNull());
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: '다녀온 곳 1곳' })).toHaveFocus(),
+    );
+  });
+
+  it('저장 중에 사람이 포커스를 다른 곳으로 옮겼으면 빼앗지 않는다', async () => {
+    const slow = slowLocks();
+    const { storage } = await renderToday(lib({ stops: [[P1, P2, P5]] }), {
+      libraryLocks: slow.locks,
+    });
+    slow.hold();
+    const box = checkbox('중앙시장 닭강정');
+    box.focus();
+    act(() => void fireEvent.click(box));
+    const menuButton = screen.getByRole('button', { name: '오늘 일정 메뉴' });
+    menuButton.focus();
+
+    await act(async () => slow.release());
+    await waitFor(() => expect(storedVisited(storage, P1)).toBe('2026-10-24'));
+    await waitFor(() => expect(remainingRows()).toHaveLength(2));
+    expect(menuButton).toHaveFocus();
   });
 
   it('카드의 `다녀옴` 뒤에는 카드로', async () => {

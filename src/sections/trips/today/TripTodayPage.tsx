@@ -55,7 +55,7 @@ function NotFound() {
   );
 }
 
-/** 체크·풀기가 끝난 뒤 포커스를 둘 곳. `index`는 누른 상자가 그 목록에서 있던 자리. */
+/** 체크·풀기(또는 스스로 사라지는 버튼) 뒤 포커스를 둘 곳. `index`는 누른 상자가 그 목록에서 있던 자리. */
 type CheckFocus = { from: 'remaining' | 'visited'; index: number } | { from: 'card' };
 
 /**
@@ -99,15 +99,24 @@ function Today({ trip }: { trip: Trip }) {
   // 내 위치는 이 화면 상태로만 둔다(보이는 동안만 지켜봄). 받은 지 2분이 지난 위치는 `useToday`가 버린다.
   const location = useMyLocation();
   const model = useToday(trip, viewDay, lastFixOf(location.state));
-  const visit = useVisitToggle();
   // 화면 켜 두기·오프라인 안내(스펙 §4.9·§4.10)는 머리·띠의 슬롯으로만 끼운다.
   const wake = useWakeLock();
   const online = useOnline();
   const paneRef = useRef<HTMLElement>(null);
   const cardRef = useRef<HTMLElement>(null);
-  // 체크가 끝난 뒤 옮길 포커스. 바뀐 목록이 그려진 다음(effect)에 옮긴다. `from`은 누른 때 포커스가 있던 요소.
+  // 체크(또는 스스로 사라지는 버튼) 뒤 옮길 포커스. 바뀐 목록이 그려진 다음(effect)에 옮긴다. `from`은 누른 때
+  // 포커스가 있던 요소.
   const checkFocus = useRef<{ target: CheckFocus; from: Element | null } | null>(null);
   const [checkFocusTick, setCheckFocusTick] = useState(0);
+  const focusLater = (target: CheckFocus, from: Element | null) => {
+    checkFocus.current = { target, from };
+    setCheckFocusTick((n) => n + 1);
+  };
+  /**
+   * 누른 버튼이 띠와 함께 사라질 때(`내 위치 켜기`·`다시 시도`·`오늘로`) 다음에 그린 뒤 포커스를 카드로 옮긴다.
+   * `from`이 null이면(토스트) 포커스가 `body`로 떨어졌을 때만 옮긴다.
+   */
+  const focusCardLater = (from: Element | null) => focusLater({ from: 'card' }, from);
   useEffect(() => {
     const want = checkFocus.current;
     if (want === null) return;
@@ -119,6 +128,8 @@ function Today({ trip }: { trip: Trip }) {
       focusAfterCheck(paneRef.current, cardRef.current, want.target);
     }
   }, [checkFocusTick]);
+  // 토스트의 `되돌리기`는 토스트와 함께 사라진다. 포커스가 `body`로 떨어졌을 때만 카드로 옮긴다.
+  const visit = useVisitToggle({ onUndone: () => focusCardLater(null) });
 
   // 고른 Stop이 지워졌거나(다른 탭) 그날에서 빠졌으면 다음 장소로 돌아간다. 다음 장소를 고르면 `다음`으로 보인다.
   const found = model.stops.findIndex((s) => s.stop.id === selectedStopId);
@@ -131,10 +142,13 @@ function Today({ trip }: { trip: Trip }) {
     setSelectedStopId(null);
     setFocusRequest(null);
   };
+  // `오늘로`: 오늘 Day로 돌아가면 그 띠와 버튼이 사라지므로 포커스는 카드로.
   const toToday = () => {
+    const from = document.activeElement;
     setViewDay(null);
     setSelectedStopId(null);
     setFocusRequest(null);
+    focusCardLater(from);
   };
   const focusOn = (placeId: string | null) => {
     if (placeId === null) return;
@@ -164,8 +178,13 @@ function Today({ trip }: { trip: Trip }) {
     const done = await visit.toggle(item.place, next, model.date);
     if (!done) return;
     if (next) setSelectedStopId((id) => (id === item.stop.id ? null : id));
-    checkFocus.current = { target, from };
-    setCheckFocusTick((n) => n + 1);
+    focusLater(target, from);
+  };
+  // `내 위치 켜기`·`다시 시도`: 감시를 걸면 위치 띠와 버튼이 사라지므로 포커스는 카드로.
+  const locate = () => {
+    const from = document.activeElement;
+    location.start();
+    focusCardLater(from);
   };
   const { stops } = model;
   const pickPlace = useCallback(
@@ -242,7 +261,7 @@ function Today({ trip }: { trip: Trip }) {
         trip={trip}
         onToday={toToday}
         location={location.state}
-        onLocate={location.start}
+        onLocate={locate}
       >
         {(!online || model.plan.offline) && <NoticeBand>{OFFLINE_NOTICE}</NoticeBand>}
       </TodayNotices>

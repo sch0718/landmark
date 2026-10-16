@@ -114,6 +114,14 @@ describe('당일 모드 내 위치: 켜는 때', () => {
     expect(screen.queryByText(OFF_TEXT)).toBeNull();
   });
 
+  it('`내 위치 켜기`를 누르면 띠와 함께 버튼이 사라지므로 포커스는 다음 장소 카드로', async () => {
+    await setup();
+    screen.getByRole('button', { name: '내 위치 켜기' }).focus();
+    await userEvent.setup().keyboard('{Enter}');
+    expect(screen.queryByRole('button', { name: '내 위치 켜기' })).toBeNull();
+    await waitFor(() => expect(nextCard()).toHaveFocus());
+  });
+
   it('권한을 조회할 수 없어도 `내 위치 켜기`', async () => {
     permission = null;
     const { geo } = await setup();
@@ -344,6 +352,16 @@ describe('당일 모드 내 위치: 오류 띠', () => {
     expect(geo.cleared).toEqual([1]);
     expect(geo.watchers.size).toBe(2);
     expect(screen.queryByText(TIMEOUT_TEXT)).toBeNull();
+  });
+
+  it('`다시 시도`를 누르면 띠와 함께 버튼이 사라지므로 포커스는 다음 장소 카드로', async () => {
+    const { geo } = await setup();
+    await waitFor(() => expect(geo.watchers.size).toBe(1));
+    emitError(geo, 2);
+    screen.getByRole('button', { name: '다시 시도' }).focus();
+    await userEvent.setup().keyboard('{Enter}');
+    expect(screen.queryByRole('button', { name: '다시 시도' })).toBeNull();
+    await waitFor(() => expect(nextCard()).toHaveFocus());
   });
 
   it('위치를 쓸 수 없는 브라우저면 띠·버튼 없음', async () => {

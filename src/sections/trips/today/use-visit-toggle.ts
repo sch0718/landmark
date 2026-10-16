@@ -1,10 +1,15 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { visitedOnOf } from 'src/domain/library/visit';
 import { markVisit, revertVisit } from 'src/domain/trips/today-visit';
 import type { Place } from 'src/schema/library';
 import { MERGED_NOTICE, UNDO_MS } from 'src/sections/trips/planner/use-trip-undo';
 import { useLibraryAction } from 'src/stores/library-state';
+
+type Options = {
+  /** 토스트의 `되돌리기`가 끝났다(바꿨든 아니든). 화면이 포커스를 되살릴 때 쓴다. */
+  onUndone?: () => void;
+};
 
 /**
  * 당일 모드의 다녀옴 체크·풀기(스펙 §4.4·§5.7). `next`가 참이면 `date`(오늘 Day의 날짜), 거짓이면 `null`을 쓴다.
@@ -17,11 +22,16 @@ import { useLibraryAction } from 'src/stores/library-state';
  *
  * `toggle`은 값을 썼으면(바뀐 것이 없어도) 참, 저장 중이라 무시했거나 실패했으면 거짓으로 끝난다.
  */
-export function useVisitToggle(): {
+export function useVisitToggle(options: Options = {}): {
   toggle(place: Place, next: boolean, date: string): Promise<boolean>;
   pending: ReadonlySet<string>;
 } {
   const { run } = useLibraryAction();
+  // 토스트는 8초 동안 남으므로 그때의 콜백을 부른다. 콜백이 바뀌어도 `undo`·`toggle`은 그대로다.
+  const onUndone = useRef(options.onUndone);
+  useEffect(() => {
+    onUndone.current = options.onUndone;
+  });
   // 렌더를 기다리지 않고 바로 막도록 진행 중인 id는 ref에, `aria-disabled` 표시에 쓰는 사본은 상태에 둔다.
   const saving = useRef(new Set<string>());
   const [pending, setPending] = useState<ReadonlySet<string>>(() => new Set());
@@ -30,6 +40,7 @@ export function useVisitToggle(): {
     async (placeId: string, written: string | null, previous: string | null) => {
       const result = await run(revertVisit(placeId, written, previous));
       if (result.ok && (result.summary?.merged ?? 0) > 0) toast(MERGED_NOTICE);
+      onUndone.current?.();
     },
     [run],
   );
