@@ -28,6 +28,7 @@
   - 토스트 `백업 파일을 만들었어요`, `백업에서 되살렸어요 (<수 문구>)` + 동작 `되돌리기`(10초), `되살리기 전으로 되돌렸어요`, `되살리기 전 보관함을 지웠어요`.
   - 대화상자 제목 `백업에서 되살리기`. 고르기: `Landmark 백업 파일(.json)을 고르세요. 손상 화면에서 받은 옛 백업 파일도 돼요.`, 버튼 `파일 고르기`, 입력 이름 `백업 파일 선택`, `읽는 중…`. 미리보기: `YYYY.MM.DD HH:mm에 만든 백업` / `만든 날짜를 모르는 옛 백업 파일`, `백업 파일: <수 문구>`, `지금 보관함: <수 문구>` / `지금 보관함: 읽지 못함`, `지금 보관함은 지워지고 이 백업 내용으로 바뀌어요.`, `테마·보기 설정도 백업 때로 돌아가요. 보관함 필터는 풀어요.`, `이 백업에는 이 버전이 모르는 정보가 있어요. 되살리면 그 정보는 빠져요. 앱을 새로 고친 뒤 되살리는 것이 좋아요.`, `지금 보관함과 같은 내용이에요`, 버튼 `취소`·`지금 보관함 먼저 받기`·`이 백업으로 바꾸기`.
   - 공간 부족: `저장 공간이 부족해 지금 보관함을 기기에 남겨 둘 수 없어요. 먼저 '지금 보관함 먼저 받기'로 파일을 받은 뒤 바꿔 주세요` / 손상 화면 `저장 공간이 부족해 지금 데이터를 남겨 둘 수 없어요. 먼저 '백업 파일 받기'로 받아 주세요`.
+  - 먼저 받은 뒤 바뀜(사본도 못 남김, 스펙 §2.3·§5): `그사이 보관함이 바뀌었어요. '지금 보관함 먼저 받기'로 다시 받은 뒤 바꿔 주세요` / 손상 화면 `그사이 데이터가 바뀌었어요. '백업 파일 받기'로 다시 받아 주세요`.
   - 읽기 오류: `파일이 너무 커요` / `공유 파일이에요. 설정 › 가져오기의 '공유 파일 가져오기'로 넣어 주세요` / `Landmark 백업 파일이 아니에요` / `더 새 버전의 Landmark에서 만든 백업이에요. 앱을 새로 고친 뒤 다시 시도해 주세요` / `백업 파일을 읽지 못했어요. 파일이 손상됐을 수 있어요` / `보관함이 너무 커서 되살릴 수 없어요`.
   - 저장 오류: `저장 공간이 부족해 되살리지 못했어요. 지금 보관함은 그대로예요` / `되살리지 못했어요. 지금 보관함은 그대로예요` / `되돌리지 못했어요` / `공유하지 못했어요. 백업 파일 받기를 이용해 주세요` / `백업 파일을 만들지 못했어요. 새로고침해 주세요`.
   - 알림 띠(이름 `백업 알림`): `아직 백업하지 않았어요. 보관함은 이 기기에만 있어요` / `마지막 백업이 N일 전이에요. 그 뒤로 바뀐 내용이 있어요`, 버튼 `백업 받기`·`나중에`. 손상 화면 새 버튼 `백업 파일로 되살리기`.
@@ -40,7 +41,7 @@
 1. **새 버전이 만든 백업(장소에 F2의 `visitedOn`, 보관함 최상위에 F3의 `folders` 같은 모르는 필드)을 v0.8.0에서 되살림** → 손상으로 보지 않고 되살리며, 미리보기에 모르는 정보 경고. Task 1 시험(`droppedUnknown`)과 Task 5 화면 시험으로 고정.
 2. **저장 공간이 거의 찬 기기에서 되살리기** → 어떤 실패에서도 지금 보관함이 그대로이고, 사본을 못 남기면 바꾸지 않고 먼저 받으라고 안내. Task 2(용량 초과 저장소)·Task 5 시험으로 고정.
 3. **엉뚱한 파일**(손상 화면이 받은 원문, 내보낸 공유 HTML, 아무 JSON, 빈 파일) → 각각 옛 백업으로 되살림 / 공유 파일 안내 / 백업 아님 / 백업 아님. Task 1 시험으로 고정.
-4. **되살리는 사이 다른 탭이 보관함을 고침** → 잠금 안에서 그 최신본이 사본이 되고, 되돌리면 그 상태로. Task 2 시험(`createHeldLocks`)으로 고정.
+4. **되살리는 사이 다른 탭이 보관함을 고침** → 잠금 안에서 그 최신본이 사본이 되고, 되돌리면 그 상태로. Task 2 시험(`createHeldLocks`)으로 고정. 특히 **`지금 보관함 먼저 받기` → 다른 탭이 고침 → 사본 쓰기 실패** 순서에서 그 변경이 어디에도 남지 않은 채 바뀌면 안 된다 → 받은 원문(`savedText`)과 잠금 안 원문이 다르면 사본 필수, 못 남기면 `그사이 보관함이 바뀌었어요…`로 막음. Task 2·5·6 시험으로 고정.
 5. **휴대폰 공유 창을 그냥 닫음(`AbortError`), 또는 받기 중 두 번 누름** → 오류 없음, 마지막 백업 날짜 그대로, 파일은 한 번만. Task 4 시험으로 고정.
 
 ---
@@ -127,19 +128,19 @@
   // src/services/library-store.ts
   export const PREVIOUS_KEY = 'tripmap:library:v2:before-restore';
   // LibraryStore 서비스에 추가 (기존 load·update·changes·resetWithBackup은 그대로)
-  readonly snapshot: Effect.Effect<{ raw: unknown; library: Library }, LibraryCorrupt>;
-  replace(next: Library, options: { requirePrevious: boolean }):
+  readonly snapshot: Effect.Effect<{ raw: unknown; text: string | null; library: Library }, LibraryCorrupt>; // text: 저장소 원문 문자열, 키 없으면 null
+  replace(next: Library, options: { requirePrevious: boolean; savedText?: string | null }):
     Effect.Effect<{ library: Library; previousKept: boolean }, StorageQuotaExceeded | LibraryInvalid | PreviousNotKept>;
   readonly previous: Effect.Effect<{ savedAt: string; library: Library } | null>;
   readonly restorePrevious: Effect.Effect<Library, StorageQuotaExceeded | LibraryInvalid | NoPrevious>;
   readonly dropPrevious: Effect.Effect<void>;
 
   // src/services/errors.ts
-  export class PreviousNotKept extends Schema.TaggedError<PreviousNotKept>()('PreviousNotKept', {}) // userMessage: 일반 화면의 공간 부족 문구
+  export class PreviousNotKept extends Schema.TaggedError<PreviousNotKept>()('PreviousNotKept', { changedSinceSaved: Schema.Boolean }) // userMessage: changedSinceSaved면 일반 화면의 "그사이 보관함이 바뀌었어요" 문구, 아니면 공간 부족 문구
   export class NoPrevious extends Schema.TaggedError<NoPrevious>()('NoPrevious', {})             // userMessage: '되돌리지 못했어요'
   ```
-- `snapshot`: 키 없음 → `{ raw: emptyLibrary(), library: emptyLibrary() }`. 정상 → `raw`는 `JSON.parse(원문)`. 손상 → `failCorruptReadOnly`와 같이 쓰지 않고 `LibraryCorrupt`.
-- `replace`(잠금 안): 스펙 §5 순서. 사본 값은 `JSON.stringify({ format, v: 1, exportedAt: <Clock 시각>, library: <지금 원문 JSON 값> })`. 지금이 정상이고 `hasAnyEntry`면 사본을 쓰고, 항목이 없으면 사본 키를 지운다. 손상이면 `ensureBackup(raw)`(사본은 건드리지 않음). 사본·손상 백업 쓰기의 용량 초과는 `requirePrevious`면 `PreviousNotKept`. 보관함 쓰기 용량 초과면 방금 쓴 사본을 지우고, `requirePrevious`면 `PreviousNotKept`, 아니면 한 번 더 쓴 뒤 실패면 `StorageQuotaExceeded`. 이 경로의 `putItem`은 사본 지우기 단계를 건너뛴다(아래 참고).
+- `snapshot`: 키 없음 → `{ raw: emptyLibrary(), text: null, library: emptyLibrary() }`. 정상 → `text`는 `getItem` 원문 문자열, `raw`는 `JSON.parse(text)`. 손상 → `failCorruptReadOnly`와 같이 쓰지 않고 `LibraryCorrupt`.
+- `replace`(잠금 안): 스펙 §5 순서. 먼저 `current = getItem(LIBRARY_KEY)`를 읽고 `mustKeep = requirePrevious || (savedText !== undefined && savedText !== current)`. 사본 값은 `JSON.stringify({ format, v: 1, exportedAt: <Clock 시각>, library: <지금 원문 JSON 값> })`. 지금이 정상이고 `hasAnyEntry`면 사본을 쓰고, 항목이 없으면 사본 키를 지운다. 손상이면 `ensureBackup(raw)`(사본은 건드리지 않음). 사본·손상 백업 쓰기의 용량 초과는 `mustKeep`이면 `PreviousNotKept({ changedSinceSaved: !requirePrevious })`. 보관함 쓰기 용량 초과면 방금 쓴 사본을 지우고, `mustKeep`이면 같은 `PreviousNotKept`, 아니면 한 번 더 쓴 뒤 실패면 `StorageQuotaExceeded`. 이 경로의 `putItem`은 사본 지우기 단계를 건너뛴다(아래 참고).
 - `putItem`의 용량 초과 대체 순서: 경로 캐시 지우고 다시 → 그래도 넘치면(쓰는 키가 `PREVIOUS_KEY`가 아니고 `replace` 안이 아닐 때) 사본 키 지우고 다시.
 - `previous`: 사본을 `BackupEnvelopeSchema` → `LibrarySchema`로 읽는다. 없거나 읽지 못하면 `null`(지우지 않는다).
 - `restorePrevious`(잠금 안): 사본을 읽어 검증한 보관함을 쓰고 사본을 지운다. 없거나 못 읽으면 `NoPrevious`.
@@ -152,6 +153,7 @@
   - `dropPrevious` → 사본 키 없음. `previous` → `{ savedAt, library }`(`savedAt`은 `Clock` 시각).
   - 일반 `update`: 경로 캐시와 사본이 있고 쓰기가 넘침 → 경로 캐시 먼저 지우고, 그래도 넘치면 사본을 지운 뒤 저장 성공.
   - 잠금: `createHeldLocks`로 잠금을 쥔 채 다른 쪽이 장소를 하나 더한 원문을 써 두고 풀어 줌 → `replace`의 사본이 그 최신 원문.
+  - 받은 뒤 바뀜(Review Focus 4): `snapshot`으로 `text = T0`를 얻음 → 다른 탭처럼 장소를 하나 더한 원문 `T1`을 `LIBRARY_KEY`에 직접 씀 → 사본 쓰기만 넘치는 저장소에서 `replace(next, { requirePrevious: false, savedText: T0 })` → `PreviousNotKept`이고 `changedSinceSaved: true`, `LIBRARY_KEY`는 `T1` 그대로. 같은 순서에서 사본이 들어가는 저장소 → 바뀜, `previousKept: true`, 사본 `library`가 `T1`의 원문. `savedText: T1`(지금과 같음) + 사본 넘침 → 사본 없이 바뀜, `previousKept: false`. `savedText: null`(연 때 키 없음)인데 지금 키가 있고 사본 넘침 → `PreviousNotKept({ changedSinceSaved: true })`. `snapshot.text`는 `getItem` 값과 글자까지 같음.
 - [ ] **Step 2:** `yarn vitest run tests/unit/services/library-store.test.ts` → FAIL
 - [ ] **Step 3:** 구현.
 - [ ] **Step 4:** PASS + `yarn test`(기존 저장소·손상 화면 시험 그대로 통과) + `yarn typecheck`
@@ -230,9 +232,10 @@
     shareable: boolean;
     busy: boolean;
     error: string | null;
-    save(): Promise<boolean>;   // 성공(받기 시작)이면 true
-    share(): Promise<boolean>;  // 공유 완료면 true, AbortError면 false·오류 없음
+    save(): Promise<BackupSaved | null>;   // 성공(받기 시작)이면 받은 원문, 아니면 null
+    share(): Promise<BackupSaved | null>;  // 공유 완료면 받은 원문, AbortError면 null·오류 없음
   };
+  export type BackupSaved = { savedText: string | null }; // 파일에 담은 `snapshot.text`(Task 5가 replace의 savedText로 넘긴다)
   // src/sections/backup/BackupSection.tsx
   export function BackupSection(props: { onRestore(): void }): JSX.Element; // onRestore는 Task 5가 채운다(이 작업에서는 SettingsPage가 아무것도 안 하는 함수를 넘김)
   ```
@@ -266,7 +269,7 @@
   // src/stores/backup-state.ts (추가)
   export type RestoreOutcome = { ok: true; previousKept: boolean; counts: LibraryCounts } | { ok: false; error: unknown };
   export function useRestoreActions(): {
-    replace(backup: ReadBackup, options: { requirePrevious: boolean }): Promise<RestoreOutcome>; // 성공 시 reflectSaved, prefs(query는 structuredClone(DEFAULT_QUERY)), exportedAt이 있으면 markBackedUpAtom(exportedAt)
+    replace(backup: ReadBackup, options: { requirePrevious: boolean; savedText?: string | null }): Promise<RestoreOutcome>; // 성공 시 reflectSaved, prefs(query는 structuredClone(DEFAULT_QUERY)), exportedAt이 있으면 markBackedUpAtom(exportedAt)
     undo(): Promise<boolean>;  // restorePrevious + reflectSaved
     drop(): Promise<void>;
   };
@@ -277,20 +280,22 @@
     open: boolean;
     onClose(): void;
     mode: 'normal' | 'corrupt';
-    /** 손상 화면에서 이미 `백업 파일 받기`를 했는가(그러면 requirePrevious 거짓). */
-    currentSaved?: boolean;
+    /** 손상 화면의 `백업 파일 받기`가 받은 원문. 있으면 requirePrevious 거짓이고 replace의 savedText로 넘긴다. */
+    savedText?: string;
     onRestored?(): void;
   }): JSX.Element;
   // src/sections/backup/RestoreDialogHost.tsx — 같은 props, ExportHtmlDialogHost와 같은 모양(처음 열 때 마운트, 기다림·받기 실패 틀)
   export function RestoreDialogHost(props: Parameters<typeof RestoreDialog>[0]): JSX.Element | null;
   ```
-- `requirePrevious` = `mode === 'normal' ? hasLiveContent(지금) && !이 대화상자에서 받기 성공 : !currentSaved`. `PreviousNotKept`면 모드별 공간 부족 문구, `StorageQuotaExceeded`면 `저장 공간이 부족해 되살리지 못했어요. 지금 보관함은 그대로예요`, 그 밖은 `되살리지 못했어요. 지금 보관함은 그대로예요`. 성공 토스트: `previousKept`면 `toast(…, { action: { label: '되돌리기', onClick }, duration: 10_000 })`. 같은 내용 판정은 `isEqual(backup.library, 지금 libraryAtom)`(`es-toolkit`). 열 때마다 단계·오류·받기 표시를 초기화하고, 닫았다 열면 늦은 읽기·바꾸기 결과를 버린다(실행 번호).
+- `requirePrevious` = `mode === 'normal' ? hasLiveContent(지금) && !이 대화상자에서 받기 성공 : props.savedText === undefined`. `savedText` = 일반 모드는 이 대화상자의 `지금 보관함 먼저 받기`가 돌려준 `BackupSaved.savedText`(다시 받으면 새 값), 받지 않았고 연 때 보관함이 비어 있으면 연 때 `snapshot.text`; 손상 모드는 `props.savedText`. `PreviousNotKept`면 `changedSinceSaved`에 따라 모드별 "그사이 … 바뀌었어요" 문구 또는 모드별 공간 부족 문구, `StorageQuotaExceeded`면 `저장 공간이 부족해 되살리지 못했어요. 지금 보관함은 그대로예요`, 그 밖은 `되살리지 못했어요. 지금 보관함은 그대로예요`. 성공 토스트: `previousKept`면 `toast(…, { action: { label: '되돌리기', onClick }, duration: 10_000 })`. 같은 내용 판정은 `isEqual(backup.library, 지금 libraryAtom)`(`es-toolkit`). 열 때마다 단계·오류·받기 표시를 초기화하고, 닫았다 열면 늦은 읽기·바꾸기 결과를 버린다(실행 번호).
 
 - [ ] **Step 1: 실패하는 시험** (`renderLibrary` 도우미, `readBackupFile`은 실제 함수에 `File` 넘김)
   - 설정 `백업 파일로 되살리기` → 대화상자 `백업에서 되살리기`, 포커스 `파일 고르기`. 공유 HTML 파일 → `공유 파일이에요…` 문구(`role="alert"`), 다시 고를 수 있음.
   - 여행 2개·장소 30곳 백업 파일 → `… 에 만든 백업`, `백업 파일: 장소 30곳 · 라벨 6개 · 여행 2개`, `지금 보관함: …`, 경고 문구, 설정 문구, 포커스 `이 백업으로 바꾸기`. 옛 원문 파일 → `만든 날짜를 모르는 옛 백업 파일`, 설정 문구 없음. `futureField` 든 파일 → 모르는 정보 경고. 지금과 같은 파일 → `지금 보관함과 같은 내용이에요`, 바꾸기 꺼짐.
   - 바꾸기 → 저장소 보관함이 파일 보관함과 `toEqual`, 사본 키 있음, 토스트 `백업에서 되살렸어요 (장소 30곳 · 라벨 6개 · 여행 2개)`와 동작 `되돌리기`, prefs 테마가 파일 값이고 `query`는 기본값, `tripmap:backup:v1`의 `lastBackupAt`이 파일 `exportedAt`. 토스트 동작을 불러 되돌리기 → 원래 보관함, 토스트 `되살리기 전으로 되돌렸어요`.
   - 사본 쓰기가 넘치는 저장소 → 바꾸기 → 공간 부족 문구, 보관함 그대로. `지금 보관함 먼저 받기`(`downloadText` 불림) 뒤 바꾸기 → 바뀜, 토스트에 동작 없음.
+  - 먼저 받기 → 다른 탭이 고침 → 사본 실패(Review Focus 4): 사본 쓰기가 넘치는 저장소, 장소 2곳 → 미리보기 → `지금 보관함 먼저 받기` → 다른 탭처럼 장소를 하나 더한 원문을 `LIBRARY_KEY`에 직접 씀 → `이 백업으로 바꾸기` → `그사이 보관함이 바뀌었어요. '지금 보관함 먼저 받기'로 다시 받은 뒤 바꿔 주세요`(`role="alert"`), 저장소 보관함은 다른 탭이 쓴 원문 그대로. 다시 받지 않고 한 번 더 누름 → 같은 문구. `지금 보관함 먼저 받기`(두 번째 `downloadText`의 텍스트를 `readBackupText`하면 장소 3곳) → 바꾸기 → 바뀜, 토스트에 동작 없음.
+  - 빈 보관함으로 열었는데 그사이 다른 탭이 장소를 넣음 + 사본 넘침 → 같은 문구, 보관함 그대로.
   - 빈 보관함 → `지금 보관함 먼저 받기` 없음, 바로 바뀜.
   - 설정 사본 줄: 바꾼 뒤 `되살리기 전 보관함이 남아 있어요 (… · 장소 …)`, `지우기` → 줄 사라짐·토스트, `되살리기 전으로 되돌리기` → 원래 보관함.
   - 단위 나누기: `loadRestoreDialog`가 `PANEL_CHUNKS`에 있음(기존 lazy 시험 방식).
@@ -308,10 +313,10 @@
 - Test: `tests/unit/sections/shell/corrupt-screen.test.tsx`
 
 **Interfaces:**
-- Consumes: Task 5 `RestoreDialogHost`(`mode: 'corrupt'`, `currentSaved`, `onRestored`).
-- Produces: 없음. 버튼 순서 `백업 파일 받기` · `백업 파일로 되살리기` · `새로 시작`. `백업 파일 받기`가 성공하면 `currentSaved`를 참으로. `onRestored`는 기존 `onRecovered`.
+- Consumes: Task 5 `RestoreDialogHost`(`mode: 'corrupt'`, `savedText`, `onRestored`).
+- Produces: 없음. 버튼 순서 `백업 파일 받기` · `백업 파일로 되살리기` · `새로 시작`. `백업 파일 받기`가 성공하면 그때 내려받은 원문(`readBackupText(error.backupKey)`의 값)을 상태에 두고 `savedText`로 넘긴다(다시 받으면 새 값). `onRestored`는 기존 `onRecovered`.
 
-- [ ] **Step 1: 실패하는 시험**: 손상 원문을 둔 셸 → `백업 파일로 되살리기` → 백업 파일 → 미리보기 `지금 보관함: 읽지 못함`, `지금 보관함 먼저 받기` 없음 → 바꾸기 → 셸(보관함 목록)이 보이고 `corruptKey(…)`에 손상 원문이 남음. 손상 백업 쓰기가 넘치는 저장소 + 받기 안 함 → 손상 화면 공간 부족 문구, 원문 그대로. 먼저 `백업 파일 받기` → 같은 저장소에서 바뀜. 기존 시험(`새로 시작` 등) 그대로 통과.
+- [ ] **Step 1: 실패하는 시험**: 손상 원문을 둔 셸 → `백업 파일로 되살리기` → 백업 파일 → 미리보기 `지금 보관함: 읽지 못함`, `지금 보관함 먼저 받기` 없음 → 바꾸기 → 셸(보관함 목록)이 보이고 `corruptKey(…)`에 손상 원문이 남음. 손상 백업 쓰기가 넘치는 저장소 + 받기 안 함 → 손상 화면 공간 부족 문구, 원문 그대로. 먼저 `백업 파일 받기` → 같은 저장소에서 바뀜. 먼저 `백업 파일 받기` → 다른 탭처럼 `LIBRARY_KEY`에 다른 손상 원문을 씀 → 바꾸기 → `그사이 데이터가 바뀌었어요. '백업 파일 받기'로 다시 받아 주세요`, 원문 그대로 → 다시 받기 → 바뀜. 기존 시험(`새로 시작` 등) 그대로 통과.
 - [ ] **Step 2:** `yarn vitest run tests/unit/sections/shell/corrupt-screen.test.tsx` → FAIL
 - [ ] **Step 3:** 구현.
 - [ ] **Step 4:** PASS + `yarn test` + `yarn typecheck`

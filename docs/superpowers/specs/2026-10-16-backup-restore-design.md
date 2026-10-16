@@ -107,12 +107,15 @@
 
 **저장 공간이 모자랄 때**: 사본을 쓰지 못하면 바꾸지 않고 미리보기에 `저장 공간이 부족해 지금 보관함을 기기에 남겨 둘 수 없어요. 먼저 '지금 보관함 먼저 받기'로 파일을 받은 뒤 바꿔 주세요`를 보인다. 이 대화상자에서 `지금 보관함 먼저 받기`가 성공한 뒤에는 사본 없이 바꾼다(그때는 토스트에 `되돌리기`가 없다). 지금 보관함이 비어 있으면 사본 없이 바꾼다.
 
+**받은 뒤 보관함이 바뀌었을 때**: `지금 보관함 먼저 받기`를 한 뒤 다른 탭이 보관함을 고치면, 받은 파일에는 그 변경이 없다. 그래서 받을 때 담은 저장소 원문을 기억해 두고, 바꾸기 직전 잠금 안에서 읽은 원문과 비교한다(§5). 다르면 "먼저 받기"가 없었던 것으로 보고 사본을 꼭 남긴다. 사본을 쓰지 못하면 바꾸지 않고 `그사이 보관함이 바뀌었어요. '지금 보관함 먼저 받기'로 다시 받은 뒤 바꿔 주세요`를 보인다. 다시 받으면 기억한 원문이 새것으로 바뀌어 사본 없이 바꿀 수 있다. 연 때 보관함이 비어 있어 사본 없이 바꾸려던 경우도 같다(연 때 읽은 원문과 비교).
+
 ### 2.4 손상 화면
 
 `백업 파일 받기`·`새로 시작` 사이에 `백업 파일로 되살리기`(outlined)를 더한다. 같은 대화상자를 연다. 차이:
 
 - `지금 보관함` 줄 대신 `지금 보관함: 읽지 못함`. `지금 보관함 먼저 받기`는 보이지 않는다(손상 화면의 `백업 파일 받기`가 그 일을 한다).
 - 바꾸기는 손상된 원문을 손상 백업 키(`tripmap:library:v2:corrupt-<시각>`)에 확보한 뒤에만 쓴다(`resetWithBackup`과 같은 규칙). 확보하지 못하면 바꾸지 않고 `저장 공간이 부족해 지금 데이터를 남겨 둘 수 없어요. 먼저 '백업 파일 받기'로 받아 주세요`.
+- 손상 화면의 `백업 파일 받기`가 받은 원문도 기억해 두고 §2.3과 같이 비교한다. 다르고 손상 백업도 확보하지 못하면 `그사이 데이터가 바뀌었어요. '백업 파일 받기'로 다시 받아 주세요`.
 - 바꾼 뒤 손상 화면이 보관함을 다시 읽어(`onRecovered`) 셸이 나온다. 토스트는 §2.3과 같고 `되돌리기`는 없다.
 
 ### 2.5 백업 알림 띠
@@ -154,6 +157,7 @@
 | 보관함 직렬화 길이 > 4,000,000자 | `보관함이 너무 커서 되살릴 수 없어요` |
 | 바꾸기 저장 실패(용량) | `저장 공간이 부족해 되살리지 못했어요. 지금 보관함은 그대로예요` |
 | 바꾸기 저장 실패(그 밖) | `되살리지 못했어요. 지금 보관함은 그대로예요` |
+| 먼저 받은 뒤 보관함이 바뀌었고 사본도 못 남김 | `그사이 보관함이 바뀌었어요. '지금 보관함 먼저 받기'로 다시 받은 뒤 바꿔 주세요` (손상 화면: `그사이 데이터가 바뀌었어요. '백업 파일 받기'로 다시 받아 주세요`) |
 | 되돌리기 실패 | `되돌리지 못했어요` |
 
 
@@ -239,7 +243,7 @@
 | `src/domain/backup/summary.ts` (새) | `libraryCounts`(살아 있는 수), `countsText`, `latestChangeAt`, `hasAnyEntry`, `hasLiveContent` |
 | `src/domain/backup/reminder.ts` (새) | §2.5 조건 → 띠 상태 |
 | `src/services/library-store.ts` | `snapshot`, `replace`, `previous`, `restorePrevious`, `dropPrevious`, 용량 초과 때 사본 지우기 |
-| `src/services/errors.ts` | `PreviousNotKept`, `NoPrevious` |
+| `src/services/errors.ts` | `PreviousNotKept`(`changedSinceSaved` 필드, §5), `NoPrevious` |
 | `src/services/backup-meta-store.ts` (새) | `tripmap:backup:v1` 읽기·쓰기(`PrefsStore`와 같은 모양), `AppLayer`에 더함 |
 | `src/stores/backup-state.ts` (새) | `backupMetaAtom`, `markBackedUpAtom`, `snoozeReminderAtom`, `useRestoreActions` |
 | `src/lib/storage-persist.ts` (새) | `persistState`, `requestPersistOnce` |
@@ -254,8 +258,8 @@
 `LibraryStore`에 더하는 것:
 
 ```ts
-readonly snapshot: Effect.Effect<{ raw: unknown; library: Library }, LibraryCorrupt>;
-replace(next: Library, options: { requirePrevious: boolean }):
+readonly snapshot: Effect.Effect<{ raw: unknown; text: string | null; library: Library }, LibraryCorrupt>; // text: 저장소 원문 문자열(키 없으면 null)
+replace(next: Library, options: { requirePrevious: boolean; savedText?: string | null }): // savedText: §5
   Effect.Effect<{ library: Library; previousKept: boolean },
                 StorageQuotaExceeded | LibraryInvalid | PreviousNotKept>;
 readonly previous: Effect.Effect<{ savedAt: string; library: Library } | null>;
@@ -267,11 +271,14 @@ readonly dropPrevious: Effect.Effect<void>;
 
 ## 5. 오류 처리
 
-- **바꾸기 순서(잠금 안)**: 지금 원문 읽기 → `next` 검증·크기 검사(실패면 아무것도 쓰지 않음) → 사본 쓰기(정상이고 항목이 있을 때) 또는 손상 백업 확보(손상일 때) → 보관함 쓰기.
-  - 사본(또는 손상 백업)을 쓰지 못함: `requirePrevious`면 `PreviousNotKept`로 끝(보관함 그대로). 아니면 사본 없이 진행.
-  - 보관함 쓰기가 용량 초과: 방금 쓴 사본을 지우고, `requirePrevious`면 `PreviousNotKept`, 아니면 한 번 더 써 보고 그래도 안 되면 `StorageQuotaExceeded`. 어느 경우든 `setItem` 실패는 원래 값을 남기므로 지금 보관함은 그대로다.
+- **바꾸기 순서(잠금 안)**: 지금 원문 읽기 → 사본 필수 여부 정하기(아래) → `next` 검증·크기 검사(실패면 아무것도 쓰지 않음) → 사본 쓰기(정상이고 항목이 있을 때) 또는 손상 백업 확보(손상일 때) → 보관함 쓰기.
+  - **사본 필수** = `requirePrevious`이거나, `savedText`가 주어졌고 잠금 안에서 읽은 지금 원문 문자열(키 없으면 `null`)과 다를 때. 다르면 화면이 근거로 삼은 "먼저 받기"(또는 빈 보관함)가 지금 보관함과 맞지 않으므로 없었던 것으로 본다.
+  - 사본(또는 손상 백업)을 쓰지 못함: 사본 필수면 `PreviousNotKept`로 끝(보관함 그대로). `requirePrevious`가 거짓인데 원문이 달라 필수가 된 경우는 `PreviousNotKept({ changedSinceSaved: true })`, 그 밖은 `changedSinceSaved: false`. 사본 필수가 아니면 사본 없이 진행.
+  - 보관함 쓰기가 용량 초과: 방금 쓴 사본을 지우고, 사본 필수면 `PreviousNotKept`(같은 `changedSinceSaved` 규칙), 아니면 한 번 더 써 보고 그래도 안 되면 `StorageQuotaExceeded`. 어느 경우든 `setItem` 실패는 원래 값을 남기므로 지금 보관함은 그대로다.
   - 이때의 사본 키 지우기는 "새 사본"을 지우는 것이므로, 바꾸기 전에 있던 옛 사본은 이미 덮어쓴 뒤다. 옛 사본을 지키려 하지 않는다(한 벌 규칙).
 - `requirePrevious`는 화면이 정한다: 지금 보관함에 살아 있는 항목이 있고, 이 대화상자에서 `지금 보관함 먼저 받기`(손상 화면은 `백업 파일 받기`)를 아직 하지 않았으면 참.
+- `savedText`도 화면이 넘긴다: 먼저 받기를 했으면 그때 백업 파일에 담은 저장소 원문 문자열(`snapshot.text`, 손상 화면은 받은 원문), 연 때 보관함이 비어 있어 `requirePrevious`가 거짓이면 연 때 읽은 원문. 해시가 아니라 문자열 그대로 둔다(최대 4,000,000자라 메모리에 둬도 되고, 같음 비교가 정확하다). 다시 받으면 새 원문으로 바꾼다.
+- `changedSinceSaved: true`면 §2.7의 "그사이 보관함이 바뀌었어요" 문구로 다시 받기를 요구한다. 기억한 원문은 그대로 두므로 다시 받지 않고 누르면 같은 규칙으로 또 막힌다(사본이 들어가면 바뀐다).
 - 되살리는 사이 다른 탭이 보관함을 바꿨으면, 잠금 안에서 읽은 그 최신본이 사본이 된다. 미리보기의 `지금 보관함` 수는 연 때 기준이라 다를 수 있다(문제 삼지 않는다).
 - 이 탭의 저장 전 메모 초안은 되살린 보관함에 그 장소가 없으면 저장이 실패해 `error`로 남는다(지금 메모 초안 규칙 그대로).
 - 파일 읽기 중 대화상자를 닫거나 다른 파일을 고르면 늦은 결과는 버린다(읽기 번호).
@@ -283,8 +290,8 @@ readonly dropPrevious: Effect.Effect<void>;
 - **도메인** `build-backup`: 봉투 모양, `library`가 넘긴 원문 객체와 같음(모르는 필드 유지), `prefs` 없으면 키 없음, 파일 이름(한국 시간 `2026-10-16T05:30:00.000Z` → `landmark-backup-2026-10-16-1430.json`).
 - **도메인** `read-backup`: 왕복(만든 텍스트 → 같은 보관함·설정, `isEqual`), 옛 손상 화면 원문(`schemaVersion` 2) → `legacy`, `v: 2`·`schemaVersion: 3` → `newer`, 공유 HTML → `share-file`, `{}`·`[]`·`"x"`·깨진 JSON → `not-backup`, 봉투는 맞고 장소 id가 틀림 → `invalid`, 16 MiB+1 `Blob` → `too-big`(읽지 않음), 4,000,001자 → `too-large`, 장소에 모르는 필드(시험 이름 `futureField` — F2의 `visitedOn` 같은 경우) → 성공·`droppedUnknown: true`, 보관함 최상위 모르는 컬렉션(`futureCollection` — F3의 `folders` 같은 경우) → 성공·`droppedUnknown: true`, 봉투 최상위 모르는 필드 → 성공·`droppedUnknown: false`, 잘못된 `prefs` → `prefs: null`, 문구 표가 §2.7과 글자까지 같음.
 - **도메인** `summary`·`reminder`: 묘비는 세지 않음, `latestChangeAt`이 Day 안 필드까지 봄, 띠 조건 경계(6일 23시간 / 7일, 미룸 7일, 변경 없음, 메모리 모드, 빈 보관함).
-- **저장소**: `snapshot`이 원문(모르는 필드 포함)을 돌려줌·손상이면 `LibraryCorrupt`, `replace`가 사본을 남기고 바꿈·빈 보관함이면 사본 지움·손상이면 손상 백업 확보 후 바꿈, 사본 쓰기 용량 초과(`requirePrevious` 참/거짓), 보관함 쓰기 용량 초과에서 원래 보관함 유지·새 사본 지움, `restorePrevious` 왕복과 사본 삭제, 사본 없음 → `NoPrevious`, 일반 `update`가 용량 초과일 때 경로 캐시 → 사본 순으로 지움, 잠금을 다른 쪽이 쥐고 있으면 기다렸다가 그 결과를 사본으로(`fake-locks`).
-- **화면**: 설정 `백업` 칸 문구·상태 줄·버튼(공유 가능/불가), 받기 → `downloadText` 호출·이름·토스트·기록, 공유 `AbortError` → 기록 안 바뀜, 되살리기 대화상자 각 단계·문구·버튼 꺼짐·`requirePrevious` 흐름, 되돌리기·지우기, 손상 화면 되살리기 → 셸이 보임, 알림 띠 조건·`나중에`·포커스.
+- **저장소**: `snapshot`이 원문(모르는 필드 포함)을 돌려줌·손상이면 `LibraryCorrupt`, `replace`가 사본을 남기고 바꿈·빈 보관함이면 사본 지움·손상이면 손상 백업 확보 후 바꿈, 사본 쓰기 용량 초과(`requirePrevious` 참/거짓), 보관함 쓰기 용량 초과에서 원래 보관함 유지·새 사본 지움, `restorePrevious` 왕복과 사본 삭제, 사본 없음 → `NoPrevious`, 일반 `update`가 용량 초과일 때 경로 캐시 → 사본 순으로 지움, 잠금을 다른 쪽이 쥐고 있으면 기다렸다가 그 결과를 사본으로(`fake-locks`), `savedText`가 지금 원문과 다르면 사본 필수(사본 넘침 → `PreviousNotKept({ changedSinceSaved: true })`·보관함 그대로, 사본 들어감 → 바뀜·`previousKept: true`), 같으면 지금처럼 사본 없이 바꿈.
+- **화면**: 설정 `백업` 칸 문구·상태 줄·버튼(공유 가능/불가), 받기 → `downloadText` 호출·이름·토스트·기록, 공유 `AbortError` → 기록 안 바뀜, 되살리기 대화상자 각 단계·문구·버튼 꺼짐·`requirePrevious` 흐름, 먼저 받기 → 다른 탭이 보관함 고침 → 사본 넘침 → `그사이 보관함이 바뀌었어요…`·보관함은 다른 탭의 것 그대로 → 다시 받기 → 바뀜, 되돌리기·지우기, 손상 화면 되살리기 → 셸이 보임, 알림 띠 조건·`나중에`·포커스.
 - **E2E** (desktop·iphone·galaxy, 새 `tests/e2e/backup-restore.spec.ts`): 시드 보관함 + 여행 하나 → 설정 › `백업 파일 받기`(다운로드 이벤트) → 저장소 비우고 새로고침 → `백업 파일로 되살리기` → 파일 → 미리보기 수 → 바꾸기 → 저장소의 보관함이 시드와 같음, 여행 화면에 여행. `되돌리기` → 빈 보관함. 손상 시드 → 손상 화면 `백업 파일로 되살리기` → 셸. (공유 창은 E2E에서 열지 않는다 — 단위 시험으로.)
 - **배포 확인(수동)**: 아이폰 사파리·안드로이드 크롬 실기기에서 `백업 파일 받기`가 파일 앱/다운로드에 저장되는지, `백업 공유`가 보이는지, 받은 파일로 되살려지는지. 결과를 PR에 적는다.
 
@@ -314,7 +321,7 @@ readonly dropPrevious: Effect.Effect<void>;
 ## 10. 결정이 필요한 것
 
 1. **복원 방식** — 선택지: 통째로 바꾸기 / 합치기 / 둘 다. **추천: 통째로 바꾸기만.** 이유: 막으려는 사고(사파리 삭제, 새 기기, 잘못 고침)는 빈 보관함이나 되돌리고 싶은 상태라 바꾸기로 충분하다. 합치기는 같은 id의 필드별 LWW(`pickField`), 묘비와 되살림, 여행 안 장소 중복·라벨 이름 중복 같은 불변식 충돌을 풀어야 해 사실상 동기화 설계다. 필요하면 별도 묶음으로.
-2. **바꾸기 전 지금 상태 남기기** — 선택지: 자동으로 파일 받기 / 기기 안 사본 한 벌 / 둘 다 / 없음. **추천: 기기 안 사본 한 벌 + 공간이 모자라면 먼저 파일로 받게 함.** 이유: 바꾸는 버튼 뒤에 받기 창(아이폰은 확인 창)이 또 뜨면 헷갈리고, 사본이면 `되돌리기` 한 번으로 끝난다. 받기는 `지금 보관함 먼저 받기` 버튼으로 고를 수 있게 둔다.
+2. **바꾸기 전 지금 상태 남기기** — 선택지: 자동으로 파일 받기 / 기기 안 사본 한 벌 / 둘 다 / 없음. **추천: 기기 안 사본 한 벌 + 공간이 모자라면 먼저 파일로 받게 함.** 이유: 바꾸는 버튼 뒤에 받기 창(아이폰은 확인 창)이 또 뜨면 헷갈리고, 사본이면 `되돌리기` 한 번으로 끝난다. 받기는 `지금 보관함 먼저 받기` 버튼으로 고를 수 있게 둔다. 먼저 받은 뒤 다른 탭이 보관함을 고쳤으면 받은 파일은 낡았으므로, 그때는 사본을 꼭 남기고 못 남기면 다시 받게 한다(§2.3, §5 — 리뷰 반영).
 3. **복원 미리보기** — 선택지: 없음 / 개수 비교 / 장소 목록까지. **추천: 만든 날짜 + 개수 비교 + 경고.** 이유: 내 데이터라 무엇이 들었는지는 알고, 날짜와 수로 "맞는 파일인가"만 확인하면 된다.
 4. **백업 알림** — 선택지: 없음 / 설정에만 날짜 / N일 지나면 띠(7·14·30일). **추천: 바뀐 내용이 있고 7일 지나면 보관함 화면에 띠, `나중에`는 7일 미룸.** 이유: 사파리 7일 규칙. 바뀐 것이 없으면 띄우지 않아 귀찮지 않게.
 5. **`navigator.storage.persist()`** — 선택지: 요청 안 함 / 앱 열 때 / 백업 받을 때. **추천: 백업을 처음 받을 때 한 번, 상태만 표시.** 이유: 손해가 없고 용량 압박 삭제는 줄일 수 있다. 앱 열 때 물으면 파이어폭스가 이유 없이 권한 창을 띄운다. 덧붙여 제안: 홈 화면 추가 안내·매니페스트는 7일 규칙을 피하는 공식 경로(§1.2)이지만 범위 밖 — 다음 다듬기 후보.
