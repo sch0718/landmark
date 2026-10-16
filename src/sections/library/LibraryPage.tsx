@@ -1,16 +1,20 @@
 import Box from '@mui/material/Box';
-import { useAtomValue, useSetAtom } from 'jotai';
+import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import {
   DEFAULT_QUERY,
+  hasVisited,
   labelCounts,
   liveLabels,
   livePlaces,
   placeIdsInRegion,
   queryPlaces,
   regionCounts,
+  sortByVisited,
+  visitCounts,
+  type LibraryQuery,
 } from 'src/domain/library/query';
 import { addLabels, deletePlaces, removeLabels, restorePlaces } from 'src/domain/library/ops';
 import { addCandidates } from 'src/domain/trips/ops';
@@ -34,6 +38,7 @@ import { exportTargets } from 'src/sections/share-export/export-targets';
 import { libraryAtom, useLibraryAction } from 'src/stores/library-state';
 import { focusPlaceAtom } from 'src/stores/library-ui';
 import { prefsAtom, setPrefsAtom } from 'src/stores/prefs-state';
+import { visitedSortAtom } from 'src/stores/visit-sort';
 
 /** 삭제 직후 "되돌리기"를 보여 주는 시간. */
 export const UNDO_MS = 5000;
@@ -52,7 +57,16 @@ export function LibraryPage() {
   const library = useAtomValue(libraryAtom);
   const prefs = useAtomValue(prefsAtom);
   const setPrefs = useSetAtom(setPrefsAtom);
-  const [query, patch] = useLibraryQuery();
+  const [query, patchQuery] = useLibraryQuery();
+  const [visitedSort, setVisitedSort] = useAtom(visitedSortAtom);
+  // 저장되는 정렬을 고르면 저장하지 않는 `다녀온 날순`은 꺼진다(같은 값을 다시 골라도).
+  const patch = useCallback(
+    (change: Partial<LibraryQuery>) => {
+      patchQuery(change);
+      if (change.sort !== undefined) setVisitedSort(false);
+    },
+    [patchQuery, setVisitedSort],
+  );
   const { run } = useLibraryAction();
   const navigate = useNavigate();
   const openId = useOpenPlaceId();
@@ -68,7 +82,15 @@ export function LibraryPage() {
   const labels = useMemo(() => liveLabels(library), [library]);
   const labelsById = useMemo(() => new Map(labels.map((l) => [l.id, l])), [labels]);
   const total = useMemo(() => livePlaces(library).length, [library]);
-  const places = useMemo(() => queryPlaces(library, query), [library, query]);
+  const places = useMemo(() => {
+    const matched = queryPlaces(library, query);
+    return visitedSort ? sortByVisited(matched) : matched;
+  }, [library, query, visitedSort]);
+  const showVisit = useMemo(
+    () => hasVisited(library) || query.visited !== 'all',
+    [library, query.visited],
+  );
+  const visits = useMemo(() => visitCounts(library, query), [library, query]);
   const counts = useMemo(() => labelCounts(library, query), [library, query]);
   const regions = useMemo(() => regionCounts(library, query), [library, query]);
 
@@ -178,6 +200,9 @@ export function LibraryPage() {
           labels={labels}
           counts={counts}
           regions={regions}
+          visitCounts={showVisit ? visits : undefined}
+          visitedSort={visitedSort}
+          onVisitedSort={() => setVisitedSort(true)}
           view={view}
           onViewChange={changeView}
           onExport={() => setExporting(true)}

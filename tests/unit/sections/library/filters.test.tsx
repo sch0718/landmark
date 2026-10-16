@@ -1,13 +1,16 @@
-import { cleanup, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createMemoryStorage } from 'src/repositories/edit-layer-repo';
 import { setAppRuntimeForTest } from 'src/lib/effect/runtime';
+import { QUERY_PERSIST_DELAY_MS } from 'src/sections/library/use-library-query';
 import { PREFS_KEY } from 'src/services/prefs-store';
-import { L_CAFE, L_FOOD, renderLibrary, sampleLibrary } from './fixtures';
+import { L_CAFE, L_FOOD, makePlace, renderLibrary, sampleLibrary, withPlaces } from './fixtures';
 
 vi.mock('src/theme/fonts', () => ({ loadDisplayFont: vi.fn(() => Promise.resolve()) }));
 
 afterEach(() => {
+  vi.useRealTimers();
   cleanup();
   setAppRuntimeForTest(null);
   vi.unstubAllGlobals();
@@ -15,6 +18,8 @@ afterEach(() => {
 
 const labelChip = (name: string) =>
   within(screen.getByRole('group', { name: '라벨' })).getByRole('button', { name });
+const visitChip = (name: string) =>
+  within(screen.getByRole('group', { name: '방문' })).getByRole('button', { name });
 const regionChip = (name: string) =>
   within(screen.getByRole('group', { name: '지역' })).getByRole('button', { name });
 
@@ -196,5 +201,182 @@ describe('library search box', () => {
     expect(ring.map((rule) => rule.style.getPropertyValue('outline'))).toEqual([
       '2px solid var(--tm-accent-text)',
     ]);
+  });
+});
+
+/** 샘플 5곳 중 횟집(맛집·바다뷰) 한 곳만 다녀온 보관함. */
+const withOneVisited = () =>
+  withPlaces(sampleLibrary(), [
+    makePlace(3, {
+      name: '속초 횟집',
+      address: '강원특별자치도 속초시 해맞이로 10',
+      labelIds: [L_FOOD, 'label003'],
+      visitedOn: '2026-10-01',
+    }),
+  ]);
+
+describe('visit chips', () => {
+  it('다녀온 곳이 없으면 방문 묶음을 그리지 않는다', async () => {
+    await renderLibrary(sampleLibrary(), { prefs: LIST });
+    expect(screen.queryByRole('group', { name: '방문' })).not.toBeInTheDocument();
+    expect(screen.getByRole('group', { name: '라벨' })).toBeInTheDocument();
+  });
+
+  it('shows counts and filters to visited / unvisited places', async () => {
+    const user = userEvent.setup();
+    await renderLibrary(withOneVisited(), { prefs: LIST });
+
+    expect(visitChip('안 가 본 곳 4')).toHaveAttribute('aria-pressed', 'false');
+    expect(visitChip('가 본 곳 1')).toHaveAttribute('aria-pressed', 'false');
+    expect(shown()).toHaveLength(5);
+
+    await user.click(visitChip('가 본 곳 1'));
+    expect(visitChip('가 본 곳 1')).toHaveAttribute('aria-pressed', 'true');
+    expect(shownMatching('속초 횟집')).toBe(true);
+    // 라벨 칩 숫자는 가 본 1곳 기준이다.
+    expect(labelChip('맛집 1')).toBeInTheDocument();
+    expect(labelChip('카페 0')).toBeInTheDocument();
+
+    await user.click(visitChip('가 본 곳 1'));
+    expect(visitChip('가 본 곳 1')).toHaveAttribute('aria-pressed', 'false');
+    expect(shown()).toHaveLength(5);
+
+    await user.click(visitChip('가 본 곳 1'));
+    await user.click(visitChip('안 가 본 곳 4'));
+    expect(visitChip('안 가 본 곳 4')).toHaveAttribute('aria-pressed', 'true');
+    expect(visitChip('가 본 곳 1')).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('안 가 본 곳은 4곳을 보이고 가 본 곳은 꺼진다', async () => {
+    const user = userEvent.setup();
+    await renderLibrary(withOneVisited(), { prefs: LIST });
+    await user.click(visitChip('가 본 곳 1'));
+    await user.click(visitChip('안 가 본 곳 4'));
+    expect(shown()).toHaveLength(4);
+    expect(visitChip('가 본 곳 1')).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('counts visits inside the selected label', async () => {
+    const user = userEvent.setup();
+    await renderLibrary(withOneVisited(), { prefs: LIST });
+    await user.click(labelChip('카페 1'));
+    expect(visitChip('안 가 본 곳 1')).toBeInTheDocument();
+    expect(visitChip('가 본 곳 0')).toBeInTheDocument();
+    await user.click(labelChip('카페 1'));
+    await user.click(labelChip('맛집 2'));
+    expect(visitChip('안 가 본 곳 1')).toBeInTheDocument();
+    expect(visitChip('가 본 곳 1')).toBeInTheDocument();
+  });
+
+  it('keeps the chips while a visit filter is on, and 필터 지우기 turns it off', async () => {
+    const user = userEvent.setup();
+    // 다녀온 곳이 없는데 선호에 `visited: 'visited'`가 남아 있는 보관함.
+    await renderLibrary(sampleLibrary(), {
+      prefs: {
+        libraryView: 'list',
+        query: {
+          labelIds: [],
+          mode: 'any',
+          unlabeled: false,
+          regions: [],
+          text: '',
+          visited: 'visited',
+          sort: 'recent',
+        },
+      },
+    });
+    expect(visitChip('가 본 곳 0')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText('조건에 맞는 장소가 없어요')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '필터 지우기' }));
+    expect(shown()).toHaveLength(5);
+    // 다녀온 곳이 없으니 필터가 꺼지면 묶음도 사라진다.
+    expect(screen.queryByRole('group', { name: '방문' })).not.toBeInTheDocument();
+  });
+});
+
+describe('visited sort', () => {
+  const visitedLibrary = () =>
+    withPlaces(sampleLibrary(), [
+      makePlace(1, { name: '중앙시장 닭강정', labelIds: [L_FOOD], visitedOn: '2026-09-01' }),
+      makePlace(2, { name: '안목 카페거리', labelIds: [L_CAFE], visitedOn: '2026-10-01' }),
+    ]);
+
+  it('sorts by visited date without persisting it, and the saved sorts switch it off', async () => {
+    const storage = createMemoryStorage();
+    await renderLibrary(visitedLibrary(), { prefs: LIST, storage });
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    // 가짜 시계 아래에서는 userEvent 대신 fireEvent로 누르고, 전환(setTimeout)은 직접 진행한다.
+    const press = (el: HTMLElement) =>
+      act(() => {
+        fireEvent.click(el);
+        vi.advanceTimersByTime(QUERY_PERSIST_DELAY_MS + 100);
+      });
+
+    press(screen.getByRole('button', { name: '최근 저장순' }));
+    const item = screen.getByRole('menuitemradio', { name: '다녀온 날순' });
+    expect(item).toHaveAttribute('aria-checked', 'false');
+    press(item);
+
+    expect(screen.getByRole('button', { name: '다녀온 날순' })).toBeInTheDocument();
+    expect(shown().slice(0, 2)).toEqual([
+      expect.stringContaining('안목 카페거리'),
+      expect.stringContaining('중앙시장 닭강정'),
+    ]);
+    // 저장되는 정렬은 그대로다(옛 버전이 읽어도 선호가 깨지지 않는다).
+    await act(async () => void (await Promise.resolve()));
+    const saved = storage.getItem(PREFS_KEY);
+    if (saved !== null) expect(JSON.parse(saved).query.sort).toBe('recent');
+
+    press(screen.getByRole('button', { name: '다녀온 날순' }));
+    expect(screen.getByRole('menuitemradio', { name: '다녀온 날순' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    expect(screen.getByRole('menuitemradio', { name: '최근 저장순' })).toHaveAttribute(
+      'aria-checked',
+      'false',
+    );
+    press(screen.getByRole('menuitemradio', { name: '이름순' }));
+    expect(screen.getByRole('button', { name: '이름순' })).toBeInTheDocument();
+    expect(shown()[0]).toContain('강남 한 곳');
+    await act(async () => void (await Promise.resolve()));
+    expect(JSON.parse(storage.getItem(PREFS_KEY)!).query.sort).toBe('name');
+  });
+
+  it('does not save 다녀온 날순 into prefs even when another filter is changed', async () => {
+    const storage = createMemoryStorage();
+    await renderLibrary(visitedLibrary(), { prefs: LIST, storage });
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const press = (el: HTMLElement) =>
+      act(() => {
+        fireEvent.click(el);
+      });
+
+    press(screen.getByRole('button', { name: '최근 저장순' }));
+    press(screen.getByRole('menuitemradio', { name: '다녀온 날순' }));
+    press(visitChip('가 본 곳 2'));
+    await act(async () => {
+      vi.advanceTimersByTime(QUERY_PERSIST_DELAY_MS + 100);
+      await Promise.resolve();
+    });
+    const query = JSON.parse(storage.getItem(PREFS_KEY)!).query;
+    expect(query.sort).toBe('recent');
+    expect(query.visited).toBe('visited');
+    expect(screen.getByRole('button', { name: '다녀온 날순' })).toBeInTheDocument();
+  });
+
+  it('starts over as the saved sort in a fresh store', async () => {
+    const storage = createMemoryStorage();
+    const user = userEvent.setup();
+    await renderLibrary(visitedLibrary(), { prefs: LIST, storage });
+    await user.click(screen.getByRole('button', { name: '최근 저장순' }));
+    await user.click(screen.getByRole('menuitemradio', { name: '다녀온 날순' }));
+    expect(screen.getByRole('button', { name: '다녀온 날순' })).toBeInTheDocument();
+    cleanup();
+    setAppRuntimeForTest(null);
+
+    await renderLibrary(visitedLibrary(), { prefs: LIST, storage });
+    expect(screen.getByRole('button', { name: '최근 저장순' })).toBeInTheDocument();
   });
 });
