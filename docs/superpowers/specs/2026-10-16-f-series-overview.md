@@ -14,7 +14,7 @@
 | F1 | 전체 백업·복원 | `v0.8.0` · `feat/backup-restore` | [설계서](2026-10-16-backup-restore-design.md) | [계획](../plans/2026-10-16-backup-restore.md) | 8 | 새 키 `tripmap:backup:v1`·`tripmap:library:v2:before-restore`. ✅ 옛 버전은 두 키를 읽지 않음 |
 | F2 | 다녀온 곳·한 줄 평 | `v0.9.0` · `feat/visited-review` | [설계서](2026-10-16-visited-review-design.md) | [계획](../plans/2026-10-16-visited-review.md) | 8 (Task 8은 병합 뒤) | 장소 선택 필드 `visitedOn`·`review`, 선호 선택 키 `query.visited`. ⚠️ 옛 버전에서 보관함을 고치면 두 필드가 지워짐(손상 화면은 없음) |
 | F3 | 네이버 폴더 다시 가져오기 | `v0.10.0` · `feat/folder-resync` | [설계서](2026-10-16-folder-resync-design.md) | [계획](../plans/2026-10-16-folder-resync.md) | 8 | 보관함 최상위 선택 컬렉션 `folders`. ⚠️ 옛 버전에서 저장하면 폴더 연결이 지워짐(링크를 한 번 더 붙여 넣으면 다시 생김) |
-| F4 | 내 근처 저장 장소 | `v0.11.0` · `feat/nearby` | [설계서](2026-10-16-nearby-design.md) | [계획](../plans/2026-10-16-nearby.md) | 6 | 없음(위치·근처 모드는 메모리만). ✅ |
+| F4 | 내 근처 저장 장소 | `v0.11.0` · `feat/nearby` | [설계서](2026-10-16-nearby-design.md) | [계획](../plans/2026-10-16-nearby.md) | 7 | 없음(위치·근처 모드는 메모리만). ✅ |
 | F5 | 여행 당일 모드 | `v0.12.0` · `feat/trip-day-mode` | [설계서](2026-10-16-trip-day-mode-design.md) | [계획](../plans/2026-10-16-trip-day-mode.md) | 9 (Task 0·8은 커밋 없음) | 없음(F2의 `visitedOn`만 씀). ✅ |
 | F6 | 영업시간·휴무 경고 | `v0.13.0` · `feat/business-hours` | [설계서](2026-10-16-business-hours-design.md) | [계획](../plans/2026-10-16-business-hours.md) | 8 (Task 8은 커밋 없음) | 새 캐시 키 `tripmap:hours:v1`(보관함 밖). ✅ 옛 버전은 읽지도 지우지도 않음 |
 | F7 | 여행 일정 공유 | `v0.14.0` · `feat/trip-share` | [설계서](2026-10-16-trip-share-design.md) | [계획](../plans/2026-10-16-trip-share.md) | 11 | 보관함 형식 그대로. 공유 형식 v2(여행) 추가, 장소만 보낼 때는 v1 그대로. ✅ (되돌린 앱은 v2 파일을 가져오지 못함 — 보관함은 그대로) |
@@ -88,6 +88,7 @@ F1 백업은 보관함 **원문**을 그대로 담으므로 F2·F3이 더한 필
 - 보관함 밖 기기 캐시 `localStorage['tripmap:hours:v1']`(`HOURS_CACHE_KEY`) = `{ entries: { [sid]: PlaceHours & { usedAt } } }`, 300곳·40만 자, 7일. `PlaceSchema`에 필드를 더하지 않는다.
 - 이름: `PlaceHours`(`src/server/hours.ts`), `checkVisit`·`checkDate`·`visitMessage`(`src/domain/trips/hours.ts`), `HoursLookup`, `usePlaceHours`·`useTripHoursRequests`, `noticeFor`·`HoursNotice`.
 - 백업·공유에 넣지 않는다. F5는 F6에 기대지 않는다. F5 당일 모드에 경고를 넣는 일은 F6 병합 뒤 작은 후속으로 미룬다(F6 결정 5, 자리는 F5 §10.3이 비워 둠).
+- **리뷰 반영**: F6은 하루 경계로 F5의 `DAY_ROLLOVER_HOUR`(`src/domain/trips/today.ts`, 4)를 import해 쓴다(F6 §3.2·§10). F6이 F5 코드에 기대는 유일한 곳이다.
 
 ## 3. 같은 파일을 고치는 곳 · 병합 순서 주의
 
@@ -102,11 +103,13 @@ F1 백업은 보관함 **원문**을 그대로 담으므로 F2·F3이 더한 필
 | `src/domain/library/ops.ts` | F2(다녀옴 연산) → F3(라벨 지우기·합치기의 연결 처리) | 첫 화면 번들. F3은 `folder-links.ts`를 import하지 않는다 |
 | `src/sections/library/{SortMenu,FilterBar,LibraryPage,PlaceRow,PlaceCard,LabelChips}.tsx`, `src/sections/map/LibraryMap.tsx` | F2 → F4 | 정렬: F2 `visitedSort`/`onVisitedSort` 위에 F4 `nearby`/`onNearby`, 둘 중 하나만 켜짐. 목록: `useNearby(visitedSort ? sortByVisited(q) : q)`. 좁은 지도 칩 줄: `leading` = F4 `내 근처` 칩 → F2 `방문` 묶음 → 라벨. 행: F2 이름 뒤 ✓, F4 지역 자리에 거리 |
 | `src/components/map/{MapAdapter,FakeMapAdapter}.ts` | F2(`MapMarker.visited`) → F4(`setMyLocation`, `MyLocation`) | 글자 충돌만. `MapView.tsx`·`NaverMapAdapter.ts`는 F4만 |
-| `src/sections/add-place/FolderList.tsx` | F2(가져온 뒤 `visited: 'all'`) → F3(`shareId` prop, 연결 기록) | F3의 다시 가져오기 `보관함에서 보기`도 `visited: 'all'`로 푼다(교차 검토에서 F3에 적음) |
-| `src/sections/share-import/SharePreview.tsx` | F2(`visited: 'all'`) → F3(`localDate`를 `src/lib/local-date.ts`로 옮김) → F7(여행 칸) | F7 계획 머리에 적음 |
+| `src/sections/add-place/FolderList.tsx` | F2(가져온 뒤 `visited: 'all'`) → F3(`shareId` prop, 연결 기록) → F4(가져온 뒤 근처 모드 끄기) | F3의 다시 가져오기 `보관함에서 보기`도 `visited: 'all'`로 푼다(교차 검토에서 F3에 적음). F4 Task 6은 그 `onClick`(`FolderResync.tsx`)에서도 근처 모드를 끈다 |
+| `src/stores/backup-state.ts` | F1(`useRestoreActions`) → F4(되살리기 뒤 근처 모드 끄기) | F4 Task 6. 리뷰 반영 |
+| `src/sections/share-import/SharePreview.tsx` | F2(`visited: 'all'`) → F3(`localDate`를 `src/lib/local-date.ts`로 옮김) → F4(제목 라벨로 거른 뒤 근처 모드 끄기) → F7(여행 칸) | F7 계획 머리에 적음(F4 줄은 리뷰 반영으로 더함) |
 | `src/sections/trips/TripsPage.tsx` | F5(카드 아래 `오늘 일정`) → F7(메뉴 `일정 공유`) | 다른 자리 |
 | `src/sections/trips/planner/TripPlannerPage.tsx` | F5(지도 위 `오늘 일정`) → F6(요청 훅, `MapCard`에 `plan`) | |
 | `src/sections/trips/planner/DayTimeline.tsx` | F6(`StopRow` 영업시간 줄) → F7(`DayHeader`의 `일정 공유`) | |
+| `src/domain/trips/today.ts` | F5(새 파일, `DAY_ROLLOVER_HOUR`) → F6(import만) | F6이 하루 경계 상수를 함께 쓴다. 리뷰 반영 |
 | `src/domain/trips/schedule.ts` | F5(`ScheduleInput.startMin?`) | F7 보기 화면이 `computeSchedule`을 import한다 — 선택 입력이라 영향 없음 |
 | `src/sections/trips/planner/format.ts` | F6(`hoursCheckedLabel`) | F7 보기 화면이 이 파일을 런타임으로 import한다. 새 import 없는 순수 함수여야 한다(F6 계획에 적음) |
 | `src/components/icons.tsx` | F4(`LocateFixedIcon`) → F6(`AlertIcon`) | |
@@ -118,7 +121,7 @@ F1 백업은 보관함 **원문**을 그대로 담으므로 F2·F3이 더한 필
 | `docs/rollback.md` | 일곱 묶음 모두, 병합 뒤 | F2가 "`v0.3.0` 이후로는 저장 형식이 바뀌지 않아" 문장을 고치고 F3이 `folders`를 더한다 |
 | `README.md` | F1(알려진 한계), F7(기능 한 줄) | |
 
-**코드 되돌리기 의존**(묶음 하나를 통째로 되돌릴 때): F5는 F2·F4에 기대고, F7은 F2(`review`)에 기댄다. F2나 F4를 되돌리려면 그에 기대는 뒤 묶음을 먼저 되돌린다(F4 설계서 §5.4가 F5에 대해 적은 것과 같은 규칙).
+**코드 되돌리기 의존**(묶음 하나를 통째로 되돌릴 때): F5는 F2·F4에 기대고, F7은 F2(`review`)에 기댄다. 리뷰 반영으로 F6은 F5(`DAY_ROLLOVER_HOUR`)에, F4(Task 6)는 F1(`backup-state.ts`)·F3(`FolderResync.tsx`)의 파일에 한 줄씩 기댄다. 앞 묶음을 되돌리려면 그에 기대는 뒤 묶음을 먼저 되돌린다(F4 설계서 §5.4가 F5에 대해 적은 것과 같은 규칙).
 
 ## 4. 첫 로딩 예산 누적 (추정)
 
@@ -144,7 +147,7 @@ F1 백업은 보관함 **원문**을 그대로 담으므로 F2·F3이 더한 필
 ### F1 전체 백업·복원
 
 1. 복원 방식 · 통째로 바꾸기만 · 합치기는 사실상 동기화 설계라 별도 묶음감 🔗(F3이 합치기 규칙을 바랐으나 "통째로"면 해당 없음)
-2. 바꾸기 전 지금 상태 남기기 · 기기 안 사본 한 벌(공간이 모자라면 먼저 파일로 받게) · `되돌리기` 한 번으로 끝난다
+2. 바꾸기 전 지금 상태 남기기 · 기기 안 사본 한 벌(공간이 모자라면 먼저 파일로 받게) · `되돌리기` 한 번으로 끝난다. ⚖️ 리뷰 반영: 먼저 받은 뒤 다른 탭이 보관함을 고쳤으면(받은 원문 ≠ 잠금 안 원문) 사본을 꼭 남기고, 못 남기면 바꾸지 않고 다시 받게 함
 3. 복원 미리보기 · 만든 날짜 + 개수 비교 + 경고 · "맞는 파일인가"만 확인하면 된다
 4. 백업 알림 · 바뀐 내용이 있고 7일 지나면 띠, `나중에`는 7일 미룸 · 아이폰 사파리 7일 규칙
 5. `navigator.storage.persist()` · 백업을 처음 받을 때 한 번 · 앱 열 때 물으면 파이어폭스가 이유 없이 권한 창
@@ -197,11 +200,12 @@ F1 백업은 보관함 **원문**을 그대로 담으므로 F2·F3이 더한 필
 8. 중간 폭 덮개가 있을 때 지도 단추 · 덮개 폭만큼 왼쪽으로(＋/− 포함) · 가려진 단추는 못 누른다
 9. 거리 종류 · 직선거리(화면에 밝힘) · 경로 조회는 장소 수만큼 나가 느리다
 10. 위치 유효 시간 · 얻은 시각만 보이고 만료 안 함 · 사람이 판단한다
+11. 반경 밖에 숨은 장소 안내 · 근처 줄 끝에 `· 3km 밖 N곳은 숨김`(지금은 안내 없음) · 사용자 `필터 지우기`는 근처 모드를 끄지 않으므로 숨은 이유가 보여야 한다 ⚖️(리뷰 반영으로 더함. 앱이 필터를 푸는 흐름 — F1 되살리기·F3 `보관함에서 보기`·폴더/공유 가져오기 — 은 근처 모드를 끄도록 이미 바꿈) 🔗F1·F3
 
 ### F5 여행 당일 모드
 
 1. 들어가는 길·자동 전환 · 여행 목록 + 계획 화면 버튼, 자동 전환 없음 · 저절로 넘어가면 놀란다 ⚠️(계획 화면 지도 위 버튼 자리 — §7-1)
-2. 하루의 경계 · 04:00 전은 어제가 여행 기간이면 어제 · 자정을 넘는 일정 🔗(장소 상세의 `다녀왔어요`는 자정 경계 — 판정 B로 의도된 차이)
+2. 하루의 경계 · 04:00 전은 어제가 여행 기간이면 어제 · 자정을 넘는 일정 🔗(장소 상세의 `다녀왔어요`는 자정 경계 — 판정 B로 의도된 차이. F6이 같은 상수 `DAY_ROLLOVER_HOUR`로 영업 끝/영업 전을 가른다 — F6 결정 10)
 3. 기간 밖 · 미리 보기 + 체크 숨김 · 전날 밤 내일 일정을 본다
 4. "다음" 규칙 · 마지막 체크 뒤의 첫 미체크(되감음) · 건너뛴 곳에 막히지 않는다
 5. 체크 날짜와 판정 · 오늘 Day의 날짜로 쓰고 여행 기간 안이면 다녀옴 · ⚖️ 판정 B로 확정
@@ -224,6 +228,7 @@ F1 백업은 보관함 **원문**을 그대로 담으므로 F2·F3이 더한 필
 7. 경고 종류 · 머무는 중 영업 끝·브레이크까지 · 체류가 문제인 경우가 흔하다
 8. 지도 핀 표시 · 없음 · 행·카드로 충분
 9. Cloudflare에서 네이버가 막힐 때 · 그대로 `확인 필요`, 미리보기 배포에서 먼저 확인 · 막히면 병합하지 않고 다시 논의
+10. 영업 끝/영업 전을 가르는 하루 경계 · 04:00, F5 `DAY_ROLLOVER_HOUR`를 함께 씀 · 당일 모드와 같은 하루, 한 상수 ⚖️(리뷰 반영으로 더함) 🔗F5 결정 2
 
 ### F7 여행 일정 공유
 
@@ -235,6 +240,7 @@ F1 백업은 보관함 **원문**을 그대로 담으므로 F2·F3이 더한 필
 6. 경로선을 파일에 · 넣는다(해시 링크에서는 뺌) · 받은 사람은 파일 안에서 경로를 다시 조회할 수 없다
 7. 들어가는 곳 · 시간표 머리 `일정 공유` + 여행 목록 메뉴 · 세 화면 크기 모두에서 보인다
 8. 후보 기본값 · `후보도 넣기` 켬 · 동행과 "어디를 더 갈지" 함께 본다
+9. 장소만 보내는 `내보내기`(v1)에도 파일 크기 검사 · 함께 적용 · 같은 `ShareFileDialog` 몸통이라 한 줄, 받을 수 없는 파일을 만들지 않는다 ⚖️(리뷰 반영으로 더함. 일정 공유는 최종 HTML이 5,242,880바이트를 넘으면 늘 막는다)
 
 ## 6. 교차 검토에서 고친 것
 
@@ -248,6 +254,15 @@ F1 백업은 보관함 **원문**을 그대로 담으므로 F2·F3이 더한 필
 | F5 설계서·계획 | 판정 B 확정 문장(§11-5, Global Constraints). 위치 띠의 오류 문구를 F4 `GeolocationError.userMessage`로, 거리 글자를 F4 `formatDistanceM`으로, 풀기 토스트를 F2와 같은 `‘<이름>’ 다녀옴 표시를 지웠어요`로. 브랜치 `feat/trip-day-mode` |
 | F6 설계서·계획 | 용량 초과 때 F1의 사본 지우기 단계를 지킴(시험 추가), `format.ts`는 F7 보기 화면이 import하므로 순수 함수로, 출발점·브랜치 `feat/business-hours`, 롤백 표는 별도 문서 PR |
 | F7 계획 | 앞 묶음이 먼저 고친 파일 목록(SharePreview·TripsPage·DayTimeline·TripPlannerPage·format·schedule·lazy-routes), 롤백 표는 병합 뒤 별도 문서 PR로(E2E 커밋과 분리) |
+
+### 6.1 리뷰 지적 반영 (2026-10-16, 조정자 판정)
+
+| 묶음 | 고친 파일·절 | 고친 것 |
+|---|---|---|
+| F1 | 설계서 §2.3·§2.4·§2.7·§4·§5·§6·§10-2, 계획 Global Constraints·Review Focus 4·Task 2·4·5·6 | `지금 보관함 먼저 받기` 뒤 다른 탭이 보관함을 고치고 사본 저장이 실패하면 그 변경이 사라지던 문제. 받은 원문(`savedText`)을 기억해 잠금 안 원문과 비교하고, 다르면 사본 필수(`PreviousNotKept({ changedSinceSaved })`). 못 남기면 `그사이 보관함이 바뀌었어요…`로 다시 받게 함. `snapshot`이 원문 문자열 `text`를 돌려줌. 시험: 먼저 받기 → 다른 탭 수정 → 사본 실패 |
+| F4 | 설계서 §4.2·§7.1·§7.3·§8.1·§13-11, 계획 Review Focus 6·Task 3·새 Task 6(E2E는 Task 7로) | 가져오기·되살리기 뒤 반경 때문에 방금 넣은 장소가 숨던 문제. F1 되살리기(`backup-state.ts`), F3 `보관함에서 보기`(`FolderResync.tsx`), 폴더 가져오기(`FolderList.tsx` `submit`의 `patchQuery`), 공유 가져오기(`SharePreview.tsx` `submit`의 제목 라벨 `patchQuery`)가 `nearbyOffAtom`으로 근처 모드를 끔. 사용자 `필터 지우기`는 그대로, 숨은 수 안내는 결정 11 |
+| F6 | 설계서 §3.2·§3.3·§8·§10·§12-10, 계획 Global Constraints·Review Focus 2·Task 3 | (1) `X-1`·`X`만 만들어 24시간 영업의 23:30~다음 날 00:30 체류가 `closes-during-stay`로 나오던 문제 → `X-1`·`X`·`X+1` 세 날 구간을 만들고 맞닿는 구간(24:00 = 다음 날 00:00)을 합침. (2) `18:00~02:00`의 10:00 도착이 `after-close`가 되던 문제 → 하루 경계 04:00(`DAY_ROLLOVER_HOUR`, F5와 공유)으로 영업 끝/영업 전을 가름. 03:59·04:00 경계 시험 |
+| F7 | 설계서 §3.2·§9.3·§12·§13-9·§15.1, 계획 Global Constraints·Review Focus 6·Task 4·8 | 메모 최대 10,000자를 빼고 "장소당 약 1KB"로 잡아 5MB 가져오기 한도를 넘는 파일을 만들 수 있던 문제(v1에도 있음). `ShareFileDialog`가 최종 HTML 바이트(`shareHtmlBytes`)를 재서 넘으면 저장·공유를 막고 줄이는 방법(메모·후보 빼기)을 창 안에. v1 적용은 결정 9 |
 
 이름·형태 확인 결과 그대로 맞은 것: C2의 `Geolocation`·`GeoFix`·`setMyLocation`·`MapView.myLocation`·`controls`(F4 ↔ F5), C1의 `setVisitedOn`·`visitedOnOf`(F2 ↔ F5), `review` 모양(F2 ↔ F7), `folders`(F3 ↔ F1), `tripmap:hours:v1` 제외(F6 ↔ F1), 태그 `v0.8.0`~`v0.14.0` 순서.
 
