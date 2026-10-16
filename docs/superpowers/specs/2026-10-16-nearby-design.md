@@ -97,7 +97,18 @@
 **빈 상태**:
 
 - 반경 안에 없음: `반경 3km 안에 저장한 곳이 없어요` + 버튼 `반경 넓히기`(한 단계 위로, `10km` 다음은 `전체`).
-- `전체`인데 없음(필터 때문): 지금 빈 상태 그대로(`조건에 맞는 장소가 없어요` / `필터 지우기`). `필터 지우기`는 근처 모드를 끄지 않는다.
+- `전체`인데 없음(필터 때문): 지금 빈 상태 그대로(`조건에 맞는 장소가 없어요` / `필터 지우기`). `필터 지우기`는 근처 모드를 끄지 않는다(사용자가 근처를 보던 중 필터만 푼 것이므로). 근처 모드에서 반경 밖이라 숨은 장소 수를 따로 알리는 문장은 지금 없다(근처 줄은 `3km 안 · 7곳`만 보인다) — 더할지는 §13 결정 11.
+
+**근처 모드가 저절로 꺼지는 흐름**: 앱이 필터를 기본값으로 되돌리거나 "방금 넣은 장소"를 보이려고 목록을 거르는 흐름은 근처 모드도 끈다. 켜 둔 반경 때문에 방금 넣은 장소가 숨으면 안 되기 때문이다(멀리 있는 폴더를 가져오면 3km 안에 하나도 없다). 끄는 것은 `nearbyAtom.on`뿐이고 반경·내 위치(지도 점)는 그대로 둔다.
+
+| 흐름 | 자리(코드) |
+|---|---|
+| F1 백업에서 되살리기 적용 | `src/stores/backup-state.ts` `useRestoreActions().replace` 성공 뒤(필터를 기본값으로 둔 직후) |
+| F3 다시 가져오기 토스트 `보관함에서 보기` | `src/sections/add-place/FolderResync.tsx` 토스트 `onClick`의 `patchQuery(…)` 뒤 |
+| 네이버 폴더 가져오기(보관함으로) | `src/sections/add-place/FolderList.tsx` `submit`의 `patchQuery({ labelIds: [result.createdId!], unlabeled: false, text: '', regions: [] })` 뒤(지금 `main` 143행, F2가 `visited: 'all'`을 더함). 여행으로 넣는 경로(`toTrip`)는 필터를 건드리지 않으므로 그대로 |
+| 공유 파일 가져오기 | `src/sections/share-import/SharePreview.tsx` `submit`의 `if (result.createdId !== undefined) { patchQuery(…) }` 안(지금 `main` 116행). 제목 라벨을 붙이지 않아 필터를 바꾸지 않으면 근처 모드도 그대로 |
+
+사용자가 직접 누르는 `필터 지우기`는 이 목록에 넣지 않는다(위).
 
 ### 4.3 지도: 내 위치 보기
 
@@ -214,6 +225,7 @@
 | `src/sections/library/SortMenu.tsx`, `FilterBar.tsx`, `LibraryPage.tsx` | `가까운 순`, 근처 줄, 빈 상태 |
 | `src/sections/library/views/PlaceList.tsx`, `PlaceRow.tsx`, `PlaceCard.tsx` | 거리 표시 |
 | `src/sections/map/LibraryMap.tsx` | 버튼·점·맞추기·칩·토스트 |
+| `src/stores/backup-state.ts`(F1), `src/sections/add-place/FolderList.tsx`, `src/sections/add-place/FolderResync.tsx`(F3), `src/sections/share-import/SharePreview.tsx` | 필터를 푸는 흐름에서 근처 모드 끄기(§4.2) |
 
 ### 7.2 인터페이스 (약속 C2)
 
@@ -260,6 +272,7 @@ export type LocateResult = { kind: 'fix'; fix: GeoFix } | { kind: 'error'; error
 export const locateAtom: WritableAtom<null, [], Promise<LocateResult>>; // 한 번 얻기. 찾는 중이면 같은 요청을 기다린다
 export type NearbyState = { on: boolean; radiusM: NearbyRadius };
 export const nearbyAtom: PrimitiveAtom<NearbyState>; // { on: false, radiusM: 3000 }
+export const nearbyOffAtom: WritableAtom<null, [], void>; // on만 false로(반경·위치는 그대로). §4.2 "저절로 꺼지는 흐름"이 부른다
 
 // src/domain/nearby.ts
 export const NEARBY_RADII = [500, 1000, 3000, 5000, 10_000, null] as const; // null = 전체
@@ -287,6 +300,7 @@ export function radiusBox(center: LngLat, radiusM: number): [LngLat, LngLat]; //
 - **상태**: 찾는 중 표시, 성공·실패 반영(성공하면 이전 오류를 지움), 실패해도 이전 위치 유지, 찾는 중에 다시 부르면 요청이 하나이고 두 호출이 같은 결과를 받음, 어떤 경우에도 storage에 쓰지 않음.
 - **지도**: 가짜 어댑터 `my-location` 요소(좌표·정확도 data 속성, `null`이면 사라짐). 네이버 어댑터: 마운트 전 호출 → 마운트 때 Marker·Circle 생성, 다시 호출 → 이전 것 지우고 새로, `null`·`destroy` → `setMap(null)`, 점이 장소 마커보다 낮은 zIndex·누를 수 없음, 원 반지름 = 정확도. `MapView`: 준비된 뒤 `setMyLocation` 전달, `controls`가 ＋/− 아래에, `controlsRight`만큼 옮김, `extraFitPoints`가 `fitBounds`에 들어감.
 - **보관함 화면**: `가까운 순` → 찾는 중 문구 → 거리순·거리 글자·상태 문장, 반경 칩, 빈 상태 `반경 넓히기`, 다른 정렬 고르면 근처 줄 사라짐, `×`, 오류 4종 문구와 `다시 시도`, 5초 뒤 느림 문구(가짜 타이머), 300ms 넘게 기다려도 `tripmap:prefs`의 `sort`는 이전 값, 시험 동안 storage 어디에도 좌표 글자가 없음, 위치 요청은 고르기 전에 0번.
+- **근처 모드 끄는 흐름**(§4.2): 근처 모드(3km, 위치 얻음)에서 기준점 20km 밖 장소만 든 폴더를 보관함으로 가져오기 → 목록에 새 장소가 보이고 근처 줄 없음, `nearbyAtom.radiusM`·지도 점은 그대로. 공유 파일 가져오기(제목 라벨 있음) → 같음, 제목 라벨 없음 → 근처 모드 그대로. F3 `보관함에서 보기` → 꺼짐. F1 되살리기 적용 → 꺼짐. 사용자 `필터 지우기` → 근처 모드 그대로.
 - **지도 화면**: 버튼 이름·44px·찾는 중 `aria-busy`, 성공 → 점·`focus`·알림 문구, 실패 → 토스트, 근처 모드 → 반경 상자에 맞춤, 중간 폭 + 상세 열림 → 기둥 `right` 368, 좁은 화면 근처 칩과 `×`.
 
 ### 8.2 E2E (Playwright, desktop·iphone·galaxy)
@@ -375,3 +389,8 @@ export function radiusBox(center: LngLat, radiusM: number): [LngLat, LngLat]; //
     - 선택지: (가) 얻은 시각만 보이고(`14:05 기준`) 만료하지 않음 / (나) 10분 지나면 근처 정렬을 멈추고 다시 찾기를 권함.
     - 추천: (가).
     - 이유: 시각이 보이면 사람이 판단한다. (나)는 시계를 계속 봐야 해서 복잡하다.
+11. **반경 밖에 숨은 장소 안내** (리뷰 반영으로 더함)
+    - 배경: 앱이 필터를 푸는 흐름(가져오기·되살리기·`보관함에서 보기`)은 근처 모드를 끄지만(§4.2), 사용자가 누르는 `필터 지우기`는 끄지 않는다. 그래서 필터를 풀어도 반경 밖 장소는 여전히 숨고, 지금 화면에는 몇 곳이 숨었는지 보이지 않는다.
+    - 선택지: (가) 지금처럼 안내 없음 / (나) 근처 줄 상태 문장 끝에 `· 3km 밖 12곳은 숨김`(반경이 `전체`이거나 0곳이면 덧붙이지 않음) / (다) (나) + 사용자 `필터 지우기`도 근처 모드를 끔.
+    - 추천: (나).
+    - 이유: 숨은 이유와 양이 한눈에 보이고, `전체` 칩 한 번으로 풀 수 있다. (다)는 근처를 보던 사람이 라벨만 풀고 싶을 때 근처 모드까지 꺼져 다시 켜야 한다. (나)를 고르면 Task 4의 상태 문장 시험에 한 줄을 더한다.
