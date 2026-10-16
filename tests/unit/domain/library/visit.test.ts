@@ -51,6 +51,10 @@ const A = 'place00001';
 const B = 'place00002';
 
 describe('visit 도우미', () => {
+  it('시험 시간대가 Asia/Seoul로 고정돼 있다(vitest.config.ts의 test.env.TZ)', () => {
+    expect(new Date(2026, 9, 16, 0, 30).toISOString()).toBe('2026-10-15T15:30:00.000Z');
+  });
+
   it('visitedOnOf·isVisited·reviewOf는 필드가 없으면 비어 있다', () => {
     const p = place(1);
     expect(visitedOnOf(p)).toBeNull();
