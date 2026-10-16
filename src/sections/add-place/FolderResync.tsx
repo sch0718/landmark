@@ -5,7 +5,6 @@ import { useAtomValue, useSetAtom } from 'jotai';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
-import type { OpSummary } from 'src/domain/library/ops';
 import { planFolderSync, syncFolder } from 'src/domain/library/folder-links';
 import { localDate } from 'src/lib/local-date';
 import { paths } from 'src/routes/paths';
@@ -138,16 +137,12 @@ export function FolderResync({
     savingRef.current = true;
     setSaving(true);
     setLinkChanged(false);
-    // 연산 안에서 채운다. 저장소가 다시 시도하면 다시 채운다.
-    const box: { summary?: OpSummary } = {};
-    const result = await run((lib, ctx) => {
-      const out = syncFolder(lib, { shareId, folderName, items: places, pickedSids }, ctx);
-      box.summary = out.ok ? out.summary : undefined;
-      return out;
-    });
+    const result = await run((lib, ctx) =>
+      syncFolder(lib, { shareId, folderName, items: places, pickedSids }, ctx),
+    );
     // 칸이 닫힌 뒤에도 가져오기는 이미 저장소에 반영됐으므로 결과는 알린다.
     if (result.ok) {
-      const message = box.summary === undefined ? null : resultMessage(box.summary);
+      const message = result.summary === undefined ? null : resultMessage(result.summary);
       const labelId = result.createdId ?? link.labelId.value;
       if (message !== null) {
         toast(message, {
