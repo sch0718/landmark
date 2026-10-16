@@ -135,7 +135,10 @@ export class NaverMapAdapter implements MapAdapter {
     this.drawMyLocation();
   }
 
-  /** 정확도 원과 점을 지우고 다시 만든다. 옵션 이름은 Naver Maps v3 문서 기준(스펙 §11 — 화면 확인 필요). */
+  /**
+   * 정확도 원과 점을 지우고 다시 만든다. 옵션 이름은 스펙 §11 목록을 따랐을 뿐 Naver Maps v3 공식 문서로는
+   * 확인하지 않았다(확인 필요 — 문서와 화면으로 확인, 스펙 §11).
+   */
   private drawMyLocation(): void {
     for (const o of this.myLocationOverlays) o.setMap(null);
     this.myLocationOverlays = [];

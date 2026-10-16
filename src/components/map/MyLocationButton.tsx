@@ -3,7 +3,10 @@ import IconButton from '@mui/material/IconButton';
 import { LocateFixedIcon } from 'src/components/icons';
 
 type Props = {
-  /** 위치를 찾는 중인가. 찾는 중에는 눌러도 아무 일도 없다(요청을 더 만들지 않는다). */
+  /**
+   * 위치를 찾는 중인가. 찾는 중에는 눌러도 아무 일도 없다(요청을 더 만들지 않는다). 포커스는 그대로 두도록
+   * `disabled` 대신 `aria-disabled`로 알린다.
+   */
   locating: boolean;
   onClick(): void;
 };
@@ -14,6 +17,7 @@ export function MyLocationButton({ locating, onClick }: Props) {
     <IconButton
       aria-label={locating ? '내 위치를 찾는 중' : '내 위치 보기'}
       aria-busy={locating ? 'true' : undefined}
+      aria-disabled={locating ? 'true' : undefined}
       onClick={() => {
         if (!locating) onClick();
       }}
