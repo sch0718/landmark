@@ -31,10 +31,16 @@ test.describe('다녀옴·한 줄 평: 데스크톱', { tag: '@desktop' }, () =>
     // 날짜 칸을 비워도(휴대폰 날짜 창의 지우기) 저장하지 않는다. 칸은 입력을 이어 갈 수 있게 비어 있다.
     await dateBox.fill('');
     await expect(dateBox).toHaveValue('');
+    // 칸을 떠나면 저장된 날짜로 돌아간다.
+    await dateBox.blur();
+    await expect(dateBox).toHaveValue(todaySeoul());
 
     // 오늘 이후 날짜는 안내만 하고 저장하지 않는다.
     await dateBox.fill('2099-01-01');
     await expect(detail.getByRole('alert')).toContainText('오늘 이후 날짜는 고를 수 없어요');
+    await dateBox.blur();
+    await expect(dateBox).toHaveValue(todaySeoul());
+    await expect(detail.getByRole('alert')).toHaveCount(0);
 
     // 지난 날짜로 고친다.
     await dateBox.fill('2026-10-10');

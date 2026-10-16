@@ -89,7 +89,7 @@ function PlaceBody({ place, level }: { place: Place; level: HeadingLevel }) {
     run((lib, ctx) => setPlaceCategory(lib, id, text === '' ? null : text, ctx));
   const saveMemo = (text: string) => run((lib, ctx) => setPlaceMemo(lib, id, text, ctx));
   const saveReview = (text: string) => run((lib, ctx) => setPlaceReview(lib, id, text, ctx));
-  const markVisited = () => void run((lib, ctx) => markVisitedToday(lib, [id], ctx));
+  const markVisited = async () => (await run((lib, ctx) => markVisitedToday(lib, [id], ctx))).ok;
   const setVisitDate = (date: string) =>
     void run((lib, ctx) => setVisitedOn(lib, { [id]: date }, ctx));
 
@@ -102,7 +102,7 @@ function PlaceBody({ place, level }: { place: Place; level: HeadingLevel }) {
       return setVisitedOn(lib, { [id]: null }, ctx);
     });
     const prev = before.date;
-    if (!result.ok || prev === null) return;
+    if (!result.ok || prev === null) return result.ok;
     toast('다녀옴 표시를 지웠어요', {
       duration: UNDO_MS,
       action: {
@@ -116,6 +116,7 @@ function PlaceBody({ place, level }: { place: Place; level: HeadingLevel }) {
           }),
       },
     });
+    return true;
   };
 
   const remove = async () => {
@@ -174,7 +175,7 @@ function PlaceBody({ place, level }: { place: Place; level: HeadingLevel }) {
           today={localDateOf(new Date().toISOString())}
           onMarkToday={markVisited}
           onSetDate={setVisitDate}
-          onClear={() => void clearVisit()}
+          onClear={clearVisit}
         />
       </Section>
       <Section title="한 줄 평" level={level}>

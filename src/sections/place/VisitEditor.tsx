@@ -12,9 +12,10 @@ type Props = {
   visitedOn: string | null;
   /** 이 기기의 오늘(`YYYY-MM-DD`). 날짜 칸의 `max`. */
   today: string;
-  onMarkToday(): void;
+  /** 저장이 실패하면(`false`) 옮기려던 포커스를 버린다. 동기 호출이면 `void`. */
+  onMarkToday(): Promise<boolean> | void;
   onSetDate(date: string): void;
-  onClear(): void;
+  onClear(): Promise<boolean> | void;
 };
 
 /**
@@ -39,6 +40,13 @@ export function VisitEditor({ visitedOn, today, onMarkToday, onSetDate, onClear 
   const focusNext = useRef<'date' | 'mark' | null>(null);
   const dateRef = useRef<HTMLInputElement>(null);
   const markRef = useRef<HTMLButtonElement>(null);
+  // 저장이 실패하면 포커스 예약을 버린다. 안 그러면 나중에 날짜가 바뀔 때 포커스를 가져간다.
+  const request = (next: 'date' | 'mark', save: () => Promise<boolean> | void) => {
+    focusNext.current = next;
+    void Promise.resolve(save()).then((ok) => {
+      if (ok === false && focusNext.current === next) focusNext.current = null;
+    });
+  };
   useEffect(() => {
     if (focusNext.current === 'date' && visitedOn !== null) {
       dateRef.current?.focus();
@@ -55,10 +63,7 @@ export function VisitEditor({ visitedOn, today, onMarkToday, onSetDate, onClear 
         component="button"
         type="button"
         ref={markRef}
-        onClick={() => {
-          focusNext.current = 'date';
-          onMarkToday();
-        }}
+        onClick={() => request('date', onMarkToday)}
         sx={{ ...BUTTON_SX, mt: 0.5 }}
       >
         <CheckIcon aria-hidden="true" style={{ color: 'var(--tm-accent-text)' }} />
@@ -66,6 +71,14 @@ export function VisitEditor({ visitedOn, today, onMarkToday, onSetDate, onClear 
       </Box>
     );
   }
+
+  // 칸을 떠날 때 저장되지 않은 값(비움·중간값·미래)이 남아 있으면 저장된 날짜로 돌린다.
+  // 올바른 날짜는 저장을 부탁한 상태라 그대로 둔다(저장이 끝나면 prop이 따라온다).
+  const onBlur = () => {
+    if (draft !== '' && draft >= MIN_DATE && draft <= today) return;
+    setDraft(visitedOn);
+    setFuture(false);
+  };
 
   const onChange = (event: ChangeEvent<HTMLInputElement>) => {
     const date = event.target.value;
@@ -100,15 +113,13 @@ export function VisitEditor({ visitedOn, today, onMarkToday, onSetDate, onClear 
           aria-invalid={future}
           aria-describedby={future ? errorId : undefined}
           onChange={onChange}
+          onBlur={onBlur}
           sx={[fieldSx({ invalid: future }), { flex: '1 1 160px', width: 'auto' }]}
         />
         <Box
           component="button"
           type="button"
-          onClick={() => {
-            focusNext.current = 'mark';
-            onClear();
-          }}
+          onClick={() => request('mark', onClear)}
           sx={BUTTON_SX}
         >
           다녀옴 취소

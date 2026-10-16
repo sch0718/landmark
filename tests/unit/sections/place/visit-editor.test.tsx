@@ -117,6 +117,42 @@ describe('VisitEditor (단독)', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
+  it('칸을 떠나면(blur) 비움·중간값·미래 날짜는 저장된 날짜로 돌아가고 안내도 사라진다', () => {
+    const h = setup('2026-10-10');
+    const input = screen.getByLabelText('다녀온 날');
+    for (const value of ['', '0209-10-16', '2099-01-01']) {
+      fireEvent.focus(input);
+      fireEvent.change(input, { target: { value } });
+      // 입력 중에는 되돌리지 않는다.
+      expect(input).toHaveValue(value);
+      fireEvent.blur(input);
+      expect(input).toHaveValue('2026-10-10');
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(input).toHaveAttribute('aria-invalid', 'false');
+    }
+    expect(h.onSetDate).not.toHaveBeenCalled();
+
+    // 올바른 날짜는 저장을 부탁했으므로 blur로 되돌리지 않는다(저장이 끝나면 prop이 따라온다).
+    fireEvent.change(input, { target: { value: '2026-10-12' } });
+    fireEvent.blur(input);
+    expect(input).toHaveValue('2026-10-12');
+    expect(h.onSetDate).toHaveBeenCalledWith('2026-10-12');
+  });
+
+  it('저장이 실패하면(거짓으로 끝나면) 옮기려던 포커스를 버린다', async () => {
+    const handlers = {
+      onMarkToday: vi.fn(() => Promise.resolve(false)),
+      onSetDate: vi.fn(),
+      onClear: vi.fn(),
+    };
+    const { rerender } = render(<VisitEditor visitedOn={null} today="2026-10-16" {...handlers} />);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: '다녀왔어요' }));
+    // 실패한 저장 뒤 다른 곳(예: 다른 탭)에서 날짜가 들어와도 포커스를 가져가지 않는다.
+    rerender(<VisitEditor visitedOn="2026-10-16" today="2026-10-16" {...handlers} />);
+    expect(screen.getByLabelText('다녀온 날')).not.toHaveFocus();
+  });
+
   it('저장된 날짜가 바뀌면 칸의 초안이 그 날짜로 맞춰지고 묵은 안내는 사라진다', () => {
     const handlers = { onMarkToday: vi.fn(), onSetDate: vi.fn(), onClear: vi.fn() };
     const { rerender } = render(
