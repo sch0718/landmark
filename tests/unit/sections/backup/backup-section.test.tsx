@@ -178,6 +178,30 @@ describe('BackupSection', () => {
     expect(within(section()).queryByRole('alert')).not.toBeInTheDocument();
   });
 
+  it('calls navigator.share in the same task as the click (no await before it)', async () => {
+    const share = stubShare(() => Promise.resolve());
+    await open();
+    // 사용자 활성화는 클릭과 같은 작업 안에서만 유효하다. 클릭 직후(기다리지 않고) 이미 불려야 한다.
+    fireEvent.click(within(section()).getByRole('button', { name: '백업 공유' }));
+    expect(share).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith('백업 파일을 만들었어요'));
+  });
+
+  it('a failure while building the file shows the rebuild message instead of rejecting', async () => {
+    const user = userEvent.setup();
+    downloadMock.mockImplementationOnce(() => {
+      throw new Error('다운로드 실패');
+    });
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    await open();
+    await user.click(saveButton());
+    expect(await within(section()).findByRole('alert')).toHaveTextContent(
+      '백업 파일을 만들지 못했어요. 새로고침해 주세요',
+    );
+    expect(statusLine()).toHaveTextContent('마지막 백업: 없음');
+    errors.mockRestore();
+  });
+
   it('백업 파일로 되살리기 opens the restore dialog with focus on 파일 고르기', async () => {
     const user = userEvent.setup();
     await open();

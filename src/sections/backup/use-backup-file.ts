@@ -4,7 +4,7 @@ import { useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { BACKUP_MIME, backupFileName, buildBackupText } from 'src/domain/backup/build-backup';
 import { downloadText } from 'src/lib/download-text';
-import { startEffect } from 'src/lib/effect/runtime';
+import { startEffectSync } from 'src/lib/effect/runtime';
 import { requestPersistOnce } from 'src/lib/storage-persist';
 import { LibraryStore } from 'src/services/library-store';
 import { markBackedUpAtom, persistStateAtom } from 'src/stores/backup-state';
@@ -65,26 +65,24 @@ export function useBackupFile() {
     setBusy(true);
     setError(null);
     try {
+      // 공유 창은 클릭과 같은 작업 안에서 열어야 한다(사파리의 사용자 활성화). 읽기는 동기라 기다리지 않는다.
       let snapshot;
+      let text;
+      let name;
+      const now = new Date();
       try {
-        snapshot = await startEffect(readSnapshot);
+        snapshot = startEffectSync(readSnapshot);
+        text = buildBackupText({ rawLibrary: snapshot.raw, prefs: store.get(prefsAtom), now });
+        name = backupFileName(now);
+        if (kind === 'save') downloadText(text, name, BACKUP_MIME);
       } catch (e) {
         console.error(e);
         setError(BUILD_FAILED);
         return null;
       }
-      const now = new Date();
-      const text = buildBackupText({
-        rawLibrary: snapshot.raw,
-        prefs: store.get(prefsAtom),
-        now,
-      });
-      const name = backupFileName(now);
-      if (kind === 'save') {
-        downloadText(text, name, BACKUP_MIME);
-      } else {
-        const file = new File([text], name, { type: BACKUP_MIME });
+      if (kind === 'share') {
         try {
+          const file = new File([text], name, { type: BACKUP_MIME });
           await navigator.share({ files: [file], title: SHARE_TITLE });
         } catch (e) {
           if (!isAbort(e)) setError(SHARE_FAILED);
@@ -93,7 +91,10 @@ export function useBackupFile() {
       }
       return finish(now, { savedText: snapshot.text });
     } finally {
-      busyRef.current = false;
+      // 받기는 끝까지 동기로 달리므로, 같은 작업 안의 두 번째 클릭이 끼지 못하게 다음 마이크로태스크에서 푼다.
+      queueMicrotask(() => {
+        busyRef.current = false;
+      });
       setBusy(false);
     }
   };
