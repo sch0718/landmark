@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeMapAdapter } from 'src/components/map/FakeMapAdapter';
 import { setAppRuntimeForTest } from 'src/lib/effect/runtime';
 import { Geolocation } from 'src/services/geolocation';
+import { NOW_TICK_MS } from 'src/sections/trips/today/use-now';
 import { installMapResources } from '../../components/helpers/map-resources';
 import { fakeGeolocation, type FakeCoords } from '../../helpers/fake-geolocation';
 import { HOUSE, P1, P2, route } from './planner-fixtures';
@@ -296,6 +297,28 @@ describe('당일 모드 내 위치: 지도', () => {
     emit(geo, nearP1(1100));
     expect(await screen.findByTestId('my-location')).toBeInTheDocument();
     expect(setMarkers).not.toHaveBeenCalled();
+  });
+
+  it('30초 틱으로 늦어짐이 바뀌어도 핀·경로선을 다시 그리지 않는다', async () => {
+    // 지도 준비(rAF)가 진짜 타이머를 쓰므로 타이머는 흉내 내지 않고, 시각 틱(30초 간격) 콜백만 붙잡아 부른다.
+    const intervals = vi.spyOn(window, 'setInterval');
+    const { geo } = await setup();
+    await waitFor(() => expect(geo.watchers.size).toBe(1));
+    await waitFor(() => expect(screen.getByTestId(`marker-${P1}`)).toBeInTheDocument());
+    const late = () => within(nextCard()).getByText(/늦음$/).textContent;
+    await waitFor(() => expect(late()).toBe('지금 출발하면 10:50 도착 · 1시간 30분 늦음'));
+    const tick = intervals.mock.calls.findLast(([, ms]) => ms === NOW_TICK_MS)?.[0] as () => void;
+    expect(tick).toBeTypeOf('function');
+    const setMarkers = vi.spyOn(FakeMapAdapter.prototype, 'setMarkers');
+    const setPolylines = vi.spyOn(FakeMapAdapter.prototype, 'setPolylines');
+
+    vi.setSystemTime(new Date(2026, 9, 24, 10, 31));
+    act(() => tick());
+    expect(late()).toBe('지금 출발하면 10:51 도착 · 1시간 31분 늦음');
+    vi.setSystemTime(new Date(2026, 9, 24, 10, 31, 30));
+    act(() => tick());
+    expect(setMarkers).not.toHaveBeenCalled();
+    expect(setPolylines).not.toHaveBeenCalled();
   });
 
   it('쓸 수 없는(3분 전) 위치는 지도에 그리지 않는다', async () => {
