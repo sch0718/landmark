@@ -12,19 +12,31 @@ const SORTS: ReadonlyArray<{ value: LibraryQuery['sort']; label: string }> = [
 
 /** 저장하지 않는 정렬(`visitedSortAtom`)의 항목 이름. */
 const VISITED_SORT_LABEL = '다녀온 날순';
+/** 저장하지 않는 근처 정렬(`nearbyAtom`)의 항목 이름. */
+const NEARBY_SORT_LABEL = '가까운 순';
 
 type Props = {
   value: LibraryQuery['sort'];
   /** `다녀온 날순`이 켜져 있는가. 켜져 있으면 저장되는 정렬은 모두 꺼진 것으로 보인다. */
   visitedSort: boolean;
+  /** `가까운 순`(근처 모드)이 켜져 있는가. 켜져 있으면 다른 정렬은 모두 꺼진 것으로 보인다. */
+  nearby: boolean;
+  /** 저장되는 정렬을 골랐다. 부른 쪽이 `다녀온 날순`과 근처 모드를 끈다. */
   onChange(sort: LibraryQuery['sort']): void;
+  /** `다녀온 날순`을 골랐다. 부른 쪽이 근처 모드를 끈다. */
   onVisitedSort(): void;
+  /** `가까운 순`을 골랐다. 부른 쪽이 `다녀온 날순`을 끄고 위치를 묻는다. */
+  onNearby(): void;
 };
 
-export function SortMenu({ value, visitedSort, onChange, onVisitedSort }: Props) {
+export function SortMenu({ value, visitedSort, nearby, onChange, onVisitedSort, onNearby }: Props) {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const menuId = useId();
   const current = SORTS.find((s) => s.value === value) ?? SORTS[0]!;
+  // 메모리 정렬은 하나만 켜진다. 근처가 먼저다(켤 때 `다녀온 날순`을 끄지만, 혹시 둘 다 참이어도 근처로 보인다).
+  const visited = visitedSort && !nearby;
+  const saved = !visitedSort && !nearby;
+  const buttonLabel = nearby ? NEARBY_SORT_LABEL : visitedSort ? VISITED_SORT_LABEL : current.label;
   return (
     <>
       <Box
@@ -47,15 +59,15 @@ export function SortMenu({ value, visitedSort, onChange, onVisitedSort }: Props)
           whiteSpace: 'nowrap',
         }}
       >
-        {visitedSort ? VISITED_SORT_LABEL : current.label}
+        {buttonLabel}
       </Box>
       <Menu id={menuId} anchorEl={anchor} open={anchor !== null} onClose={() => setAnchor(null)}>
         {SORTS.map((sort) => (
           <MenuItem
             key={sort.value}
             role="menuitemradio"
-            aria-checked={!visitedSort && sort.value === value}
-            selected={!visitedSort && sort.value === value}
+            aria-checked={saved && sort.value === value}
+            selected={saved && sort.value === value}
             sx={{ minHeight: 44 }}
             onClick={() => {
               onChange(sort.value);
@@ -67,8 +79,8 @@ export function SortMenu({ value, visitedSort, onChange, onVisitedSort }: Props)
         ))}
         <MenuItem
           role="menuitemradio"
-          aria-checked={visitedSort}
-          selected={visitedSort}
+          aria-checked={visited}
+          selected={visited}
           sx={{ minHeight: 44 }}
           onClick={() => {
             onVisitedSort();
@@ -76,6 +88,18 @@ export function SortMenu({ value, visitedSort, onChange, onVisitedSort }: Props)
           }}
         >
           {VISITED_SORT_LABEL}
+        </MenuItem>
+        <MenuItem
+          role="menuitemradio"
+          aria-checked={nearby}
+          selected={nearby}
+          sx={{ minHeight: 44 }}
+          onClick={() => {
+            onNearby();
+            setAnchor(null);
+          }}
+        >
+          {NEARBY_SORT_LABEL}
         </MenuItem>
       </Menu>
     </>

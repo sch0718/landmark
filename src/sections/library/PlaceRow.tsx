@@ -2,6 +2,7 @@ import Box from '@mui/material/Box';
 import { visuallyHidden } from '@mui/utils';
 import { CheckIcon } from 'src/components/icons';
 import { isVisited } from 'src/domain/library/visit';
+import { formatDistanceM } from 'src/domain/nearby';
 import type { Label, Place } from 'src/schema/library';
 import { labelColors } from 'src/sections/library/label-style';
 import { SelectMark } from 'src/sections/library/SelectMark';
@@ -20,7 +21,23 @@ export type PlaceItemProps = {
   current?: boolean;
   onOpen(id: string): void;
   onToggle(id: string): void;
+  /** 내 위치에서의 직선거리(m). 근처 모드일 때만 있고, 있으면 지역 자리에 대신 보인다. */
+  distanceM?: number;
 };
+
+/** 지역 자리에 들어가는 글자: 거리가 있으면 거리(화면 읽기에는 `내 위치에서 570m`), 없으면 지역. */
+export function RegionOrDistance({ region, distanceM }: { region: string; distanceM?: number }) {
+  if (distanceM === undefined) return region;
+  return (
+    <span>
+      {/* 띄어쓰기는 숨은 글자 밖에 둔다(숨은 글자 끝의 공백은 접근 이름에서 잘린다). 줄 맨 앞 공백이라 눈에는 안 보인다. */}
+      <Box component="span" sx={visuallyHidden}>
+        내 위치에서
+      </Box>{' '}
+      {formatDistanceM(distanceM)}
+    </span>
+  );
+}
 
 /** 보기가 선택할 수 있는 장소 칸이 공유하는 버튼 바탕. */
 export const ITEM_BUTTON_SX = {
@@ -56,6 +73,7 @@ export function PlaceRow({
   current = false,
   onOpen,
   onToggle,
+  distanceM,
 }: PlaceItemProps) {
   const gestures = usePlaceGestures({ id: place.id, selecting, onOpen, onToggle });
   const chips = labels.slice(0, MAX_CHIPS);
@@ -165,7 +183,7 @@ export function PlaceRow({
           color: 'var(--tm-text-secondary)',
         }}
       >
-        {region}
+        <RegionOrDistance region={region} distanceM={distanceM} />
       </Box>
     </Box>
   );
