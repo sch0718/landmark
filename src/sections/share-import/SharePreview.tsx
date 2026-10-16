@@ -14,6 +14,7 @@ import {
   shareTitle,
 } from 'src/domain/library/import-share';
 import { fieldSx } from 'src/components/field-style';
+import { localDate } from 'src/lib/local-date';
 import { labelNameIssue } from 'src/schema/library';
 import type { ShareDoc } from 'src/schema/share';
 import { resultMessage } from 'src/sections/add-place/shared';
@@ -24,13 +25,6 @@ import { addFlowAtom } from 'src/stores/add-place';
 import { libraryAtom, useLibraryAction } from 'src/stores/library-state';
 
 const NOTE_SX = { mt: 0.5, fontSize: 12, color: 'var(--tm-text-secondary)' } as const;
-
-/** `2026.10.13`(로컬 날짜). `createdAt`은 읽을 때 검증한 ISO 시각이다. */
-function localDate(iso: string): string {
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}.${pad(d.getMonth() + 1)}.${pad(d.getDate())}`;
-}
 
 /**
  * 받은 공유 파일의 미리보기(스펙 §2.3). 머리글, 붙을 받은 라벨, 제목 라벨·메모 덧붙이기 스위치,

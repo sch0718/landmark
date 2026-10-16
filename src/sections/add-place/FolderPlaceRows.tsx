@@ -4,62 +4,68 @@ import type { FolderResult } from 'src/server/resolve';
 
 type FolderPlace = FolderResult['places'][number];
 
-/** 폴더 미리보기의 장소 목록(체크박스). `existingSids`는 보관함에 이미 있는 항목이라 `이미 있음`을 붙인다. */
+/** 폴더 미리보기의 장소 목록(체크박스). `marks`에 있는 `sid` 행 오른쪽에 그 값을 작은 표시(`이미 있음` 등)로 붙인다. */
 export function FolderPlaceRows({
   places,
   selected,
-  existingSids,
+  marks,
   onToggle,
+  label,
 }: {
   places: readonly FolderPlace[];
   selected: ReadonlySet<string>;
-  existingSids: ReadonlySet<string>;
+  marks: ReadonlyMap<string, string>;
   onToggle(sid: string): void;
+  /** 목록의 접근 이름. */
+  label: string;
 }) {
   return (
     <Box
       component="ul"
-      aria-label="가져올 장소"
+      aria-label={label}
       sx={{ listStyle: 'none', m: 0, p: 0, borderTop: '1px solid var(--tm-border)' }}
     >
-      {places.map((place) => (
-        <Box component="li" key={place.sid} sx={{ borderBottom: '1px solid var(--tm-border)' }}>
-          <Box
-            component="label"
-            sx={{
-              display: 'flex',
-              alignItems: 'flex-start',
-              gap: 1.25,
-              minHeight: 44,
-              py: 1,
-              cursor: 'pointer',
-            }}
-          >
+      {places.map((place) => {
+        const mark = marks.get(place.sid);
+        return (
+          <Box component="li" key={place.sid} sx={{ borderBottom: '1px solid var(--tm-border)' }}>
             <Box
-              component="input"
-              type="checkbox"
-              checked={selected.has(place.sid)}
-              onChange={() => onToggle(place.sid)}
-              sx={{ flex: 'none', width: 20, height: 20, m: 0, mt: '2px' }}
-            />
-            <Box sx={{ minWidth: 0, flex: 1 }}>
-              <Box sx={{ fontSize: 15, fontWeight: 700, wordBreak: 'break-word' }}>
-                {place.name}
-              </Box>
+              component="label"
+              sx={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 1.25,
+                minHeight: 44,
+                py: 1,
+                cursor: 'pointer',
+              }}
+            >
               <Box
-                sx={{
-                  fontSize: 13,
-                  color: 'var(--tm-text-secondary)',
-                  wordBreak: 'break-word',
-                }}
-              >
-                {place.address}
+                component="input"
+                type="checkbox"
+                checked={selected.has(place.sid)}
+                onChange={() => onToggle(place.sid)}
+                sx={{ flex: 'none', width: 20, height: 20, m: 0, mt: '2px' }}
+              />
+              <Box sx={{ minWidth: 0, flex: 1 }}>
+                <Box sx={{ fontSize: 15, fontWeight: 700, wordBreak: 'break-word' }}>
+                  {place.name}
+                </Box>
+                <Box
+                  sx={{
+                    fontSize: 13,
+                    color: 'var(--tm-text-secondary)',
+                    wordBreak: 'break-word',
+                  }}
+                >
+                  {place.address}
+                </Box>
               </Box>
+              {mark !== undefined && <RowMark>{mark}</RowMark>}
             </Box>
-            {existingSids.has(place.sid) && <RowMark>이미 있음</RowMark>}
           </Box>
-        </Box>
-      ))}
+        );
+      })}
     </Box>
   );
 }

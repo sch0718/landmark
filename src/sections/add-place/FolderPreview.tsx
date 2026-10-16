@@ -76,7 +76,7 @@ export function FolderPreview({ shareId }: { shareId: string }) {
   };
 
   if (status.kind === 'ready') {
-    return <FolderList folderName={status.folderName} places={status.places} />;
+    return <FolderList shareId={shareId} folderName={status.folderName} places={status.places} />;
   }
   const error = status.kind === 'error' ? status.error : null;
   return (
