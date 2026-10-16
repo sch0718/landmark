@@ -12,9 +12,9 @@ type Props = {
   model: TodayModel;
   /** 남은 일정 행의 이름을 눌렀다(`index`는 `model.stops`의 자리). */
   onSelect(index: number): void;
-  /** 체크 상자를 눌렀다. `next`가 참이면 체크, 거짓이면 풀기. */
-  onCheck(item: TodayStop, next: boolean): void;
-  /** 다녀옴을 저장 중인 장소 id. 그동안 그 체크 상자를 끈다. */
+  /** 체크 상자를 눌렀다. `next`가 참이면 체크(남은 일정), 거짓이면 풀기(다녀온 곳). `index`는 그 목록에서의 자리. */
+  onCheck(item: TodayStop, next: boolean, index: number): void;
+  /** 다녀옴을 저장 중인 장소 id. 그동안 그 상자는 포커스를 지닌 채 `aria-disabled`(누름은 저장 쪽이 무시). */
   pending: ReadonlySet<string>;
 };
 
@@ -29,23 +29,33 @@ function timeLine(item: TodayStop): string {
   return parts.join(' · ');
 }
 
-/** 다녀옴 체크 상자(44×44, 이름 `‘<이름>’ 다녀옴`). 저장된 값만 보인다(낙관 표시 없음). */
+/**
+ * 다녀옴 체크 상자(44×44, 이름 `‘<이름>’ 다녀옴`). 저장된 값만 보인다(낙관 표시 없음). 저장 중에도 `disabled`로
+ * 끄지 않는다 — 끄면 포커스가 `body`로 떨어진다. `aria-disabled`로 알리고 누름은 `useVisitToggle`이 무시한다.
+ */
 function VisitCheckbox({
   item,
-  disabled,
-  onCheck,
+  list,
+  pending,
+  onChange,
 }: {
   item: TodayStop;
-  disabled: boolean;
-  onCheck(item: TodayStop, next: boolean): void;
+  list: 'remaining' | 'visited';
+  pending: boolean;
+  onChange(next: boolean): void;
 }) {
   return (
     <Checkbox
+      data-today-check={list}
       checked={item.visited}
-      disabled={disabled}
-      onChange={(event) => onCheck(item, event.target.checked)}
-      slotProps={{ input: { 'aria-label': `‘${item.place.name.value}’ 다녀옴` } }}
-      sx={{ flex: 'none', width: 44, height: 44 }}
+      onChange={(event) => onChange(event.target.checked)}
+      slotProps={{
+        input: {
+          'aria-label': `‘${item.place.name.value}’ 다녀옴`,
+          'aria-disabled': pending || undefined,
+        },
+      }}
+      sx={{ flex: 'none', width: 44, height: 44, opacity: pending ? 0.5 : 1 }}
     />
   );
 }
@@ -111,9 +121,14 @@ function RemainingRow({
  */
 export function TodayLists({ model, onSelect, onCheck, pending }: Props) {
   const [visitedOpen, setVisitedOpen] = useState(false);
-  const check = (item: TodayStop) =>
+  const check = (item: TodayStop, list: 'remaining' | 'visited', index: number) =>
     model.canCheck ? (
-      <VisitCheckbox item={item} disabled={pending.has(item.place.id)} onCheck={onCheck} />
+      <VisitCheckbox
+        item={item}
+        list={list}
+        pending={pending.has(item.place.id)}
+        onChange={(next) => onCheck(item, next, index)}
+      />
     ) : null;
   const remaining = model.stops.flatMap((item, index) => (item.visited ? [] : [{ item, index }]));
   const visited = model.stops.filter((item) => item.visited);
@@ -125,13 +140,13 @@ export function TodayLists({ model, onSelect, onCheck, pending }: Props) {
         <Box component="section" sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
           <Box component="h2" sx={H2_SX}>{`남은 일정 ${remaining.length}곳`}</Box>
           <Box component="ol" aria-label="남은 일정" sx={LIST_SX}>
-            {remaining.map(({ item, index }) => (
+            {remaining.map(({ item, index }, at) => (
               <RemainingRow
                 key={item.stop.id}
                 item={item}
                 current={index === nextIndex}
                 onSelect={() => onSelect(index)}
-                check={check(item)}
+                check={check(item, 'remaining', at)}
               />
             ))}
           </Box>
@@ -141,6 +156,7 @@ export function TodayLists({ model, onSelect, onCheck, pending }: Props) {
         <Box component="section" sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
           <Box component="h2" sx={H2_SX}>
             <Button
+              data-today-fold=""
               aria-expanded={visitedOpen}
               onClick={() => setVisitedOpen((open) => !open)}
               sx={{ minHeight: 44, px: 0, font: 'inherit', fontWeight: 800 }}
@@ -150,7 +166,7 @@ export function TodayLists({ model, onSelect, onCheck, pending }: Props) {
           </Box>
           {visitedOpen && (
             <Box component="ul" aria-label="다녀온 곳" sx={LIST_SX}>
-              {visited.map((item) => {
+              {visited.map((item, at) => {
                 const on = visitedOnOf(item.place);
                 return (
                   <Box
@@ -165,7 +181,7 @@ export function TodayLists({ model, onSelect, onCheck, pending }: Props) {
                       color: 'var(--tm-text-secondary)',
                     }}
                   >
-                    {check(item)}
+                    {check(item, 'visited', at)}
                     <Box sx={{ flex: 1, minWidth: 0 }}>
                       <Box sx={{ fontSize: 15, fontWeight: 700 }}>{item.place.name.value}</Box>
                       {on !== null && <Box sx={TIME_SX}>{`다녀옴 · ${shortDate(on)}`}</Box>}

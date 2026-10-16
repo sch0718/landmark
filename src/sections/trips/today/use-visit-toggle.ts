@@ -22,7 +22,7 @@ export function useVisitToggle(): {
   pending: ReadonlySet<string>;
 } {
   const { run } = useLibraryAction();
-  // 렌더를 기다리지 않고 바로 막도록 진행 중인 id는 ref에, 버튼을 끄는 데 쓰는 사본은 상태에 둔다.
+  // 렌더를 기다리지 않고 바로 막도록 진행 중인 id는 ref에, `aria-disabled` 표시에 쓰는 사본은 상태에 둔다.
   const saving = useRef(new Set<string>());
   const [pending, setPending] = useState<ReadonlySet<string>>(() => new Set());
 

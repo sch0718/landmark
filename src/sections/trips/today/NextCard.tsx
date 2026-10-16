@@ -1,7 +1,7 @@
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import { useSetAtom } from 'jotai';
-import { useRef, type ReactNode } from 'react';
+import type { ReactNode, RefObject } from 'react';
 import { Link } from 'react-router';
 import { formatClock, formatSpan } from 'src/domain/trips/schedule';
 import { paths } from 'src/routes/paths';
@@ -17,8 +17,10 @@ type Props = {
   onShowNext(): void;
   /** 카드의 `다녀옴`을 눌렀다. */
   onCheck(target: TodayStop): void;
-  /** 다녀옴을 저장 중인 장소 id. 그동안 `다녀옴`을 끈다. */
+  /** 다녀옴을 저장 중인 장소 id. 그동안 `다녀옴`은 포커스를 지닌 채 `aria-disabled`(누름은 저장 쪽이 무시). */
   pending: ReadonlySet<string>;
+  /** 카드(`section`). `다음 장소 보기`·체크 뒤 포커스를 여기에 둔다. */
+  cardRef: RefObject<HTMLElement | null>;
 };
 
 const HEAD_SX = { fontSize: 13, fontWeight: 700, color: 'var(--tm-text-secondary)' } as const;
@@ -40,8 +42,7 @@ function plannedLine(target: TodayStop): string {
  * 그날 Stop이 없거나 모두 다녀왔고 숙소도 없으면 그 안내를 보인다. `다음 장소 보기` 뒤에는 포커스를 카드에 둔다.
  * 기간 안이면 Stop 카드에 `다녀옴`(스펙 §4.4)을 둔다. 숙소는 체크 대상이 아니다.
  */
-export function NextCard({ model, trip, selected, onShowNext, onCheck, pending }: Props) {
-  const cardRef = useRef<HTMLElement>(null);
+export function NextCard({ model, trip, selected, onShowNext, onCheck, pending, cardRef }: Props) {
   const setSelectedDay = useSetAtom(selectedDayAtom);
   const target =
     selected !== null
@@ -88,9 +89,9 @@ export function NextCard({ model, trip, selected, onShowNext, onCheck, pending }
               <Button
                 aria-label={`‘${name}’ 다녀옴으로 표시`}
                 variant={model.here ? 'contained' : 'outlined'}
-                disabled={pending.has(target.place.id)}
+                aria-disabled={pending.has(target.place.id) || undefined}
                 onClick={() => onCheck(target)}
-                sx={{ minHeight: 44 }}
+                sx={{ minHeight: 44, '&[aria-disabled="true"]': { opacity: 0.5 } }}
               >
                 다녀옴
               </Button>

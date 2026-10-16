@@ -1,7 +1,7 @@
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import { useAtomValue } from 'jotai';
-import { useCallback, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router';
 import type { MapPadding } from 'src/components/map/MapAdapter';
 import { useDocumentTitle } from 'src/lib/use-document-title';
@@ -47,6 +47,30 @@ function NotFound() {
   );
 }
 
+/** 체크·풀기가 끝난 뒤 포커스를 둘 곳. `index`는 누른 상자가 그 목록에서 있던 자리. */
+type CheckFocus = { from: 'remaining' | 'visited'; index: number } | { from: 'card' };
+
+/**
+ * 체크한 행은 목록을 옮겨 가며 사라지므로 포커스가 `body`로 떨어지지 않게 옮긴다. 남은 일정은 같은 자리(없으면
+ * 마지막)의 상자 → 카드, 다녀온 곳은 같은 자리의 상자 → `다녀온 곳 N곳` 버튼 → 카드. 카드의 `다녀옴`은 카드로.
+ */
+function focusAfterCheck(pane: HTMLElement | null, card: HTMLElement | null, target: CheckFocus) {
+  const nth = (selector: string, index: number): HTMLElement | null => {
+    const all = pane?.querySelectorAll<HTMLElement>(selector) ?? [];
+    return all.length === 0 ? null : (all[Math.min(index, all.length - 1)] ?? null);
+  };
+  let el: HTMLElement | null = null;
+  if (target.from === 'remaining') {
+    el = nth('[data-today-check="remaining"] input', target.index);
+  } else if (target.from === 'visited') {
+    el =
+      nth('[data-today-check="visited"] input', target.index) ??
+      pane?.querySelector<HTMLElement>('[data-today-fold]') ??
+      null;
+  }
+  (el ?? card)?.focus();
+}
+
 /** 카드가 보는 장소: 고른 Stop → 다음 Stop → 숙소. */
 function cardPlaceId(model: TodayModel, selected: number | null): string | null {
   if (selected !== null) return model.stops[selected]?.place.id ?? null;
@@ -62,8 +86,26 @@ function Today({ trip }: { trip: Trip }) {
   const [selectedStopId, setSelectedStopId] = useState<string | null>(null);
   // 지도를 옮기는 요청. 사람이 고를 때만 늘린다(행 누름·`다음 장소 보기`). 체크·삭제로 카드가 바뀌면 그대로 둔다.
   const [focusRequest, setFocusRequest] = useState<TodayFocusRequest | null>(null);
+  // `seq`는 `focusRequest`를 비운 뒤에도 늘기만 한다(`MapView`는 이미 옮긴 `seq`를 다시 옮기지 않는다).
+  const focusSeq = useRef(0);
   const model = useToday(trip, viewDay);
   const visit = useVisitToggle();
+  const paneRef = useRef<HTMLElement>(null);
+  const cardRef = useRef<HTMLElement>(null);
+  // 체크가 끝난 뒤 옮길 포커스. 바뀐 목록이 그려진 다음(effect)에 옮긴다. `from`은 누른 때 포커스가 있던 요소.
+  const checkFocus = useRef<{ target: CheckFocus; from: Element | null } | null>(null);
+  const [checkFocusTick, setCheckFocusTick] = useState(0);
+  useEffect(() => {
+    const want = checkFocus.current;
+    if (want === null) return;
+    checkFocus.current = null;
+    // 저장하는 동안 사람이 다른 곳으로 포커스를 옮겼으면 빼앗지 않는다.
+    const active = document.activeElement;
+    const lost = active === null || active === document.body || active === want.from;
+    if (lost || !document.contains(active)) {
+      focusAfterCheck(paneRef.current, cardRef.current, want.target);
+    }
+  }, [checkFocusTick]);
 
   // 고른 Stop이 지워졌거나(다른 탭) 그날에서 빠졌으면 다음 장소로 돌아간다. 다음 장소를 고르면 `다음`으로 보인다.
   const found = model.stops.findIndex((s) => s.stop.id === selectedStopId);
@@ -74,14 +116,17 @@ function Today({ trip }: { trip: Trip }) {
   const pickDay = (dayIndex: number) => {
     setViewDay(dayIndex === model.todayIndex ? null : dayIndex);
     setSelectedStopId(null);
+    setFocusRequest(null);
   };
   const toToday = () => {
     setViewDay(null);
     setSelectedStopId(null);
+    setFocusRequest(null);
   };
   const focusOn = (placeId: string | null) => {
     if (placeId === null) return;
-    setFocusRequest((prev) => ({ placeId, seq: (prev?.seq ?? 0) + 1 }));
+    focusSeq.current += 1;
+    setFocusRequest({ placeId, seq: focusSeq.current });
   };
   const selectIndex = (index: number) => {
     const item = model.stops[index];
@@ -95,9 +140,13 @@ function Today({ trip }: { trip: Trip }) {
   };
   // 체크 날짜는 보는 Day가 아니라 오늘 Day의 날짜(`model.date`, 새벽 경계 반영)다. 고른 장소를 체크하면
   // 카드는 다음 장소로 돌아온다(스펙 §4.5). 지도는 옮기지 않는다.
-  const check = async (item: TodayStop, next: boolean) => {
+  const check = async (item: TodayStop, next: boolean, target: CheckFocus) => {
+    const from = document.activeElement;
     const done = await visit.toggle(item.place, next, model.date);
-    if (done && next) setSelectedStopId((id) => (id === item.stop.id ? null : id));
+    if (!done) return;
+    if (next) setSelectedStopId((id) => (id === item.stop.id ? null : id));
+    checkFocus.current = { target, from };
+    setCheckFocusTick((n) => n + 1);
   };
   const { stops } = model;
   const pickPlace = useCallback(
@@ -127,6 +176,7 @@ function Today({ trip }: { trip: Trip }) {
   );
   const scroll: ReactNode = (
     <Box
+      ref={paneRef}
       sx={{
         flex: 1,
         minHeight: 0,
@@ -144,13 +194,16 @@ function Today({ trip }: { trip: Trip }) {
         trip={trip}
         selected={selected}
         onShowNext={showNext}
-        onCheck={(item) => void check(item, true)}
+        onCheck={(item) => void check(item, true, { from: 'card' })}
         pending={visit.pending}
+        cardRef={cardRef}
       />
       <TodayLists
         model={model}
         onSelect={selectIndex}
-        onCheck={(item, next) => void check(item, next)}
+        onCheck={(item, next, index) =>
+          void check(item, next, { from: next ? 'remaining' : 'visited', index })
+        }
         pending={visit.pending}
       />
     </Box>
