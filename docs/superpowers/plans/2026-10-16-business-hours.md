@@ -13,6 +13,7 @@
 ## Global Constraints
 
 - 출발점: F1~F5(`v0.12.0`)가 병합된 `main`. 브랜치 `feat/business-hours`, 병합 뒤 태그 `v0.13.0`.
+- 하루 경계: F5의 `DAY_ROLLOVER_HOUR`(`src/domain/trips/today.ts`, 값 4)를 import해 쓴다. F6에 따로 상수를 두지 않는다(스펙 §3.2·§10 — F6이 F5 코드에 기대는 유일한 곳이라, F5만 되돌리려면 F6을 먼저 되돌린다).
 - 셸은 Node 24: `export PATH="/opt/homebrew/opt/node@24/bin:$PATH"`(git 훅에도 필요). 주석·UI 문구는 한국어, 주변 코드 관례를 따른다.
 - 커밋 메시지 끝: `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. 작업 하나 = 커밋 하나(리뷰 수정은 같은 작업 이름으로). 구현 PR은 병합 커밋으로 넣는다.
 - 파일에 U+2028/U+2029 원문자 금지. 커밋 전 `grep -rnP '[\x{2028}\x{2029}]' src functions tests` 출력 없음.
@@ -31,7 +32,7 @@
 ## Review Focus
 
 1. **네이버가 요청을 막아 빈 페이지·다른 HTML을 줌**(잦은 요청, Cloudflare IP) → 502로 끝나고 캐시에 남지 않으며, 앱은 `영업시간 확인 필요 — 영업시간을 받지 못했어요`와 `다시 확인`. 정보 없음(`days: []`)과 섞이면 안 된다. Task 1(키 없음 → 502)·Task 2(오류 저장 안 함) 테스트로 고정, Task 8에서 미리보기 배포로 실제 확인.
-2. **자정을 넘는 일정·영업**(도착 `다음 날 01:10`, 바 18:00~02:00, 24시간 영업) → 다음 날 도착은 다음 날 요일로, 전날 밤 구간 안이면 경고 없음, 00:00~24:00 매일은 자정에 끊기지 않음. Task 3 테스트로 고정.
+2. **자정을 넘는 일정·영업**(도착 `다음 날 01:10`, 바 18:00~02:00, 24시간 영업) → 다음 날 도착은 다음 날 요일로, 전날 밤 구간 안이면 경고 없음, 00:00~24:00 매일은 자정에 끊기지 않음(23:30~다음 날 00:30 체류도 — `X+1` 구간까지 이어 붙임). 영업 밖 새벽 도착은 04:00(`DAY_ROLLOVER_HOUR`) 전이면 전날 밤 영업의 `영업 종료`, 그 뒤면 `영업 시작`(03:59·04:00 경계). Task 3 테스트로 고정.
 3. **고정 시각을 기다리는 장소**(09:00 도착, 11:00 고정, 영업 10:00부터) → 경고 없음. 기다린 뒤 브레이크타임이면 `11:00 시작 — …`. Task 3 테스트로 고정.
 4. **받은 적 있는 장소를 다시 받다 실패**(오프라인·서버 오류) → 옛 정보와 옛 확인 날짜로 계속 판정하고 ` · 새로 받지 못했어요`. 옛 정보가 지워지면 안 된다. Task 5(상태 갱신)·Task 6(카드) 테스트로 고정.
 5. **같은 장소를 여러 Day·여러 여행에서 동시에 요청 / `다시 확인`을 연달아 누름** → 서버 요청은 하나로 합쳐지고, 나중에 시작한 요청의 답이 이긴다(번호 `seq`). Task 4·5 테스트로 고정.
@@ -146,7 +147,7 @@ README에 더할 절: 녹화일 2026-10-16, 명령 `curl -s -A "$UA" -H "Accept-
 - Create: `src/domain/trips/hours.ts`, `tests/unit/domain/trips/hours.test.ts`
 
 **Interfaces:**
-- Consumes: `import type { HoursDay, HoursSpan, PlaceHours } from 'src/server/hours'`, `formatClock`·`type PointTime`(`src/domain/trips/schedule`).
+- Consumes: `import type { HoursDay, HoursSpan, PlaceHours } from 'src/server/hours'`, `formatClock`·`type PointTime`(`src/domain/trips/schedule`), `DAY_ROLLOVER_HOUR`(F5 `src/domain/trips/today`).
 - Produces:
   ```ts
   export type Weekday = '일' | '월' | '화' | '수' | '목' | '금' | '토';
@@ -185,7 +186,8 @@ README에 더할 절: 녹화일 2026-10-16, 명령 `curl -s -A "$UA" -H "Accept-
   export function uncountedRules(hours: PlaceHours): string[];
   ```
 - `visitOf`: 고정 시각이 있고 `point.slackMin >= 0`이면 `startMin = 고정 시각 분`, `waited: true`(단, 고정 = 도착이면 `waited: false`), 아니면 `startMin = arriveMin`. `endMin = departMin`.
-- 판정 순서·자정 처리는 스펙 §3.2~3.3 그대로. 구간은 `X`(=`Day 날짜 + floor(startMin/1440)`)와 `X-1`의 규칙에서 만들어 절대 분으로 옮긴 뒤, 끝 = 다음 시작인 구간을 이어 붙인다. `X-1`이 Day 날짜보다 앞이어도 같은 방법(요일만 본다).
+- 판정 순서·자정 처리는 스펙 §3.2~3.3 그대로. 구간은 `X-1`·`X`·`X+1`(`X` = `Day 날짜 + floor(startMin/1440)`) 세 날의 규칙에서 만들어 Day 축 분으로 옮긴 뒤(날짜 `d`의 구간은 `(d - Day 날짜) × 1440`만큼 민다), 시작 순으로 놓고 끝 = 다음 시작(`24:00` = 다음 날 `00:00`)인 구간을 하나로 이어 붙인다. 브레이크타임·라스트오더도 같은 날짜 기준으로 민다. `X-1`이 Day 날짜보다 앞이어도 같은 방법(요일만 본다). 휴무·모름인 날은 구간을 만들지 않는다.
+- 구간 밖 판정(스펙 §3.3-4): `B = (X - Day 날짜) × 1440 + DAY_ROLLOVER_HOUR × 60`. `startMin < B`이면 `startMin` 전에 끝난 구간 중 가장 늦은 끝 → `after-close`(없으면 `startMin` 뒤 첫 시작 → `before-open`). `startMin ≥ B`이면 `[B, startMin)`에 시작한 구간이 없을 때 `before-open`(`startMin` 뒤 첫 시작), 있을 때 `after-close`(`startMin` 전 가장 늦은 끝).
 - 임시 휴무 날짜 꼴: `(\d{4})-(\d{1,2})-(\d{1,2})`, `(\d{4})\.\s?(\d{1,2})\.\s?(\d{1,2})`, `(\d{1,2})월\s?(\d{1,2})일`(연도는 대상 날짜의 연도).
 
 - [ ] **Step 1: 실패하는 테스트** — 단천면옥 정규화 값(Task 1 기대값을 테스트 안에 상수로)과 손으로 만든 `PlaceHours`로:
@@ -202,7 +204,9 @@ README에 더할 절: 녹화일 2026-10-16, 명령 `curl -s -A "$UA" -H "Accept-
     - `2026-10-21`(수) 12:00 → `closed-day`, `휴무일 — 정기휴무 (매주 수요일)`.
     - 화요일 Day에 `arriveMin` 1500(다음 날 01:00, 수요일) → `closed-day`.
   - 자정 넘김(`매일 18:00~02:00`, `endsNextDay: true`): 금 Day 1500분(다음 날 01:00) → `ok`; 금 Day 150분(02:30, 전날 밤 영업이 02:00에 끝남) → `after-close`, 문구 `02:30 도착 — 영업 종료 02:00`; 금 Day 600분(10:00) → `before-open`, `10:00 도착 — 영업 시작 18:00`; 23:00 도착·다음 날 03:00 떠남 → `closes-during-stay`, `머무는 중 영업 종료 02:00(다음 날)`; 끝이 시작보다 이른데 `endsNextDay: false`여도 같은 결과.
-  - 24시간(`매일 00:00~24:00`): 23:30 도착·다음 날 00:30 떠남 → `ok`.
+  - 하루 경계(`매일 18:00~02:00`, 금 Day): 239분(03:59) → `after-close`, `03:59 도착 — 영업 종료 02:00`; 240분(04:00) → `before-open`, `04:00 도착 — 영업 시작 18:00`. 다음 날로 넘어간 새벽(금 Day 1679분 = 다음 날 03:59) → `after-close` 02:00, 1680분(다음 날 04:00) → `before-open` 18:00(경계 `B` = 1440 + 240 = 1680). `매일 11:00~21:00`, 금 Day 120분(02:00) → `after-close`, `02:00 도착 — 영업 종료 21:00`(전날 밤 영업의 끝); 300분(05:00) → `before-open` 11:00. 두 구간 사이(`11:00~14:00`, `17:00~22:00`) 15:00 → `after-close` 14:00(그날 영업을 시작한 뒤라서).
+  - 24시간(`매일 00:00~24:00`): 23:30 도착·다음 날 00:30 떠남 → `ok`. 분으로: `S` 1410, `E` 1470, 구간 `X-1` [-1440, 0]·`X` [0, 1440]·`X+1` [1440, 2880] → 이어 붙여 [-1440, 2880], `S`·`E` 모두 안. (`X+1`을 만들지 않으면 [-1440, 1440]이라 `E` 1470이 넘어 `closes-during-stay`가 된다 — 이 시험이 그것을 잡는다.) 같은 장소 다음 날 02:00 도착(`S` 1560) → `ok`.
+  - `X+1`이 이어지지 않는 경우(`매일 11:00~24:00`): 23:00 도착·다음 날 00:30 떠남 → `closes-during-stay`, `머무는 중 영업 종료 24:00`(`X` [660, 1440], `X+1` [2100, 2880]은 맞닿지 않음).
   - `24:00`(구십도씨처럼 `11:00~24:00`): 23:50 → `ok`, 다음 날 00:10 도착 → `after-close`, 문구 `다음 날 00:10 도착 — 영업 종료 24:00`.
   - 라스트오더 둘(`11:00~21:00`, 브레이크 `15:00~17:00`, 라스트오더 `14:30`·`20:00`): 14:40 → `last-order 14:30`, 17:30 → `ok`, 20:10 → `last-order 20:00`.
   - 고정 시각: 09:00 도착·11:00 고정(`slackMin` 120)·영업 10:00~ → `visitOf`가 `startMin 660, waited true`, `checkVisit` → `ok`; 14:00 도착·15:00 고정·브레이크 15:00~16:30 → `break`, 문구 `15:00 시작 — 브레이크타임 15:00~16:30`; 늦은 고정(`slackMin` < 0) → `startMin = arriveMin`, `waited false`.
