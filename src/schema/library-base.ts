@@ -15,6 +15,10 @@ export const LIBRARY_LIMITS = {
   tripMaxDays: 30,
   stopNoteChars: 500,
   stayMaxMin: 1440,
+  /** 네이버 폴더 이름의 `String.length` 상한. */
+  folderNameChars: 100,
+  /** 폴더 연결 하나가 기억하는 본 장소(sid)의 최대 개수. */
+  folderSids: 1000,
 } as const;
 
 export const PlaceId = Schema.String.check(

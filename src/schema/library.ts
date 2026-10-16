@@ -50,10 +50,18 @@ export const LabelIcon = Schema.Literals(LABEL_ICONS);
 export type LabelColor = typeof LabelColor.Type;
 export type LabelIcon = typeof LabelIcon.Type;
 
+export const NaverSid = Schema.String.check(
+  Schema.isPattern(/^\d+$/, { message: 'sid는 숫자입니다' }),
+);
+/** 네이버 폴더 공유 ID. 서버(`src/server/resolve.ts`의 `SHARE_ID`)와 같은 패턴이다. */
+export const ShareId = Schema.String.check(
+  Schema.isPattern(/^[0-9a-zA-Z]+$/, { message: '공유 ID는 영문·숫자입니다' }),
+);
+
 export const PlaceSource = Schema.Union([
   Schema.Struct({
     kind: Schema.Literal('naver'),
-    sid: Schema.String.check(Schema.isPattern(/^\d+$/, { message: 'sid는 숫자입니다' })),
+    sid: NaverSid,
   }),
   Schema.Struct({
     kind: Schema.Literal('kakao'),
@@ -106,6 +114,20 @@ export const LabelSchema = Schema.Struct({
   deletedAt: Schema.NullOr(IsoDateTime),
 });
 
+/** 네이버 공유 폴더와 라벨의 연결. 키는 `shareId`다. 바뀌는 값은 필드 단위 LWW다. */
+export const FolderLinkSchema = Schema.Struct({
+  shareId: ShareId,
+  name: FieldSchema(Schema.String.check(Schema.isMaxLength(LIBRARY_LIMITS.folderNameChars))),
+  labelId: FieldSchema(LabelId),
+  seenSids: FieldSchema(
+    Schema.Array(NaverSid).check(Schema.isMaxLength(LIBRARY_LIMITS.folderSids)),
+  ),
+  /** 바뀔 때마다 그 자체가 시각이라 `FieldSchema`로 묶지 않는다. */
+  checkedAt: IsoDateTime,
+  createdAt: IsoDateTime,
+  deletedAt: Schema.NullOr(IsoDateTime),
+});
+
 /** 라벨 이름 비교용 정규형: 앞뒤 공백 제거 → 연속 공백을 하나로 → 소문자. */
 export function normalizeLabelName(name: string): string {
   return name.trim().replace(/\s+/g, ' ').toLocaleLowerCase('ko-KR');
@@ -130,6 +152,8 @@ export const LibrarySchema = Schema.Struct({
   places: Schema.Record(Schema.String, PlaceSchema),
   labels: Schema.Record(Schema.String, LabelSchema),
   trips: Schema.Record(Schema.String, TripSchema),
+  // 선택 컬렉션: 옛 문서에는 키가 없다. 옛 버전은 모르는 키를 떼어 내고 읽는다(스펙 §5.3).
+  folders: Schema.optionalKey(Schema.Record(Schema.String, FolderLinkSchema)),
 }).check(
   Schema.makeFilter((library) => {
     const issues: Schema.FilterIssue[] = [];
@@ -220,12 +244,25 @@ export const LibrarySchema = Schema.Struct({
         }
       }
     }
+
+    for (const [key, link] of Object.entries(library.folders ?? {})) {
+      if (key !== link.shareId) {
+        issues.push({ path: ['folders', key], issue: `키와 id가 다릅니다: ${key}` });
+      }
+      // 지운 연결은 라벨을 가리킬 필요가 없다.
+      if (link.deletedAt !== null) continue;
+      const label = library.labels[link.labelId.value];
+      if (label === undefined || label.deletedAt !== null) {
+        issues.push({ path: ['folders', key], issue: `없는 라벨입니다: ${link.labelId.value}` });
+      }
+    }
     return issues;
   }),
 );
 
 export type Place = typeof PlaceSchema.Type;
 export type Label = typeof LabelSchema.Type;
+export type FolderLink = typeof FolderLinkSchema.Type;
 export type Library = typeof LibrarySchema.Type;
 
 export function emptyLibrary(): Library {
