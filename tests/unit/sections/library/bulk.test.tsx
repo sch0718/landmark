@@ -1,11 +1,14 @@
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { visitedOnOf } from 'src/domain/library/visit';
 import { setAppRuntimeForTest } from 'src/lib/effect/runtime';
 import type { Library } from 'src/schema/library';
 import { LIBRARY_KEY } from 'src/services/library-store';
+import { DEFAULT_PREFS } from 'src/schema/prefs';
 import { libraryAtom } from 'src/stores/library-state';
-import { L_CAFE, L_FOOD, makePlace, renderLibrary, sampleLibrary } from './fixtures';
+import { ruleValue } from '../../components/helpers/rule-style';
+import { L_CAFE, L_FOOD, makePlace, renderLibrary, sampleLibrary, withPlaces } from './fixtures';
 
 const toastMock = vi.hoisted(() => {
   const error = vi.fn();
@@ -222,5 +225,117 @@ describe('library bulk edit', () => {
     });
     await waitFor(() => expect(store.get(libraryAtom).places.place00005!.deletedAt).toBeNull());
     expect(store.get(libraryAtom).places.place00004!.deletedAt).toBe('2026-10-08T02:00:00.000Z');
+  });
+});
+
+describe('library bulk visited', () => {
+  const visitedOf = (lib: Library, id: string) => visitedOnOf(lib.places[id]!);
+  const openVisitMenu = async (user: ReturnType<typeof userEvent.setup>) =>
+    user.click(within(toolbar()).getByRole('button', { name: '다녀옴' }));
+
+  it('marks the selection visited today, tells the real count, and undo restores each previous value', async () => {
+    // 앱 런타임의 `Clock`은 `Date.now()`를 읽는다. 날짜만 고정하고 나머지 타이머는 진짜로 둔다.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 9, 16, 9));
+    const user = userEvent.setup();
+    const lib = withPlaces(sampleLibrary(), [
+      makePlace(3, { name: '속초 횟집', labelIds: [L_FOOD], visitedOn: '2026-10-10' }),
+    ]);
+    const { store } = await renderLibrary(lib, { prefs: LIST });
+    await shiftClick(user, /창가 자리/, /강남 한 곳/, /속초 횟집/);
+
+    expect(within(toolbar()).getByRole('button', { name: '다녀옴' })).toHaveAttribute(
+      'aria-haspopup',
+      'menu',
+    );
+    await openVisitMenu(user);
+    const item = screen.getByRole('menuitem', { name: '오늘 다녀옴으로 표시' });
+    expect(ruleValue(item, 'min-height')).toBe('44px');
+    await user.click(item);
+
+    await waitFor(() => {
+      const now = store.get(libraryAtom);
+      for (const id of ['place00003', 'place00004', 'place00005']) {
+        expect(visitedOf(now, id)).toBe('2026-10-16');
+      }
+    });
+    expect(toastMock).toHaveBeenCalledTimes(1);
+    const [message, options] = toastMock.mock.calls[0] as [
+      string,
+      { duration: number; action: { label: string; onClick: () => void } },
+    ];
+    expect(message).toBe('3곳을 오늘 다녀옴으로 표시했어요');
+    expect(options.duration).toBe(5000);
+    expect(options.action.label).toBe('되돌리기');
+    // 선택은 그대로다.
+    await waitFor(() => expect(within(toolbar()).getByText('3곳 선택')).toBeInTheDocument());
+
+    // 다시 눌러도 바뀌는 곳이 없다: 안내만 하고 되돌리기는 없다.
+    await openVisitMenu(user);
+    await user.click(screen.getByRole('menuitem', { name: '오늘 다녀옴으로 표시' }));
+    await waitFor(() => expect(toastMock).toHaveBeenCalledTimes(2));
+    expect(toastMock.mock.calls[1]![0]).toBe('이미 다녀옴으로 표시돼 있어요');
+    expect(toastMock.mock.calls[1]![1]?.action).toBeUndefined();
+
+    await act(async () => {
+      options.action.onClick();
+    });
+    await waitFor(() => expect(visitedOf(store.get(libraryAtom), 'place00003')).toBe('2026-10-10'));
+    expect(visitedOf(store.get(libraryAtom), 'place00004')).toBeNull();
+    expect(visitedOf(store.get(libraryAtom), 'place00005')).toBeNull();
+    expect(toastMock.error).not.toHaveBeenCalled();
+  });
+
+  it('disables clearing when nothing selected was visited', async () => {
+    const user = userEvent.setup();
+    await renderLibrary(sampleLibrary(), { prefs: LIST });
+    await shiftClick(user, /창가 자리/, /강남 한 곳/);
+    await openVisitMenu(user);
+    expect(screen.getByRole('menuitem', { name: '다녀옴 표시 지우기' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+    expect(screen.getByRole('menuitem', { name: '오늘 다녀옴으로 표시' })).not.toHaveAttribute(
+      'aria-disabled',
+    );
+  });
+
+  it('clearing under the visited filter drops those places from the list and the selection', async () => {
+    const user = userEvent.setup();
+    const lib = withPlaces(sampleLibrary(), [
+      makePlace(1, { name: '중앙시장 닭강정', labelIds: [L_FOOD], visitedOn: '2026-10-01' }),
+      makePlace(2, { name: '안목 카페거리', labelIds: [L_CAFE], visitedOn: '2026-10-02' }),
+      makePlace(3, { name: '속초 횟집', labelIds: [L_FOOD], visitedOn: '2026-10-03' }),
+    ]);
+    const { store } = await renderLibrary(lib, {
+      prefs: { ...LIST, query: { ...DEFAULT_PREFS.query, visited: 'visited' } },
+    });
+    await shiftClick(user, /중앙시장 닭강정/, /안목 카페거리/);
+    expect(within(toolbar()).getByText('2곳 선택')).toBeInTheDocument();
+
+    await openVisitMenu(user);
+    await user.click(screen.getByRole('menuitem', { name: '다녀옴 표시 지우기' }));
+
+    await waitFor(() => expect(visitedOf(store.get(libraryAtom), 'place00001')).toBeNull());
+    expect(visitedOf(store.get(libraryAtom), 'place00002')).toBeNull();
+    expect(visitedOf(store.get(libraryAtom), 'place00003')).toBe('2026-10-03');
+    expect(screen.queryByRole('button', { name: /중앙시장 닭강정/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /안목 카페거리/ })).not.toBeInTheDocument();
+    expect(row(/속초 횟집/)).toBeInTheDocument();
+    expect(screen.queryByRole('toolbar', { name: '일괄 편집' })).not.toBeInTheDocument();
+
+    const [message, options] = toastMock.mock.calls[0] as [
+      string,
+      { duration: number; action: { label: string; onClick: () => void } },
+    ];
+    expect(message).toBe('2곳의 다녀옴 표시를 지웠어요');
+    expect(options.duration).toBe(5000);
+    expect(options.action.label).toBe('되돌리기');
+
+    await act(async () => {
+      options.action.onClick();
+    });
+    await waitFor(() => expect(visitedOf(store.get(libraryAtom), 'place00001')).toBe('2026-10-01'));
+    expect(visitedOf(store.get(libraryAtom), 'place00002')).toBe('2026-10-02');
   });
 });

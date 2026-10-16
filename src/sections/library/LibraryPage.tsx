@@ -16,7 +16,16 @@ import {
   visitCounts,
   type LibraryQuery,
 } from 'src/domain/library/query';
-import { addLabels, deletePlaces, removeLabels, restorePlaces } from 'src/domain/library/ops';
+import {
+  addLabels,
+  deletePlaces,
+  markVisitedToday,
+  removeLabels,
+  restorePlaces,
+  setVisitedOn,
+} from 'src/domain/library/ops';
+import { isVisited, localDateOf, visitedOnOf } from 'src/domain/library/visit';
+import type { Library } from 'src/schema/library';
 import { addCandidates } from 'src/domain/trips/ops';
 import { paths } from 'src/routes/paths';
 import { BulkBar } from 'src/sections/library/BulkBar';
@@ -47,6 +56,22 @@ const toggled = (set: ReadonlySet<string>, id: string): Set<string> => {
   const next = new Set(set);
   if (!next.delete(id)) next.add(id);
   return next;
+};
+
+/** 최신본의 살아 있는 `ids` 중 `changes(이전 다녀온 날)`가 참인 장소의 이전 값. 실제로 바뀌는 곳만 센다. */
+const visitedBefore = (
+  lib: Library,
+  ids: readonly string[],
+  changes: (prev: string | null) => boolean,
+): Record<string, string | null> => {
+  const out: Record<string, string | null> = {};
+  for (const id of ids) {
+    const place = lib.places[id];
+    if (place === undefined || place.deletedAt !== null) continue;
+    const prev = visitedOnOf(place);
+    if (changes(prev)) out[id] = prev;
+  }
+  return out;
 };
 
 /**
@@ -145,6 +170,46 @@ export function LibraryPage() {
       },
     });
   };
+  // 다녀옴 표시·지우기. 숫자와 되돌리기는 화면이 아니라 저장된 최신본에서 실제로 바뀐 곳 기준이다.
+  const undoVisited = (prevById: Record<string, string | null>) => ({
+    label: '되돌리기',
+    onClick: () => void run((lib, ctx) => setVisitedOn(lib, prevById, ctx)),
+  });
+  const markVisited = async () => {
+    const ids = selectedIds;
+    let prevById: Record<string, string | null> = {};
+    const result = await run((lib, ctx) => {
+      const today = localDateOf(ctx.now);
+      prevById = visitedBefore(lib, ids, (prev) => prev === null || prev < today);
+      return markVisitedToday(lib, ids, ctx);
+    });
+    if (!result.ok) return;
+    const n = Object.keys(prevById).length;
+    if (n === 0) {
+      toast('이미 다녀옴으로 표시돼 있어요');
+      return;
+    }
+    toast(`${n}곳을 오늘 다녀옴으로 표시했어요`, {
+      duration: UNDO_MS,
+      action: undoVisited(prevById),
+    });
+  };
+  const clearVisited = async () => {
+    const ids = selectedIds;
+    let prevById: Record<string, string | null> = {};
+    const result = await run((lib, ctx) => {
+      prevById = visitedBefore(lib, ids, (prev) => prev !== null);
+      return setVisitedOn(
+        lib,
+        Object.fromEntries(Object.keys(prevById).map((id) => [id, null])),
+        ctx,
+      );
+    });
+    if (!result.ok) return;
+    const n = Object.keys(prevById).length;
+    if (n === 0) return;
+    toast(`${n}곳의 다녀옴 표시를 지웠어요`, { duration: UNDO_MS, action: undoVisited(prevById) });
+  };
   const clearFilters = () => patch({ ...DEFAULT_QUERY, sort: query.sort });
   // 고른 장소를 기존 여행의 후보에 더한다. 이미 그 여행에 있는 곳은 건너뛰고 새로 넣은 수만 알린다.
   // 저장이 끝나기 전에 또 누르면(두 번 탭) 무시한다. 토스트가 두 번 뜨지 않게.
@@ -234,6 +299,9 @@ export function LibraryPage() {
           onDelete={() => void remove()}
           onExport={() => setExporting(true)}
           onAddToTrip={() => setPickingTrip(true)}
+          visitedCount={selectedPlaces.filter(isVisited).length}
+          onMarkVisited={() => void markVisited()}
+          onClearVisited={() => void clearVisited()}
           onClear={() => setSelected(new Set())}
         />
       )}
