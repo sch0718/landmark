@@ -1,8 +1,11 @@
 import Box from '@mui/material/Box';
-import { useId, useState, type ChangeEvent } from 'react';
+import { useEffect, useId, useRef, useState, type ChangeEvent } from 'react';
 import { fieldSx } from 'src/components/field-style';
 import { CheckIcon } from 'src/components/icons';
 import { BUTTON_SX } from 'src/sections/place/button-style';
+
+/** 이보다 이른 날짜는 연도를 치는 중간값(`0002-…`)으로 보고 저장하지 않는다. 날짜 칸의 `min`과 같다. */
+const MIN_DATE = '1900-01-01';
 
 type Props = {
   /** 저장된 다녀온 날(`YYYY-MM-DD`). 안 가 봤으면 `null`. */
@@ -21,10 +24,43 @@ type Props = {
 export function VisitEditor({ visitedOn, today, onMarkToday, onSetDate, onClear }: Props) {
   const errorId = useId();
   const [future, setFuture] = useState(false);
+  // 크로뮴은 연도를 한 자리씩 칠 때마다 완전한 값(`0002-10-16`, `0209-10-16`…)으로 change를 쏜다.
+  // 그래서 칸은 초안을 들고, 저장은 끝까지 올바른 날짜일 때만 한다.
+  const [draft, setDraft] = useState(visitedOn ?? '');
+  const [syncedOn, setSyncedOn] = useState(visitedOn);
+  if (syncedOn !== visitedOn) {
+    // 저장된 날짜가 바뀌면(표시·취소·되돌리기) 초안을 맞추고 묵은 안내를 지운다.
+    setSyncedOn(visitedOn);
+    setDraft(visitedOn ?? '');
+    setFuture(false);
+  }
+
+  // 누른 버튼이 사라지고 다른 쪽이 나타나므로, 저장돼 화면이 바뀐 뒤 포커스를 옮겨 준다.
+  const focusNext = useRef<'date' | 'mark' | null>(null);
+  const dateRef = useRef<HTMLInputElement>(null);
+  const markRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (focusNext.current === 'date' && visitedOn !== null) {
+      dateRef.current?.focus();
+      focusNext.current = null;
+    } else if (focusNext.current === 'mark' && visitedOn === null) {
+      markRef.current?.focus();
+      focusNext.current = null;
+    }
+  }, [visitedOn]);
 
   if (visitedOn === null) {
     return (
-      <Box component="button" type="button" onClick={onMarkToday} sx={{ ...BUTTON_SX, mt: 0.5 }}>
+      <Box
+        component="button"
+        type="button"
+        ref={markRef}
+        onClick={() => {
+          focusNext.current = 'date';
+          onMarkToday();
+        }}
+        sx={{ ...BUTTON_SX, mt: 0.5 }}
+      >
         <CheckIcon aria-hidden="true" style={{ color: 'var(--tm-accent-text)' }} />
         다녀왔어요
       </Box>
@@ -33,8 +69,9 @@ export function VisitEditor({ visitedOn, today, onMarkToday, onSetDate, onClear 
 
   const onChange = (event: ChangeEvent<HTMLInputElement>) => {
     const date = event.target.value;
-    // 브라우저의 지우기: 저장하지 않는다. 칸은 제어 입력이라 저장된 날짜로 돌아간다.
-    if (date === '') return;
+    setDraft(date);
+    // 비움(휴대폰 날짜 창의 지우기)이나 연도 입력 중간값: 저장도 안내도 없이 입력을 이어 가게 둔다.
+    if (date === '' || date < MIN_DATE) return;
     if (date > today) {
       setFuture(true);
       return;
@@ -55,15 +92,25 @@ export function VisitEditor({ visitedOn, today, onMarkToday, onSetDate, onClear 
         <Box
           component="input"
           type="date"
+          ref={dateRef}
           aria-label="다녀온 날"
+          min={MIN_DATE}
           max={today}
-          value={visitedOn}
+          value={draft}
           aria-invalid={future}
           aria-describedby={future ? errorId : undefined}
           onChange={onChange}
           sx={[fieldSx({ invalid: future }), { flex: '1 1 160px', width: 'auto' }]}
         />
-        <Box component="button" type="button" onClick={onClear} sx={BUTTON_SX}>
+        <Box
+          component="button"
+          type="button"
+          onClick={() => {
+            focusNext.current = 'mark';
+            onClear();
+          }}
+          sx={BUTTON_SX}
+        >
           다녀옴 취소
         </Box>
       </Box>

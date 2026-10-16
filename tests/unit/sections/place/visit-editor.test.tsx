@@ -73,12 +73,12 @@ describe('VisitEditor (단독)', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
-  it('칸을 비우면 저장하지 않고 저장된 날짜로 돌아간다', () => {
+  it('칸을 비우면 저장도 안내도 없이 입력을 이어 갈 수 있다', () => {
     const h = setup('2026-10-10');
     const input = screen.getByLabelText('다녀온 날');
     fireEvent.change(input, { target: { value: '' } });
     expect(h.onSetDate).not.toHaveBeenCalled();
-    expect(input).toHaveValue('2026-10-10');
+    expect(input).toHaveValue('');
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
@@ -91,12 +91,70 @@ describe('VisitEditor (단독)', () => {
     expect(alert).toHaveTextContent('오늘 이후 날짜는 고를 수 없어요');
     expect(input).toHaveAttribute('aria-invalid', 'true');
     expect(input).toHaveAttribute('aria-describedby', alert.id);
-    expect(input).toHaveValue('2026-10-10');
 
     fireEvent.change(input, { target: { value: '2026-10-11' } });
     expect(h.onSetDate).toHaveBeenCalledWith('2026-10-11');
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(input).not.toHaveAttribute('aria-describedby');
+  });
+
+  it('연도를 한 자리씩 치는 중간값(0002·0020·0209…)은 저장하지 않고 2099는 미래라 안내한다', () => {
+    const h = setup('2026-10-10');
+    const input = screen.getByLabelText('다녀온 날');
+    expect(input).toHaveAttribute('min', '1900-01-01');
+    for (const value of ['0002-10-16', '0020-10-16', '0209-10-16']) {
+      fireEvent.change(input, { target: { value } });
+      expect(input).toHaveValue(value); // 입력을 이어 갈 수 있게 칸은 친 값을 유지한다
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    }
+    fireEvent.change(input, { target: { value: '2099-10-16' } });
+    expect(h.onSetDate).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert')).toHaveTextContent('오늘 이후 날짜는 고를 수 없어요');
+
+    fireEvent.change(input, { target: { value: '2025-10-16' } });
+    expect(h.onSetDate).toHaveBeenCalledTimes(1);
+    expect(h.onSetDate).toHaveBeenCalledWith('2025-10-16');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('저장된 날짜가 바뀌면 칸의 초안이 그 날짜로 맞춰지고 묵은 안내는 사라진다', () => {
+    const handlers = { onMarkToday: vi.fn(), onSetDate: vi.fn(), onClear: vi.fn() };
+    const { rerender } = render(
+      <VisitEditor visitedOn="2026-10-10" today="2026-10-16" {...handlers} />,
+    );
+    fireEvent.change(screen.getByLabelText('다녀온 날'), { target: { value: '2099-01-01' } });
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+
+    // 취소 후 다시 표시: 안 가 봄 → 다시 다녀옴(오늘)
+    rerender(<VisitEditor visitedOn={null} today="2026-10-16" {...handlers} />);
+    rerender(<VisitEditor visitedOn="2026-10-16" today="2026-10-16" {...handlers} />);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('다녀온 날')).toHaveValue('2026-10-16');
+    expect(screen.getByLabelText('다녀온 날')).toHaveAttribute('aria-invalid', 'false');
+
+    // 안내가 떠 있는 채로 저장된 날짜만 바뀌어도(되돌리기 등) 안내가 사라진다.
+    fireEvent.change(screen.getByLabelText('다녀온 날'), { target: { value: '2099-01-01' } });
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+    rerender(<VisitEditor visitedOn="2026-10-12" today="2026-10-16" {...handlers} />);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('다녀온 날')).toHaveValue('2026-10-12');
+  });
+
+  it('다녀왔어요를 키보드로 누르면 포커스가 날짜 칸으로, 취소하면 다녀왔어요 버튼으로 간다', async () => {
+    const user = userEvent.setup();
+    const handlers = { onMarkToday: vi.fn(), onSetDate: vi.fn(), onClear: vi.fn() };
+    const { rerender } = render(<VisitEditor visitedOn={null} today="2026-10-16" {...handlers} />);
+    screen.getByRole('button', { name: '다녀왔어요' }).focus();
+    await user.keyboard('{Enter}');
+    expect(handlers.onMarkToday).toHaveBeenCalledTimes(1);
+    rerender(<VisitEditor visitedOn="2026-10-16" today="2026-10-16" {...handlers} />);
+    expect(screen.getByLabelText('다녀온 날')).toHaveFocus();
+
+    screen.getByRole('button', { name: '다녀옴 취소' }).focus();
+    await user.keyboard(' ');
+    expect(handlers.onClear).toHaveBeenCalledTimes(1);
+    rerender(<VisitEditor visitedOn={null} today="2026-10-16" {...handlers} />);
+    expect(screen.getByRole('button', { name: '다녀왔어요' })).toHaveFocus();
   });
 });
 
@@ -140,7 +198,6 @@ describe('장소 상세의 다녀옴·한 줄 평', () => {
     fireEvent.change(input, { target: { value: '' } });
     await act(async () => {});
     expect(stored(store).visitedOn?.value).toBe('2026-10-10');
-    expect(input).toHaveValue('2026-10-10');
 
     fireEvent.change(input, { target: { value: '2099-01-01' } });
     await act(async () => {});
