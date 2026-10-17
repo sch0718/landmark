@@ -1,5 +1,7 @@
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import { visuallyHidden } from '@mui/utils';
+import { useState } from 'react';
 import {
   checkDate,
   checkVisit,
@@ -102,6 +104,8 @@ function KnownHours({
 export function HoursSection({ trip, dayIndex, place, plan, found }: Props) {
   const isCandidate = found === null && trip.candidates.value.includes(place.id);
   const { view, refresh } = usePlaceHours(place, { request: isCandidate });
+  // 이 장소에서 `다시 확인`을 누른 횟수. 같은 날 다시 받아 날짜 줄이 그대로여도 알리려고 쓴다.
+  const [asked, setAsked] = useState<{ placeId: string; count: number } | null>(null);
   if (found === null && !isCandidate) return null;
 
   const ruleDay = found?.dayIndex ?? dayIndex;
@@ -118,11 +122,27 @@ export function HoursSection({ trip, dayIndex, place, plan, found }: Props) {
       : checkDate(hours, date);
   const otherDay = found !== null && found.dayIndex !== dayIndex ? found.dayIndex + 1 : null;
 
-  const pending = view.kind === 'loading' || (view.kind !== 'unsupported' && view.pending);
+  const pending = view.kind !== 'unsupported' && view.pending;
   const status =
     view.kind === 'known'
       ? `${hoursCheckedLabel(view.hours.fetchedAt)}${view.error === null ? '' : ' · 새로 받지 못했어요'}`
       : null;
+  // 누른 뒤 새로 받았으면 보이지 않는 `확인했어요`를 붙인다. 받는 동안 빠졌다가 누를 때마다 새로 생겨 알린다.
+  const confirmed =
+    asked !== null &&
+    asked.placeId === place.id &&
+    !pending &&
+    view.kind === 'known' &&
+    view.error === null;
+  // 받는 동안은 포커스를 지닌 채 `aria-disabled`이고 누름을 무시한다(`disabled`면 포커스가 카드 밖으로 빠진다).
+  const onRefresh = () => {
+    if (pending) return;
+    setAsked((prev) => ({
+      placeId: place.id,
+      count: prev?.placeId === place.id ? prev.count + 1 : 1,
+    }));
+    refresh();
+  };
 
   return (
     <Box sx={{ mt: 1.5 }}>
@@ -150,12 +170,21 @@ export function HoursSection({ trip, dayIndex, place, plan, found }: Props) {
             sx={{ flex: 1, minWidth: 0, fontSize: 12, color: 'var(--tm-text-muted)' }}
           >
             {status}
+            {confirmed && (
+              <Box key={asked.count} component="span" sx={visuallyHidden}>
+                {' · 확인했어요'}
+              </Box>
+            )}
           </Box>
           <Button
             size="small"
-            disabled={pending}
-            onClick={refresh}
-            sx={{ minHeight: 44, textTransform: 'none' }}
+            aria-disabled={pending || undefined}
+            onClick={onRefresh}
+            sx={{
+              minHeight: 44,
+              textTransform: 'none',
+              '&[aria-disabled="true"]': { opacity: 0.5 },
+            }}
           >
             {pending ? '확인 중…' : '다시 확인'}
           </Button>

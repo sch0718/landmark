@@ -1,5 +1,6 @@
 import { Effect, Result } from 'effect';
 import { useAtomValue, useStore } from 'jotai';
+import { selectAtom } from 'jotai/utils';
 import { useCallback, useEffect, useMemo } from 'react';
 import { visibleStops } from 'src/domain/trips/query';
 import { forkEffect } from 'src/lib/effect/runtime';
@@ -61,14 +62,16 @@ function lookupHours(store: Store, sid: string, refresh: boolean) {
     const isLatest = () => started.get(sid) === token;
 
     const result = yield* Effect.result(lookup.place(sid, { refresh })).pipe(
-      // 런타임이 정리되며 중단되면 받는 중 표시를 거둔다. 처음 묻던 장소는 상태를 지워 다음에 다시 묻게 한다.
+      // 런타임이 정리되며 중단되면 받는 중 표시를 거둔다. 처음 묻던 장소나 보일 것(정보·실패)이 없는 장소는
+      // 상태를 지워 다음에 다시 묻게 한다(정보도 실패도 없이 받는 중이 아닌 상태를 남기지 않는다).
       Effect.onInterrupt(() =>
         Effect.sync(() => {
           if (!isLatest()) return;
           store.set(hoursStatesAtom, (prev) => {
             const known = prev[sid];
             if (known === undefined) return prev;
-            if (before === undefined && known.seq === 0 && known.error === null) {
+            const first = before === undefined && known.seq === 0 && known.error === null;
+            if (first || (known.hours === null && known.error === null)) {
               const { [sid]: _dropped, ...rest } = prev;
               void _dropped;
               return rest;
@@ -190,24 +193,29 @@ export function useTripHoursRequests(tripId: string, dayIndex: number): void {
 /**
  * 화면이 보는 한 장소의 영업시간.
  * - `unsupported`: 네이버 장소가 아니다.
- * - `loading`: 아직 받은 정보도 실패도 없다(묻기 전·받는 중).
+ * - `loading`: 아직 받은 정보도 실패도 없다. `pending`이면 받는 중, 아니면 묻기 전이다(`다시 확인`을 누를 수 있다).
  * - `known`: 받은 정보가 있다(옛것일 수 있음). `pending`은 다시 받는 중, `error`는 마지막 요청의 실패.
  * - `failed`: 받은 정보 없이 실패했다. `pending`이면 다시 묻는 중이다.
  */
 export type PlaceHoursView =
   | { kind: 'unsupported' }
-  | { kind: 'loading' }
+  | { kind: 'loading'; pending: boolean }
   | { kind: 'known'; hours: PlaceHours; pending: boolean; error: HoursLookupErrorCode | null }
   | { kind: 'failed'; error: HoursLookupErrorCode; pending: boolean };
 
-function viewOf(sid: string | null, state: HoursState | undefined): PlaceHoursView {
+/** `request`면 상태가 없어도 곧 물으므로 받는 중으로 본다. */
+function viewOf(
+  sid: string | null,
+  state: HoursState | undefined,
+  request: boolean,
+): PlaceHoursView {
   if (sid === null) return { kind: 'unsupported' };
-  if (state === undefined) return { kind: 'loading' };
+  if (state === undefined) return { kind: 'loading', pending: request };
   if (state.hours !== null) {
     return { kind: 'known', hours: state.hours, pending: state.pending, error: state.error };
   }
   if (state.error !== null) return { kind: 'failed', error: state.error, pending: state.pending };
-  return { kind: 'loading' };
+  return { kind: 'loading', pending: state.pending };
 }
 
 /**
@@ -221,18 +229,25 @@ export function usePlaceHours(
 ): { view: PlaceHoursView; refresh(): void } {
   const store = useStore();
   const sid = naverSid(place);
-  const state = useAtomValue(hoursStatesAtom)[sid ?? ''];
+  // 이 장소의 상태만 구독한다. 다른 장소의 답이 와도 다시 그리지 않는다.
+  const stateAtom = useMemo(
+    () => selectAtom(hoursStatesAtom, (states) => (sid === null ? undefined : states[sid])),
+    [sid],
+  );
+  const state = useAtomValue(stateAtom);
   const request = options.request === true;
+  const missing = state === undefined;
 
+  // 상태가 없으면 묻는다. 중단으로 상태가 지워져도 다시 묻는다.
   useEffect(() => {
-    if (!request || sid === null) return;
+    if (!request || sid === null || !missing) return;
     forkEffect(requestMissing(store, [sid]));
-  }, [request, sid, store]);
+  }, [request, sid, store, missing]);
   useOfflineRetry(store, request && sid !== null ? sid : '');
 
   const refresh = useCallback(() => {
     if (sid !== null) forkEffect(lookupHours(store, sid, true));
   }, [sid, store]);
-  const view = useMemo(() => viewOf(sid, sid === null ? undefined : state), [sid, state]);
+  const view = useMemo(() => viewOf(sid, state, request), [sid, state, request]);
   return useMemo(() => ({ view, refresh }), [view, refresh]);
 }

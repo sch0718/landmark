@@ -1,9 +1,10 @@
 import { act, fireEvent, renderHook, screen, waitFor, within } from '@testing-library/react';
-import { Provider } from 'jotai';
+import { Effect, ManagedRuntime } from 'effect';
+import { createStore, Provider } from 'jotai';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { VisitCheck } from 'src/domain/trips/hours';
-import { setAppRuntimeForTest } from 'src/lib/effect/runtime';
+import { setAppRuntimeForTest, type AppRuntime } from 'src/lib/effect/runtime';
 import type { Library, Place } from 'src/schema/library';
 import type { HoursDay, PlaceHours } from 'src/server/hours';
 import { noticeFor } from 'src/sections/trips/planner/HoursNotice';
@@ -369,6 +370,105 @@ describe('영업시간 상태 갱신', () => {
   });
 });
 
+describe('영업시간 구독과 중단', () => {
+  it('한 장소의 답은 다른 장소를 보는 훅을 다시 그리지 않는다', async () => {
+    const hours = fakeHours(() => 'pending');
+    const { store } = await open(library([[P1, P2]]), { routes: routes(), hours });
+    expect(hours.calls.map((c) => c.sid)).toEqual([S1, S2]);
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <Provider store={store}>{children}</Provider>
+    );
+    const places = store.get(libraryAtom).places;
+    const renders = { [S1]: 0, [S2]: 0 };
+    renderHook(
+      () => {
+        renders[S1] += 1;
+        return usePlaceHours(places[P1]!);
+      },
+      { wrapper },
+    );
+    renderHook(
+      () => {
+        renders[S2] += 1;
+        return usePlaceHours(places[P2]!);
+      },
+      { wrapper },
+    );
+    const before = { ...renders };
+
+    await act(async () => hours.settle(0, dancheon(S1)));
+    expect(store.get(hoursStatesAtom)[S1]).toMatchObject({ pending: false });
+    expect(renders[S1]).toBeGreaterThan(before[S1]);
+    expect(renders[S2]).toBe(before[S2]);
+  });
+
+  /** 앱 없이 저장소 하나와 가짜 조회만으로 런타임을 만든다(정리하면 진행 중인 요청이 중단된다). */
+  function runtimeWith(hours: ReturnType<typeof fakeHours>): AppRuntime {
+    const runtime = ManagedRuntime.make(hours.layer) as unknown as AppRuntime;
+    setAppRuntimeForTest(runtime);
+    return runtime;
+  }
+  const naverPlace = () => plannerLibrary().places[P1]!;
+
+  it('앞 요청이 남긴 빈 상태에서 다시 확인이 중단되면 상태를 지워 받는 중에 갇히지 않는다', async () => {
+    const hours = fakeHours(() => 'pending');
+    const runtime = runtimeWith(hours);
+    const store = createStore();
+    // 다른 화면이 시작한 첫 요청이 아직 받는 중이다(정보도 실패도 없음).
+    store.set(hoursStatesAtom, {
+      [S1]: { hours: null, pending: true, error: null, seq: 0, refresh: false },
+    });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <Provider store={store}>{children}</Provider>
+    );
+    const { result } = renderHook(() => usePlaceHours(naverPlace()), { wrapper });
+    expect(result.current.view).toEqual({ kind: 'loading', pending: true });
+
+    await act(async () => result.current.refresh());
+    expect(hours.calls).toEqual([{ sid: S1, refresh: true }]);
+
+    // 런타임이 정리되며 이 장소의 마지막 요청이 중단된다.
+    await act(async () => {
+      await Effect.runPromise(runtime.disposeEffect);
+    });
+    expect(store.get(hoursStatesAtom)[S1]).toBeUndefined();
+    // 카드는 확인 중…에 갇히지 않고 다시 확인을 누를 수 있다.
+    expect(result.current.view).toEqual({ kind: 'loading', pending: false });
+
+    const next = fakeHours((sid) => dancheon(sid));
+    runtimeWith(next);
+    await act(async () => result.current.refresh());
+    expect(next.calls).toEqual([{ sid: S1, refresh: true }]);
+    expect(result.current.view).toMatchObject({ kind: 'known', pending: false, error: null });
+  });
+
+  it('상태가 지워지면 묻는 훅(request)은 다시 묻는다', async () => {
+    const hours = fakeHours(() => 'pending');
+    const runtime = runtimeWith(hours);
+    const store = createStore();
+    store.set(hoursStatesAtom, {
+      [S1]: { hours: null, pending: true, error: null, seq: 0, refresh: false },
+    });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <Provider store={store}>{children}</Provider>
+    );
+    const { result } = renderHook(() => usePlaceHours(naverPlace(), { request: true }), {
+      wrapper,
+    });
+    // 상태가 있어 묻지 않는다.
+    expect(hours.calls).toEqual([]);
+    await act(async () => result.current.refresh());
+
+    const next = fakeHours((sid) => dancheon(sid));
+    await act(async () => {
+      await Effect.runPromise(runtime.disposeEffect);
+      runtimeWith(next);
+    });
+    await waitFor(() => expect(next.calls).toEqual([{ sid: S1, refresh: false }]));
+    expect(result.current.view).toMatchObject({ kind: 'known', pending: false });
+  });
+});
+
 describe('noticeFor', () => {
   const H = dancheon(S1);
   const check =
@@ -384,7 +484,7 @@ describe('noticeFor', () => {
     expect(noticeFor({ kind: 'failed', error: 'NOT_FOUND', pending: false }, check())).toEqual(
       muted,
     );
-    expect(noticeFor({ kind: 'loading' }, check())).toBeNull();
+    expect(noticeFor({ kind: 'loading', pending: true }, check())).toBeNull();
   });
 
   it('받은 정보는 판정대로: 문제없음은 없음, 모름은 확인 필요, 그 밖은 경고', () => {
@@ -416,6 +516,7 @@ describe('지도 카드의 영업시간 칸', () => {
       candidates?: string[];
       lodging?: (string | null)[];
       startTime?: string;
+      origin?: string;
     } = {},
   ): Library {
     const base = library([]);
@@ -424,6 +525,7 @@ describe('지도 카드의 영업시간 칸', () => {
       stops: options.stops ?? [[P1]],
       candidates: options.candidates,
       lodging: options.lodging,
+      origin: options.origin,
     });
     const days = trip.days.map((d, i) =>
       i === 0 && options.startTime !== undefined ? { ...d, startTime: f(options.startTime) } : d,
@@ -461,15 +563,24 @@ describe('지도 카드의 영업시간 칸', () => {
     expect(within(card).queryByText(/고르면 확인해요/)).not.toBeInTheDocument();
   });
 
-  it('다시 확인은 새로 받고, 받는 동안 확인 중…(누를 수 없음), 끝나면 확인 날짜가 바뀐다', async () => {
+  it('다시 확인은 새로 받고, 받는 동안 확인 중…(누름 무시, 포커스 유지), 끝나면 확인 날짜가 바뀐다', async () => {
     const hours = fakeHours((sid, refresh) => (refresh ? 'pending' : checked(sid)));
     const { card } = await openCard(cardLibrary(), P1, hours);
     await within(card).findByText(CHECKED);
 
-    fireEvent.click(within(card).getByRole('button', { name: '다시 확인' }));
+    const button = within(card).getByRole('button', { name: '다시 확인' });
+    act(() => button.focus());
+    fireEvent.click(button);
     expect(hours.calls.at(-1)).toEqual({ sid: S1, refresh: true });
     const busy = await within(card).findByRole('button', { name: '확인 중…' });
-    expect(busy).toBeDisabled();
+    expect(busy).toBe(button);
+    // 받는 동안 포커스를 지닌 채 aria-disabled이고, 누름은 무시한다.
+    expect(busy).toHaveAttribute('aria-disabled', 'true');
+    expect(busy).not.toHaveAttribute('disabled');
+    expect(document.activeElement).toBe(button);
+    const asked = hours.calls.length;
+    fireEvent.click(busy);
+    expect(hours.calls).toHaveLength(asked);
     // 받는 중에도 옛 정보를 그대로 보인다.
     expect(within(card).getByText('Day 1 · 10.16(금) · 11:00~21:00')).toBeInTheDocument();
 
@@ -477,7 +588,43 @@ describe('지도 카드의 영업시간 칸', () => {
       hours.settle(hours.calls.length - 1, checked(S1, '2026-10-17T02:00:00.000Z')),
     );
     expect(await within(card).findByText('10월 17일 확인 · 네이버')).toBeInTheDocument();
-    expect(within(card).getByRole('button', { name: '다시 확인' })).toBeEnabled();
+    const done = within(card).getByRole('button', { name: '다시 확인' });
+    expect(done).toBe(button);
+    expect(done).not.toHaveAttribute('aria-disabled');
+    expect(document.activeElement).toBe(button);
+  });
+
+  it('같은 날 다시 받아 성공해도 확인 날짜 줄(aria-live)이 바뀌어 알린다', async () => {
+    const hours = fakeHours((sid, refresh) => (refresh ? 'pending' : checked(sid)));
+    const { card } = await openCard(cardLibrary(), P1, hours);
+    const live = (await within(card).findByText(CHECKED)).closest('[aria-live]')!;
+    expect(live).toHaveAttribute('aria-live', 'polite');
+    expect(live.textContent).toBe(CHECKED);
+
+    for (const at of ['2026-10-16T03:00:00.000Z', '2026-10-16T04:00:00.000Z']) {
+      fireEvent.click(within(card).getByRole('button', { name: '다시 확인' }));
+      await within(card).findByRole('button', { name: '확인 중…' });
+      const during = live.textContent;
+      await act(async () => hours.settle(hours.calls.length - 1, checked(S1, at)));
+      await within(card).findByRole('button', { name: '다시 확인' });
+      // 날짜(10월 16일)는 같지만 줄의 글이 받는 중과 달라진다.
+      expect(live.textContent).toBe(`${CHECKED} · 확인했어요`);
+      expect(live.textContent).not.toBe(during);
+    }
+  });
+
+  it('출발지가 있는 Day의 둘째 장소 카드는 그 장소의 도착 시각으로 판정한다', async () => {
+    const hours = fakeHours((sid) => checked(sid));
+    const lib = cardLibrary({ stops: [[P1, P2]], origin: HOUSE });
+    const { store } = await open(lib, { routes: routes(), hours });
+    const rowChip = await within(stopRow('안목 카페거리')).findByText(/도착 — 영업 시작 11:00/);
+    const firstChip = within(stopRow('중앙시장 닭강정')).getByText(/도착 — 영업 시작 11:00/);
+    expect(rowChip.textContent).not.toBe(firstChip.textContent);
+
+    await act(async () => store.set(mapCardAtom, { tripId: TRIP, placeId: P2 }));
+    const card = await screen.findByRole('dialog', { name: '안목 카페거리' });
+    expect(within(card).getByText(rowChip.textContent!)).toBeInTheDocument();
+    expect(within(card).queryByText(firstChip.textContent!)).not.toBeInTheDocument();
   });
 
   it('고르지 않은 Day의 장소: 그 Day 날짜로 휴무만 보고, 시각은 그 Day를 고르면 확인한다', async () => {
