@@ -8,7 +8,9 @@ import { RouteLookupError } from 'src/services/errors';
 import {
   listenPageLeave,
   ROUTE_CACHE_KEY,
+  ROUTE_MAX_CONCURRENT,
   ROUTE_PERSIST_DELAY_MS,
+  ROUTE_TIMEOUT_MS,
   RouteLookup,
 } from 'src/services/route-lookup';
 
@@ -828,6 +830,69 @@ describe('RouteLookup 오류', () => {
       expect(outcome.retry).toEqual({ ...result(), seq: 5, fresh: false });
       expect(fetchFn).toHaveBeenCalledTimes(5);
     }),
+  );
+
+  it.effect(
+    `본문을 받는 중에 12초가 지나도 TIMEOUT이고 그 요청을 끊어, 받는 중인 전송이 ${ROUTE_MAX_CONCURRENT}개를 넘지 않는다`,
+    () =>
+      Effect.gen(function* () {
+        // 머리는 오고 본문은 끝나지 않는 응답. 실제 fetch처럼 signal이 끊기면 본문 읽기도 실패한다.
+        const signals: AbortSignal[] = [];
+        const fetchFn = vi.fn(async (_url: unknown, init?: RequestInit) => {
+          const signal = init!.signal!;
+          signals.push(signal);
+          const body = new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(new TextEncoder().encode('{"mode":'));
+              signal.addEventListener('abort', () => controller.error(signal.reason));
+            },
+          });
+          return new Response(body, { status: 200 });
+        });
+        const transferring = () => signals.filter((s) => !s.aborted).length;
+        // 칸 수보다 하나 더 부른다. 마지막 하나는 칸이 풀릴 때까지 기다린다.
+        const targets: Pt[] = Array.from({ length: ROUTE_MAX_CONCURRENT + 1 }, (_, i) => [
+          127.02 + i * 0.01,
+          37.5,
+        ]);
+        const outcome = yield* run({ fetch: fetchFn, storage: null }, (l) =>
+          Effect.gen(function* () {
+            const legs = yield* Effect.all(
+              targets.map((t) => Effect.flip(l.leg('car', A, t)).pipe(Effect.forkChild)),
+            );
+            yield* settle;
+            const before = { calls: fetchFn.mock.calls.length, transferring: transferring() };
+            yield* TestClock.adjust(`${ROUTE_TIMEOUT_MS} millis`);
+            const errors = yield* Effect.all(
+              legs.slice(0, ROUTE_MAX_CONCURRENT).map((f) => Fiber.join(f)),
+            );
+            const aborted = signals.slice(0, ROUTE_MAX_CONCURRENT).map((s) => s.aborted);
+            // 칸이 풀려 기다리던 요청이 나가도 끊지 않은 전송은 칸 수를 넘지 않는다.
+            yield* settle;
+            const afterQueued = { calls: fetchFn.mock.calls.length, transferring: transferring() };
+            yield* TestClock.adjust(`${ROUTE_TIMEOUT_MS} millis`);
+            const queuedError = yield* Fiber.join(legs[ROUTE_MAX_CONCURRENT]!);
+            return {
+              before,
+              errors: errors.map((e) => e.code),
+              aborted,
+              afterQueued,
+              queuedError,
+            };
+          }).pipe(
+            Effect.catch((e) => (e instanceof RouteLookupError ? Effect.fail(e) : Effect.die(e))),
+          ),
+        );
+        expect(outcome.before).toEqual({
+          calls: ROUTE_MAX_CONCURRENT,
+          transferring: ROUTE_MAX_CONCURRENT,
+        });
+        expect(outcome.errors).toEqual(Array(ROUTE_MAX_CONCURRENT).fill('TIMEOUT'));
+        expect(outcome.aborted).toEqual(Array(ROUTE_MAX_CONCURRENT).fill(true));
+        expect(outcome.afterQueued).toEqual({ calls: ROUTE_MAX_CONCURRENT + 1, transferring: 1 });
+        expect(outcome.queuedError.code).toBe('TIMEOUT');
+        expect(signals[ROUTE_MAX_CONCURRENT]?.aborted).toBe(true);
+      }),
   );
 
   it.effect('실패한 요청은 진행 중 표에서 빠져 다시 시도할 수 있다', () =>
