@@ -86,6 +86,7 @@ test.describe('영업시간 경고', () => {
     await expect(card).toContainText('10월 16일 확인 · 네이버');
 
     // 3. 다시 확인: 서버에 새로 받으라는 질의(fresh=1)가 간다.
+    // 바로 읽어도 된다: 칩은 답을 받아야 보이고 처리기는 응답 전에 질의를 모으며, 다시 확인은 아직 누르지 않았다.
     expect(calls.length).toBeGreaterThan(0);
     expect(calls.every((call) => call.fresh === null)).toBe(true);
     await card.getByRole('button', { name: '다시 확인' }).click();
@@ -100,6 +101,8 @@ test.describe('영업시간 경고', () => {
     const startTime = timeline(page).getByLabel('출발 시각');
     await startTime.fill('10:30');
     await expect(list.getByText('10:30', { exact: true })).toBeVisible();
+    // 행이 있어야 아래 `없음` 확인이 뜻을 가진다.
+    await expect(row).toContainText('초당순두부 본점');
     await expect(row).not.toContainText('영업 시작');
     await expect(row).not.toContainText('영업시간 확인 필요');
   });
