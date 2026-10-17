@@ -661,7 +661,7 @@ describe('GET /api/hours', () => {
 
   it('상태·키가 없는 HTML이면 502, 저장하지 않는다', async () => {
     const cache = stubCaches();
-    stubFetch({
+    const calls = stubFetch({
       [`${HOME}/place/11733192/home`]: () => new Response('<html><body>blocked</body></html>'),
     });
     const { ctx, pending } = makeContext(hoursPath('sid=11733192'));
@@ -670,6 +670,9 @@ describe('GET /api/hours', () => {
     expect(((await res.json()) as { error: { code: string } }).error.code).toBe('UPSTREAM_ERROR');
     await Promise.all(pending);
     expect(cache.put).not.toHaveBeenCalled();
+    // 캐시를 보고 실제로 네이버까지 가서 실패했다(다른 이유로 502가 난 것이 아니다).
+    expect(cache.match).toHaveBeenCalledWith(KEY);
+    expect(calls).toEqual([`${HOME}/place/11733192/home`]);
   });
 
   it('출처가 없으면 403, 캐시도 보지 않는다', async () => {
