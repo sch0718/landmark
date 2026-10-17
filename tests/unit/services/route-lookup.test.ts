@@ -80,6 +80,12 @@ const run = <A>(
 /** 마이크로태스크에 예약된 저장이 돌 때까지 기다린다. */
 const settle = Effect.promise(() => new Promise<void>((r) => setTimeout(r, 0)));
 
+/** `done`이 참이 될 때까지 `settle`을 되풀이한다(최대 50번). 파이버가 언제 도는지는 한 바퀴로 정해지지 않는다. */
+const settleUntil = (done: () => boolean) =>
+  Effect.gen(function* () {
+    for (let i = 0; i < 50 && !done(); i += 1) yield* settle;
+  });
+
 const leg = (mode: RouteMode, from: Pt, to: Pt, refresh?: boolean) => (l: RouteLookup['Service']) =>
   l.leg(mode, from, to, refresh === undefined ? undefined : { refresh });
 
@@ -860,7 +866,7 @@ describe('RouteLookup 오류', () => {
             const legs = yield* Effect.all(
               targets.map((t) => Effect.flip(l.leg('car', A, t)).pipe(Effect.forkChild)),
             );
-            yield* settle;
+            yield* settleUntil(() => fetchFn.mock.calls.length >= ROUTE_MAX_CONCURRENT);
             const before = { calls: fetchFn.mock.calls.length, transferring: transferring() };
             yield* TestClock.adjust(`${ROUTE_TIMEOUT_MS} millis`);
             const errors = yield* Effect.all(
@@ -868,7 +874,7 @@ describe('RouteLookup 오류', () => {
             );
             const aborted = signals.slice(0, ROUTE_MAX_CONCURRENT).map((s) => s.aborted);
             // 칸이 풀려 기다리던 요청이 나가도 끊지 않은 전송은 칸 수를 넘지 않는다.
-            yield* settle;
+            yield* settleUntil(() => fetchFn.mock.calls.length > ROUTE_MAX_CONCURRENT);
             const afterQueued = { calls: fetchFn.mock.calls.length, transferring: transferring() };
             yield* TestClock.adjust(`${ROUTE_TIMEOUT_MS} millis`);
             const queuedError = yield* Fiber.join(legs[ROUTE_MAX_CONCURRENT]!);

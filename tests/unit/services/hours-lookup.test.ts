@@ -85,6 +85,12 @@ const run = <A>(
 /** 마이크로태스크·타이머 한 바퀴를 기다린다. */
 const settle = Effect.promise(() => new Promise<void>((r) => setTimeout(r, 0)));
 
+/** `done`이 참이 될 때까지 `settle`을 되풀이한다(최대 50번). 파이버가 언제 도는지는 한 바퀴로 정해지지 않는다. */
+const settleUntil = (done: () => boolean) =>
+  Effect.gen(function* () {
+    for (let i = 0; i < 50 && !done(); i += 1) yield* settle;
+  });
+
 /** 오류는 그대로, 그 밖의 실패는 결함으로(타입을 `HoursLookupError`로 좁힌다). */
 const onlyLookupErrors = <A, E>(effect: Effect.Effect<A, E>) =>
   effect.pipe(
@@ -531,7 +537,7 @@ describe('HoursLookup 오류', () => {
               const hung = yield* Effect.all(
                 ['1', '2'].map((sid) => Effect.flip(l.place(sid)).pipe(Effect.forkChild)),
               );
-              yield* settle;
+              yield* settleUntil(() => fetchFn.mock.calls.length >= 2);
               expect(fetchFn).toHaveBeenCalledTimes(2);
               expect(transferring()).toBe(2);
               yield* TestClock.adjust(`${HOURS_TIMEOUT_MS} millis`);
@@ -539,7 +545,7 @@ describe('HoursLookup 오류', () => {
               const aborted = signals.map((s) => s.aborted);
               // 칸이 풀려 셋째 요청이 나가도 끊지 않은 전송은 2개를 넘지 않는다.
               const third = yield* Effect.flip(l.place('3')).pipe(Effect.forkChild);
-              yield* settle;
+              yield* settleUntil(() => fetchFn.mock.calls.length >= 3);
               const afterThird = { calls: fetchFn.mock.calls.length, transferring: transferring() };
               yield* TestClock.adjust(`${HOURS_TIMEOUT_MS} millis`);
               const thirdError = yield* Fiber.join(third);
