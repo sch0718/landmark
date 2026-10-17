@@ -248,6 +248,23 @@ describe('checkVisit — 자정 넘김(매일 18:00~02:00)', () => {
     });
   }
 
+  it('방문일 규칙을 몰라도 전날 밤 영업 구간 안이면 그 구간으로 본다', () => {
+    // 금 18:00~02:00, 토 항목 없음.
+    const fri = place([open('금', '18:00', '02:00', { endsNextDay: true, lastOrders: ['00:30'] })]);
+    const SAT = '2026-10-17';
+    expect(checkVisit(fri, SAT, v(at(1, 0), at(1, 0)))).toMatchObject({ kind: 'last-order' });
+    const noLastOrder = place([open('금', '18:00', '02:00', { endsNextDay: true })]);
+    expect(checkVisit(noLastOrder, SAT, v(at(1), at(1, 30)))).toEqual({ kind: 'ok' });
+    expect(checkVisit(noLastOrder, FRI, v(1440 + at(1), 1440 + at(1, 30)))).toEqual({ kind: 'ok' });
+    expect(checkVisit(noLastOrder, SAT, v(at(1), at(2, 30)))).toEqual({
+      kind: 'closes-during-stay',
+      closesAt: '02:00',
+    });
+    // 구간 밖(토 05:00)은 여전히 모름.
+    expect(checkVisit(noLastOrder, SAT, v(at(5), at(6)))).toEqual({ kind: 'unknown' });
+    expect(checkVisit(noLastOrder, SAT, v(at(2, 30), at(3)))).toEqual({ kind: 'unknown' });
+  });
+
   it('하루 경계: 03:59 → 영업 끝 02:00, 04:00 → 영업 전 18:00', () => {
     expect(run(BAR, FRI, v(239, 250))[1]).toBe('03:59 도착 — 영업 종료 02:00');
     expect(run(BAR, FRI, v(240, 250))[1]).toBe('04:00 도착 — 영업 시작 18:00');
@@ -383,6 +400,21 @@ describe('임시 휴무', () => {
     const expected = text === '2026.10.7 휴무' ? '2026-10-07' : '2026-10-17';
     expect(irregularMatch(withIrregular(text), expected)).toBe(text);
   });
+
+  it('연도가 적힌 M월 D일은 그 연도로 본다', () => {
+    const text = '2026년 10월 17일 휴무';
+    expect(irregularMatch(withIrregular(text), '2026-10-17')).toBe(text);
+    expect(irregularMatch(withIrregular('2026년10월17일 휴무'), '2026-10-17')).not.toBeNull();
+    expect(irregularMatch(withIrregular('2025년 10월 17일 휴무'), '2026-10-17')).toBeNull();
+    expect(irregularMatch(withIrregular('2025년 10월 17일 휴무'), '2025-10-17')).not.toBeNull();
+  });
+
+  it.each(['2026-10-170', '2026.10.170 휴무', '12026-10-17', '110월 17일 휴무', '10월 117일 휴무'])(
+    '숫자가 이어지면 맞지 않는다: %s',
+    (text) => {
+      expect(irregularMatch(withIrregular(text), '2026-10-17')).toBeNull();
+    },
+  );
 
   it('날짜 없는 원문은 맞지 않는다', () => {
     expect(irregularMatch(withIrregular('추석 연휴'), '2026-10-17')).toBeNull();

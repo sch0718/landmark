@@ -40,9 +40,15 @@ export function dayRuleFor(hours: PlaceHours, date: string): DayRule {
 
 const pad2 = (n: number): string => String(n).padStart(2, '0');
 
-// 임시 휴무 원문의 날짜 꼴(스펙 §3.6). 월·일만 있는 꼴은 대상 날짜의 연도로 본다.
-const FULL_DATES = [/(\d{4})-(\d{1,2})-(\d{1,2})/g, /(\d{4})\.\s?(\d{1,2})\.\s?(\d{1,2})/g];
-const MONTH_DAY = /(\d{1,2})월\s?(\d{1,2})일/g;
+// 임시 휴무 원문의 날짜 꼴(스펙 §3.6). 연도가 적힌 꼴은 그 연도, 월·일만 있는 꼴은 대상 날짜의 연도로 본다.
+// 앞뒤에 숫자가 이어지면 날짜로 보지 않는다(`2026-10-170`, `110월`).
+const FULL_DATES = [
+  /(?<!\d)(\d{4})-(\d{1,2})-(\d{1,2})(?!\d)/g,
+  /(?<!\d)(\d{4})\.\s?(\d{1,2})\.\s?(\d{1,2})(?!\d)/g,
+  /(?<!\d)(\d{4})년\s?(\d{1,2})월\s?(\d{1,2})일/g,
+];
+// `2025년 10월 17일`의 `10월 17일`은 위 꼴이 맡으므로 앞에 `년`이 오면 건너뛴다.
+const MONTH_DAY = /(?<!\d)(?<!년\s?)(\d{1,2})월\s?(\d{1,2})일/g;
 
 /** 원문에서 뽑은 'YYYY-MM-DD'들. */
 function datesIn(text: string, year: string): string[] {
@@ -211,7 +217,8 @@ export function checkVisit(hours: PlaceHours, date: string, visit: Visit): Visit
   const rule = dayRuleFor(hours, visitDate);
   if (rule.kind === 'closed' && current === undefined)
     return { kind: 'closed-day', note: rule.note };
-  if (rule.kind === 'unknown') return { kind: 'unknown' };
+  // 규칙을 몰라도 전날 밤 영업 구간 안이면 그 구간으로 판정한다.
+  if (rule.kind === 'unknown' && current === undefined) return { kind: 'unknown' };
 
   if (current === undefined) {
     const lastEnd = segments
