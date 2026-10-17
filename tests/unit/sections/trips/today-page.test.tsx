@@ -356,7 +356,10 @@ describe('당일 모드: 지도 핀', () => {
 });
 
 describe('당일 모드: 다녀옴 체크', () => {
-  type ToastOptions = { duration: number; action: { label: string; onClick: () => void } };
+  type ToastOptions = {
+    duration: number;
+    action: { label: string; onClick: (event?: { currentTarget: Element }) => void };
+  };
   /** 이 문구로 띄운 마지막 토스트의 옵션. */
   const toastOf = (message: string): ToastOptions | undefined =>
     toastMock.mock.calls.findLast((c) => c[0] === message)?.[1] as ToastOptions | undefined;
@@ -556,6 +559,39 @@ describe('당일 모드: 다녀옴 체크', () => {
       // 토스트가 사라진 뒤에도 포커스는 카드에 남는다.
       toaster.remove();
       expect(nextCard()).toHaveFocus();
+    } finally {
+      toaster.remove();
+    }
+  });
+
+  it('되돌리기 저장 중에 다른 토스트의 버튼으로 포커스를 옮기면, 끝나도 그 버튼에 둔다', async () => {
+    const slow = slowLocks();
+    const { storage } = await renderToday(lib(), { libraryLocks: slow.locks });
+    const user = userEvent.setup();
+    await user.click(checkbox('중앙시장 닭강정'));
+    await waitFor(() => expect(storedVisited(storage, P1)).toBe('2026-10-24'));
+    await user.click(checkbox('안목 카페거리'));
+    await waitFor(() => expect(storedVisited(storage, P2)).toBe('2026-10-24'));
+    // Sonner가 그리는 토스트 두 개(A: 닭강정, B: 안목)의 `되돌리기` 버튼.
+    const toaster = document.createElement('ol');
+    toaster.setAttribute('data-sonner-toaster', '');
+    const undoA = document.createElement('button');
+    const undoB = document.createElement('button');
+    toaster.append(undoA, undoB);
+    document.body.append(toaster);
+    try {
+      undoA.focus();
+      slow.hold();
+      const a = toastOf('‘중앙시장 닭강정’ 다녀옴으로 표시했어요');
+      await act(async () => {
+        a!.action.onClick({ currentTarget: undoA });
+      });
+      // 저장을 기다리는 동안 A 토스트는 닫히고, 사람이 B의 `되돌리기`로 포커스를 옮겼다.
+      undoA.remove();
+      undoB.focus();
+      await act(async () => slow.release());
+      await waitFor(() => expect(storedVisited(storage, P1)).toBeNull());
+      expect(undoB).toHaveFocus();
     } finally {
       toaster.remove();
     }

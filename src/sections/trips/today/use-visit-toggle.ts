@@ -6,9 +6,23 @@ import type { Place } from 'src/schema/library';
 import { MERGED_NOTICE, UNDO_MS } from 'src/sections/trips/planner/use-trip-undo';
 import { useLibraryAction } from 'src/stores/library-state';
 
+/** Sonner가 토스트를 그리는 자리. */
+const TOASTER_SELECTOR = '[data-sonner-toaster]';
+
+/** 누른 `되돌리기` 버튼. 이벤트에 없으면 그 순간 토스트 안에 있던 포커스를 쓴다. */
+function pressedButton(event: { currentTarget?: unknown } | undefined): Element | null {
+  const target = event?.currentTarget;
+  if (target instanceof Element) return target;
+  const active = document.activeElement;
+  return active?.closest(TOASTER_SELECTOR) ? active : null;
+}
+
 type Options = {
-  /** 토스트의 `되돌리기`가 끝났다(바꿨든 아니든). 화면이 포커스를 되살릴 때 쓴다. */
-  onUndone?: () => void;
+  /**
+   * 토스트의 `되돌리기`가 끝났다(바꿨든 아니든). 화면이 포커스를 되살릴 때 쓴다. `pressed`는 누른 순간의
+   * `되돌리기` 버튼(알 수 없으면 null)이다.
+   */
+  onUndone?: (pressed: Element | null) => void;
 };
 
 /**
@@ -37,10 +51,15 @@ export function useVisitToggle(options: Options = {}): {
   const [pending, setPending] = useState<ReadonlySet<string>>(() => new Set());
 
   const undo = useCallback(
-    async (placeId: string, written: string | null, previous: string | null) => {
+    async (
+      placeId: string,
+      written: string | null,
+      previous: string | null,
+      pressed: Element | null,
+    ) => {
       const result = await run(revertVisit(placeId, written, previous));
       if (result.ok && (result.summary?.merged ?? 0) > 0) toast(MERGED_NOTICE);
-      onUndone.current?.();
+      onUndone.current?.(pressed);
     },
     [run],
   );
@@ -71,7 +90,12 @@ export function useVisitToggle(options: Options = {}): {
           const previous = box.previous;
           toast(next ? `‘${name}’ 다녀옴으로 표시했어요` : `‘${name}’ 다녀옴 표시를 지웠어요`, {
             duration: UNDO_MS,
-            action: { label: '되돌리기', onClick: () => void undo(id, written, previous) },
+            action: {
+              label: '되돌리기',
+              // 누른 버튼은 누른 순간에 잡아 둔다. 저장이 끝날 때 포커스가 토스트 안에 있어도 그것이 이
+              // 버튼인지(곧 사라짐) 사람이 옮긴 다른 토스트의 버튼인지는 그때 알 수 없다.
+              onClick: (event) => void undo(id, written, previous, pressedButton(event)),
+            },
           });
         }
         return true;
