@@ -123,6 +123,8 @@ export async function renderLibrary(
     placeLookup?: NonNullable<Parameters<typeof renderApp>[0]>['placeLookup'];
     /** `renderApp`의 `routeLookup`을 그대로 넘긴다. */
     routeLookup?: NonNullable<Parameters<typeof renderApp>[0]>['routeLookup'];
+    /** `renderApp`의 `hoursLookup`을 그대로 넘긴다. */
+    hoursLookup?: NonNullable<Parameters<typeof renderApp>[0]>['hoursLookup'];
     /** `renderApp`의 `reverseGeocoder`를 그대로 넘긴다. */
     reverseGeocoder?: NonNullable<Parameters<typeof renderApp>[0]>['reverseGeocoder'];
     /** `renderApp`의 `preloadPanels`를 그대로 넘긴다. */
@@ -141,6 +143,7 @@ export async function renderLibrary(
     shareTemplate,
     placeLookup,
     routeLookup,
+    hoursLookup,
     reverseGeocoder,
     preloadPanels,
     geolocation,
@@ -159,6 +162,7 @@ export async function renderLibrary(
     shareTemplate,
     placeLookup,
     routeLookup,
+    hoursLookup,
     reverseGeocoder,
     preloadPanels,
     geolocation,

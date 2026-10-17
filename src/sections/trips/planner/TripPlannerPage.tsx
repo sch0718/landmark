@@ -27,6 +27,7 @@ import { TripMap } from 'src/sections/trips/planner/TripMap';
 import { TripNotFound } from 'src/sections/trips/TripNotFound';
 import { TripTitleHeading } from 'src/sections/trips/planner/TripTitleHeading';
 import { useDayPlan, type DayPlan } from 'src/sections/trips/planner/use-day-plan';
+import { useTripHoursRequests } from 'src/sections/trips/planner/use-place-hours';
 import { libraryAtom } from 'src/stores/library-state';
 import { mapCardAtom, selectedDayAtom } from 'src/stores/trip-planner';
 
@@ -271,6 +272,8 @@ function Planner({ trip, library }: { trip: Trip; library: Library }) {
   // 고른 Day의 구간·시각은 여기서 한 번 구해 지도·시간표·오프라인 안내가 함께 쓴다. 좁은 화면에서 시트가
   // 후보 탭이어도 경로 요청이 지도와 함께 시작된다.
   const plan = useDayPlan(trip.id, dayIndex);
+  // 영업시간은 여행의 모든 Day 장소를 여기서 한 번 묻는다(고른 Day 먼저). 행·카드는 상태만 읽는다.
+  useTripHoursRequests(trip.id, dayIndex);
   const [card, setCard] = useAtom(mapCardAtom);
   const cardId = card !== null && card.tripId === trip.id ? card.placeId : null;
   // 카드의 장소가 지워졌거나 여행에서 빠졌으면(다른 탭·되돌리기 등) 카드를 닫는다.
