@@ -19,6 +19,7 @@ import { prefsAtom, setPrefsAtom } from 'src/stores/prefs-state';
 import { cssVarsOf } from 'src/theme/create-app-theme';
 import { ThemeRoot } from 'src/theme/ThemeRoot';
 import { TOKENS } from 'src/theme/tokens';
+import { PENDING_HOURS_LOOKUP } from '../helpers/pending-hours-lookup';
 
 const fonts = vi.hoisted(() => ({ loadDisplayFont: vi.fn(() => Promise.resolve()) }));
 vi.mock('src/theme/fonts', () => fonts);
@@ -64,6 +65,7 @@ function setup(saved?: Partial<Prefs>) {
       PlaceLookup.layer,
       ReverseGeocoder.layer,
       RouteLookup.layer,
+      PENDING_HOURS_LOOKUP,
       Geolocation.layerWith({ api: undefined, secure: true }),
     ),
   );

@@ -12,6 +12,7 @@ import {
   PreviousNotKept,
   StorageQuotaExceeded,
 } from 'src/services/errors';
+import { HOURS_CACHE_KEY } from 'src/services/hours-lookup';
 import { ROUTE_CACHE_KEY } from 'src/services/route-lookup';
 
 /** 보관함 문서의 저장 키(스펙 §3). */
@@ -146,8 +147,8 @@ function makeLibraryStore(options: LibraryStoreOptions) {
   const libraryChars = options.limits?.libraryChars ?? LIBRARY_LIMITS.libraryChars;
 
   /**
-   * `storage.setItem`. 용량 초과면 버려도 되는 경로 캐시(`tripmap:routes:v1`)를 지우고 한 번 더 쓴다.
-   * 보관함은 사용자의 데이터이고 경로 캐시는 다시 받으면 된다. 그래도 넘치면 되살리기 전 사본을 지우고
+   * `storage.setItem`. 용량 초과면 버려도 되는 경로 캐시(`tripmap:routes:v1`)·영업시간 캐시(`tripmap:hours:v1`) 중
+   * 있는 것을 모두 지우고 한 번 더 쓴다. 보관함은 사용자의 데이터이고 두 캐시는 다시 받으면 된다. 그래도 넘치면 되살리기 전 사본을 지우고
    * 한 번 더 쓴다(사용자 편집을 저장하는 것이 사본보다 중요하다, 설계서 §3.3). 사본을 쓰는 중이거나
    * `keepPrevious`(바꾸기·되돌리기 도중, 사본을 직접 다룬다)면 사본은 건드리지 않는다.
    * 그래도 넘치면 `StorageQuotaExceeded`, 그 밖의 예외는 결함으로 보고한다.
@@ -176,9 +177,15 @@ function makeLibraryStore(options: LibraryStoreOptions) {
           return false;
         }
       };
+      /** 다시 받으면 되는 캐시를 모두 지운다. 하나라도 지웠으면 true. */
+      const dropCaches = (): boolean => {
+        const droppedRoutes = drop(ROUTE_CACHE_KEY);
+        const droppedHours = drop(HOURS_CACHE_KEY);
+        return droppedRoutes || droppedHours;
+      };
       const mayDropPrevious = key !== PREVIOUS_KEY && options.keepPrevious !== true;
       let error = attempt();
-      if (error !== null && isQuotaError(error) && drop(ROUTE_CACHE_KEY)) error = attempt();
+      if (error !== null && isQuotaError(error) && dropCaches()) error = attempt();
       if (error !== null && isQuotaError(error) && mayDropPrevious && drop(PREVIOUS_KEY)) {
         error = attempt();
       }

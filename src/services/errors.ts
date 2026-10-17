@@ -238,3 +238,36 @@ export class RouteLookupError extends Schema.TaggedError<RouteLookupError>()('Ro
     }
   }
 }
+
+export const HOURS_LOOKUP_ERROR_CODES = [
+  'NOT_FOUND',
+  'UPSTREAM_ERROR',
+  'TIMEOUT',
+  'BAD_REQUEST',
+  'FORBIDDEN_ORIGIN',
+  'OFFLINE',
+] as const;
+export type HoursLookupErrorCode = (typeof HOURS_LOOKUP_ERROR_CODES)[number];
+
+/**
+ * 영업시간 조회 실패(스펙 §4.3). 호출한 쪽은 받아 둔 정보가 있으면 그대로 두고 카드에
+ * `영업시간 확인 필요 — <userMessage>`를 보인다. `seq`는 실패한 서버 요청의 순서 번호(`HoursAnswer.seq`와 같은 차례).
+ */
+export class HoursLookupError extends Schema.TaggedError<HoursLookupError>()('HoursLookupError', {
+  code: Schema.Literals(HOURS_LOOKUP_ERROR_CODES),
+  seq: Schema.Number,
+}) {
+  get userMessage(): string {
+    switch (this.code) {
+      case 'NOT_FOUND':
+        return '네이버에서 장소를 찾지 못했어요';
+      case 'OFFLINE':
+        return '인터넷에 연결되지 않았어요';
+      case 'UPSTREAM_ERROR':
+      case 'TIMEOUT':
+      case 'BAD_REQUEST':
+      case 'FORBIDDEN_ORIGIN':
+        return '영업시간을 받지 못했어요';
+    }
+  }
+}
