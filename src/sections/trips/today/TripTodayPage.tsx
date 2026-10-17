@@ -39,6 +39,9 @@ type CheckFocus = { from: 'remaining' | 'visited'; index: number } | { from: 'ca
  * 체크한 행은 목록을 옮겨 가며 사라지므로 포커스가 `body`로 떨어지지 않게 옮긴다. 남은 일정은 같은 자리(없으면
  * 마지막)의 상자 → 카드, 다녀온 곳은 같은 자리의 상자 → `다녀온 곳 N곳` 버튼 → 카드. 카드의 `다녀옴`은 카드로.
  */
+
+/** Sonner가 토스트를 그리는 자리. */
+const TOASTER_SELECTOR = '[data-sonner-toaster]';
 function focusAfterCheck(pane: HTMLElement | null, card: HTMLElement | null, target: CheckFocus) {
   const nth = (selector: string, index: number): HTMLElement | null => {
     const all = pane?.querySelectorAll<HTMLElement>(selector) ?? [];
@@ -105,8 +108,15 @@ function Today({ trip }: { trip: Trip }) {
       focusAfterCheck(paneRef.current, cardRef.current, want.target);
     }
   }, [checkFocusTick]);
-  // 토스트의 `되돌리기`는 토스트와 함께 사라진다. 포커스가 `body`로 떨어졌을 때만 카드로 옮긴다.
-  const visit = useVisitToggle({ onUndone: () => focusCardLater(null) });
+  // 토스트의 `되돌리기`는 토스트와 함께 사라진다. 키보드로 누르면 저장이 끝날 때 포커스가 아직 토스트 안에 있고
+  // 토스트는 잠시 뒤에 닫히므로, 그때는 사라질 버튼을 `from`으로 넘겨 바로 카드로 옮긴다. 그 밖에는 포커스가
+  // `body`로 떨어졌을 때만 옮긴다.
+  const visit = useVisitToggle({
+    onUndone: () => {
+      const active = document.activeElement;
+      focusCardLater(active?.closest(TOASTER_SELECTOR) ? active : null);
+    },
+  });
 
   // 고른 Stop이 지워졌거나(다른 탭) 그날에서 빠졌으면 다음 장소로 돌아간다. 다음 장소를 고르면 `다음`으로 보인다.
   const found = model.stops.findIndex((s) => s.stop.id === selectedStopId);

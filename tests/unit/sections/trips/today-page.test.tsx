@@ -536,6 +536,31 @@ describe('당일 모드: 다녀옴 체크', () => {
     expect(cardTitle()).toHaveTextContent('중앙시장 닭강정');
   });
 
+  it('토스트의 되돌리기를 키보드로 누르면(포커스가 아직 토스트 안) 토스트가 닫히기 전에 다음 장소 카드로', async () => {
+    const { storage } = await renderToday(lib());
+    const user = userEvent.setup();
+    await user.click(checkbox('중앙시장 닭강정'));
+    await waitFor(() => expect(storedVisited(storage, P1)).toBe('2026-10-24'));
+    // Sonner가 그리는 토스트 자리. 저장이 끝난 뒤에도 토스트는 잠시(약 200ms) 남아 버튼이 포커스를 쥐고 있다.
+    const toaster = document.createElement('ol');
+    toaster.setAttribute('data-sonner-toaster', '');
+    const undoButton = document.createElement('button');
+    undoButton.textContent = '되돌리기';
+    toaster.append(undoButton);
+    document.body.append(toaster);
+    undoButton.focus();
+    try {
+      await undoToast('‘중앙시장 닭강정’ 다녀옴으로 표시했어요');
+      await waitFor(() => expect(storedVisited(storage, P1)).toBeNull());
+      await waitFor(() => expect(nextCard()).toHaveFocus());
+      // 토스트가 사라진 뒤에도 포커스는 카드에 남는다.
+      toaster.remove();
+      expect(nextCard()).toHaveFocus();
+    } finally {
+      toaster.remove();
+    }
+  });
+
   it('토스트의 되돌리기 뒤 포커스가 다른 곳에 있으면 옮기지 않는다', async () => {
     const { storage } = await renderToday(lib());
     const user = userEvent.setup();
