@@ -1,0 +1,18 @@
+{
+  "sid": "0",
+  "fetchedAt": "2026-10-16T01:00:00.000Z",
+  "days": [
+    {
+      "day": "매일",
+      "open": { "start": "10:00", "end": "20:00", "endsNextDay": false },
+      "closed": false,
+      "breaks": [],
+      "lastOrders": [],
+      "note": null
+    }
+  ],
+  "irregularClosed": [],
+  "regularClosed": null,
+  "note": null,
+  "otherSchedules": []
+}

@@ -4,6 +4,7 @@ import Tabs from '@mui/material/Tabs';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { Fragment, useState } from 'react';
 import { LockIcon } from 'src/components/icons';
+import { checkVisit, visitOf } from 'src/domain/trips/hours';
 import { setDayStartTime, setLegMode } from 'src/domain/trips/ops';
 import { dayEndpoints, tripDates, visibleStops } from 'src/domain/trips/query';
 import { formatClock, formatSlack, formatSpan, type PointTime } from 'src/domain/trips/schedule';
@@ -11,6 +12,7 @@ import type { Place } from 'src/schema/library';
 import type { Stop, Trip } from 'src/schema/trip';
 import { DayHeader } from 'src/sections/trips/planner/DayHeader';
 import { DayTail } from 'src/sections/trips/planner/DayTail';
+import { HoursNotice, noticeFor } from 'src/sections/trips/planner/HoursNotice';
 import { LegRow } from 'src/sections/trips/planner/LegRow';
 import { useOptimizeDay } from 'src/sections/trips/planner/optimize-ops';
 import {
@@ -27,6 +29,7 @@ import {
   type DayPlan,
   type PlannedLeg,
 } from 'src/sections/trips/planner/use-day-plan';
+import { usePlaceHours } from 'src/sections/trips/planner/use-place-hours';
 import { useTripUndo } from 'src/sections/trips/planner/use-trip-undo';
 import { shortDate } from 'src/sections/trips/trip-dates';
 import { libraryAtom, useLibraryAction } from 'src/stores/library-state';
@@ -82,6 +85,7 @@ const markerSx = (marker: 'before' | 'after' | null) =>
 function StopRow({
   trip,
   dayIndex,
+  date,
   number,
   stop,
   place,
@@ -92,6 +96,8 @@ function StopRow({
 }: {
   trip: Trip;
   dayIndex: number;
+  /** 그 Day의 날짜('YYYY-MM-DD'). 영업시간 판정에 쓴다. */
+  date: string;
   number: number;
   stop: Stop;
   place: Place;
@@ -104,6 +110,12 @@ function StopRow({
 }) {
   const late = point?.slackMin !== null && point?.slackMin !== undefined && point.slackMin < 0;
   const name = place.name.value;
+  // 요청은 계획 화면이 여행 단위로 한 번 한다(`useTripHoursRequests`). 행은 상태만 읽는다.
+  const { view } = usePlaceHours(place);
+  const notice =
+    point === undefined
+      ? null
+      : noticeFor(view, (hours) => checkVisit(hours, date, visitOf(point, stop)));
   const { setNodeRef, setActivatorNodeRef, attributes, listeners, isDragging, marker } =
     useStopDrag({ kind: 'stop', stopId: stop.id, placeId: stop.placeId, dayIndex, name });
   return (
@@ -205,6 +217,7 @@ function StopRow({
             </Box>
           )}
         </Box>
+        {notice !== null && <HoursNotice notice={notice} />}
       </Box>
       <StopMenu
         trip={trip}
@@ -245,6 +258,7 @@ export function DayTimeline({
   const { points, totals } = plan.schedule;
   const offset = start === null ? 0 : 1;
   const legs = plan.legs;
+  const date = tripDates(trip)[dayIndex] ?? '';
   // 시간표 목록의 빈 곳(구간 행 사이·장소 없는 Day)에 놓으면 가장 가까운 행 또는 그 Day 끝.
   const { setNodeRef: setListRef } = useDropTarget(`list:${dayIndex}`, {
     kind: 'day-end',
@@ -295,6 +309,7 @@ export function DayTimeline({
               <StopRow
                 trip={trip}
                 dayIndex={dayIndex}
+                date={date}
                 number={i + 1}
                 stop={stop}
                 place={library.places[stop.placeId]!}

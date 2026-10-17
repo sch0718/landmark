@@ -19,6 +19,7 @@ import { ShareTemplate } from 'src/services/share-template';
 import { libraryAtom } from 'src/stores/library-state';
 import { prefsAtom } from 'src/stores/prefs-state';
 import { L_FOOD, sampleLibrary } from './fixtures';
+import { PENDING_HOURS_LOOKUP } from '../../helpers/pending-hours-lookup';
 
 // 진짜 `RouteLookup.layer`가 창 이벤트 구독을 걸므로 테스트가 끝나면 런타임을 닫는다.
 let runtime: AppRuntime | undefined;
@@ -36,6 +37,7 @@ function setup() {
       PlaceLookup.layer,
       ReverseGeocoder.layer,
       RouteLookup.layer,
+      PENDING_HOURS_LOOKUP,
       Geolocation.layerWith({ api: undefined, secure: true }),
     ),
   );

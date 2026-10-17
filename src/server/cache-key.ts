@@ -24,3 +24,8 @@ export function cacheKey(kind: 'place' | 'folder', input: string): string {
 export function routeCacheKey(input: string): string {
   return `${CACHE_ORIGIN}/route/${encodeURIComponent(input)}`;
 }
+
+/** 영업시간 캐시 키. 네이버 장소 ID(숫자)만 들어간다. 다시 확인(`fresh=1`)도 같은 키에 저장한다. */
+export function hoursCacheKey(sid: string): string {
+  return `${CACHE_ORIGIN}/hours/naver/${sid}`;
+}

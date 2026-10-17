@@ -15,10 +15,12 @@ import { LibraryStore } from 'src/services/library-store';
 import { PlaceLookup } from 'src/services/place-lookup';
 import { PrefsStore } from 'src/services/prefs-store';
 import { Geolocation } from 'src/services/geolocation';
+import type { HoursLookup } from 'src/services/hours-lookup';
 import { ReverseGeocoder } from 'src/services/reverse-geocoder';
 import { RouteLookup } from 'src/services/route-lookup';
 import { ShareTemplate } from 'src/services/share-template';
 import { ThemeRoot } from 'src/theme/ThemeRoot';
+import { PENDING_HOURS_LOOKUP } from '../../helpers/pending-hours-lookup';
 
 /**
  * `(min-width:Npx)` 질의를 주어진 폭으로 판정하는 `matchMedia`를 깐다. 나머지 질의는 false.
@@ -95,6 +97,8 @@ export async function renderApp(
     placeLookup?: Layer.Layer<PlaceLookup>;
     /** 경로 조회 가짜 레이어. 없으면 늘 `OFFLINE`으로 실패한다. */
     routeLookup?: Layer.Layer<RouteLookup>;
+    /** 영업시간 조회 가짜 레이어. 없으면 캐시가 비어 있고 요청이 끝나지 않는다(`PENDING_HOURS_LOOKUP`). */
+    hoursLookup?: Layer.Layer<HoursLookup>;
     /** 주소 변환 가짜 레이어. 없으면 늘 null을 돌려준다. */
     reverseGeocoder?: Layer.Layer<ReverseGeocoder>;
     /** 위치 서비스 레이어. 없으면 위치 API가 없는 것(`unsupported`)으로 둔다. */
@@ -120,6 +124,7 @@ export async function renderApp(
     shareTemplate = DEFAULT_SHARE_TEMPLATE,
     placeLookup = OFFLINE_PLACE_LOOKUP,
     routeLookup = OFFLINE_ROUTE_LOOKUP,
+    hoursLookup = PENDING_HOURS_LOOKUP,
     reverseGeocoder = NULL_REVERSE_GEOCODER,
     geolocation = UNSUPPORTED_GEOLOCATION,
     libraryLocks,
@@ -148,6 +153,7 @@ export async function renderApp(
         }),
         placeLookup,
         routeLookup,
+        hoursLookup,
         reverseGeocoder,
         geolocation,
       ),
