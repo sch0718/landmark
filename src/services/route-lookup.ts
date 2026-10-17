@@ -326,16 +326,16 @@ export class RouteLookup extends Context.Service<
           // `다시 계산`(fresh)은 서버의 엣지 캐시도 건너뛰게 한다(스펙 §4.2). 보통 요청은 엣지 캐시를 함께 쓴다.
           const path = `/api/route?mode=${mode}&from=${coordinate(from)}&to=${coordinate(to)}${fresh ? '&fresh=1' : ''}`;
           // 서버 시한(8초)보다 조금 길게 기다리고, 그래도 안 오면 중단한다. 중단하면 대기 칸과 진행 중 표가 풀린다.
-          const response = yield* Effect.gen(function* () {
-            const res = yield* Effect.tryPromise({
-              try: (signal) => options.fetch(`${base}${path}`, { signal }),
-              catch: (e) => e,
-            }).pipe(Effect.catch(offline(seq, fresh)));
-            const body = yield* Effect.tryPromise({ try: () => res.text(), catch: (e) => e }).pipe(
-              Effect.catch(offline(seq, fresh)),
-            );
-            return { status: res.status, ok: res.ok, text: body };
+          // 요청과 본문 읽기를 한 효과로 묶어 같은 signal을 쓴다: 머리만 오고 본문을 받는 중에 시한이 지나도 그
+          // 전송을 끊어, 칸이 풀린 뒤 실제로 받는 중인 전송이 동시 요청 수를 넘지 않게 한다.
+          const response = yield* Effect.tryPromise({
+            try: async (signal) => {
+              const res = await options.fetch(`${base}${path}`, { signal });
+              return { status: res.status, ok: res.ok, text: await res.text() };
+            },
+            catch: (e) => e,
           }).pipe(
+            Effect.catch(offline(seq, fresh)),
             Effect.timeoutOrElse({
               duration: ROUTE_TIMEOUT_MS,
               orElse: () => Effect.fail(new RouteLookupError({ code: 'TIMEOUT', seq, fresh })),
