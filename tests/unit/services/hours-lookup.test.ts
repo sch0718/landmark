@@ -479,7 +479,7 @@ describe('HoursLookup 오류', () => {
         .mockImplementation(() => new Promise<Response>(() => {})) // 응답이 오지 않는다
         .mockImplementationOnce(() => new Promise<Response>(() => {}))
         .mockImplementationOnce(() => new Promise<Response>(() => {}))
-        .mockImplementationOnce(async () => json(hours()));
+        .mockImplementationOnce(async () => json(hours({ sid: '1' })));
       const outcome = yield* run({ fetch: fetchFn, storage: null }, (l) =>
         onlyLookupErrors(
           Effect.gen(function* () {
@@ -502,7 +502,7 @@ describe('HoursLookup 오류', () => {
         ['TIMEOUT', 1],
         ['TIMEOUT', 2],
       ]);
-      expect(outcome.retry).toEqual({ hours: hours(), seq: 3 });
+      expect(outcome.retry).toEqual({ hours: hours({ sid: '1' }), seq: 3 });
       expect(fetchFn).toHaveBeenCalledTimes(3);
     }),
   );
@@ -531,6 +531,142 @@ describe('HoursLookup 오류', () => {
       expect(out.failed).toEqual(['UPSTREAM_ERROR', 1]);
       expect(out.kept).toEqual(hours());
       expect(out.second).toEqual({ hours: hours({ note: '새로 받음' }), seq: 2 });
+    }),
+  );
+});
+
+describe('HoursLookup 오류의 요청 종류(fresh)', () => {
+  const never = () => new Promise<Response>(() => {});
+  const cases = [
+    ['NOT_FOUND(error 본문)', async () => json(errorBody('NOT_FOUND'), 404), 'NOT_FOUND'],
+    ['502 HTML', async () => new Response('<html>oops</html>', { status: 502 }), 'UPSTREAM_ERROR'],
+    ['200 HTML', async () => new Response('<!doctype html>'), 'OFFLINE'],
+    [
+      'fetch 거부',
+      async () => {
+        throw new TypeError('Failed to fetch');
+      },
+      'OFFLINE',
+    ],
+    ['모양 틀린 200 JSON', async () => json({ days: 'x' }), 'UPSTREAM_ERROR'],
+  ] as const;
+
+  it.effect.each(cases)(
+    '%s: refresh 실패는 fresh true, 보통 실패는 fresh false',
+    ([, respond, code]) =>
+      Effect.gen(function* () {
+        vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        const fetchFn = vi.fn(respond);
+        const out = yield* run({ fetch: fetchFn, storage: null }, (l) =>
+          onlyLookupErrors(
+            Effect.gen(function* () {
+              const plain = yield* Effect.flip(l.place(SID));
+              const refreshed = yield* Effect.flip(l.place(SID, { refresh: true }));
+              return [
+                [plain.code, plain.seq, plain.fresh],
+                [refreshed.code, refreshed.seq, refreshed.fresh],
+              ];
+            }),
+          ),
+        );
+        expect(out).toEqual([
+          [code, 1, false],
+          [code, 2, true],
+        ]);
+      }),
+  );
+
+  it.effect('TIMEOUT에도 요청 종류가 붙는다', () =>
+    Effect.gen(function* () {
+      const fetchFn = vi.fn(never);
+      const out = yield* run({ fetch: fetchFn, storage: null }, (l) =>
+        onlyLookupErrors(
+          Effect.gen(function* () {
+            const fibers = yield* Effect.all([
+              Effect.flip(l.place('1')).pipe(Effect.forkChild),
+              Effect.flip(l.place('2', { refresh: true })).pipe(Effect.forkChild),
+            ]);
+            for (let i = 0; i < 5; i += 1) yield* Effect.yieldNow;
+            yield* TestClock.adjust(`${HOURS_TIMEOUT_MS} millis`);
+            const errors = yield* Effect.all(fibers.map((f) => Fiber.join(f)));
+            return errors.map((e) => [e.code, e.fresh]);
+          }),
+        ),
+      );
+      expect(out).toEqual([
+        ['TIMEOUT', false],
+        ['TIMEOUT', true],
+      ]);
+    }),
+  );
+
+  it.effect(
+    '진행 중인 refresh에 합류한 보통 호출의 오류도 fresh true(실제로 나간 요청의 종류)',
+    () =>
+      Effect.gen(function* () {
+        const gates: ((res: Response) => void)[] = [];
+        const fetchFn = vi.fn(() => new Promise<Response>((resolve) => gates.push(resolve)));
+        const out = yield* run({ fetch: fetchFn, storage: null }, (l) =>
+          onlyLookupErrors(
+            Effect.gen(function* () {
+              const [refreshed, joined] = yield* Effect.all(
+                [
+                  Effect.flip(l.place(SID, { refresh: true })),
+                  Effect.flip(Effect.andThen(settle, l.place(SID))),
+                  Effect.gen(function* () {
+                    yield* settle;
+                    yield* settle;
+                    gates[0]?.(json(errorBody('UPSTREAM_ERROR'), 502));
+                  }),
+                ],
+                { concurrency: 'unbounded' },
+              );
+              return [
+                [refreshed.seq, refreshed.fresh],
+                [joined.seq, joined.fresh],
+              ];
+            }),
+          ),
+        );
+        expect(fetchFn).toHaveBeenCalledTimes(1);
+        expect(out).toEqual([
+          [1, true],
+          [1, true],
+        ]);
+      }),
+  );
+});
+
+describe('HoursLookup sid 확인', () => {
+  it.effect('응답의 sid가 요청한 sid와 다르면 UPSTREAM_ERROR이고 캐시하지 않는다', () =>
+    Effect.gen(function* () {
+      const storage = createMemoryStorage();
+      const fetchFn = vi.fn(async () => json(hours({ sid: '999' })));
+      const error = yield* run({ fetch: fetchFn, storage }, (l) => l.place(SID)).pipe(Effect.flip);
+      expect(error.code).toBe('UPSTREAM_ERROR');
+      expect(error.fresh).toBe(false);
+      expect(storage.getItem(HOURS_CACHE_KEY)).toBeNull();
+    }),
+  );
+
+  it.effect('저장된 항목의 sid가 키와 다르면 버린다', () =>
+    Effect.gen(function* () {
+      const storage = createMemoryStorage();
+      seedDoc(storage, {
+        [SID]: stored(SID, FETCHED),
+        '2': stored('999', FETCHED),
+      });
+      const fetchFn = vi.fn(async () => json(hours({ sid: '2' })));
+      const out = yield* run({ fetch: fetchFn, storage }, (l) =>
+        Effect.gen(function* () {
+          const peeked = l.peek('2');
+          return [l.peek(SID), peeked, yield* l.place('2')] as const;
+        }),
+      );
+      expect(out[0]).toEqual(hours());
+      expect(out[1]).toBeNull();
+      expect(out[2]).toEqual({ hours: hours({ sid: '2' }), seq: 1 });
+      expect(fetchFn).toHaveBeenCalledTimes(1);
     }),
   );
 });
@@ -743,6 +879,6 @@ describe('HoursLookupError.userMessage', () => {
     ['BAD_REQUEST', '영업시간을 받지 못했어요'],
     ['FORBIDDEN_ORIGIN', '영업시간을 받지 못했어요'],
   ] as const)('%s → %s', (code, message) => {
-    expect(new HoursLookupError({ code, seq: 0 }).userMessage).toBe(message);
+    expect(new HoursLookupError({ code, seq: 0, fresh: false }).userMessage).toBe(message);
   });
 });

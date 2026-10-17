@@ -128,7 +128,8 @@ function readCache(storage: Storage | null): Map<string, CachedHours> {
   const loaded: [string, CachedHours][] = [];
   for (const [sid, value] of Object.entries(doc.entries)) {
     const hours = toPlaceHoursValue(value);
-    if (hours === null || !isObject(value) || typeof value.usedAt !== 'string') continue;
+    if (hours === null || hours.sid !== sid) continue;
+    if (!isObject(value) || typeof value.usedAt !== 'string') continue;
     // 저장소에서 읽은 항목은 이 세션의 어떤 요청보다 먼저다.
     loaded.push([sid, { hours, usedAt: value.usedAt, seq: 0 }]);
   }
@@ -256,16 +257,16 @@ export class HoursLookup extends Context.Service<
         return { hours, seq };
       };
 
-      const offline = (seq: number) => (cause: unknown) =>
+      const offline = (seq: number, fresh: boolean) => (cause: unknown) =>
         Effect.sync(() => {
           if (offlineWarned) return;
           offlineWarned = true;
           console.warn(OFFLINE_WARNING, cause);
-        }).pipe(Effect.andThen(Effect.fail(new HoursLookupError({ code: 'OFFLINE', seq }))));
+        }).pipe(Effect.andThen(Effect.fail(new HoursLookupError({ code: 'OFFLINE', seq, fresh }))));
 
       /** 요청 `seq`가 받은 응답을 영업시간으로 읽는다. 실패에도 그 요청의 번호를 싣는다. */
       const request = Effect.fnUntraced(function* (seq: number, sid: string, fresh: boolean) {
-        const upstream = () => new HoursLookupError({ code: 'UPSTREAM_ERROR', seq });
+        const upstream = () => new HoursLookupError({ code: 'UPSTREAM_ERROR', seq, fresh });
         // `다시 확인`(fresh)은 서버의 엣지 캐시도 건너뛰게 한다(스펙 §4.1). 보통 요청은 엣지 캐시를 함께 쓴다.
         const path = `/api/hours?sid=${encodeURIComponent(sid)}${fresh ? '&fresh=1' : ''}`;
         // 시한까지 안 오면 중단한다. 중단하면 대기 칸과 진행 중 표가 풀린다.
@@ -273,15 +274,15 @@ export class HoursLookup extends Context.Service<
           const res = yield* Effect.tryPromise({
             try: (signal) => options.fetch(`${base}${path}`, { signal }),
             catch: (e) => e,
-          }).pipe(Effect.catch(offline(seq)));
+          }).pipe(Effect.catch(offline(seq, fresh)));
           const body = yield* Effect.tryPromise({ try: () => res.text(), catch: (e) => e }).pipe(
-            Effect.catch(offline(seq)),
+            Effect.catch(offline(seq, fresh)),
           );
           return { status: res.status, ok: res.ok, text: body };
         }).pipe(
           Effect.timeoutOrElse({
             duration: HOURS_TIMEOUT_MS,
-            orElse: () => Effect.fail(new HoursLookupError({ code: 'TIMEOUT', seq })),
+            orElse: () => Effect.fail(new HoursLookupError({ code: 'TIMEOUT', seq, fresh })),
           }),
         );
         let body: unknown;
@@ -290,7 +291,7 @@ export class HoursLookup extends Context.Service<
         } catch {
           // 서버 함수가 있는 환경의 5xx(예: Cloudflare 오류 HTML 페이지)는 서버 문제이지 서버 함수 부재가 아니다.
           if (response.status >= 500) return yield* upstream();
-          return yield* offline(seq)(`JSON이 아닌 응답(HTTP ${response.status})`);
+          return yield* offline(seq, fresh)(`JSON이 아닌 응답(HTTP ${response.status})`);
         }
         const errorCode = readApiErrorCode(body);
         if (errorCode !== null) {
@@ -299,12 +300,13 @@ export class HoursLookup extends Context.Service<
             forbiddenWarned = true;
             console.warn(FORBIDDEN_ORIGIN_WARNING);
           }
-          return yield* new HoursLookupError({ code, seq });
+          return yield* new HoursLookupError({ code, seq, fresh });
         }
-        if (response.status === 404) return yield* offline(seq)('error 본문이 없는 404');
+        if (response.status === 404) return yield* offline(seq, fresh)('error 본문이 없는 404');
         if (!response.ok) return yield* upstream();
         const hours = toPlaceHoursValue(body);
-        if (hours === null) return yield* upstream();
+        // 다른 장소의 답이 오면(서버 캐시 키 혼동 등) 받지 않는다.
+        if (hours === null || hours.sid !== sid) return yield* upstream();
         return hours;
       });
 
@@ -327,6 +329,7 @@ export class HoursLookup extends Context.Service<
       ): Effect.Effect<HoursAnswer, HoursLookupError> =>
         Effect.suspend(() => {
           const fresh = placeOptions?.refresh === true;
+          // 캐시 답을 refresh 합류보다 먼저 본다: 캐시 답은 seq 0이라 더 큰 번호의 상태를 덮지 않아 안전하다.
           if (!fresh) {
             const cached = entries.get(sid);
             if (cached !== undefined && isFresh(cached.hours)) {
