@@ -87,7 +87,8 @@ export function extractBusinessHours(html: string): unknown[] | null {
   let start = keyAt + KEY_MARKER.length;
   while (start < html.length && /\s/.test(html[start]!)) start += 1;
 
-  if (html.startsWith('null', start)) return null;
+  // `null` 뒤에는 구분자가 와야 한다(`nullx` 같은 값은 null이 아니다).
+  if (/^null[,}\]\s]/.test(html.slice(start, start + 5))) return null;
   if (html[start] !== '[') throw badResponse('영업시간 값이 배열이 아님');
   const end = matchingBracketEnd(html, start);
   if (end < 0) throw badResponse('영업시간 배열의 닫는 괄호가 없음');

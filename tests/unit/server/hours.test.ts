@@ -73,6 +73,18 @@ describe('extractBusinessHours', () => {
     expect(extractBusinessHours(pageWith(' \n [ ]'))).toEqual([]);
   });
 
+  it('null 뒤에 구분자(, } ] 공백)가 와야 null이고, nullx 같은 값은 UPSTREAM_ERROR', () => {
+    expect(extractBusinessHours(pageWith('null,"b":1'))).toBeNull();
+    expect(extractBusinessHours(pageWith('null '))).toBeNull();
+    expect(extractBusinessHours(pageWith('[null]'))).toEqual([null]);
+    const html = '<script>window.__APOLLO_STATE__ = {"a":[{"newBusinessHours":null]}</script>';
+    expect(extractBusinessHours(html)).toBeNull();
+    expect(errorOf(() => extractBusinessHours(pageWith('nullx'))).code).toBe('UPSTREAM_ERROR');
+    expect(errorOf(() => extractBusinessHours(pageWith('null1'))).code).toBe('UPSTREAM_ERROR');
+    const cut = '<script>window.__APOLLO_STATE__ = {"newBusinessHours":null';
+    expect(errorOf(() => extractBusinessHours(cut)).code).toBe('UPSTREAM_ERROR');
+  });
+
   it('__APOLLO_STATE__가 없으면 UPSTREAM_ERROR', () => {
     expect(errorOf(() => extractBusinessHours('<html>"newBusinessHours":[]</html>')).code).toBe(
       'UPSTREAM_ERROR',
@@ -368,6 +380,8 @@ describe('resolveHours', () => {
     ['다른 꼴의 경로', '/restaurant/11733192/review'],
     ['대문자 업종', '/Restaurant/11733192/home'],
     ['포트', 'https://pcmap.place.naver.com:8443/restaurant/11733192/home'],
+    ['끝에 /가 붙은 경로', '/restaurant/11733192/home/'],
+    ['사용자 정보', 'https://a:b@pcmap.place.naver.com/restaurant/11733192/home'],
     ['Location 없음', ''],
   ])('%s로 이동하면 UPSTREAM_ERROR', async (_, location) => {
     const { deps, calls } = makeDeps(() =>
