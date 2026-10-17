@@ -10,11 +10,14 @@ import { noticeFor } from 'src/sections/trips/planner/HoursNotice';
 import { usePlaceHours, useTripHoursRequests } from 'src/sections/trips/planner/use-place-hours';
 import { libraryAtom } from 'src/stores/library-state';
 import { hoursStatesAtom } from 'src/stores/place-hours';
+import { mapCardAtom } from 'src/stores/trip-planner';
 import { makePlace, withPlaces } from '../library/fixtures';
 import {
   at,
   fakeHours,
+  f,
   fakeRoutes,
+  HOUSE,
   makeTrip,
   open,
   P1,
@@ -341,6 +344,29 @@ describe('영업시간 상태 갱신', () => {
     });
     expect(within(stopRow('중앙시장 닭강정')).getByText(CHIP_P1)).toBeInTheDocument();
   });
+  it('작은 번호의 성공 답이 늦게 와도, 큰 번호가 실패해 정보가 없으면 그 정보를 채운다(실패는 남긴다)', async () => {
+    const hours = fakeHours(() => 'pending');
+    const { store } = await open(library([[P1]]), { routes: routes(), hours });
+    const { result } = renderPlaceHours(store, P1);
+    await act(async () => result.current.refresh());
+
+    // 나중에 시작한 다시 확인(번호 2)이 먼저 실패한다: 받은 정보가 없어 확인 필요.
+    await act(async () => hours.settle(1, 'UPSTREAM_ERROR'));
+    expect(store.get(hoursStatesAtom)[S1]).toMatchObject({ hours: null, seq: 2, pending: false });
+    expect(result.current.view).toMatchObject({ kind: 'failed', error: 'UPSTREAM_ERROR' });
+
+    // 먼저 시작한 보통 요청(번호 1)이 늦게 성공한다: 번호와 실패는 그대로, 정보만 채운다.
+    await act(async () => hours.settle(0, dancheon(S1)));
+    expect(store.get(hoursStatesAtom)[S1]).toEqual({
+      hours: dancheon(S1),
+      pending: false,
+      error: 'UPSTREAM_ERROR',
+      seq: 2,
+      refresh: false,
+    });
+    expect(result.current.view).toMatchObject({ kind: 'known', error: 'UPSTREAM_ERROR' });
+    expect(await within(stopRow('중앙시장 닭강정')).findByText(CHIP_P1)).toBeInTheDocument();
+  });
 });
 
 describe('noticeFor', () => {
@@ -372,5 +398,219 @@ describe('noticeFor', () => {
       text: '09:00 도착 — 영업 시작 11:00',
       tone: 'warn',
     });
+  });
+});
+
+describe('지도 카드의 영업시간 칸', () => {
+  const CHECKED = '10월 16일 확인 · 네이버';
+  /** 단천면옥 값, 확인 시각 2026-10-16 10:00(서울). */
+  const checked = (sid: string, fetchedAt = '2026-10-16T01:00:00.000Z'): PlaceHours => ({
+    ...dancheon(sid),
+    fetchedAt,
+  });
+
+  function cardLibrary(
+    options: {
+      start?: string;
+      stops?: string[][];
+      candidates?: string[];
+      lodging?: (string | null)[];
+      startTime?: string;
+    } = {},
+  ): Library {
+    const base = library([]);
+    const trip = makeTrip({
+      start: options.start ?? START,
+      stops: options.stops ?? [[P1]],
+      candidates: options.candidates,
+      lodging: options.lodging,
+    });
+    const days = trip.days.map((d, i) =>
+      i === 0 && options.startTime !== undefined ? { ...d, startTime: f(options.startTime) } : d,
+    );
+    return withTrip(base, { ...trip, days });
+  }
+
+  async function openCard(
+    lib: Library,
+    placeId: string,
+    hours: ReturnType<typeof fakeHours>,
+  ): Promise<{ store: Awaited<ReturnType<typeof open>>['store']; card: HTMLElement }> {
+    const { store } = await open(lib, { routes: routes(), hours });
+    await act(async () => store.set(mapCardAtom, { tripId: TRIP, placeId }));
+    const name = store.get(libraryAtom).places[placeId]!.name.value;
+    return { store, card: await screen.findByRole('dialog', { name }) };
+  }
+
+  it('고른 Day의 장소: 그날 규칙·덧붙임·도착 시각 경고·확인 날짜·다시 확인', async () => {
+    const hours = fakeHours((sid) => checked(sid));
+    const { card } = await openCard(cardLibrary({ startTime: '15:40' }), P1, hours);
+
+    expect(within(card).getByRole('heading', { level: 3, name: '영업시간' })).toBeInTheDocument();
+    expect(await within(card).findByText('Day 1 · 10.16(금) · 11:00~21:00')).toBeInTheDocument();
+    expect(
+      within(card).getByText('브레이크타임 14:30~16:30 · 라스트오더 19:40'),
+    ).toBeInTheDocument();
+    const chip = within(card).getByText('15:40 도착 — 브레이크타임 14:30~16:30');
+    expect(chip).toHaveStyle({ backgroundColor: 'var(--tm-label-orange-fill)', fontWeight: 700 });
+    const line = within(card).getByText(CHECKED);
+    expect(line).toHaveAttribute('aria-live', 'polite');
+    const button = within(card).getByRole('button', { name: '다시 확인' });
+    expect(button).toBeEnabled();
+    expect(button).toHaveStyle({ minHeight: '44px' });
+    expect(within(card).queryByText(/고르면 확인해요/)).not.toBeInTheDocument();
+  });
+
+  it('다시 확인은 새로 받고, 받는 동안 확인 중…(누를 수 없음), 끝나면 확인 날짜가 바뀐다', async () => {
+    const hours = fakeHours((sid, refresh) => (refresh ? 'pending' : checked(sid)));
+    const { card } = await openCard(cardLibrary(), P1, hours);
+    await within(card).findByText(CHECKED);
+
+    fireEvent.click(within(card).getByRole('button', { name: '다시 확인' }));
+    expect(hours.calls.at(-1)).toEqual({ sid: S1, refresh: true });
+    const busy = await within(card).findByRole('button', { name: '확인 중…' });
+    expect(busy).toBeDisabled();
+    // 받는 중에도 옛 정보를 그대로 보인다.
+    expect(within(card).getByText('Day 1 · 10.16(금) · 11:00~21:00')).toBeInTheDocument();
+
+    await act(async () =>
+      hours.settle(hours.calls.length - 1, checked(S1, '2026-10-17T02:00:00.000Z')),
+    );
+    expect(await within(card).findByText('10월 17일 확인 · 네이버')).toBeInTheDocument();
+    expect(within(card).getByRole('button', { name: '다시 확인' })).toBeEnabled();
+  });
+
+  it('고르지 않은 Day의 장소: 그 Day 날짜로 휴무만 보고, 시각은 그 Day를 고르면 확인한다', async () => {
+    // Day 1 = 2026-10-20(화), Day 2 = 2026-10-21(수, 정기휴무).
+    const hours = fakeHours((sid) => checked(sid));
+    const { card } = await openCard(
+      cardLibrary({ start: '2026-10-20', stops: [[P1], [P2]] }),
+      P2,
+      hours,
+    );
+
+    expect(
+      await within(card).findByText('Day 2 · 10.21(수) · 휴무 — 정기휴무 (매주 수요일)'),
+    ).toBeInTheDocument();
+    expect(within(card).getByText('휴무일 — 정기휴무 (매주 수요일)')).toBeInTheDocument();
+    expect(within(card).getByText('시각은 Day 2를 고르면 확인해요')).toBeInTheDocument();
+    expect(within(card).queryByText(/브레이크타임/)).not.toBeInTheDocument();
+  });
+
+  it('후보: 그 장소 하나를 묻고 고른 Day 날짜로 규칙을 보인다', async () => {
+    const hours = fakeHours((sid) => checked(sid));
+    const { store } = await open(cardLibrary({ candidates: [P3] }), { routes: routes(), hours });
+    await within(stopRow('중앙시장 닭강정')).findByText(CHIP_P1);
+    // 계획 화면은 Day의 장소만 묻는다.
+    expect(hours.calls.map((c) => c.sid)).toEqual([S1]);
+
+    await act(async () => store.set(mapCardAtom, { tripId: TRIP, placeId: P3 }));
+    const card = screen.getByRole('dialog', { name: '속초 횟집' });
+    expect(await within(card).findByText('Day 1 · 10.16(금) · 11:00~21:00')).toBeInTheDocument();
+    expect(hours.calls).toEqual([
+      { sid: S1, refresh: false },
+      { sid: S3, refresh: false },
+    ]);
+    // 후보는 도착 시각이 없어 휴무·임시 휴무만 경고한다.
+    expect(within(card).queryByText(/도착 —/)).not.toBeInTheDocument();
+    expect(within(card).queryByText(/고르면 확인해요/)).not.toBeInTheDocument();
+  });
+
+  it('카카오 장소는 네이버 장소만 받는다고 하고 다시 확인이 없다', async () => {
+    const hours = fakeHours((sid) => checked(sid));
+    const { card } = await openCard(cardLibrary({ stops: [[P1, KAKAO]] }), KAKAO, hours);
+
+    const line = within(card).getByText('영업시간 확인 필요 — 네이버 장소만 영업시간을 받아요');
+    expect(line).toHaveStyle({ color: 'var(--tm-text-muted)', fontSize: '12px' });
+    expect(within(card).queryByRole('button', { name: '다시 확인' })).not.toBeInTheDocument();
+    expect(within(card).queryByText(/확인 · 네이버/)).not.toBeInTheDocument();
+  });
+
+  it('네이버에 영업시간이 없으면 그렇게 말하고 확인 날짜와 다시 확인을 보인다', async () => {
+    const hours = fakeHours((sid) => ({ ...checked(sid), days: [] }));
+    const { card } = await openCard(cardLibrary(), P1, hours);
+
+    expect(
+      await within(card).findByText('영업시간 확인 필요 — 네이버에 영업시간이 없어요'),
+    ).toBeInTheDocument();
+    expect(within(card).getByText(CHECKED)).toBeInTheDocument();
+    expect(within(card).getByRole('button', { name: '다시 확인' })).toBeEnabled();
+    expect(within(card).queryByText(/^Day 1 · 10\.16/)).not.toBeInTheDocument();
+  });
+
+  it('받지 못했으면 실패 이유와 다시 확인을 보인다', async () => {
+    const hours = fakeHours(() => 'UPSTREAM_ERROR');
+    const { card } = await openCard(cardLibrary(), P1, hours);
+
+    expect(
+      await within(card).findByText('영업시간 확인 필요 — 영업시간을 받지 못했어요'),
+    ).toBeInTheDocument();
+    expect(within(card).getByRole('button', { name: '다시 확인' })).toBeEnabled();
+    expect(within(card).queryByText(/확인 · 네이버/)).not.toBeInTheDocument();
+  });
+
+  it('받은 뒤 다시 확인이 실패하면 옛 규칙과 옛 확인 날짜에 새로 받지 못했어요를 붙인다', async () => {
+    const hours = fakeHours((sid, refresh) => (refresh ? 'UPSTREAM_ERROR' : checked(sid)));
+    const { card } = await openCard(cardLibrary(), P1, hours);
+    await within(card).findByText(CHECKED);
+
+    fireEvent.click(within(card).getByRole('button', { name: '다시 확인' }));
+    expect(await within(card).findByText(`${CHECKED} · 새로 받지 못했어요`)).toBeInTheDocument();
+    expect(within(card).getByText('Day 1 · 10.16(금) · 11:00~21:00')).toBeInTheDocument();
+    expect(within(card).getByRole('button', { name: '다시 확인' })).toBeEnabled();
+  });
+
+  it('계산하지 않는 규칙·네이버 안내·임시·정기 휴무·다른 운영 시간을 한 줄씩 보인다', async () => {
+    const hours = fakeHours((sid) => ({
+      ...checked(sid),
+      days: [
+        ...checked(sid).days,
+        {
+          day: '공휴일',
+          open: { start: '10:00', end: '17:00', endsNextDay: false },
+          closed: false,
+          breaks: [],
+          lastOrders: [],
+          note: null,
+        },
+      ],
+      note: '라스트오더 점심14:30 /저녁19:30',
+      irregularClosed: ['10월 30일 휴무', '11월 2일 휴무'],
+      regularClosed: '매월 첫째 월요일',
+      otherSchedules: ['포장', '배달'],
+    }));
+    const { card } = await openCard(cardLibrary(), P1, hours);
+
+    expect(await within(card).findByText('공휴일 10:00~17:00')).toBeInTheDocument();
+    expect(within(card).getByText('공휴일 영업시간은 계산에 넣지 않아요')).toBeInTheDocument();
+    expect(
+      within(card).getByText('네이버 안내: 라스트오더 점심14:30 /저녁19:30'),
+    ).toBeInTheDocument();
+    expect(
+      within(card).getByText('다가오는 임시 휴무: 10월 30일 휴무, 11월 2일 휴무'),
+    ).toBeInTheDocument();
+    expect(within(card).getByText('정기 휴무: 매월 첫째 월요일')).toBeInTheDocument();
+    expect(within(card).getByText('다른 운영 시간도 있어요: 포장, 배달')).toBeInTheDocument();
+  });
+
+  it('공휴일이 아닌 계산하지 않는 규칙에는 공휴일 안내를 붙이지 않는다', async () => {
+    const hours = fakeHours((sid) => ({
+      ...checked(sid),
+      days: [...checked(sid).days, { ...open11('평일', '11:00'), breaks: [], lastOrders: [] }],
+    }));
+    const { card } = await openCard(cardLibrary(), P1, hours);
+
+    expect(await within(card).findByText('평일 11:00~21:00')).toBeInTheDocument();
+    expect(within(card).queryByText('공휴일 영업시간은 계산에 넣지 않아요')).toBeNull();
+  });
+
+  it('숙소로만 쓰인 장소의 카드에는 영업시간 칸이 없다', async () => {
+    const hours = fakeHours((sid) => checked(sid));
+    const { card } = await openCard(cardLibrary({ lodging: [HOUSE, null] }), HOUSE, hours);
+
+    expect(within(card).getByText('숙소')).toBeInTheDocument();
+    expect(within(card).queryByRole('heading', { name: '영업시간' })).not.toBeInTheDocument();
+    expect(within(card).queryByText(/영업시간/)).not.toBeInTheDocument();
+    expect(hours.calls.map((c) => c.sid)).toEqual([S1]);
   });
 });

@@ -34,7 +34,8 @@ function startedOf(store: Store): Map<string, number> {
  * 한 장소를 묻고 결과를 `hoursStatesAtom`에 쓴다. 실패도 상태로 남기므로 이 효과는 실패하지 않는다.
  * - 시작하면 받아 둔 정보(없으면 기기 캐시의 것)를 그대로 두고 `pending`을 켠다.
  * - 답을 만든 서버 요청의 번호(`seq`)가 지금 상태보다 작으면 내용은 버린다(`useDayPlan`의 `lookupLeg`와 같은
- *   규칙). 실패해도 받아 둔 정보는 지우지 않는다.
+ *   규칙). 다만 받은 정보가 없을 때(나중 요청이 실패) 그 답이 성공이면 정보만 채운다. 실패해도 받아 둔 정보는
+ *   지우지 않는다.
  * - `pending`은 이 장소에 이 요청보다 나중에 시작한 요청이 없을 때 거둔다. 내용을 버린 답이어도 거둔다:
  *   캐시 답(번호 0)이나 진행 중인 앞 요청에 합류한 답은 번호가 작아 버려지는데, 그때 켜 둔 채로 두면
  *   `pending`이 영영 꺼지지 않는다.
@@ -83,6 +84,10 @@ function lookupHours(store: Store, sid: string, refresh: boolean) {
       const pending = latest ? false : (known?.pending ?? false);
       const seq = Result.isSuccess(result) ? result.success.seq : result.failure.seq;
       if (known !== undefined && seq < known.seq) {
+        // 나중 요청이 실패해 받은 정보가 없으면, 늦게 온 앞 요청의 성공 답으로 정보만 채운다(번호·실패는 그대로).
+        if (Result.isSuccess(result) && known.hours === null) {
+          return { ...prev, [sid]: { ...known, hours: result.success.hours, pending } };
+        }
         return known.pending === pending ? prev : { ...prev, [sid]: { ...known, pending } };
       }
       let state: HoursState;

@@ -8,6 +8,7 @@ import { XIcon } from 'src/components/icons';
 import { setStopFixedTime, setStopStay } from 'src/domain/trips/ops';
 import { visibleStops } from 'src/domain/trips/query';
 import type { Stop, Trip } from 'src/schema/trip';
+import { HoursSection } from 'src/sections/trips/planner/HoursSection';
 import { OtherDayMenu } from 'src/sections/trips/planner/StopMenu';
 import {
   insertAtEnd,
@@ -19,6 +20,7 @@ import {
   unschedule,
   UNSCHEDULED_MESSAGE,
 } from 'src/sections/trips/planner/stop-ops';
+import type { DayPlan } from 'src/sections/trips/planner/use-day-plan';
 import { useTripUndo } from 'src/sections/trips/planner/use-trip-undo';
 import { libraryAtom, useLibraryAction } from 'src/stores/library-state';
 
@@ -162,6 +164,8 @@ type Props = {
   trip: Trip;
   /** 고른 Day. 후보의 `Day N에 넣기`와 `숙소로 정하기`의 대상이다. */
   dayIndex: number;
+  /** 고른 Day의 시간표(계획 화면이 한 번 구한 것). `영업시간` 칸이 도착 시각으로 판정한다. */
+  plan: DayPlan;
   placeId: string;
   onClose(): void;
   onDetail(placeId: string): void;
@@ -169,10 +173,11 @@ type Props = {
 
 /**
  * 지도 위 카드(스펙 §2.3): 이름·분류·위치(`후보` / `Day 2 · 3번째`). 후보면 `Day N에 넣기`, Day의 장소면
- * 체류 시간·고정 시각·`다른 Day로`·`후보로 빼기`, 공통으로 `숙소로 정하기`(고른 Day)와 `상세`.
+ * 체류 시간·고정 시각·`다른 Day로`·`후보로 빼기`, 공통으로 `숙소로 정하기`(고른 Day)와 `상세`. Day의 장소·후보는
+ * 입력과 버튼 사이에 `영업시간` 칸(F6 스펙 §2.2)을 둔다.
  * Esc나 카드 밖을 누르면 닫는다(메뉴가 열려 있을 때는 메뉴만 닫힌다). 장소가 바뀌면 부른 쪽이 `key`로 새로 만든다.
  */
-export function MapCard({ trip, dayIndex, placeId, onClose, onDetail }: Props) {
+export function MapCard({ trip, dayIndex, plan, placeId, onClose, onDetail }: Props) {
   const library = useAtomValue(libraryAtom);
   const { run } = useLibraryAction();
   // 넣기·옮기기·빼기·숙소로 정하기는 되돌리기 토스트를 띄운다.
@@ -296,6 +301,8 @@ export function MapCard({ trip, dayIndex, placeId, onClose, onDetail }: Props) {
           }
         />
       )}
+
+      <HoursSection trip={trip} dayIndex={dayIndex} place={place} plan={plan} found={found} />
 
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1.5 }}>
         {isCandidate && (

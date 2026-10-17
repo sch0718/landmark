@@ -329,6 +329,7 @@ function Planner({ trip, library }: { trip: Trip; library: Library }) {
             key={cardPlaceId}
             trip={trip}
             dayIndex={dayIndex}
+            plan={plan}
             placeId={cardPlaceId}
             onClose={closeCard}
             onDetail={setDetailId}
