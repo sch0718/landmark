@@ -108,7 +108,18 @@ export type VisitCheck =
 
 /** Day 축의 한 시점과 그 네이버 원문 시각. */
 type Mark = { min: number; text: string };
-type Segment = { start: Mark; end: Mark; breaks: { start: Mark; end: Mark }[]; lastOrders: Mark[] };
+/**
+ * 라스트오더와 그것이 적힌 영업 구간의 끝(`until`). 구간을 이어 붙여도 라스트오더는 제 구간 안(그 시각부터
+ * `until` 전까지)에서만 걸린다. 앞 구간의 14:30이 맞닿은 뒤 구간의 17:00에, 전날 00:00~24:00의 23:00이 그날
+ * 정오에 걸리지 않게 한다. 브레이크타임은 시작·끝이 정해진 구간이라 이어 붙여도 제자리에서만 걸린다.
+ */
+type LastOrder = Mark & { until: number };
+type Segment = {
+  start: Mark;
+  end: Mark;
+  breaks: { start: Mark; end: Mark }[];
+  lastOrders: LastOrder[];
+};
 
 /** 영업 구간을 Day 축으로 옮긴다. 자정을 넘는 끝·브레이크타임·라스트오더는 여는 시각 뒤로 민다(스펙 §3.2). */
 function segmentOf(day: HoursDay, shift: number): Segment | null {
@@ -132,10 +143,11 @@ function segmentOf(day: HoursDay, shift: number): Segment | null {
       end: { min: e + moved + shift, text: b.end },
     });
   }
-  const lastOrders: Mark[] = [];
+  const lastOrders: LastOrder[] = [];
   for (const text of day.lastOrders) {
     const min = clockMin(text);
-    if (min !== null) lastOrders.push({ min: afterOpen(min) + shift, text });
+    if (min !== null)
+      lastOrders.push({ min: afterOpen(min) + shift, text, until: closeMin + shift });
   }
   return {
     start: { min: openMin + shift, text: day.open.start },
@@ -248,7 +260,8 @@ export function checkVisit(hours: PlaceHours, date: string, visit: Visit): Visit
   const inBreak = current.breaks.find((b) => b.start.min <= s && s < b.end.min);
   if (inBreak !== undefined) return { kind: 'break', visit, span: spanText(inBreak, dayStart) };
 
-  // S가 든 토막(영업 구간을 브레이크타임으로 나눈 조각) 안의 라스트오더.
+  // S가 든 토막(영업 구간을 브레이크타임으로 나눈 조각) 안의 라스트오더. 이어 붙인 구간이면 S가 그 라스트오더의
+  // 구간 안(`until` 전)일 때만 본다.
   const pieceStart = Math.max(
     current.start.min,
     ...current.breaks.filter((b) => b.end.min <= s).map((b) => b.end.min),
@@ -258,7 +271,7 @@ export function checkVisit(hours: PlaceHours, date: string, visit: Visit): Visit
     ...current.breaks.filter((b) => b.start.min > s).map((b) => b.start.min),
   );
   const passed = current.lastOrders
-    .filter((lo) => lo.min >= pieceStart && lo.min <= pieceEnd && s > lo.min)
+    .filter((lo) => lo.min >= pieceStart && lo.min <= pieceEnd && s > lo.min && s < lo.until)
     .sort((a, b) => b.min - a.min)[0];
   if (passed !== undefined)
     return { kind: 'last-order', visit, lastOrder: markText(passed, dayStart) };

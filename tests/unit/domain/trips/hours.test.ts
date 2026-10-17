@@ -350,6 +350,37 @@ describe('checkVisit — 라스트오더 둘', () => {
   });
 });
 
+describe('checkVisit — 이어 붙인 구간의 라스트오더는 제 구간에만', () => {
+  it('금 11:00~15:00(라스트오더 14:30) + 15:00~21:00(20:30): 17:00 → 문제없음', () => {
+    const h = place([
+      open('금', '11:00', '15:00', { lastOrders: ['14:30'] }),
+      open('금', '15:00', '21:00', { lastOrders: ['20:30'] }),
+    ]);
+    expect(checkVisit(h, FRI, v(at(17), at(18)))).toEqual({ kind: 'ok' });
+    // 맞닿는 15:00부터는 뒤 구간이라 앞 구간의 라스트오더를 보지 않는다.
+    expect(checkVisit(h, FRI, v(at(15), at(16)))).toEqual({ kind: 'ok' });
+    // 제 구간 안에서는 그대로 걸린다.
+    expect(run(h, FRI, v(at(14, 40), at(14, 50)))[1]).toBe('14:40 도착 — 라스트오더 14:30');
+    expect(run(h, FRI, v(at(20, 40), at(20, 50)))[1]).toBe('20:40 도착 — 라스트오더 20:30');
+  });
+
+  it('00:00~24:00 매일(라스트오더 23:00): 12:00 → 문제없음(전날의 라스트오더를 쓰지 않는다)', () => {
+    const h = place([open('매일', '00:00', '24:00', { lastOrders: ['23:00'] })]);
+    expect(checkVisit(h, FRI, v(at(12), at(13)))).toEqual({ kind: 'ok' });
+    expect(checkVisit(h, FRI, v(at(0, 30), at(1)))).toEqual({ kind: 'ok' });
+    expect(run(h, FRI, v(at(23, 10), at(23, 20)))[1]).toBe('23:10 도착 — 라스트오더 23:00');
+  });
+
+  it('자정 넘은 바의 새벽 라스트오더는 그대로 걸린다', () => {
+    const h = place([open('매일', '18:00', '02:00', { endsNextDay: true, lastOrders: ['01:00'] })]);
+    expect(run(h, FRI, v(at(1, 30), at(1, 40)))[1]).toBe('01:30 도착 — 라스트오더 01:00');
+    expect(run(h, FRI, v(1440 + at(1, 30), 1440 + at(1, 40)))[1]).toBe(
+      '다음 날 01:30 도착 — 라스트오더 01:00',
+    );
+    expect(checkVisit(h, FRI, v(at(19), at(20)))).toEqual({ kind: 'ok' });
+  });
+});
+
 describe('checkVisit — 고정 시각', () => {
   it('09:00 도착·11:00 고정·영업 10:00~ → 문제없음', () => {
     const h = place([open('매일', '10:00', '20:00')]);
