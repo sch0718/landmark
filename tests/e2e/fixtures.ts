@@ -29,7 +29,7 @@ export const PREFS_KEY = 'tripmap:prefs';
 /** 보관함 시드 JSON 문자열(장소 30 · 라벨 6). */
 export const seedJson: string = readFileSync(SEED_FILE, 'utf8');
 export const seed = JSON.parse(seedJson) as {
-  places: Record<string, { id: string; name: { value: string } }>;
+  places: Record<string, { id: string; name: { value: string }; lng: number; lat: number }>;
   labels: Record<string, { id: string }>;
 };
 export const SEED_PLACE_COUNT = Object.keys(seed.places).length;
@@ -121,4 +121,32 @@ export async function exportSeaPlaces(page: Page, testInfo: TestInfo): Promise<s
   expect(file.endsWith('.html')).toBe(true);
   await download.saveAs(file);
   return file;
+}
+
+/** 앱이 `/api/route`에서 받는 응답을 녹화해 둔 fixture(`tests/fixtures/routes/api/`). */
+const routeFixture = (name: string): string =>
+  readFileSync(fileURLToPath(new URL(`../fixtures/routes/api/${name}`, import.meta.url)), 'utf8');
+
+const ROUTE_REPLY: Record<'car' | 'walk', string> = {
+  car: routeFixture('car.json'),
+  walk: routeFixture('walk.json'),
+};
+
+/** 앱이 `/api/route`로 보낸 질의를 요청 순서대로 모은 것. */
+export type RouteCall = { mode: string; from: string; to: string };
+
+/** `/api/route`를 녹화 응답으로 대신한다. 실제 네트워크는 타지 않는다. */
+export async function mockRoutes(page: Page): Promise<RouteCall[]> {
+  const calls: RouteCall[] = [];
+  await page.route('**/api/route?**', (route) => {
+    const params = new URL(route.request().url()).searchParams;
+    const mode = params.get('mode') === 'walk' ? 'walk' : 'car';
+    calls.push({ mode, from: params.get('from') ?? '', to: params.get('to') ?? '' });
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json; charset=utf-8',
+      body: ROUTE_REPLY[mode],
+    });
+  });
+  return calls;
 }

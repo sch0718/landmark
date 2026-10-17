@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setAppRuntimeForTest } from 'src/lib/effect/runtime';
 import { prefetchWhenIdle } from 'src/lib/prefetch';
 import { createMemoryStorage } from 'src/repositories/edit-layer-repo';
-import { PANEL_CHUNKS, ROUTE_CHUNKS } from 'src/routes/lazy-routes';
+import { loadTripTodayPage, PANEL_CHUNKS, ROUTE_CHUNKS } from 'src/routes/lazy-routes';
 import { PREFETCH_CHUNKS } from 'src/sections/shell/ShellRoute';
 import { LIBRARY_KEY } from 'src/services/library-store';
 import { mockViewport, renderApp } from '../sections/shell/harness';
@@ -23,7 +23,7 @@ const gates = vi.hoisted(() => {
     });
     return { open, opened };
   };
-  return { trips: make(), settings: make(), labels: make(), planner: make() };
+  return { trips: make(), settings: make(), labels: make(), planner: make(), today: make() };
 });
 vi.mock('src/sections/trips/TripsPage', async (importOriginal) => {
   await gates.trips.opened;
@@ -39,6 +39,10 @@ vi.mock('src/sections/labels/LabelsPage', async (importOriginal) => {
 });
 vi.mock('src/sections/trips/planner/TripPlannerPage', async (importOriginal) => {
   await gates.planner.opened;
+  return importOriginal();
+});
+vi.mock('src/sections/trips/today/TripTodayPage', async (importOriginal) => {
+  await gates.today.opened;
   return importOriginal();
 });
 
@@ -100,6 +104,22 @@ describe('라우트 화면 나눠 받기', () => {
     gates.planner.open();
     expect(await screen.findByRole('region', { name: 'Day 시간표' })).toBeInTheDocument();
     expect(screen.queryByText('불러오는 중…')).not.toBeInTheDocument();
+  });
+
+  it('/trips/<id>/today로 바로 들어와도 셸이 먼저 그려지고, 기다린 뒤 당일 모드 화면이 나타난다', async () => {
+    const storage = createMemoryStorage();
+    storage.setItem(LIBRARY_KEY, JSON.stringify(withTrip(plannerLibrary(), makeTrip())));
+    mockViewport(390);
+    await renderApp({ path: '/trips/trip000001/today', storage, preloadRoutes: false });
+    expect(bottomNav()).toBeInTheDocument();
+    expect(waiting()).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '오늘 일정' })).not.toBeInTheDocument();
+
+    gates.today.open();
+    expect(await screen.findByRole('heading', { level: 1, name: '오늘 일정' })).toBeInTheDocument();
+    expect(screen.queryByText('불러오는 중…')).not.toBeInTheDocument();
+    // 한가할 때 미리 받는 화면 단위에 들어 있다.
+    expect(ROUTE_CHUNKS).toContain(loadTripTodayPage);
   });
 
   it('셸이 그려진 뒤 미리 받기를 한 번 예약한다', async () => {

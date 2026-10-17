@@ -41,13 +41,27 @@ const REASON_BY_CODE: Record<number, GeolocationErrorReason> = {
 const errorOf = (error: GeolocationPositionError): GeolocationError =>
   failure(REASON_BY_CODE[error.code] ?? 'unavailable');
 
-/** 좌표가 유한한 숫자가 아니면 null(→ `unavailable`). */
+/** 위치 `timestamp`를 믿는 가장 긴 나이(ms). 이보다 오래됐거나 받은 때보다 뒤면 받은 때로 본다. */
+const MAX_FIX_AGE_MS = 86_400_000;
+
+/**
+ * 브라우저 위치의 잰 시각(epoch ms). µs·초 단위, NaN, 미래 값은 받은 때(`receivedAt`)로 바꾼다.
+ * 하루 안의 과거 값은 그대로 둬서 캐시 위치(`maximumAge`)가 실제 나이를 지니게 한다.
+ */
+function fixTime(raw: number, receivedAt: number): number {
+  return Number.isFinite(raw) && raw <= receivedAt && receivedAt - raw <= MAX_FIX_AGE_MS
+    ? raw
+    : receivedAt;
+}
+
+/** 좌표가 유한한 숫자가 아니면 null(→ `unavailable`). 콜백 안에서 불러 받은 때를 그때 읽는다. */
 function fixOf(position: GeolocationPosition): GeoFix | null {
   const { longitude, latitude, accuracy } = position.coords;
   if (!Number.isFinite(longitude) || !Number.isFinite(latitude) || !Number.isFinite(accuracy)) {
     return null;
   }
-  return { lng: longitude, lat: latitude, accuracyM: accuracy, at: position.timestamp };
+  const at = fixTime(position.timestamp, Date.now());
+  return { lng: longitude, lat: latitude, accuracyM: accuracy, at };
 }
 
 /**

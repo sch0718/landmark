@@ -27,6 +27,6 @@ export async function turnNearbyOn(
     store.set(nearbyAtom, { on: true, radiusM: 3000 });
   });
   await waitFor(() => expect(fake.requests).toHaveLength(1));
-  await act(async () => fake.succeed(0, NEARBY_BASE, Date.parse('2026-10-16T05:05:00.000Z')));
+  await act(async () => fake.succeed(0, NEARBY_BASE));
   await waitFor(() => expect(store.get(myLocationAtom).fix).not.toBeNull());
 }

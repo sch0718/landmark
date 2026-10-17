@@ -36,6 +36,8 @@ const errorOf = (code: FakeErrorCode): GeolocationPositionError =>
 /**
  * 브라우저 위치 API를 흉내 내는 가짜(`GeolocationApi` 모양). 요청을 쌓아 두고,
  * 시험이 `succeed`·`fail`(한 번 묻기)과 `emit`·`emitError`(계속 받기)로 답한다.
+ * 잰 시각을 주지 않으면 지금(`Date.now()`)으로 답한다. 서비스는 하루보다 오래됐거나 미래인 값을
+ * 받은 때로 바꾸므로, 시각을 주는 시험은 시험 속 `Date.now()`보다 하루 안쪽으로 이른 값을 준다.
  */
 export function fakeGeolocation() {
   const requests: Request[] = [];
@@ -75,13 +77,13 @@ export function fakeGeolocation() {
     requests,
     watchers,
     cleared,
-    succeed(index: number, coords: FakeCoords, timestamp = 1000): void {
+    succeed(index: number, coords: FakeCoords, timestamp = Date.now()): void {
       requestOf(index).ok(positionOf(coords, timestamp));
     },
     fail(index: number, code: FakeErrorCode): void {
       requestOf(index).fail(errorOf(code));
     },
-    emit(id: number, coords: FakeCoords, timestamp = 1000): void {
+    emit(id: number, coords: FakeCoords, timestamp = Date.now()): void {
       watcherOf(id).ok(positionOf(coords, timestamp));
     },
     emitError(id: number, code: FakeErrorCode): void {

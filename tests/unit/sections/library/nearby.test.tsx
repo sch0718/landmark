@@ -1,6 +1,6 @@
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setAppRuntimeForTest } from 'src/lib/effect/runtime';
 import { createMemoryStorage } from 'src/repositories/edit-layer-repo';
 import { emptyLibrary, type Library, type Place } from 'src/schema/library';
@@ -13,6 +13,16 @@ import { L_CAFE, L_FOOD, makeLabel, makePlace, renderLibrary } from './fixtures'
 
 vi.mock('src/theme/fonts', () => ({ loadDisplayFont: vi.fn(() => Promise.resolve()) }));
 
+/** 2026-10-16 14:05(한국 시각, 시험은 `TZ=Asia/Seoul`). */
+const FIX_AT = Date.parse('2026-10-16T05:05:00.000Z');
+
+// 기기 시각을 위치를 잰 때 1분 뒤로 고정한다. 위치 서비스는 하루보다 오래됐거나 미래인 `timestamp`를
+// 받은 때로 바꾸므로, 고정하지 않으면 `14:05 기준`이 실제 날짜에 따라 달라진다.
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(FIX_AT + 60_000);
+});
+
 afterEach(() => {
   vi.useRealTimers();
   cleanup();
@@ -23,8 +33,6 @@ afterEach(() => {
 /** 기준점. 장소 좌표와 겹치지 않는 자릿수라 storage에서 이 글자를 찾으면 위치가 샌 것이다. */
 const BASE: FakeCoords = { longitude: 128.90031, latitude: 37.75517, accuracy: 30 };
 const BASE_STRINGS = ['37.75517', '128.90031'];
-/** 2026-10-16 14:05(한국 시각, 시험은 `TZ=Asia/Seoul`). */
-const FIX_AT = Date.parse('2026-10-16T05:05:00.000Z');
 /** `haversineM`의 지구 반지름 기준 위도 1도의 길이(m). */
 const M_PER_LAT_DEGREE = (6_371_008.8 * Math.PI) / 180;
 

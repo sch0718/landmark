@@ -9,6 +9,7 @@ import {
   SettingsPage,
   TripPlannerPage,
   TripsPage,
+  TripTodayPage,
 } from 'src/routes/lazy-routes';
 import { paths } from 'src/routes/paths';
 import { ShellRoute } from 'src/sections/shell/ShellRoute';
@@ -45,6 +46,7 @@ export const routes: RouteObject[] = [
       },
       { path: paths.trips, element: lazyElement(<TripsPage />, 'trips') },
       { path: paths.trip(':id'), element: lazyElement(<TripPlannerPage />, 'trip') },
+      { path: paths.tripToday(':id'), element: lazyElement(<TripTodayPage />, 'trip-today') },
     ],
   },
   { path: '*', element: <ErrorScreen title="페이지를 찾을 수 없어요" /> },

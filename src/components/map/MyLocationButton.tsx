@@ -9,13 +9,15 @@ type Props = {
    */
   locating: boolean;
   onClick(): void;
+  /** 접근 이름(찾는 중이 아닐 때). 기본 `내 위치 보기`. */
+  label?: string;
 };
 
 /** 지도 단추 기둥의 `내 위치 보기` 단추. 바탕·테두리·그림자는 `MapZoomButtons` 묶음과 같다. */
-export function MyLocationButton({ locating, onClick }: Props) {
+export function MyLocationButton({ locating, onClick, label = '내 위치 보기' }: Props) {
   return (
     <IconButton
-      aria-label={locating ? '내 위치를 찾는 중' : '내 위치 보기'}
+      aria-label={locating ? '내 위치를 찾는 중' : label}
       aria-busy={locating ? 'true' : undefined}
       aria-disabled={locating ? 'true' : undefined}
       onClick={() => {

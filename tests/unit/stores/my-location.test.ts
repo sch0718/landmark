@@ -9,9 +9,17 @@ import { fakeGeolocation } from '../helpers/fake-geolocation';
 const SOKCHO = { longitude: 128.9003, latitude: 37.7551, accuracy: 30 };
 const GANGNEUNG = { longitude: 128.8761, latitude: 37.7519, accuracy: 55 };
 
+/** 시험 속 기기 시각. 위치 서비스는 하루 안의 과거 `timestamp`만 그대로 두므로 그 안쪽 값을 준다. */
+const NOW = Date.parse('2026-10-16T05:05:00.000Z');
+const T5 = NOW - 5000;
+const T6 = NOW - 4000;
+const T9 = NOW - 1000;
+
 let fake: ReturnType<typeof fakeGeolocation>;
 
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(NOW);
   fake = fakeGeolocation();
   // 이 시험은 위치 서비스만 쓴다. 나머지 서비스는 꺼내 쓰지 않으므로 좁은 런타임을 그대로 넣는다.
   setAppRuntimeForTest(
@@ -22,6 +30,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   setAppRuntimeForTest(null);
   vi.restoreAllMocks();
 });
@@ -43,9 +52,9 @@ describe('locateAtom', () => {
     const pending = store.set(locateAtom);
     expect(store.get(myLocationAtom).locating).toBe(true);
     await settle();
-    fake.succeed(0, SOKCHO, 5000);
+    fake.succeed(0, SOKCHO, T5);
     const result = await pending;
-    const fix = { lng: 128.9003, lat: 37.7551, accuracyM: 30, at: 5000 };
+    const fix = { lng: 128.9003, lat: 37.7551, accuracyM: 30, at: T5 };
     expect(result).toEqual({ kind: 'fix', fix });
     expect(store.get(myLocationAtom)).toEqual({ fix, locating: false, error: null });
   });
@@ -54,7 +63,7 @@ describe('locateAtom', () => {
     const store = createStore();
     const first = store.set(locateAtom);
     await settle();
-    fake.succeed(0, SOKCHO, 5000);
+    fake.succeed(0, SOKCHO, T5);
     await first;
     const previous = store.get(myLocationAtom).fix;
 
@@ -70,11 +79,11 @@ describe('locateAtom', () => {
 
     const third = store.set(locateAtom);
     await settle();
-    fake.succeed(2, GANGNEUNG, 9000);
+    fake.succeed(2, GANGNEUNG, T9);
     await third;
     const afterOk = store.get(myLocationAtom);
     expect(afterOk.error).toBeNull();
-    expect(afterOk.fix).toEqual({ lng: 128.8761, lat: 37.7519, accuracyM: 55, at: 9000 });
+    expect(afterOk.fix).toEqual({ lng: 128.8761, lat: 37.7519, accuracyM: 55, at: T9 });
   });
 
   it('찾는 중에 또 부르면 새 요청 없이 같은 결과를 돌려준다', async () => {
@@ -83,14 +92,14 @@ describe('locateAtom', () => {
     const b = store.set(locateAtom);
     await settle();
     expect(fake.requests).toHaveLength(1);
-    fake.succeed(0, SOKCHO, 5000);
+    fake.succeed(0, SOKCHO, T5);
     const [resultA, resultB] = await Promise.all([a, b]);
     expect(resultB).toBe(resultA);
     // 끝난 뒤에는 새 요청을 낸다.
     const c = store.set(locateAtom);
     await settle();
     expect(fake.requests).toHaveLength(2);
-    fake.succeed(1, SOKCHO, 6000);
+    fake.succeed(1, SOKCHO, T6);
     await c;
   });
 
@@ -125,7 +134,7 @@ describe('locateAtom', () => {
     const store = createStore();
     const pending = store.set(locateAtom);
     await settle();
-    fake.succeed(0, SOKCHO, 5000);
+    fake.succeed(0, SOKCHO, T5);
     await pending;
     const failing = store.set(locateAtom);
     await settle();
@@ -141,7 +150,7 @@ describe('nearbyOffAtom', () => {
     const store = createStore();
     const pending = store.set(locateAtom);
     await settle();
-    fake.succeed(0, SOKCHO, 5000);
+    fake.succeed(0, SOKCHO, T5);
     await pending;
     const fix = store.get(myLocationAtom).fix;
     store.set(nearbyAtom, { on: true, radiusM: 1000 });

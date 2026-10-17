@@ -10,6 +10,7 @@ export const loadTripsPage = lazyChunk(() => import('src/sections/trips/TripsPag
 export const loadTripPlannerPage = lazyChunk(
   () => import('src/sections/trips/planner/TripPlannerPage'),
 );
+export const loadTripTodayPage = lazyChunk(() => import('src/sections/trips/today/TripTodayPage'));
 export const loadSettingsPage = lazyChunk(() => import('src/sections/settings/SettingsPage'));
 export const loadLabelsPage = lazyChunk(() => import('src/sections/labels/LabelsPage'));
 export const loadLegacyImportPage = lazyChunk(
@@ -19,6 +20,9 @@ export const loadLegacyImportPage = lazyChunk(
 export const TripsPage = lazy(() => loadTripsPage().then((m) => ({ default: m.TripsPage })));
 export const TripPlannerPage = lazy(() =>
   loadTripPlannerPage().then((m) => ({ default: m.TripPlannerPage })),
+);
+export const TripTodayPage = lazy(() =>
+  loadTripTodayPage().then((m) => ({ default: m.TripTodayPage })),
 );
 export const SettingsPage = lazy(() =>
   loadSettingsPage().then((m) => ({ default: m.SettingsPage })),
@@ -73,6 +77,7 @@ export const RestoreDialog = lazy(() =>
 export const ROUTE_CHUNKS: readonly (() => Promise<unknown>)[] = [
   loadTripsPage,
   loadTripPlannerPage,
+  loadTripTodayPage,
   loadSettingsPage,
   loadLabelsPage,
   loadLegacyImportPage,
