@@ -12,6 +12,11 @@ export const HOURS_CACHE_MAX = 300;
 export const HOURS_CACHE_MAX_CHARS = 400_000;
 /** 받은 지(`fetchedAt`) 이만큼 지나면 다시 받는다(ms, 스펙 §4.3). 그 전까지는 오래된 정보도 판정에 쓴다. */
 export const HOURS_STALE_MS = 7 * 86_400_000;
+/** 받은 지(`fetchedAt`) 7일 안인가. 받은 시각을 읽을 수 없으면 아니다(다시 받는다). */
+export function isHoursFresh(hours: PlaceHours, nowMs: number): boolean {
+  const fetchedAt = Date.parse(hours.fetchedAt);
+  return Number.isFinite(fetchedAt) && nowMs - fetchedAt < HOURS_STALE_MS;
+}
 /** 클라이언트가 응답을 기다리는 최대 시간(ms). */
 export const HOURS_TIMEOUT_MS = 12_000;
 /** 동시에 서버에 보내는 영업시간 요청 수. 네이버 장소 홈은 무겁고 잦으면 빈 응답이 와서 적게 둔다. */
@@ -222,12 +227,6 @@ export class HoursLookup extends Context.Service<
         if (!write()) persistent = false;
       };
 
-      /** 받은 지 7일 안인가. 받은 시각을 읽을 수 없으면 아니다(다시 받는다). */
-      const isFresh = (hours: PlaceHours): boolean => {
-        const fetchedAt = Date.parse(hours.fetchedAt);
-        return Number.isFinite(fetchedAt) && now().getTime() - fetchedAt < HOURS_STALE_MS;
-      };
-
       /** 캐시에 있던 정보가 들어온 정보보다 확실히 새것인가(`fetchedAt` 비교). 시각을 읽을 수 없으면 아니다. */
       const isNewerThan = (cached: PlaceHours, incoming: PlaceHours): boolean => {
         const cachedAt = Date.parse(cached.fetchedAt);
@@ -332,7 +331,7 @@ export class HoursLookup extends Context.Service<
           // 캐시 답을 refresh 합류보다 먼저 본다: 캐시 답은 seq 0이라 더 큰 번호의 상태를 덮지 않아 안전하다.
           if (!fresh) {
             const cached = entries.get(sid);
-            if (cached !== undefined && isFresh(cached.hours)) {
+            if (cached !== undefined && isHoursFresh(cached.hours, now().getTime())) {
               // 맨 뒤(가장 최근)로 옮기고 `usedAt`을 새로 한다. 저장은 다음에 받을 때 함께 한다.
               entries.delete(sid);
               entries.set(sid, { ...cached, usedAt: now().toISOString() });

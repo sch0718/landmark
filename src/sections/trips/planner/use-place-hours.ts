@@ -7,7 +7,7 @@ import { forkEffect } from 'src/lib/effect/runtime';
 import type { Place } from 'src/schema/library';
 import type { PlaceHours } from 'src/server/hours';
 import type { HoursLookupErrorCode } from 'src/services/errors';
-import { HoursLookup } from 'src/services/hours-lookup';
+import { HoursLookup, isHoursFresh } from 'src/services/hours-lookup';
 import { libraryAtom } from 'src/stores/library-state';
 import { hoursStatesAtom, type HoursState } from 'src/stores/place-hours';
 
@@ -121,13 +121,27 @@ const lookupAll = (store: Store, requests: HoursRequest[]) =>
     discard: true,
   });
 
-/** 상태가 없는 장소만 묻는다. 고르는 일도 효과 안에서 해, 앞 요청이 상태를 남긴 뒤의 목록으로 거른다. */
-const requestMissing = (store: Store, sids: readonly string[]) =>
+/**
+ * 물을 장소인가(스펙 §4.3): 상태가 없거나, 받는 중이 아니고 마지막 요청이 성공했는데 받은 정보가 7일을 넘었다.
+ * 7일 안의 정보는 다시 묻지 않는다. 실패한 장소는 여기서 다시 묻지 않는다(연결 실패는 `online` 때, 그 밖은
+ * `다시 확인`으로).
+ */
+function needsRequest(state: HoursState | undefined): boolean {
+  if (state === undefined) return true;
+  if (state.pending || state.error !== null || state.hours === null) return false;
+  return !isHoursFresh(state.hours, Date.now());
+}
+
+/**
+ * 상태가 없거나 받은 정보가 7일을 넘은 장소만 보통 요청으로 묻는다(캐시로 답할지는 `HoursLookup`이 정한다).
+ * 고르는 일도 효과 안에서 해, 앞 요청이 상태를 남긴 뒤의 목록으로 거른다.
+ */
+const requestNeeded = (store: Store, sids: readonly string[]) =>
   Effect.suspend(() => {
     const states = store.get(hoursStatesAtom);
     return lookupAll(
       store,
-      sids.filter((sid) => states[sid] === undefined).map((sid) => ({ sid, refresh: false })),
+      sids.filter((sid) => needsRequest(states[sid])).map((sid) => ({ sid, refresh: false })),
     );
   });
 
@@ -157,9 +171,10 @@ function useOfflineRetry(store: Store, key: string) {
 // 결과는 공용 atom에 남아 다음에 쓴다. 서버 요청은 조회 계층이 따로 돌리므로 기다림을 끊어도 줄지 않는다.
 
 /**
- * 그 여행 모든 Day의 네이버 장소(고른 Day 먼저)를 묻는다(스펙 §4.3). 상태가 없는 것만 묻고, 한 번 답을 받은
- * 장소(실패 포함)는 다시 묻지 않는다. 연결 실패(`OFFLINE`)는 인터넷이 돌아올 때(`online`) 다시 묻는다.
- * 출발지·숙소는 판정하지 않아 묻지 않는다. 계획 화면이 한 번 부른다.
+ * 그 여행 모든 Day의 네이버 장소(고른 Day 먼저)를 묻는다(스펙 §4.3). 상태가 없거나 받은 정보가 7일을 넘은 것만
+ * 묻고(화면을 열 때·장소가 바뀔 때), 그 밖에 한 번 답을 받은 장소(실패 포함)는 다시 묻지 않는다. 연결
+ * 실패(`OFFLINE`)는 인터넷이 돌아올 때(`online`) 다시 묻는다. 출발지·숙소는 판정하지 않아 묻지 않는다.
+ * 계획 화면이 한 번 부른다.
  */
 export function useTripHoursRequests(tripId: string, dayIndex: number): void {
   const library = useAtomValue(libraryAtom);
@@ -185,7 +200,7 @@ export function useTripHoursRequests(tripId: string, dayIndex: number): void {
 
   useEffect(() => {
     if (key === '') return;
-    forkEffect(requestMissing(store, key.split('\n')));
+    forkEffect(requestNeeded(store, key.split('\n')));
   }, [key, store]);
   useOfflineRetry(store, key);
 }
@@ -220,7 +235,8 @@ function viewOf(
 
 /**
  * 한 장소의 영업시간 상태와 `다시 확인`(스펙 §2.2). 장소·날짜·시각만 받아 계획 화면 밖에서도 쓸 수 있다.
- * `request`면 상태가 없을 때 그 장소 하나를 묻는다(후보 카드). 연결 실패였으면 `online` 때 다시 묻는다.
+ * `request`면 상태가 없거나 받은 정보가 7일을 넘었을 때 그 장소 하나를 묻는다(후보 카드). 연결 실패였으면
+ * `online` 때 다시 묻는다.
  * `refresh`는 서버 캐시까지 건너뛰고 새로 받는다(`fresh=1`).
  */
 export function usePlaceHours(
@@ -238,10 +254,12 @@ export function usePlaceHours(
   const request = options.request === true;
   const missing = state === undefined;
 
-  // 상태가 없으면 묻는다. 중단으로 상태가 지워져도 다시 묻는다.
+  // 그릴 때 상태가 없거나 받은 정보가 7일을 넘었으면 묻는다. 중단으로 상태가 지워져도(`missing`) 다시 묻는다.
+  // 7일 넘음은 의존성에 넣지 않는다: 받은 답이 여전히 7일을 넘어도(기기 시계가 틀림) 거듭 묻지 않게, 들어올
+  // 때(마운트)와 상태가 지워질 때만 본다.
   useEffect(() => {
-    if (!request || sid === null || !missing) return;
-    forkEffect(requestMissing(store, [sid]));
+    if (!request || sid === null) return;
+    forkEffect(requestNeeded(store, [sid]));
   }, [request, sid, store, missing]);
   useOfflineRetry(store, request && sid !== null ? sid : '');
 

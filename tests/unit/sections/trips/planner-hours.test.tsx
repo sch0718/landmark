@@ -370,6 +370,14 @@ describe('영업시간 상태 갱신', () => {
   });
 });
 
+/** 앱 없이 저장소 하나와 가짜 조회만으로 런타임을 만든다(정리하면 진행 중인 요청이 중단된다). */
+function runtimeWith(hours: ReturnType<typeof fakeHours>): AppRuntime {
+  const runtime = ManagedRuntime.make(hours.layer) as unknown as AppRuntime;
+  setAppRuntimeForTest(runtime);
+  return runtime;
+}
+const naverPlace = () => plannerLibrary().places[P1]!;
+
 describe('영업시간 구독과 중단', () => {
   it('한 장소의 답은 다른 장소를 보는 훅을 다시 그리지 않는다', async () => {
     const hours = fakeHours(() => 'pending');
@@ -401,14 +409,6 @@ describe('영업시간 구독과 중단', () => {
     expect(renders[S1]).toBeGreaterThan(before[S1]);
     expect(renders[S2]).toBe(before[S2]);
   });
-
-  /** 앱 없이 저장소 하나와 가짜 조회만으로 런타임을 만든다(정리하면 진행 중인 요청이 중단된다). */
-  function runtimeWith(hours: ReturnType<typeof fakeHours>): AppRuntime {
-    const runtime = ManagedRuntime.make(hours.layer) as unknown as AppRuntime;
-    setAppRuntimeForTest(runtime);
-    return runtime;
-  }
-  const naverPlace = () => plannerLibrary().places[P1]!;
 
   it('앞 요청이 남긴 빈 상태에서 다시 확인이 중단되면 상태를 지워 받는 중에 갇히지 않는다', async () => {
     const hours = fakeHours(() => 'pending');
@@ -466,6 +466,76 @@ describe('영업시간 구독과 중단', () => {
     });
     await waitFor(() => expect(next.calls).toEqual([{ sid: S1, refresh: false }]));
     expect(result.current.view).toMatchObject({ kind: 'known', pending: false });
+  });
+});
+
+describe('7일 지난 정보는 다시 들어오면 다시 묻는다(스펙 §4.3)', () => {
+  const DAY_MS = 86_400_000;
+  // 받은 시각은 지금(가짜 시계)으로 한다.
+  const answerNow = (sid: string): PlaceHours => ({
+    ...dancheon(sid),
+    fetchedAt: new Date().toISOString(),
+  });
+  const hooks = [
+    ['여행 전체(useTripHoursRequests)', () => useTripHoursRequests(TRIP, 0)],
+    ['후보 카드(usePlaceHours request)', () => usePlaceHours(naverPlace(), { request: true })],
+  ] as const;
+
+  for (const [name, hook] of hooks) {
+    describe(name, () => {
+      it.each([
+        [8, 1],
+        [6, 0],
+      ])('받고 %i일 뒤 다시 그리면 %i번 더 묻는다', async (days, more) => {
+        const hours = fakeHours((sid) => answerNow(sid));
+        runtimeWith(hours);
+        const store = createStore();
+        store.set(libraryAtom, library([[P1]]));
+        const wrapper = ({ children }: { children: ReactNode }) => (
+          <Provider store={store}>{children}</Provider>
+        );
+        const first = renderHook(hook, { wrapper });
+        await waitFor(() =>
+          expect(store.get(hoursStatesAtom)[S1]).toMatchObject({ pending: false, error: null }),
+        );
+        expect(hours.calls).toEqual([{ sid: S1, refresh: false }]);
+        const firstAt = store.get(hoursStatesAtom)[S1]!.hours!.fetchedAt;
+        first.unmount();
+
+        vi.setSystemTime(Date.now() + days * DAY_MS);
+        const second = renderHook(hook, { wrapper });
+        await act(async () => {});
+        expect(hours.calls).toEqual(Array(1 + more).fill({ sid: S1, refresh: false }));
+        const state = store.get(hoursStatesAtom)[S1]!;
+        expect(state.pending).toBe(false);
+        expect(state.hours!.fetchedAt).toBe(more === 1 ? new Date().toISOString() : firstAt);
+
+        // 새로 받은(7일 안) 정보는 다시 그려도 또 묻지 않는다.
+        second.unmount();
+        renderHook(hook, { wrapper });
+        await act(async () => {});
+        expect(hours.calls).toHaveLength(1 + more);
+      });
+    });
+  }
+
+  it('7일 지났어도 받는 중이거나 마지막 요청이 실패했으면 묻지 않는다', async () => {
+    const hours = fakeHours((sid) => answerNow(sid));
+    runtimeWith(hours);
+    const store = createStore();
+    store.set(libraryAtom, library([[P1, P2, P3]]));
+    const old = (sid: string) => ({ ...dancheon(sid), fetchedAt: '2026-10-01T00:00:00.000Z' });
+    store.set(hoursStatesAtom, {
+      [S1]: { hours: old(S1), pending: true, error: null, seq: 1, refresh: false },
+      [S2]: { hours: old(S2), pending: false, error: 'UPSTREAM_ERROR', seq: 2, refresh: false },
+      [S3]: { hours: old(S3), pending: false, error: null, seq: 3, refresh: false },
+    });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <Provider store={store}>{children}</Provider>
+    );
+    renderHook(() => useTripHoursRequests(TRIP, 0), { wrapper });
+    await act(async () => {});
+    expect(hours.calls).toEqual([{ sid: S3, refresh: false }]);
   });
 });
 
