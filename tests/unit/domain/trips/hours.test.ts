@@ -443,6 +443,26 @@ describe('임시 휴무', () => {
     expect(irregularMatch(withIrregular('내년 10월 17일 휴무'), '2026-10-17')).not.toBeNull();
   });
 
+  it.each([
+    ['공백 둘', '2025년  10월 17일 휴무'],
+    ['줄바꿈', '2025년 \n10월 17일 휴무'],
+    ['탭', '2025년\t\t10월\t\t17일 휴무'],
+  ])('년 뒤 빈칸이 여럿이어도 적힌 연도로 본다: %s', (_name, text) => {
+    expect(irregularMatch(withIrregular(text), '2026-10-17')).toBeNull();
+    expect(irregularMatch(withIrregular(text), '2025-10-17')).toBe(text);
+  });
+
+  it.each([
+    ['2026.  10.  17 휴무', '2026-10-17'],
+    ['2026.\r\n10.\t\t17 휴무', '2026-10-17'],
+    ['10월  17일 휴무', '2026-10-17'],
+    ['10월 \n17일 휴무', '2026-10-17'],
+    ['매년  10월 17일 휴무', '2026-10-17'],
+    ['내년\n\n10월 17일 휴무', '2026-10-17'],
+  ])('빈칸이 여럿이어도 날짜로 읽는다: %j', (text, date) => {
+    expect(irregularMatch(withIrregular(text), date)).toBe(text);
+  });
+
   it.each(['2026-10-170', '2026.10.170 휴무', '12026-10-17', '110월 17일 휴무', '10월 117일 휴무'])(
     '숫자가 이어지면 맞지 않는다: %s',
     (text) => {
