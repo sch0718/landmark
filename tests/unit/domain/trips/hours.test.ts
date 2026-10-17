@@ -407,6 +407,9 @@ describe('임시 휴무', () => {
     expect(irregularMatch(withIrregular('2026년10월17일 휴무'), '2026-10-17')).not.toBeNull();
     expect(irregularMatch(withIrregular('2025년 10월 17일 휴무'), '2026-10-17')).toBeNull();
     expect(irregularMatch(withIrregular('2025년 10월 17일 휴무'), '2025-10-17')).not.toBeNull();
+    // 네 자리 연도가 아닌 `매년`·`내년` 뒤의 `M월 D일`은 그날 연도로 읽는다.
+    expect(irregularMatch(withIrregular('매년 10월 17일 휴무'), '2026-10-17')).not.toBeNull();
+    expect(irregularMatch(withIrregular('내년 10월 17일 휴무'), '2026-10-17')).not.toBeNull();
   });
 
   it.each(['2026-10-170', '2026.10.170 휴무', '12026-10-17', '110월 17일 휴무', '10월 117일 휴무'])(
