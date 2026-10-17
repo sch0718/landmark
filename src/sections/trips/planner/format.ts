@@ -31,6 +31,12 @@ export function queriedLabel(iso: string): string {
   return `${date.getMonth() + 1}월 ${date.getDate()}일 조회`;
 }
 
+/** 영업시간 확인 날짜(이 기기 시간대): `10월 16일 확인 · 네이버`. `queriedLabel`과 같은 날짜 꼴이다. */
+export function hoursCheckedLabel(iso: string): string {
+  const date = new Date(iso);
+  return `${date.getMonth() + 1}월 ${date.getDate()}일 확인 · 네이버`;
+}
+
 // 숫자로 끝나는 이름의 받침: 0(영)·1(일)·3(삼)·6(육)·7(칠)·8(팔)은 받침이 있다.
 const DIGIT_HAS_FINAL = new Set(['0', '1', '3', '6', '7', '8']);
 

@@ -1,10 +1,17 @@
 import { screen, within } from '@testing-library/react';
-import { Effect, Layer } from 'effect';
+import { Deferred, Effect, Exit, Layer } from 'effect';
 import type { Library, Place } from 'src/schema/library';
 import type { Trip } from 'src/schema/trip';
+import type { PlaceHours } from 'src/server/hours';
 import type { RouteResult } from 'src/server/route';
-import { RouteLookupError, type RouteLookupErrorCode } from 'src/services/errors';
+import {
+  HoursLookupError,
+  RouteLookupError,
+  type HoursLookupErrorCode,
+  type RouteLookupErrorCode,
+} from 'src/services/errors';
 import type { Geolocation } from 'src/services/geolocation';
+import { HoursLookup, type HoursAnswer } from 'src/services/hours-lookup';
 import { RouteLookup } from 'src/services/route-lookup';
 import { makePlace, renderLibrary, sampleLibrary, T0, withPlaces } from '../library/fixtures';
 
@@ -152,6 +159,78 @@ export function fakeRoutes(answer: (call: Call, nth: number) => Answer) {
   return { layer, calls };
 }
 
+// ---------- 가짜 영업시간 조회 ----------
+
+/**
+ * 가짜 영업시간 조회의 답. `'pending'`은 `settle`을 부를 때까지 끝나지 않고, `'cached'`는 지난번에 받은 정보로
+ * 캐시 답(번호 0)을 한다(실제 조회 계층의 7일 안 캐시 적중과 같다).
+ */
+export type HoursOut = PlaceHours | HoursLookupErrorCode | 'pending' | 'cached';
+
+/**
+ * sid와 `refresh`로 답하는 가짜. 부른 기록을 남긴다. 캐시 답이 아니면 부를 때마다 서버 요청 하나로 보고
+ * 순서 번호(`seq`)를 1부터 매긴다(부른 순서 = 시작한 순서). `peek`은 그 sid가 마지막으로 받은 정보다.
+ * `'pending'`으로 둔 호출은 `settle(호출 순번, 답)`으로 원하는 순서에 끝낸다(번호는 시작할 때 매긴 그대로).
+ */
+export function fakeHours(answer: (sid: string, refresh: boolean) => HoursOut) {
+  const calls: { sid: string; refresh: boolean }[] = [];
+  const received = new Map<string, PlaceHours>();
+  // 끝내지 않은 호출(순번 → 기다리는 답과 시작할 때 매긴 번호).
+  const held = new Map<
+    number,
+    { deferred: Deferred.Deferred<HoursAnswer, HoursLookupError>; seq: number }
+  >();
+  let seq = 0;
+
+  const exitOf = (
+    sid: string,
+    refresh: boolean,
+    callSeq: number,
+    out: Exclude<HoursOut, 'pending'>,
+  ): Exit.Exit<HoursAnswer, HoursLookupError> => {
+    if (out === 'cached') {
+      const hours = received.get(sid);
+      if (hours === undefined) throw new Error(`캐시에 없는 장소: ${sid}`);
+      return Exit.succeed({ hours, seq: 0 });
+    }
+    if (typeof out === 'string') {
+      return Exit.fail(new HoursLookupError({ code: out, seq: callSeq, fresh: refresh }));
+    }
+    received.set(sid, out);
+    return Exit.succeed({ hours: out, seq: callSeq });
+  };
+
+  const layer = Layer.succeed(
+    HoursLookup,
+    HoursLookup.of({
+      peek: (sid) => received.get(sid) ?? null,
+      place: (sid, options) =>
+        Effect.suspend(() => {
+          const refresh = options?.refresh === true;
+          calls.push({ sid, refresh });
+          const out = answer(sid, refresh);
+          const callSeq = out === 'cached' ? 0 : ++seq;
+          if (out !== 'pending') return exitOf(sid, refresh, callSeq, out);
+          const deferred = Deferred.makeUnsafe<HoursAnswer, HoursLookupError>();
+          const index = calls.length - 1;
+          held.set(index, { deferred, seq: callSeq });
+          return Deferred.await(deferred).pipe(
+            Effect.onExit(() => Effect.sync(() => held.delete(index))),
+          );
+        }),
+    }),
+  );
+
+  /** 끝내지 않은 호출(`calls[index]`)을 `out`으로 끝낸다. */
+  const settle = (index: number, out: Exclude<HoursOut, 'pending'>) => {
+    const entry = held.get(index);
+    if (entry === undefined) throw new Error(`끝나지 않은 호출이 아님: ${index}`);
+    const { sid, refresh } = calls[index]!;
+    Deferred.doneUnsafe(entry.deferred, exitOf(sid, refresh, entry.seq, out));
+  };
+  return { layer, calls, settle };
+}
+
 export const legRow = (from: string, to: string) =>
   screen.getByRole('listitem', { name: `${from} → ${to}` });
 export const timeline = () => screen.getByRole('region', { name: 'Day 시간표' });
@@ -166,6 +245,8 @@ export async function open(
     path?: string;
     libraryLocks?: LockManager;
     geolocation?: Layer.Layer<Geolocation>;
+    /** 영업시간 조회. 없으면 캐시가 비어 있고 요청이 끝나지 않는다(행에 영업시간 줄이 없다). */
+    hours?: ReturnType<typeof fakeHours>;
   } = {},
 ) {
   return renderLibrary(lib, {
@@ -173,6 +254,7 @@ export async function open(
     width: options.width,
     ids: options.ids,
     routeLookup: options.routes?.layer,
+    hoursLookup: options.hours?.layer,
     libraryLocks: options.libraryLocks,
     geolocation: options.geolocation,
   });

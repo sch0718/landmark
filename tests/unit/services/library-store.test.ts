@@ -25,6 +25,7 @@ import {
   PREVIOUS_KEY,
   type LibraryStoreOptions,
 } from 'src/services/library-store';
+import { HOURS_CACHE_KEY } from 'src/services/hours-lookup';
 import { ROUTE_CACHE_KEY } from 'src/services/route-lookup';
 import { createHeldLocks } from '../../fixtures/fake-locks';
 
@@ -1285,6 +1286,84 @@ describe('LibraryStore.update: 사본과 용량', () => {
       );
       expect(storage.getItem(ROUTE_CACHE_KEY)).toBeNull();
       expect(storage.getItem(PREVIOUS_KEY)).toBe('{"copy":true}');
+    }),
+  );
+
+  it.effect('over quota: 영업시간 캐시만 있어도 지우고 다시 써서 저장한다', () =>
+    Effect.gen(function* () {
+      const storage = createMemoryStorage();
+      seed(storage, libraryOf(place(P1)));
+      storage.setItem(HOURS_CACHE_KEY, '{"entries":{}}');
+      let libraryAttempts = 0;
+      failWrites(storage, (key) => {
+        if (key !== LIBRARY_KEY) return false;
+        libraryAttempts += 1;
+        return storage.getItem(HOURS_CACHE_KEY) !== null;
+      });
+      const saved = yield* withStore({ storage }, (s) =>
+        s.update((lib) => Effect.succeed(setPlaceMemo(lib, P1, '길게', ctx))),
+      );
+      expect(saved.places[P1]!.memo.value).toBe('길게');
+      expect(libraryAttempts).toBe(2);
+      expect(storage.getItem(HOURS_CACHE_KEY)).toBeNull();
+      expect(storage.getItem(LIBRARY_KEY)).toBe(JSON.stringify(saved));
+    }),
+  );
+
+  it.effect(
+    'over quota: 경로·영업시간 캐시를 함께 먼저 지우고, 그것으로 들어가면 사본은 남긴다',
+    () =>
+      Effect.gen(function* () {
+        const storage = createMemoryStorage();
+        seed(storage, libraryOf(place(P1)));
+        storage.setItem(ROUTE_CACHE_KEY, '{"entries":{}}');
+        storage.setItem(HOURS_CACHE_KEY, '{"entries":{}}');
+        storage.setItem(PREVIOUS_KEY, '{"copy":true}');
+        const removed: string[] = [];
+        const removeItem = storage.removeItem.bind(storage);
+        storage.removeItem = (key: string) => {
+          if (key !== 'tripmap:probe') removed.push(key);
+          removeItem(key);
+        };
+        let libraryAttempts = 0;
+        // 영업시간 캐시가 있는 동안에는 보관함 쓰기가 넘친다.
+        failWrites(storage, (key) => {
+          if (key !== LIBRARY_KEY) return false;
+          libraryAttempts += 1;
+          return storage.getItem(HOURS_CACHE_KEY) !== null;
+        });
+        yield* withStore({ storage }, (s) =>
+          s.update((lib) => Effect.succeed(setPlaceMemo(lib, P1, '길게', ctx))),
+        );
+        expect(libraryAttempts).toBe(2);
+        expect(removed).toEqual([ROUTE_CACHE_KEY, HOURS_CACHE_KEY]);
+        expect(storage.getItem(PREVIOUS_KEY)).toBe('{"copy":true}');
+      }),
+  );
+
+  it.effect('over quota: 영업시간 캐시를 지워도 넘치면 그다음에 사본을 지운다', () =>
+    Effect.gen(function* () {
+      const storage = createMemoryStorage();
+      seed(storage, libraryOf(place(P1)));
+      storage.setItem(HOURS_CACHE_KEY, '{"entries":{}}');
+      storage.setItem(PREVIOUS_KEY, '{"copy":true}');
+      const removed: string[] = [];
+      const removeItem = storage.removeItem.bind(storage);
+      storage.removeItem = (key: string) => {
+        if (key !== 'tripmap:probe') removed.push(key);
+        removeItem(key);
+      };
+      failWrites(
+        storage,
+        (key) =>
+          key === LIBRARY_KEY &&
+          (storage.getItem(HOURS_CACHE_KEY) !== null || storage.getItem(PREVIOUS_KEY) !== null),
+      );
+      const saved = yield* withStore({ storage }, (s) =>
+        s.update((lib) => Effect.succeed(setPlaceMemo(lib, P1, '길게', ctx))),
+      );
+      expect(removed).toEqual([HOURS_CACHE_KEY, PREVIOUS_KEY]);
+      expect(storage.getItem(LIBRARY_KEY)).toBe(JSON.stringify(saved));
     }),
   );
 });

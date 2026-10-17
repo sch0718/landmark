@@ -28,6 +28,7 @@ import {
   useLibraryAction,
   useLibrarySync,
 } from 'src/stores/library-state';
+import { PENDING_HOURS_LOOKUP } from '../helpers/pending-hours-lookup';
 
 const toastMock = vi.hoisted(() => {
   const error = vi.fn();
@@ -111,6 +112,7 @@ function setup(
     PlaceLookup.layer,
     ReverseGeocoder.layer,
     RouteLookup.layer,
+    PENDING_HOURS_LOOKUP,
     Geolocation.layerWith({ api: undefined, secure: true }),
   );
   const runtime = ManagedRuntime.make(
