@@ -507,6 +507,54 @@ describe('HoursLookup 오류', () => {
     }),
   );
 
+  it.effect(
+    '본문을 받는 중에 12초가 지나도 TIMEOUT이고 그 요청을 끊어, 받는 중인 전송이 2개를 넘지 않는다',
+    () =>
+      Effect.gen(function* () {
+        // 머리는 오고 본문은 끝나지 않는 응답. 실제 fetch처럼 signal이 끊기면 본문 읽기도 실패한다.
+        const signals: AbortSignal[] = [];
+        const fetchFn = vi.fn(async (_url: unknown, init?: RequestInit) => {
+          const signal = init!.signal!;
+          signals.push(signal);
+          const body = new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(new TextEncoder().encode('{"sid":'));
+              signal.addEventListener('abort', () => controller.error(signal.reason));
+            },
+          });
+          return new Response(body, { status: 200 });
+        });
+        const transferring = () => signals.filter((s) => !s.aborted).length;
+        const outcome = yield* run({ fetch: fetchFn, storage: null }, (l) =>
+          onlyLookupErrors(
+            Effect.gen(function* () {
+              const hung = yield* Effect.all(
+                ['1', '2'].map((sid) => Effect.flip(l.place(sid)).pipe(Effect.forkChild)),
+              );
+              yield* settle;
+              expect(fetchFn).toHaveBeenCalledTimes(2);
+              expect(transferring()).toBe(2);
+              yield* TestClock.adjust(`${HOURS_TIMEOUT_MS} millis`);
+              const errors = yield* Effect.all(hung.map((f) => Fiber.join(f)));
+              const aborted = signals.map((s) => s.aborted);
+              // 칸이 풀려 셋째 요청이 나가도 끊지 않은 전송은 2개를 넘지 않는다.
+              const third = yield* Effect.flip(l.place('3')).pipe(Effect.forkChild);
+              yield* settle;
+              const afterThird = { calls: fetchFn.mock.calls.length, transferring: transferring() };
+              yield* TestClock.adjust(`${HOURS_TIMEOUT_MS} millis`);
+              const thirdError = yield* Fiber.join(third);
+              return { errors: errors.map((e) => e.code), aborted, afterThird, thirdError };
+            }),
+          ),
+        );
+        expect(outcome.errors).toEqual(['TIMEOUT', 'TIMEOUT']);
+        expect(outcome.aborted).toEqual([true, true]);
+        expect(outcome.afterThird).toEqual({ calls: 3, transferring: 1 });
+        expect(outcome.thirdError.code).toBe('TIMEOUT');
+        expect(signals[2]?.aborted).toBe(true);
+      }),
+  );
+
   it.effect('실패에도 그 요청의 seq가 붙고, 실패한 sid는 다시 시도할 수 있다', () =>
     Effect.gen(function* () {
       const storage = createMemoryStorage();
