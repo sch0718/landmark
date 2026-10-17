@@ -157,8 +157,12 @@ function segmentOf(day: HoursDay, shift: number): Segment | null {
   };
 }
 
-/** 그날 영업 구간들. 같은 요일 항목이 여럿이면 모두 쓴다. 휴무·모름은 없음. */
+/**
+ * 그날 영업 구간들. 같은 요일 항목이 여럿이면 모두 쓴다. 휴무·모름은 없음. 임시 휴무인 날도 정기 휴무처럼 없다
+ * (전날이 임시 휴무면 그 밤의 자정 넘은 영업도 없다).
+ */
 function segmentsFor(hours: PlaceHours, date: string, shift: number): Segment[] {
+  if (irregularMatch(hours, date) !== null) return [];
   const rule = dayRuleFor(hours, date);
   if (rule.kind !== 'open') return [];
   return hours.days

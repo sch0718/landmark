@@ -463,6 +463,42 @@ describe('임시 휴무', () => {
     expect(checkDate(h, WED)).toEqual({ kind: 'irregular-closed', text: '2026-10-21 임시휴무' });
   });
 
+  describe('임시 휴무인 전날은 밤 영업도 없다(매일 18:00~02:00)', () => {
+    const SAT = '2026-10-17';
+    const bar = open('매일', '18:00', '02:00', { endsNextDay: true });
+
+    it('금 임시 휴무 → 토 01:00은 영업 전 18:00(정기 휴무와 같다)', () => {
+      const irregular = place([bar], { irregularClosed: ['2026-10-16 휴무'] });
+      const regular = place([bar, closed('금')]);
+      const expected = { kind: 'before-open', visit: v(at(1), at(1, 30)), opensAt: '18:00' };
+      expect(checkVisit(regular, SAT, v(at(1), at(1, 30)))).toEqual(expected);
+      expect(checkVisit(irregular, SAT, v(at(1), at(1, 30)))).toEqual(expected);
+      // 금 Day 축의 다음 날 01:00도 같다.
+      expect(checkVisit(irregular, FRI, v(1440 + at(1), 1440 + at(1, 30)))).toMatchObject({
+        kind: 'before-open',
+        opensAt: '18:00',
+      });
+    });
+
+    it('다음 날 임시 휴무면 그날 영업으로 이어지지 않는다(24시간 영업)', () => {
+      const allday = place([open('매일', '00:00', '24:00')], {
+        irregularClosed: ['2026-10-17 휴무'],
+      });
+      expect(checkVisit(allday, FRI, v(at(23, 30), 1440 + at(0, 30)))).toEqual({
+        kind: 'closes-during-stay',
+        closesAt: '24:00',
+      });
+    });
+
+    it('방문일의 임시 휴무가 먼저다', () => {
+      const h = place([bar], { irregularClosed: ['2026-10-17 휴무'] });
+      expect(checkVisit(h, SAT, v(at(1), at(1, 30)))).toEqual({
+        kind: 'irregular-closed',
+        text: '2026-10-17 휴무',
+      });
+    });
+  });
+
   it('다음 날로 넘어간 방문은 그 날짜의 임시 휴무를 본다', () => {
     const h = withIrregular('10월 17일 휴무');
     expect(checkVisit(h, FRI, v(1440 + at(12), 1440 + at(13)))).toMatchObject({
