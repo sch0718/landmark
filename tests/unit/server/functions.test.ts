@@ -3,9 +3,10 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { Effect, Fiber } from 'effect';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cacheKey, routeCacheKey } from 'src/server/cache-key';
+import { cacheKey, hoursCacheKey, routeCacheKey } from 'src/server/cache-key';
 import { RouteLookup } from 'src/services/route-lookup';
 import { onRequestGet as onFolderGet } from '../../../functions/api/naver-folder';
+import { onRequestGet as onHoursGet } from '../../../functions/api/hours';
 import { onRequestGet as onPlaceGet } from '../../../functions/api/place';
 import { onRequestGet as onRouteGet } from '../../../functions/api/route';
 
@@ -560,5 +561,123 @@ describe('다시 계산 → 엣지 캐시 우회(RouteLookup + GET /api/route)',
     // 늦게 온 엣지 캐시의 오래된 답(01:00)은 먼저 끝난 refresh 결과(01:20)를 덮지 못하고, 보통 호출도 새 값을 받는다.
     expect(plain.queriedAt).toBe('2026-10-13T01:20:00.000Z');
     expect(refreshed.queriedAt).toBe('2026-10-13T01:20:00.000Z');
+  });
+});
+
+describe('hoursCacheKey', () => {
+  it('sid를 hours/naver/ 아래에 둔다', () => {
+    expect(hoursCacheKey('11733192')).toBe('https://cache.landmark/hours/naver/11733192');
+  });
+});
+
+describe('GET /api/hours', () => {
+  const HOME = 'https://pcmap.place.naver.com';
+  const hoursHtml = () =>
+    readFileSync(resolve(process.cwd(), 'tests/fixtures/naver/pcmap-home-11733192.html'), 'utf8');
+  // /place/… 는 식당·카페면 /restaurant/… 로 한 번 이동한다.
+  const naverRoutes = (): Record<string, Route> => ({
+    [`${HOME}/place/11733192/home`]: () =>
+      new Response(null, { status: 302, headers: { Location: '/restaurant/11733192/home' } }),
+    [`${HOME}/restaurant/11733192/home`]: () => new Response(hoursHtml()),
+  });
+  const hoursPath = (qs: string) => `/api/hours?${qs}`;
+  const KEY = 'https://cache.landmark/hours/naver/11733192';
+
+  it('허용 출처 + sid → 200 PlaceHours, 브라우저에는 private, no-store', async () => {
+    stubFetch(naverRoutes());
+    const { ctx } = makeContext(hoursPath('sid=11733192'));
+    const res = await onHoursGet(ctx);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+    const body = (await res.json()) as { sid: string; days: unknown[] };
+    expect(body.sid).toBe('11733192');
+    expect(body.days).toHaveLength(7);
+  });
+
+  it('1일 저장하고, 같은 sid로 다시 오면 바깥 요청 없이 처음 fetchedAt 그대로 돌려준다', async () => {
+    const cache = stubCaches();
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-16T01:00:00.000Z'));
+    const calls = stubFetch(naverRoutes());
+    const first = makeContext(hoursPath('sid=11733192'));
+    const res = await onHoursGet(first.ctx);
+    expect(res.status).toBe(200);
+    await Promise.all(first.pending);
+    expect(cache.put).toHaveBeenCalledTimes(1);
+    const [key, stored] = cache.put.mock.calls[0]!;
+    expect(String(key)).toBe(KEY);
+    expect(stored.headers.get('Cache-Control')).toBe('max-age=86400');
+    expect(calls).toHaveLength(2);
+
+    vi.setSystemTime(new Date('2026-10-16T05:00:00.000Z'));
+    const hit = await onHoursGet(makeContext(hoursPath('sid=11733192')).ctx);
+    expect(hit.status).toBe(200);
+    expect(hit.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(((await hit.json()) as { fetchedAt: string }).fetchedAt).toBe(
+      '2026-10-16T01:00:00.000Z',
+    );
+    expect(calls).toHaveLength(2);
+  });
+
+  it('fresh=1은 캐시를 보지 않고 다시 받아 같은 키(fresh 없음)에 저장한다', async () => {
+    const cache = stubCaches();
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-16T01:00:00.000Z'));
+    const calls = stubFetch(naverRoutes());
+    const first = makeContext(hoursPath('sid=11733192'));
+    await onHoursGet(first.ctx);
+    await Promise.all(first.pending);
+    expect(calls).toHaveLength(2);
+
+    vi.setSystemTime(new Date('2026-10-16T05:00:00.000Z'));
+    cache.match.mockClear();
+    const fresh = makeContext(hoursPath('sid=11733192&fresh=1'));
+    const res = await onHoursGet(fresh.ctx);
+    await Promise.all(fresh.pending);
+    expect(res.status).toBe(200);
+    expect(cache.match).not.toHaveBeenCalled();
+    expect(((await res.json()) as { fetchedAt: string }).fetchedAt).toBe(
+      '2026-10-16T05:00:00.000Z',
+    );
+    expect(calls).toHaveLength(4);
+    expect(cache.put).toHaveBeenCalledTimes(2);
+    expect(String(cache.put.mock.calls[1]![0])).toBe(KEY);
+    // 보통 요청이 새 값을 받는다.
+    const after = await onHoursGet(makeContext(hoursPath('sid=11733192')).ctx);
+    expect(((await after.json()) as { fetchedAt: string }).fetchedAt).toBe(
+      '2026-10-16T05:00:00.000Z',
+    );
+    expect(calls).toHaveLength(4);
+  });
+
+  it('sid가 숫자가 아니면 400 BAD_REQUEST, 바깥 요청 없음', async () => {
+    const calls = stubFetch({});
+    const res = await onHoursGet(makeContext(hoursPath('sid=abc')).ctx);
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe('BAD_REQUEST');
+    expect((await onHoursGet(makeContext('/api/hours').ctx)).status).toBe(400);
+    expect(calls).toHaveLength(0);
+  });
+
+  it('상태·키가 없는 HTML이면 502, 저장하지 않는다', async () => {
+    const cache = stubCaches();
+    stubFetch({
+      [`${HOME}/place/11733192/home`]: () => new Response('<html><body>blocked</body></html>'),
+    });
+    const { ctx, pending } = makeContext(hoursPath('sid=11733192'));
+    const res = await onHoursGet(ctx);
+    expect(res.status).toBe(502);
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe('UPSTREAM_ERROR');
+    await Promise.all(pending);
+    expect(cache.put).not.toHaveBeenCalled();
+  });
+
+  it('출처가 없으면 403, 캐시도 보지 않는다', async () => {
+    const cache = stubCaches();
+    const calls = stubFetch({});
+    const res = await onHoursGet(makeContext(hoursPath('sid=11733192'), {}).ctx);
+    expect(res.status).toBe(403);
+    expect(cache.match).not.toHaveBeenCalled();
+    expect(calls).toHaveLength(0);
   });
 });
