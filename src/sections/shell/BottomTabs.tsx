@@ -1,6 +1,7 @@
 import Box from '@mui/material/Box';
 import { Link, useLocation } from 'react-router';
 import { PlusIcon } from 'src/components/icons';
+import { sheetStateOf } from 'src/sections/library/use-open-place';
 import { ADD_LABEL, isNavActive, NAV_ITEMS } from 'src/sections/shell/nav-items';
 
 const TAB_SX = {
@@ -29,7 +30,8 @@ const TAB_SX = {
  * `onAdd`는 누른 ＋를 받는다(흐름을 닫을 때 포커스를 돌려줄 곳).
  */
 export function BottomTabs({ onAdd }: { onAdd: (opener: HTMLElement) => void }) {
-  const { pathname } = useLocation();
+  const { pathname, state } = useLocation();
+  const placeOn = sheetStateOf(state).from;
   return (
     <Box
       component="nav"
@@ -77,7 +79,7 @@ export function BottomTabs({ onAdd }: { onAdd: (opener: HTMLElement) => void }) 
             </Box>
           );
         }
-        const active = isNavActive(item, pathname);
+        const active = isNavActive(item, pathname, placeOn);
         return (
           <Box
             key={item.key}

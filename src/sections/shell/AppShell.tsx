@@ -3,12 +3,13 @@ import IconButton from '@mui/material/IconButton';
 import type { SxProps, Theme } from '@mui/material/styles';
 import { visuallyHidden } from '@mui/utils';
 import { useAtomValue, useSetAtom } from 'jotai';
-import { useState, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { matchPath, Outlet, useLocation, useNavigate } from 'react-router';
-import { ChevronLeftIcon, XIcon } from 'src/components/icons';
+import { XIcon } from 'src/components/icons';
 import { useDocumentTitle } from 'src/lib/use-document-title';
 import { paths } from 'src/routes/paths';
 import { AddPlaceHost, useAddFlowRoute } from 'src/sections/add-place/AddPlaceHost';
+import { sheetLocationState, sheetStateOf } from 'src/sections/library/use-open-place';
 import { ShareDropOverlay } from 'src/sections/share-import/ShareDropOverlay';
 import { useImportEntry } from 'src/sections/share-import/use-import-entry';
 import { AddSheet } from 'src/sections/shell/AddSheet';
@@ -16,7 +17,9 @@ import { BackupReminder } from 'src/sections/shell/BackupReminder';
 import { BottomTabs } from 'src/sections/shell/BottomTabs';
 import { NavRail } from 'src/sections/shell/NavRail';
 import { DETAIL_WIDTH, LIST_WIDTH } from 'src/sections/shell/pane-widths';
+import { PlaceSheet } from 'src/sections/shell/PlaceSheet';
 import { DetailSlot, ListSlot, MapSlot } from 'src/sections/shell/ShellSlots';
+import type { SheetSnap } from 'src/sections/shell/sheet-snap';
 import { MAIN_ID, SkipLink } from 'src/sections/shell/SkipLink';
 import { StorageBanner } from 'src/sections/shell/StorageBanner';
 import { useLayout } from 'src/sections/shell/use-layout';
@@ -53,14 +56,13 @@ function Pane({
 /** 지도 슬롯. 지도는 스스로 크기를 정하므로 가운데 칸을 꽉 채우고 넘치는 부분은 자른다. */
 const MAP_PANE_SX: SxProps<Theme> = { flex: 1, height: '100%', overflow: 'hidden' };
 
-type DetailMode = 'column' | 'overlay' | 'sheet';
+type DetailMode = 'column' | 'overlay';
 
 /**
- * 상세 슬롯 하나. 폭에 따라 모양만 바뀌고 트리 위치는 그대로라서(`column` ↔ `overlay`) 창 폭이
- * 1280px을 오가도 안쪽 상세가 다시 만들어지지 않는다.
+ * 넓은·중간 화면의 상세 슬롯. 폭에 따라 모양만 바뀌고 트리 위치는 그대로라서(`column` ↔ `overlay`) 창 폭이
+ * 1280px을 오가도 안쪽 상세가 다시 만들어지지 않는다. 휴대폰은 `PlaceSheet`를 쓴다.
  * - `column`: 넓은 화면의 오른쪽 칸(항상 있고, 고른 장소가 없으면 안내만 보인다).
  * - `overlay`: 중간 폭에서 지도 오른쪽을 덮는 360px 패널.
- * - `sheet`: 좁은 화면의 전체 화면 시트.
  */
 function DetailPane({
   mode,
@@ -71,8 +73,7 @@ function DetailPane({
   placeId: string | null;
   onClose: () => void;
 }) {
-  const floating = mode !== 'column';
-  const sheet = mode === 'sheet';
+  const overlay = mode === 'overlay';
   return (
     <Box
       component="section"
@@ -83,18 +84,17 @@ function DetailPane({
         display: 'flex',
         flexDirection: 'column',
         bgcolor: 'var(--tm-bg-surface)',
-        ...(floating
+        ...(overlay
           ? {
-              position: sheet ? 'fixed' : 'absolute',
+              position: 'absolute',
               zIndex: 1100,
               top: 0,
               right: 0,
               bottom: 0,
-              ...(sheet
-                ? { left: 0, pt: 'env(safe-area-inset-top, 0px)' }
-                : { width: DETAIL_WIDTH, maxWidth: '100%' }),
-              borderLeft: sheet ? 0 : '1px solid var(--tm-border)',
-              boxShadow: sheet ? 'none' : 'var(--tm-shadow-2)',
+              width: DETAIL_WIDTH,
+              maxWidth: '100%',
+              borderLeft: '1px solid var(--tm-border)',
+              boxShadow: 'var(--tm-shadow-2)',
             }
           : {
               flex: 'none',
@@ -103,10 +103,10 @@ function DetailPane({
             }),
       }}
     >
-      {floating && (
+      {overlay && (
         <Box sx={{ flex: 'none', display: 'flex', p: 0.5 }}>
-          <IconButton onClick={onClose} aria-label={sheet ? '목록으로' : '닫기'}>
-            {sheet ? <ChevronLeftIcon aria-hidden="true" /> : <XIcon aria-hidden="true" />}
+          <IconButton onClick={onClose} aria-label="닫기">
+            <XIcon aria-hidden="true" />
           </IconButton>
         </Box>
       )}
@@ -184,25 +184,34 @@ export function AppShell() {
   // 중간 폭에서는 핀 모드가 상세 오버레이를 내린다(아래 `body`의 분기와 같다).
   const detailShown = layout === 'compact' || (!adding && (layout === 'wide' || !pinning));
 
-  // 좁은 화면에서 장소 시트 뒤에 깔리는 화면(목록/지도). 마지막으로 본 쪽을 기억한다.
-  const [origin, setOrigin] = useState<'list' | 'map'>('list');
-  const viewOrigin = isMap ? 'map' : 'list';
-  if (placeId === null && isLibraryView && origin !== viewOrigin) setOrigin(viewOrigin); // 렌더 중 상태 갱신
-  const sheetOnMap = placeId !== null && origin === 'map';
-  // 좁은 화면은 지도 탭에서만 지도가 가리지 않고 보인다(장소 시트는 지도를 덮는다).
+  // 휴대폰 상세 시트의 뒤 화면·단계(스펙 §4.4). 기록 상태가 유일한 출처다(새로고침에도 남는다).
+  const sheet = placeId === null ? null : sheetStateOf(location.state);
+  const sheetOnMap = sheet?.from === 'map';
+  // 좁은 화면은 지도 탭에서만 추가 흐름의 지도를 쓴다(장소 시트 뒤의 지도는 시트가 다 펼치면 가려진다).
   useAddFlowRoute(layout === 'compact' ? isMap : isLibraryView);
   // `/import`로 들어오면 주소를 `/`로 바꾸고 공유 파일 가져오기 흐름을 연다.
   useImportEntry();
 
   const closeDetail = () => {
-    // 좁은 화면은 시트를 연 기록을 되감아 모바일 뒤로가기와 어긋나지 않게 한다. 앱 안에서 연
-    // 기록이 없으면(링크로 바로 들어옴) 앱을 벗어나지 않도록 기록을 교체한다.
+    // 휴대폰은 시트를 연 기록을 되감아 모바일 뒤로가기와 어긋나지 않게 한다. 앱 안에서 연 기록이 아니면
+    // (링크로 바로 들어옴) 앱을 벗어나지 않도록 뒤 화면으로 바꿔치기한다. 펼치기·접기가 기록 항목을
+    // 바꿔치기해 `location.key`가 바뀌므로 키 대신 `inApp`으로 판단한다.
     if (layout === 'compact') {
-      if (location.key !== 'default') void navigate(-1);
-      else void navigate(origin === 'map' ? paths.map : paths.library, { replace: true });
+      const current = sheetStateOf(location.state);
+      if (current.inApp) void navigate(-1);
+      else void navigate(current.from === 'map' ? paths.map : paths.library, { replace: true });
       return;
     }
     void navigate(paths.library);
+  };
+
+  // 펼치기·접기: 지금 기록 항목의 상태만 바꾼다(새 항목 없음).
+  const changeSnap = (snap: SheetSnap) => {
+    if (sheet === null) return;
+    void navigate(
+      { pathname: location.pathname, search: location.search, hash: location.hash },
+      { replace: true, state: sheetLocationState({ ...sheet, snap }) },
+    );
   };
 
   let body: ReactNode;
@@ -244,7 +253,18 @@ export function AppShell() {
     );
   } else {
     body = (
-      <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+      <Box
+        sx={{
+          flex: 1,
+          minHeight: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          position: 'relative',
+          // 시트를 이 칸 안에 가두고(하단 탭은 칸 밖이라 늘 보인다), `hidden`과 달리 스크롤 컨테이너가 아니라서
+          // 반쯤 시트 안에서 아래쪽으로 포커스가 가도 칸이 밀려 지도·목록이 움직이지 않는다.
+          overflow: 'clip',
+        }}
+      >
         {isMap || sheetOnMap ? (
           <Pane label="지도" sx={MAP_PANE_SX}>
             <MapSlot />
@@ -254,7 +274,11 @@ export function AppShell() {
             <ListSlot />
           </Pane>
         )}
-        {placeId !== null && <DetailPane mode="sheet" placeId={placeId} onClose={closeDetail} />}
+        {sheet !== null && (
+          <PlaceSheet snap={sheet.snap} onSnapChange={changeSnap} onClose={closeDetail}>
+            <DetailSlot placeId={placeId} />
+          </PlaceSheet>
+        )}
       </Box>
     );
   }
