@@ -18,12 +18,23 @@ afterEach(() => {
   resources.restore();
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 const id = (n: number) => `place${String(n).padStart(5, '0')}`;
 const detail = () => screen.getByRole('region', { name: '장소 상세' });
 const closeButton = () => within(detail()).getByRole('button', { name: '닫기' });
 /** 중간 폭의 상세 패널은 장소를 연 뒤에야 그려지므로 나타날 때까지 기다린다. */
+/**
+ * jsdom은 배치를 하지 않는다. 목록 행은 `rowTop`부터 56px 높이, 나머지 요소(스크롤 칸 포함)는 0~600px 자리에
+ * 있는 것처럼 심는다.
+ */
+function placeRows(rowTop: number) {
+  vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+    const [top, height] = this.hasAttribute('data-place-id') ? [rowTop, 56] : [0, 600];
+    return DOMRect.fromRect({ x: 0, y: top, width: 360, height });
+  });
+}
 const findCloseButton = async () =>
   within(await screen.findByRole('region', { name: '장소 상세' })).findByRole('button', {
     name: '닫기',
@@ -125,9 +136,25 @@ describe('상세 닫기 (넓은·중간)', () => {
       prefs: { libraryView: 'list' },
     });
     await router.navigate(`/place/${id(2)}`);
+    placeRows(100); // 행이 목록 칸의 보이는 자리에 있다.
     (await findCloseButton()).focus();
     await user.keyboard('{Enter}');
     await waitFor(() => expect(router.state.location.pathname).toBe('/'));
     await waitFor(() => expect(document.activeElement).toHaveAttribute('data-place-id', id(2)));
+  });
+
+  it('연 장소의 행이 목록 칸의 보이는 자리 밖이면 닫은 뒤 포커스는 본문으로 간다', async () => {
+    const user = userEvent.setup();
+    const { router } = await renderLibrary(sampleLibrary(), {
+      width: 1280,
+      path: '/',
+      prefs: { libraryView: 'list' },
+    });
+    await router.navigate(`/place/${id(2)}`);
+    placeRows(650); // 스크롤 복원으로 행이 칸(0~600) 아래로 밀려났다. 창(768) 안이어도 칸 밖이다.
+    (await findCloseButton()).focus();
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(router.state.location.pathname).toBe('/'));
+    await waitFor(() => expect(document.activeElement).toHaveAttribute('id', 'main'));
   });
 });
