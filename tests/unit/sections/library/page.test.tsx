@@ -1,9 +1,11 @@
-import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setAppRuntimeForTest } from 'src/lib/effect/runtime';
 import { emptyLibrary } from 'src/schema/library';
 import { VIRTUALIZE_AFTER } from 'src/sections/library/views/VirtualRows';
+import { focusPlaceAtom } from 'src/stores/library-ui';
+import { installMapResources } from '../../components/helpers/map-resources';
 import { makePlace, renderLibrary, sampleLibrary, withPlaces } from './fixtures';
 
 vi.mock('src/theme/fonts', () => ({ loadDisplayFont: vi.fn(() => Promise.resolve()) }));
@@ -172,5 +174,71 @@ describe('library virtualization', () => {
     fireEvent.scroll(scroller);
     await waitFor(() => expect(screen.queryByText('장소 300')).not.toBeInTheDocument());
     expect(screen.getByText('장소 150')).toBeInTheDocument();
+  });
+});
+
+describe('닫으면 목록 스크롤 되돌리기', () => {
+  // 보관함과 함께 그려지는 지도 칸이 가짜 어댑터로 뜨게 한다.
+  let resources: ReturnType<typeof installMapResources>;
+  beforeEach(() => {
+    vi.stubEnv('VITE_MAP_ADAPTER', 'fake');
+    resources = installMapResources();
+  });
+  afterEach(() => {
+    resources.restore();
+    vi.unstubAllEnvs();
+  });
+
+  /** 목록을 감싼 가장 가까운 스크롤 칸. */
+  const scroller = () => {
+    let el: HTMLElement | null = screen.getByRole('list', { name: '장소 목록' });
+    while (el !== null && getComputedStyle(el).overflow !== 'auto') el = el.parentElement;
+    return el!;
+  };
+  const id = (n: number) => `place${String(n).padStart(5, '0')}`;
+
+  it('마커로 열어 목록이 움직였어도 닫으면 열기 전 자리로 돌아간다', async () => {
+    const user = userEvent.setup();
+    const { router, store } = await renderLibrary(sampleLibrary(), {
+      prefs: { libraryView: 'bento' },
+    });
+    const box = scroller();
+    box.scrollTop = 120;
+    fireEvent.scroll(box);
+    // 마커를 누르면 목록 스크롤 요청이 먼저 오고 목록이 그 행으로 움직인다(여기서는 흉내).
+    act(() => store.set(focusPlaceAtom, { id: id(3), seq: 99 }));
+    box.scrollTop = 400;
+    fireEvent.scroll(box);
+    await router.navigate(`/place/${id(3)}`);
+
+    await user.click(
+      await within(screen.getByRole('region', { name: '장소 상세' })).findByRole('button', {
+        name: '닫기',
+      }),
+    );
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/'));
+    expect(box.scrollTop).toBe(120);
+  });
+
+  it('열린 사이 거르기가 바뀌면 되돌리지 않는다', async () => {
+    const user = userEvent.setup();
+    const { router } = await renderLibrary(sampleLibrary(), { prefs: { libraryView: 'list' } });
+    const box = scroller();
+    box.scrollTop = 120;
+    fireEvent.scroll(box);
+    await router.navigate(`/place/${id(3)}`);
+    await user.type(screen.getByRole('searchbox', { name: '장소 검색' }), '횟집');
+    box.scrollTop = 30;
+    fireEvent.scroll(box);
+
+    await user.click(
+      within(screen.getByRole('region', { name: '장소 상세' })).getByRole('button', {
+        name: '닫기',
+      }),
+    );
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/'));
+    expect(box.scrollTop).toBe(30);
   });
 });

@@ -33,6 +33,7 @@ import { BulkBar } from 'src/sections/library/BulkBar';
 import { EmptyState } from 'src/sections/library/EmptyState';
 import { FilterBar } from 'src/sections/library/FilterBar';
 import { useLibraryQuery } from 'src/sections/library/use-library-query';
+import { useListScrollRestore } from 'src/sections/library/use-list-scroll-restore';
 import { useOpenPlaceId } from 'src/sections/library/use-open-place-id';
 import { BentoView } from 'src/sections/library/views/BentoView';
 import { CardsView } from 'src/sections/library/views/CardsView';
@@ -110,6 +111,8 @@ export function LibraryPage() {
   const openId = useOpenPlaceId();
   const requestListScroll = useSetAtom(focusPlaceAtom);
   const [scrollElement, setScrollElement] = useState<HTMLElement | null>(null);
+  // 장소를 닫으면 목록을 열기 전 자리로 되돌린다.
+  useListScrollRestore(scrollElement, openId, JSON.stringify(query));
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [exporting, setExporting] = useState(false);
   // `여행에 넣기`의 여행 고르기 창, 그리고 새 여행 대화상자(제목·처음 후보).
