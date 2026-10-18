@@ -230,24 +230,25 @@ export function LibraryMap() {
     setAnnouncement(LOCATED_MESSAGE);
   }, [locate, store]);
 
+  // 추가 칸이 열려 있는 동안은 마커 다시 누르기·빈 곳 누르기로 선택을 풀지 않는다(스펙 A1 §3.2).
+  const adding = showsAddPanel(flow);
   const onMarkerClick = useCallback(
     (id: string) => {
       if (id === CANDIDATE_MARKER_ID) return; // 아직 보관함에 없는 후보다.
       if (pinning) return; // 핀 모드에서는 위치만 고른다.
-      // 고른 마커를 다시 누르면 선택을 푼다(스펙 A1 §3.2).
+      // 고른 마커를 다시 누르면 선택을 푼다(스펙 A1 §3.2). 추가 칸이 열려 있으면 그대로 둔다.
       if (id === placeId) {
-        closeDetail();
+        if (!adding) closeDetail();
         return;
       }
       setFromMarker(id);
       requestListScroll((prev) => ({ id, seq: (prev?.seq ?? 0) + 1 }));
       void navigate(paths.place(id));
     },
-    [navigate, requestListScroll, pinning, placeId, closeDetail],
+    [navigate, requestListScroll, pinning, adding, placeId, closeDetail],
   );
 
   // 지도 빈 곳을 누르면 선택을 푼다. 핀 모드(조준점 조작)와 추가 칸이 열려 있을 때는 그쪽 몫이다.
-  const adding = showsAddPanel(flow);
   const onMapClick = useCallback(() => {
     if (pinning || adding || placeId === null) return;
     closeDetail();

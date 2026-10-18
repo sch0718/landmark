@@ -6,6 +6,7 @@ import { setAppRuntimeForTest } from 'src/lib/effect/runtime';
 import { emptyLibrary, type Library, type Place } from 'src/schema/library';
 import type { Prefs } from 'src/schema/prefs';
 import { Geolocation } from 'src/services/geolocation';
+import { addFlowAtom } from 'src/stores/add-place';
 import { libraryAtom } from 'src/stores/library-state';
 import { focusPlaceAtom } from 'src/stores/library-ui';
 import { TOKENS } from 'src/theme/tokens';
@@ -341,6 +342,50 @@ describe('library map', () => {
     expect(router.state.location.pathname).toBe('/map');
   });
 
+  it('추가 칸이 열려 있으면 고른 마커를 다시 눌러도 선택이 풀리지 않는다', async () => {
+    const user = userEvent.setup();
+    const { router, store } = await renderLibrary(sampleLibrary(), {
+      prefs: { libraryView: 'list' },
+    });
+    await ready();
+    await router.navigate(`/place/${id(2)}`);
+    await waitFor(() => expect(marker(2)).toHaveAttribute('aria-pressed', 'true'));
+    act(() => store.set(addFlowAtom, { step: 'link', hint: 'place' }));
+
+    await user.click(marker(2)!);
+
+    expect(router.state.location.pathname).toBe(`/place/${id(2)}`);
+    expect(marker(2)).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('추가 칸이 열려 있으면 빈 곳을 눌러도 선택이 풀리지 않는다', async () => {
+    const { router, store } = await renderLibrary(sampleLibrary(), {
+      prefs: { libraryView: 'list' },
+    });
+    await ready();
+    await router.navigate(`/place/${id(2)}`);
+    await waitFor(() => expect(marker(2)).toHaveAttribute('aria-pressed', 'true'));
+    act(() => store.set(addFlowAtom, { step: 'link', hint: 'place' }));
+
+    fireEvent.click(fakeMap());
+
+    expect(router.state.location.pathname).toBe(`/place/${id(2)}`);
+  });
+
+  it('핀 모드에서는 빈 곳을 눌러도 선택이 풀리지 않는다', async () => {
+    const { router, store } = await renderLibrary(sampleLibrary(), {
+      prefs: { libraryView: 'list' },
+    });
+    await ready();
+    await router.navigate(`/place/${id(2)}`);
+    await waitFor(() => expect(marker(2)).toHaveAttribute('aria-pressed', 'true'));
+    act(() => store.set(addFlowAtom, { step: 'pin', name: '', start: null }));
+
+    fireEvent.click(fakeMap());
+
+    expect(router.state.location.pathname).toBe(`/place/${id(2)}`);
+  });
+
   it('거르기로 열린 장소가 결과에서 빠지면 선택을 풀고, 결과 전체에 맞춘다', async () => {
     const user = userEvent.setup();
     // 샘플 장소는 좌표가 모두 같다. 속초 횟집만 속초로 옮겨 맞추기 점을 가른다.
@@ -366,6 +411,7 @@ describe('library map', () => {
     await waitFor(() => expect(fakeAdapter().fitCalls.length).toBeGreaterThan(fits));
     // 강제로 보이던 열린 장소(`fit: false`)는 맞추기 점에 들지 않는다. 점이 하나면 그 근처 상자로 넓혀 맞춘다.
     const fitted = fakeAdapter().fitCalls.at(-1)!;
+    expect(fitted.length).toBeGreaterThan(0);
     for (const [lng, lat] of fitted) {
       expect(lng).toBeCloseTo(128.95, 1);
       expect(lat).toBeCloseTo(37.77, 1);
