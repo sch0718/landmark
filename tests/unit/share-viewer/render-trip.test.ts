@@ -259,6 +259,57 @@ describe('시간표', () => {
     expect(web[0]!.rel).toBe('noopener noreferrer');
   });
 
+  it('화면 폭이 바뀌어 refreshDirections를 부르면 지금 패널의 길찾기 주소·새 탭 속성을 다시 정한다', () => {
+    let compact = false;
+    const handle = renderTripViewer(root, makeShareV2Doc(), map as unknown as MapPort, {
+      app: APP,
+      compact: () => compact,
+    });
+    const anchors = () => [...list().querySelectorAll<HTMLAnchorElement>('a.directions')];
+    expect(anchors()).toHaveLength(3);
+    for (const a of anchors()) expect(a.getAttribute('href')).toMatch(/^https:\/\//);
+
+    compact = true;
+    handle.refreshDirections();
+    expect(anchors()).toHaveLength(3);
+    expect(anchors()[0]!.getAttribute('href')).toMatch(/^nmap:\/\/route\/car\?/);
+    expect(anchors()[1]!.getAttribute('href')).toMatch(/^nmap:\/\/route\/walk\?/);
+    for (const a of anchors()) {
+      expect(a.getAttribute('href')).toMatch(/^nmap:\/\//);
+      expect(a.hasAttribute('target')).toBe(false);
+      expect(a.hasAttribute('rel')).toBe(false);
+    }
+
+    compact = false;
+    handle.refreshDirections();
+    expect(anchors()[0]!.getAttribute('href')).toMatch(
+      /^https:\/\/map\.naver\.com\/p\/directions\/.+\/car$/,
+    );
+    for (const a of anchors()) {
+      expect(a.getAttribute('href')).toMatch(/^https:\/\//);
+      expect(a.target).toBe('_blank');
+      expect(a.rel).toBe('noopener noreferrer');
+    }
+  });
+
+  it('탭을 바꾼 뒤의 refreshDirections는 새 패널의 링크만 바꾼다', () => {
+    let compact = false;
+    const handle = renderTripViewer(root, makeShareV2Doc(), map as unknown as MapPort, {
+      app: APP,
+      compact: () => compact,
+    });
+    const old = list().querySelector<HTMLAnchorElement>('a.directions')!;
+    const oldHref = old.getAttribute('href');
+    tab(tabs()[1]!.textContent!).click();
+    tab(tabs()[0]!.textContent!).click();
+    compact = true;
+    handle.refreshDirections();
+    expect(old.getAttribute('href')).toBe(oldHref);
+    for (const a of list().querySelectorAll<HTMLAnchorElement>('a.directions')) {
+      expect(a.getAttribute('href')).toMatch(/^nmap:\/\//);
+    }
+  });
+
   it('좌표가 어긋나 주소를 만들 수 없는 구간은 링크가 없다', () => {
     const doc = makeShareV2Doc();
     doc.places.find((p) => p.id === IDS.a)!.lat = Number.NaN;

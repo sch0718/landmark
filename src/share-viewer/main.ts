@@ -37,13 +37,16 @@ if (doc === null) {
     draw: (layers) => map.draw(layers),
   };
   const app = appUrl(import.meta.env.VITE_APP_URL);
-  const handle =
-    doc.version === 2
-      ? renderTripViewer(root, doc, port, {
-          app,
-          compact: () => window.matchMedia('(max-width: 767px)').matches,
-        })
-      : renderViewer(root, doc, port, { app });
+  let handle: ReturnType<typeof renderViewer>;
+  if (doc.version === 2) {
+    // 길찾기 링크는 좁은 화면(767px 이하)에서 앱 주소를 쓴다. 폭이 바뀌면 지금 링크도 바꾼다(스펙 §4.4).
+    const narrow = window.matchMedia('(max-width: 767px)');
+    const trip = renderTripViewer(root, doc, port, { app, compact: () => narrow.matches });
+    narrow.addEventListener('change', () => trip.refreshDirections());
+    handle = trip;
+  } else {
+    handle = renderViewer(root, doc, port, { app });
+  }
   // 압축은 비동기라 링크는 먼저 해시 없이 그려 두고, 끝나면 바꾼다. 실패하면 해시 없는 기본 링크(`/import`)를 둔다.
   void importLink(doc, app)
     .then(handle.setImportLink)

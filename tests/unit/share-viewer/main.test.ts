@@ -40,7 +40,11 @@ beforeEach(() => {
   portMock.filter.mockReset();
   portMock.draw.mockReset();
   window.matchMedia = ((query: string) =>
-    ({ matches: false, media: query }) as MediaQueryList) as typeof window.matchMedia;
+    ({
+      matches: false,
+      media: query,
+      addEventListener: () => undefined,
+    }) as unknown as MediaQueryList) as typeof window.matchMedia;
   Element.prototype.scrollIntoView = vi.fn();
   vi.resetModules();
 });
@@ -102,12 +106,47 @@ describe('보기 화면 진입점', () => {
       ({
         matches: query === '(max-width: 767px)',
         media: query,
-      }) as MediaQueryList) as typeof window.matchMedia;
+        addEventListener: () => undefined,
+      }) as unknown as MediaQueryList) as typeof window.matchMedia;
     setData(makeShareV2Doc());
     importLinkMock.mockResolvedValue({ kind: 'unsupported' });
     await import('src/share-viewer/main');
     expect(document.querySelector<HTMLAnchorElement>('a.directions')!.getAttribute('href')).toMatch(
       /^nmap:\/\//,
     );
+  });
+
+  it('화면 폭 질의가 바뀌면(change) 길찾기 링크를 다시 정한다', async () => {
+    // 질의는 한 번만 만들고, 그 결과의 matches와 change 듣는 함수를 시험이 쥔다.
+    const query = {
+      matches: true,
+      media: '(max-width: 767px)',
+      listeners: [] as Array<() => void>,
+      addEventListener(type: string, listener: () => void) {
+        if (type === 'change') this.listeners.push(listener);
+      },
+    };
+    const matchMedia = vi.fn((q: string) => {
+      expect(q).toBe('(max-width: 767px)');
+      return query as unknown as MediaQueryList;
+    });
+    window.matchMedia = matchMedia as unknown as typeof window.matchMedia;
+    setData(makeShareV2Doc());
+    importLinkMock.mockResolvedValue({ kind: 'unsupported' });
+    await import('src/share-viewer/main');
+    const href = () =>
+      document.querySelector<HTMLAnchorElement>('a.directions')!.getAttribute('href');
+    expect(href()).toMatch(/^nmap:\/\//);
+    expect(query.listeners).toHaveLength(1);
+
+    query.matches = false;
+    for (const listener of query.listeners) listener();
+    expect(href()).toMatch(/^https:\/\/map\.naver\.com\/p\/directions\//);
+    expect(document.querySelector<HTMLAnchorElement>('a.directions')!.target).toBe('_blank');
+
+    query.matches = true;
+    for (const listener of query.listeners) listener();
+    expect(href()).toMatch(/^nmap:\/\//);
+    expect(matchMedia).toHaveBeenCalledTimes(1);
   });
 });

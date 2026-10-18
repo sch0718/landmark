@@ -40,7 +40,12 @@ export function renderTripViewer(
   doc: ShareDocV2,
   map: MapPort,
   opts: { app: string; compact(): boolean },
-): { highlight(id: string): void; setImportLink(link: ImportLink): void } {
+): {
+  highlight(id: string): void;
+  setImportLink(link: ImportLink): void;
+  /** 화면 폭(`compact`)이 바뀐 뒤 부른다. 지금 패널의 길찾기 링크를 다시 정한다(스펙 §4.4). */
+  refreshDirections(): void;
+} {
   const d = root.ownerDocument;
   const trip = doc.trips[0]!;
   d.title = doc.title;
@@ -141,6 +146,8 @@ export function renderTripViewer(
   // 시간표 행: 핀 id → 행. 탭을 바꿀 때마다 새로 채운다.
   let rows = new Map<string, HTMLElement>();
   let currentRow: HTMLElement | null = null;
+  // 지금 패널의 길찾기 링크와 그 구간. 탭을 바꿀 때마다 새로 채운다.
+  let directions: { a: HTMLAnchorElement; leg: ShareLeg }[] = [];
 
   function markRow(next: HTMLElement | null): HTMLElement | null {
     if (currentRow !== null) currentRow.removeAttribute('aria-current');
@@ -240,31 +247,42 @@ export function renderTripViewer(
     }
     box.append(el(d, 'span', parts.join(' · '), 'leg-text'));
 
-    const from = placeById.get(leg.from);
-    const to = placeById.get(leg.to);
-    const href =
-      from === undefined || to === undefined
-        ? null
-        : naverDirectionsUrl(
-            {
-              from: { name: from.name, lng: from.lng, lat: from.lat },
-              to: { name: to.name, lng: to.lng, lat: to.lat },
-              mode: leg.mode,
-            },
-            opts.compact() ? 'app' : 'web',
-          );
+    const href = directionsHref(leg);
     if (href !== null) {
       const a = el(d, 'a', '길찾기', 'directions');
-      a.href = href;
-      // 웹 길찾기만 새 탭으로 연다. 앱 주소(nmap://)는 새 탭이면 빈 탭이 남는다.
-      if (href.startsWith('https://')) {
-        a.target = '_blank';
-        a.rel = 'noopener noreferrer';
-      }
+      setDirections(a, href);
+      directions.push({ a, leg });
       box.append(a);
     }
     li.append(box);
     return li;
+  }
+
+  /** 구간의 길찾기 주소. 좁은 화면은 앱(`nmap://`), 아니면 웹. 좌표가 어긋나면 null. */
+  function directionsHref(leg: ShareLeg): string | null {
+    const from = placeById.get(leg.from);
+    const to = placeById.get(leg.to);
+    if (from === undefined || to === undefined) return null;
+    return naverDirectionsUrl(
+      {
+        from: { name: from.name, lng: from.lng, lat: from.lat },
+        to: { name: to.name, lng: to.lng, lat: to.lat },
+        mode: leg.mode,
+      },
+      opts.compact() ? 'app' : 'web',
+    );
+  }
+
+  /** 링크 주소를 정한다. 웹 길찾기만 새 탭으로 연다. 앱 주소(nmap://)는 새 탭이면 빈 탭이 남는다. */
+  function setDirections(a: HTMLAnchorElement, href: string) {
+    a.href = href;
+    if (href.startsWith('https://')) {
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+    } else {
+      a.removeAttribute('target');
+      a.removeAttribute('rel');
+    }
   }
 
   function dayList(dayIndex: number): HTMLUListElement {
@@ -361,6 +379,7 @@ export function renderTripViewer(
     });
     rows = new Map();
     currentRow = null;
+    directions = [];
     if (tab.kind === 'day') {
       panel.replaceChildren(dayList(tab.dayIndex));
     } else {
@@ -417,5 +436,17 @@ export function renderTripViewer(
       }
     },
     setImportLink: importer.set,
+    refreshDirections() {
+      // 만들 때와 같은 규칙. 주소를 만들 수 없게 되면 만들 때처럼 링크를 두지 않는다.
+      directions = directions.filter(({ a, leg }) => {
+        const href = directionsHref(leg);
+        if (href === null) {
+          a.remove();
+          return false;
+        }
+        setDirections(a, href);
+        return true;
+      });
+    },
   };
 }
