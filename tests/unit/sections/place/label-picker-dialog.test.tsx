@@ -246,6 +246,15 @@ describe('LabelPickerDialog', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
+  it('열림 전환이 끝나면 포커스 트랩이 가져간 포커스를 넓은 화면의 검색 칸으로 되돌린다', async () => {
+    setup();
+    const search = screen.getByRole('searchbox', { name: '라벨 검색 또는 새 라벨 이름' });
+    // 실제 브라우저에서 포커스 트랩이 창으로 포커스를 옮긴 상황을 흉내 낸다.
+    search.blur();
+    expect(search).not.toHaveFocus();
+    await waitFor(() => expect(search).toHaveFocus());
+  });
+
   it('휴대폰은 화면 전체로 열고 검색 칸에 포커스를 두지 않는다', () => {
     setup({ width: 390 });
     expect(

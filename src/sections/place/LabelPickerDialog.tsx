@@ -94,6 +94,7 @@ export function LabelPickerDialog({
   // 만들기가 끝나기를 기다리는 중인가(Enter 두 번·누르기 겹침 막기), 창을 연 횟수(늦게 끝난 만들기가 다시 연 창을 건드리지 않게).
   const creating = useRef(false);
   const session = useRef(0);
+  const searchRef = useRef<HTMLInputElement>(null);
 
   // 닫힘에서 열림으로 바뀔 때만 순서를 정하고 검색을 비운다. 닫히는 동안(페이드 아웃)에는 그대로 둔다(렌더 중 상태 갱신).
   if (open !== prevOpen) {
@@ -171,6 +172,13 @@ export function LabelPickerDialog({
       fullScreen={compact}
       fullWidth
       slotProps={{
+        // 실제 브라우저에서는 MUI 포커스 트랩이 autoFocus 다음에 포커스를 창(paper)으로 가져가므로,
+        // 열림 전환이 끝난 뒤에 검색 칸으로 다시 옮긴다(휴대폰은 키보드가 목록을 가려서 옮기지 않는다).
+        transition: {
+          onEntered: () => {
+            if (!compact) searchRef.current?.focus();
+          },
+        },
         paper: {
           sx: {
             bgcolor: 'var(--tm-bg-surface)',
@@ -194,6 +202,7 @@ export function LabelPickerDialog({
         <Box
           component="input"
           type="search"
+          ref={searchRef}
           autoFocus={!compact}
           aria-label="라벨 검색 또는 새 라벨 이름"
           placeholder="라벨 검색 또는 새 이름"
