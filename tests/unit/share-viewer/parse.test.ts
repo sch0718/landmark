@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ShareDoc } from 'src/schema/share';
 import { parseShareDoc, readShareDoc } from 'src/share-viewer/parse';
+import { makeShareV2Doc } from '../helpers/share-v2-doc';
 
 function validDoc(): ShareDoc {
   return {
@@ -63,7 +64,8 @@ describe('parseShareDoc', () => {
 
   it.each([
     ['format이 다르다', { format: 'other' }],
-    ['version이 2다', { version: 2 }],
+    ['version이 2인데 trips가 없다', { version: 2 }],
+    ['version이 3이다', { version: 3 }],
     ['places가 배열이 아니다', { places: 'x' }],
     ['title이 문자열이 아니다', { title: 1 }],
     ['createdAt이 없다', { createdAt: undefined }],
@@ -134,5 +136,224 @@ describe('readShareDoc', () => {
 
   it('형식이 맞지 않으면 null', () => {
     expect(readShareDoc(docWithBlock('{"format":"x"}'))).toBeNull();
+  });
+});
+
+describe('parseShareDoc v2', () => {
+  const clone = () =>
+    JSON.parse(JSON.stringify(makeShareV2Doc())) as ReturnType<typeof makeShareV2Doc>;
+  const mutate = (fn: (doc: ReturnType<typeof makeShareV2Doc>) => void) => {
+    const doc = clone();
+    fn(doc);
+    return parseShareDoc(doc);
+  };
+
+  it('정상 v2 문서는 같은 값으로 읽힌다', () => {
+    expect(parseShareDoc(makeShareV2Doc())).toEqual(makeShareV2Doc());
+  });
+
+  it('JSON을 거쳐도 읽힌다', () => {
+    expect(parseShareDoc(clone())).toEqual(makeShareV2Doc());
+  });
+
+  it('review·note·kakaoId가 남는다', () => {
+    const doc = makeShareV2Doc();
+    doc.places[0]!.review = '맛있어요';
+    doc.places[0]!.kakaoId = 'k1';
+    expect(parseShareDoc(doc)).toEqual(doc);
+  });
+
+  it('모르는 필드는 읽은 값에 남기지 않는다', () => {
+    const doc = clone() as unknown as Record<string, unknown>;
+    doc.extra = 1;
+    (doc.trips as Record<string, unknown>[])[0]!.extra = 2;
+    expect(parseShareDoc(doc)).toEqual(makeShareV2Doc());
+  });
+
+  it('stayMin이 문자열이면 null', () => {
+    expect(
+      mutate((d) => {
+        (d.trips[0]!.days[0]!.stops[0] as unknown as { stayMin: unknown }).stayMin = '60';
+      }),
+    ).toBeNull();
+  });
+
+  it.each([
+    [
+      'stayMin이 소수',
+      (d: ReturnType<typeof makeShareV2Doc>) => {
+        d.trips[0]!.days[0]!.stops[0]!.stayMin = 1.5;
+      },
+    ],
+    [
+      'stayMin이 1441',
+      (d: ReturnType<typeof makeShareV2Doc>) => {
+        d.trips[0]!.days[0]!.stops[0]!.stayMin = 1441;
+      },
+    ],
+    [
+      'stayMin이 음수',
+      (d: ReturnType<typeof makeShareV2Doc>) => {
+        d.trips[0]!.days[0]!.stops[0]!.stayMin = -1;
+      },
+    ],
+    [
+      'fixedTime 형식이 틀림',
+      (d: ReturnType<typeof makeShareV2Doc>) => {
+        d.trips[0]!.days[0]!.stops[1]!.fixedTime = '24:00';
+      },
+    ],
+    [
+      'note가 501자',
+      (d: ReturnType<typeof makeShareV2Doc>) => {
+        d.trips[0]!.days[0]!.stops[1]!.note = 'a'.repeat(501);
+      },
+    ],
+    [
+      'review가 141자',
+      (d: ReturnType<typeof makeShareV2Doc>) => {
+        d.places[0]!.review = 'a'.repeat(141);
+      },
+    ],
+    [
+      'startTime 형식이 틀림',
+      (d: ReturnType<typeof makeShareV2Doc>) => {
+        d.trips[0]!.days[0]!.startTime = '9:00';
+      },
+    ],
+    [
+      'startDate가 달력에 없음',
+      (d: ReturnType<typeof makeShareV2Doc>) => {
+        d.trips[0]!.startDate = '2026-02-30';
+      },
+    ],
+    [
+      'createdAt이 ISO가 아님',
+      (d: ReturnType<typeof makeShareV2Doc>) => {
+        d.createdAt = '2026-10-16';
+      },
+    ],
+    [
+      '장소 lng가 범위 밖',
+      (d: ReturnType<typeof makeShareV2Doc>) => {
+        d.places[0]!.lng = 200;
+      },
+    ],
+    [
+      'legModes 값이 틀림',
+      (d: ReturnType<typeof makeShareV2Doc>) => {
+        (d.trips[0]!.legModes as Record<string, string>)[`${d.places[2]!.id}>${d.places[3]!.id}`] =
+          'bike';
+      },
+    ],
+    [
+      'leg mode가 틀림',
+      (d: ReturnType<typeof makeShareV2Doc>) => {
+        (d.trips[0]!.days[0]!.legs[0] as unknown as { mode: string }).mode = 'bus';
+      },
+    ],
+    [
+      'leg status가 틀림',
+      (d: ReturnType<typeof makeShareV2Doc>) => {
+        (d.trips[0]!.days[0]!.legs[0] as unknown as { status: string }).status = 'x';
+      },
+    ],
+    [
+      'leg durationS가 문자열',
+      (d: ReturnType<typeof makeShareV2Doc>) => {
+        (d.trips[0]!.days[0]!.legs[0] as unknown as { durationS: unknown }).durationS = '1';
+      },
+    ],
+    [
+      'leg tollFare가 undefined',
+      (d: ReturnType<typeof makeShareV2Doc>) => {
+        (d.trips[0]!.days[0]!.legs[0] as unknown as { tollFare: unknown }).tollFare = undefined;
+      },
+    ],
+    [
+      'path 점이 세 값',
+      (d: ReturnType<typeof makeShareV2Doc>) => {
+        (d.trips[0]!.days[0]!.legs[0]!.path as unknown[]).push([1, 2, 3]);
+      },
+    ],
+    [
+      'path 점이 NaN',
+      (d: ReturnType<typeof makeShareV2Doc>) => {
+        d.trips[0]!.days[0]!.legs[0]!.path.push([Number.NaN, 37]);
+      },
+    ],
+    [
+      'stops가 배열이 아님',
+      (d: ReturnType<typeof makeShareV2Doc>) => {
+        (d.trips[0]!.days[0] as unknown as { stops: unknown }).stops = {};
+      },
+    ],
+    [
+      'lodgingId가 undefined',
+      (d: ReturnType<typeof makeShareV2Doc>) => {
+        (d.trips[0]!.days[1] as unknown as { lodgingId: unknown }).lodgingId = undefined;
+      },
+    ],
+    [
+      'candidateIds에 숫자',
+      (d: ReturnType<typeof makeShareV2Doc>) => {
+        (d.trips[0]!.candidateIds as unknown[]).push(1);
+      },
+    ],
+    [
+      'trips가 2개',
+      (d: ReturnType<typeof makeShareV2Doc>) => {
+        d.trips.push(d.trips[0]!);
+      },
+    ],
+    [
+      'trips가 비어 있음',
+      (d: ReturnType<typeof makeShareV2Doc>) => {
+        d.trips = [];
+      },
+    ],
+  ])('%s → null', (_name, fn) => {
+    expect(mutate(fn)).toBeNull();
+  });
+
+  it('관계 검사에 실패하면 null(구간 개수가 맞지 않음)', () => {
+    expect(
+      mutate((d) => {
+        d.trips[0]!.days[0]!.legs.pop();
+      }),
+    ).toBeNull();
+  });
+
+  it('어디에도 쓰이지 않는 장소가 있으면 null', () => {
+    expect(
+      mutate((d) => {
+        d.places.push({ ...d.places[0]!, id: 'orphan0001' });
+      }),
+    ).toBeNull();
+  });
+
+  it('장소가 0곳이면 null', () => {
+    expect(
+      mutate((d) => {
+        d.places = [];
+      }),
+    ).toBeNull();
+  });
+
+  it('version 3은 null', () => {
+    expect(
+      mutate((d) => {
+        (d as unknown as { version: number }).version = 3;
+      }),
+    ).toBeNull();
+  });
+
+  it('readShareDoc도 v2를 읽는다', () => {
+    const d = document.implementation.createHTMLDocument('x');
+    const s = d.createElement('script');
+    s.id = 'tripmap-share';
+    s.textContent = JSON.stringify(makeShareV2Doc());
+    d.body.append(s);
+    expect(readShareDoc(d)).toEqual(makeShareV2Doc());
   });
 });
