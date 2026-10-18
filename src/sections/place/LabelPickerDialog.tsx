@@ -5,12 +5,12 @@ import { useAtomValue } from 'jotai';
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { fieldSx } from 'src/components/field-style';
 import { LabelGlyph, PlusIcon } from 'src/components/icons';
-import { DEFAULT_QUERY, labelCounts } from 'src/domain/library/query';
 import { LABEL_NAME_RANGE_MESSAGE, type Label } from 'src/schema/library';
 import { labelColors } from 'src/sections/library/label-style';
 import {
   arrangeLabels,
   canCreateLabel,
+  countLabelUses,
   filterLabels,
   orderLabelsForPicker,
 } from 'src/sections/place/label-picker-order';
@@ -84,7 +84,10 @@ export function LabelPickerDialog({
   const [error, setError] = useState<string | null>(null);
   const [order, setOrder] = useState<string[]>([]);
   const [prevOpen, setPrevOpen] = useState(false);
-  const counts = useMemo(() => labelCounts(library, DEFAULT_QUERY), [library]);
+  // 누른 체크(라벨 id → 체크 여부). 저장(보관함 전체를 씀)이 끝나 `attachedIds`가 따라오기 전에도 누른 대로 보인다.
+  const [pending, setPending] = useState<ReadonlyMap<string, boolean>>(new Map());
+  const [prevAttached, setPrevAttached] = useState(attachedIds);
+  const counts = useMemo(() => countLabelUses(library), [library]);
   // 만들기가 끝나기를 기다리는 중인가(Enter 두 번·누르기 겹침 막기), 창을 연 횟수(늦게 끝난 만들기가 다시 연 창을 건드리지 않게).
   const creating = useRef(false);
   const session = useRef(0);
@@ -96,13 +99,26 @@ export function LabelPickerDialog({
       setOrder(orderLabelsForPicker(labels, attachedIds, counts));
       setText('');
       setError(null);
+      setPending(new Map());
     }
+  }
+  // 저장된 값이 누른 체크와 같아지면 그 체크는 더 붙들지 않는다(렌더 중 상태 갱신).
+  if (attachedIds !== prevAttached) {
+    setPrevAttached(attachedIds);
+    const saved = new Set(attachedIds);
+    const left = new Map([...pending].filter(([id, checked]) => saved.has(id) !== checked));
+    if (left.size !== pending.size) setPending(left);
   }
   useEffect(() => {
     if (open) session.current += 1;
   }, [open]);
 
   const attached = new Set(attachedIds);
+  const isChecked = (id: string) => pending.get(id) ?? attached.has(id);
+  const toggle = (id: string) => {
+    setPending(new Map(pending).set(id, !isChecked(id)));
+    onToggle(id);
+  };
   const trimmed = text.trim();
   const shown = filterLabels(arrangeLabels(labels, order), text);
   const creatable = canCreateLabel(labels, text);
@@ -139,7 +155,6 @@ export function LabelPickerDialog({
       aria-labelledby={titleId}
       fullScreen={compact}
       fullWidth
-      maxWidth="xs"
       slotProps={{
         paper: {
           sx: {
@@ -147,7 +162,7 @@ export function LabelPickerDialog({
             backgroundImage: 'none',
             ...(compact
               ? { pt: 'env(safe-area-inset-top, 0px)' }
-              : { maxHeight: 'min(640px, 80dvh)' }),
+              : { maxWidth: 420, maxHeight: 'min(640px, 80dvh)' }),
           },
         },
       }}
@@ -196,63 +211,60 @@ export function LabelPickerDialog({
           </Box>
         ) : shown.length === 0 ? (
           <Box component="p" sx={{ m: 0, px: 1, py: 1.5, color: 'var(--tm-text-secondary)' }}>
-            {`‘${trimmed}’와 맞는 라벨이 없어요`}
+            {`‘${trimmed}’에 맞는 라벨이 없어요`}
           </Box>
         ) : (
-          <Box
-            component="ul"
-            role="group"
-            aria-label="라벨 목록"
-            sx={{ listStyle: 'none', m: 0, p: 0 }}
-          >
-            {shown.map((label) => {
-              const tone = labelColors(label.color.value);
-              return (
-                <li key={label.id}>
-                  <Box component="label" sx={ROW_SX}>
-                    <Box
-                      component="input"
-                      type="checkbox"
-                      checked={attached.has(label.id)}
-                      onChange={() => onToggle(label.id)}
-                      sx={{ flex: 'none', width: 20, height: 20, m: 0, accentColor: tone.marker }}
-                    />
-                    <Box
-                      component="span"
-                      aria-hidden="true"
-                      sx={{ flex: 'none', display: 'inline-flex', color: tone.marker }}
-                    >
-                      <LabelGlyph name={label.icon.value} size={16} />
+          <Box role="group" aria-label="라벨 목록">
+            <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0 }}>
+              {shown.map((label) => {
+                const tone = labelColors(label.color.value);
+                return (
+                  <li key={label.id}>
+                    <Box component="label" sx={ROW_SX}>
+                      <Box
+                        component="input"
+                        type="checkbox"
+                        checked={isChecked(label.id)}
+                        onChange={() => toggle(label.id)}
+                        sx={{ flex: 'none', width: 20, height: 20, m: 0, accentColor: tone.marker }}
+                      />
+                      <Box
+                        component="span"
+                        aria-hidden="true"
+                        sx={{ flex: 'none', display: 'inline-flex', color: tone.marker }}
+                      >
+                        <LabelGlyph name={label.icon.value} size={16} />
+                      </Box>
+                      <Box
+                        component="span"
+                        data-label-name=""
+                        sx={{
+                          flex: 1,
+                          minWidth: 0,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {label.name.value}
+                      </Box>
+                      {/* 접근 이름이 `맛집 2곳`으로 읽히게 이름과 개수를 `inline`이 아닌 요소로 나눈다(flex 항목이라 겉모양은 같다). */}
+                      <Box
+                        component="span"
+                        sx={{
+                          flex: 'none',
+                          display: 'inline-block',
+                          fontSize: 13,
+                          color: 'var(--tm-text-secondary)',
+                        }}
+                      >
+                        {`${counts.get(label.id) ?? 0}곳`}
+                      </Box>
                     </Box>
-                    <Box
-                      component="span"
-                      data-label-name=""
-                      sx={{
-                        flex: 1,
-                        minWidth: 0,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {label.name.value}
-                    </Box>
-                    {/* 접근 이름이 `맛집 2곳`으로 읽히게 이름과 개수를 `inline`이 아닌 요소로 나눈다(flex 항목이라 겉모양은 같다). */}
-                    <Box
-                      component="span"
-                      sx={{
-                        flex: 'none',
-                        display: 'inline-block',
-                        fontSize: 13,
-                        color: 'var(--tm-text-secondary)',
-                      }}
-                    >
-                      {`${counts.get(label.id) ?? 0}곳`}
-                    </Box>
-                  </Box>
-                </li>
-              );
-            })}
+                  </li>
+                );
+              })}
+            </Box>
           </Box>
         )}
       </Box>

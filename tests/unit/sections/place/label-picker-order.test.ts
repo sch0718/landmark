@@ -2,10 +2,19 @@ import { describe, expect, it } from 'vitest';
 import {
   arrangeLabels,
   canCreateLabel,
+  countLabelUses,
   filterLabels,
   orderLabelsForPicker,
 } from 'src/sections/place/label-picker-order';
-import { makeLabel } from '../library/fixtures';
+import {
+  L_CAFE,
+  L_FOOD,
+  L_SEA,
+  makeLabel,
+  makePlace,
+  sampleLibrary,
+  withPlaces,
+} from '../library/fixtures';
 
 const a = makeLabel('label00a', '서울 맛집', 'red', 'utensils', 0);
 const b = makeLabel('label00b', '강원도 명소', 'blue', 'mountain', 1);
@@ -44,6 +53,46 @@ describe('filterLabels', () => {
     expect(filterLabels(labels, ' 서울 ')).toEqual([a, c]);
     expect(filterLabels(labels, 'bar')).toEqual([d]);
     expect(filterLabels(labels, '')).toEqual(labels);
+  });
+
+  it('안쪽 공백 여러 칸과 NFD 검색어도 같은 이름으로 찾는다(새 라벨 중복 판정과 같다)', () => {
+    expect(filterLabels(labels, '서울  맛집')).toEqual([a]);
+    expect(filterLabels(labels, '서울 맛집'.normalize('NFD'))).toEqual([a]);
+  });
+});
+
+describe('countLabelUses', () => {
+  it('살아 있는 장소에 붙은 살아 있는 라벨만 센다', () => {
+    expect(countLabelUses(sampleLibrary())).toEqual(
+      new Map([
+        [L_FOOD, 2],
+        [L_CAFE, 1],
+        [L_SEA, 1],
+      ]),
+    );
+  });
+
+  it('지운 장소·보관함에서 숨긴 장소·지운 라벨은 세지 않는다', () => {
+    const base = sampleLibrary();
+    const lib = withPlaces(
+      {
+        ...base,
+        labels: {
+          ...base.labels,
+          [L_SEA]: { ...base.labels[L_SEA]!, deletedAt: '2026-10-09T00:00:00.000Z' },
+        },
+      },
+      [
+        makePlace(6, { labelIds: [L_CAFE], deletedAt: '2026-10-09T00:00:00.000Z' }),
+        makePlace(7, { labelIds: [L_CAFE], saved: false }),
+      ],
+    );
+    expect(countLabelUses(lib)).toEqual(
+      new Map([
+        [L_FOOD, 2],
+        [L_CAFE, 1],
+      ]),
+    );
   });
 });
 

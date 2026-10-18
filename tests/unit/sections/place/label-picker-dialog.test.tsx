@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { createStore, Provider } from 'jotai';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Label } from 'src/schema/library';
+import { ruleValue } from '../../components/helpers/rule-style';
 import { LabelPickerDialog } from 'src/sections/place/LabelPickerDialog';
 import { libraryAtom, type LibraryActionResult } from 'src/stores/library-state';
 import { L_CAFE, L_SEA, sampleLibrary } from '../library/fixtures';
@@ -73,6 +74,31 @@ describe('LabelPickerDialog', () => {
     expect(within(dialog()).getByRole('checkbox', { name: /^카페/ })).toBeChecked();
   });
 
+  it('체크는 저장이 끝나기 전에도 바로 보이고, 저장된 값이 따라오면 그대로, 다시 열면 저장된 값을 보인다', async () => {
+    const { rerender, view } = setup();
+    const cafe = () => within(dialog()).getByRole('checkbox', { name: /^카페/ });
+    const sea = () => within(dialog()).getByRole('checkbox', { name: /^바다뷰/ });
+    // onToggle이 attachedIds를 바꾸지 않아도(저장 중) 체크가 되돌아가지 않는다.
+    await userEvent.click(cafe());
+    expect(cafe()).toBeChecked();
+    await userEvent.click(sea());
+    expect(sea()).not.toBeChecked();
+    // 저장이 끝나 attachedIds가 같아진다.
+    rerender(view(true, [L_CAFE]));
+    expect(cafe()).toBeChecked();
+    expect(sea()).not.toBeChecked();
+    // 맞춰진 뒤에는 저장된 값을 따른다(남은 체크 표시가 없다).
+    rerender(view(true, [L_SEA]));
+    expect(cafe()).not.toBeChecked();
+    expect(sea()).toBeChecked();
+    // 저장되지 않은 체크가 남은 채 닫았다가 다시 열면 저장된 값으로 보인다.
+    await userEvent.click(cafe());
+    expect(cafe()).toBeChecked();
+    rerender(view(false, [L_SEA]));
+    rerender(view(true, [L_SEA]));
+    expect(cafe()).not.toBeChecked();
+  });
+
   it('다시 열면 그때의 붙은 라벨 기준으로 순서를 새로 정한다', () => {
     const { rerender, view } = setup();
     rerender(view(false, [L_CAFE]));
@@ -111,7 +137,7 @@ describe('LabelPickerDialog', () => {
     expect(rowNames()).toEqual(['맛집']);
     await userEvent.clear(search);
     await userEvent.type(search, '없는이름');
-    expect(within(dialog()).getByText('‘없는이름’와 맞는 라벨이 없어요')).toBeInTheDocument();
+    expect(within(dialog()).getByText('‘없는이름’에 맞는 라벨이 없어요')).toBeInTheDocument();
   });
 
   it('같은 이름이 없으면 새 라벨 행이 생기고, 누르거나 Enter로 만든다', async () => {
@@ -153,6 +179,33 @@ describe('LabelPickerDialog', () => {
     );
     expect(search).toHaveAttribute('aria-invalid', 'true');
     expect(search).toHaveValue('야시장');
+  });
+
+  it('장소가 사라져 거절되면 알리고, 알 수 없는 오류(토스트로 알림)는 칸 아래에 보이지 않는다', async () => {
+    const { unmount } = setup({
+      onCreate: vi.fn(async () => ({
+        ok: false as const,
+        error: { _tag: 'NotFound', id: 'place00001' },
+      })) as unknown as (name: string) => Promise<LibraryActionResult>,
+    });
+    const search = () => screen.getByRole('searchbox', { name: '라벨 검색 또는 새 라벨 이름' });
+    await userEvent.type(search(), '야시장{Enter}');
+    expect(await within(dialog()).findByRole('alert')).toHaveTextContent('장소를 찾을 수 없어요');
+    unmount();
+
+    const onCreate = vi.fn(async () => ({ ok: false as const, error: new Error('x') }));
+    setup({ onCreate: onCreate as unknown as (name: string) => Promise<LibraryActionResult> });
+    await userEvent.type(search(), '야시장{Enter}');
+    await waitFor(() => expect(onCreate).toHaveBeenCalled());
+    expect(within(dialog()).queryByRole('alert')).toBeNull();
+    expect(search()).not.toHaveAttribute('aria-invalid', 'true');
+  });
+
+  it('검색 칸은 16px·높이 44px(아이폰에서 눌러도 확대되지 않는다)이다', () => {
+    setup();
+    const search = screen.getByRole('searchbox', { name: '라벨 검색 또는 새 라벨 이름' });
+    expect(ruleValue(search, 'font-size')).toBe('16px');
+    expect(ruleValue(search, 'min-height')).toBe('44px');
   });
 
   it('완료로 닫는다', async () => {
