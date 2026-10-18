@@ -49,6 +49,66 @@ test.describe('데스크톱 3단', { tag: '@desktop' }, () => {
     await expect(markers(page)).toHaveCount(9);
   });
 
+  test('@smoke 마커 다시 누르기·빈 곳·Esc·X로 선택을 풀고, 거르면 결과 밖 장소가 닫힌다', async ({
+    page,
+  }) => {
+    await seedStorage(page, { prefs: { libraryView: 'list' } });
+    await page.goto('/');
+    const detail = page.getByRole('region', { name: '장소 상세' });
+    const id = placeIdByName('경포대');
+    const marker = page.getByTestId(`marker-${id}`);
+
+    // 다시 누르기
+    await marker.click();
+    await expect(page).toHaveURL(new RegExp(`/place/${id}$`));
+    await marker.click();
+    await expect(page).toHaveURL(/\/$/);
+    await expect(detail).toContainText('장소를 고르면 여기에 보여요');
+
+    // 지도 빈 곳(마커가 없는 오른쪽 아래)
+    await marker.click();
+    await expect(page).toHaveURL(new RegExp(`/place/${id}$`));
+    const map = page.getByTestId('fake-map');
+    const box = (await map.boundingBox())!;
+    await page.mouse.click(box.x + box.width - 10, box.y + box.height - 10);
+    await expect(page).toHaveURL(/\/$/);
+
+    // Esc
+    await marker.click();
+    await expect(page).toHaveURL(new RegExp(`/place/${id}$`));
+    await page.keyboard.press('Escape');
+    await expect(page).toHaveURL(/\/$/);
+
+    // X
+    await marker.click();
+    await expect(page).toHaveURL(new RegExp(`/place/${id}$`));
+    await detail.getByRole('button', { name: '닫기' }).click();
+    await expect(page).toHaveURL(/\/$/);
+
+    // 결과 밖이면 닫힘: 경포대를 연 채 경포대가 없는 라벨로 거른다.
+    // 시드에서 경포대의 라벨은 바다·산책이다. 카페로 거르면 결과 밖이다.
+    await marker.click();
+    await expect(page).toHaveURL(new RegExp(`/place/${id}$`));
+    // 장소를 열면 상세에도 `라벨` 묶음(라벨 고르기)이 생겨서, 거르기 칩은 첫 번째 묶음으로 좁힌다.
+    const chips = page.getByRole('group', { name: '라벨' }).first();
+    await chips.getByRole('button', { name: /^카페/ }).click();
+    await expect(page).toHaveURL(/\/$/);
+  });
+
+  test('중간 화면: 지도에서 연 장소의 X는 /map으로', async ({ page }) => {
+    await page.setViewportSize({ width: 1024, height: 768 });
+    await seedStorage(page, { prefs: { libraryView: 'list' } });
+    await page.goto('/map');
+    const id = placeIdByName('경포대');
+    await page.getByTestId(`marker-${id}`).click();
+    await expect(page).toHaveURL(new RegExp(`/place/${id}$`));
+    await page
+      .getByRole('region', { name: '장소 상세' })
+      .getByRole('button', { name: '닫기' })
+      .click();
+    await expect(page).toHaveURL(/\/map$/);
+  });
+
   test('@smoke 두 탭이 서로 다른 장소의 메모를 저장해도 둘 다 남는다', async ({ browser }) => {
     const context = await browser.newContext({
       locale: 'ko-KR',
@@ -146,6 +206,12 @@ test.describe('모바일', { tag: '@mobile' }, () => {
     if (test.info().project.name === 'iphone') {
       await page.screenshot({ path: `${SCREEN_DIR}/iphone-library.png` });
     }
+  });
+
+  test('라벨 관리가 칩 줄 맨 앞에 보인다', async ({ page }) => {
+    await seedStorage(page, { prefs: { libraryView: 'list' } });
+    await page.goto('/');
+    await expect(page.getByRole('link', { name: '라벨 관리' })).toBeInViewport();
   });
 
   test('긴 이름과 이모지 메모가 카드에서 가로로 넘치지 않는다', async ({ page }) => {
