@@ -3,6 +3,7 @@ import Button from '@mui/material/Button';
 import { useState } from 'react';
 import { fieldSx } from 'src/components/field-style';
 import { HomeIcon, LabelGlyph } from 'src/components/icons';
+import { TruncatedText } from 'src/components/TruncatedText';
 import type { Place } from 'src/schema/library';
 
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -86,12 +87,7 @@ export function DayHeader({
       >
         {start !== null &&
           (dayIndex === 0 ? <HomeIcon aria-hidden="true" /> : <LabelGlyph name="bed" size={16} />)}
-        <Box
-          component="span"
-          sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-        >
-          {start === null ? '첫 장소에서 출발' : start.name.value}
-        </Box>
+        <TruncatedText>{start === null ? '첫 장소에서 출발' : start.name.value}</TruncatedText>
       </Box>
       <Button size="small" disabled={!canOptimize} onClick={onOptimize} sx={{ minHeight: 44 }}>
         순서 정리

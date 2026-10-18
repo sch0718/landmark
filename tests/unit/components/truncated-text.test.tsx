@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
 import { TruncatedText } from 'src/components/TruncatedText';
+import { ColorBadge } from 'src/sections/library/LabelBadge';
 
 afterEach(cleanup);
 
@@ -78,5 +79,16 @@ describe('TruncatedText', () => {
   it('단추의 접근 이름은 그대로다', () => {
     renderInButton();
     expect(screen.getByRole('button', { name: NAME })).toBeInTheDocument();
+  });
+});
+
+describe('ColorBadge', () => {
+  it('잘린 라벨 이름의 전체를 툴팁으로 보인다', async () => {
+    const user = userEvent.setup();
+    render(<ColorBadge color="red" name="신세계 정용진이 모은 맛집-강원" />);
+    const text = screen.getByText('신세계 정용진이 모은 맛집-강원');
+    fakeOverflow(text, true);
+    await user.hover(text);
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('신세계 정용진이 모은 맛집-강원');
   });
 });

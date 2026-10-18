@@ -1,6 +1,7 @@
 import Box from '@mui/material/Box';
 import type { SxProps, Theme } from '@mui/material/styles';
 import { LabelGlyph } from 'src/components/icons';
+import { TruncatedText } from 'src/components/TruncatedText';
 import type { LibraryQuery } from 'src/domain/library/query';
 import type { Label } from 'src/schema/library';
 import { labelColors } from 'src/sections/library/label-style';
@@ -77,20 +78,11 @@ export function LabelBlock({
         ...(Array.isArray(sx) ? sx : [sx]),
       ]}
     >
-      <Box
-        component="span"
-        sx={{
-          display: 'block',
-          pr: label === null ? 0 : 4.5,
-          fontWeight: 800,
-          fontSize: 15,
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-        }}
+      <TruncatedText
+        sx={{ display: 'block', pr: label === null ? 0 : 4.5, fontWeight: 800, fontSize: 15 }}
       >
         {label === null ? '미분류' : label.name.value}
-      </Box>
+      </TruncatedText>
       <Box component="span" sx={{ display: 'block', mt: 0.25, fontSize: 12 }}>
         {count}곳
       </Box>
