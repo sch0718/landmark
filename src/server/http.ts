@@ -37,7 +37,8 @@ export const STATUS: Record<ApiErrorCode, number> = {
 };
 
 const EXACT_ORIGINS: readonly string[] = [
-  'https://landmark-c5f.pages.dev',
+  'https://landmark.sch0718.dev', // 운영 도메인
+  'https://landmark-c5f.pages.dev', // Pages 기본 주소(옛 주소, 계속 연다)
   'http://localhost:5173',
   'http://localhost:8788',
 ];

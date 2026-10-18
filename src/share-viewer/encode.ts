@@ -6,7 +6,7 @@ import type { ShareDoc } from 'src/schema/share';
  * 압축 부분만 여기에 따로 둔다(앱의 `readShareHash`가 읽는 것과 같은 형식: JSON → deflate-raw → base64url).
  */
 
-export const DEFAULT_APP_URL = 'https://landmark-c5f.pages.dev';
+export const DEFAULT_APP_URL = 'https://landmark.sch0718.dev';
 
 /** 앱이 받아들이는 해시 값의 최대 길이(`SHARE_IMPORT_LIMITS.hashChars`와 같다). */
 export const MAX_HASH_CHARS = 32_000;

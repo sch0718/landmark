@@ -45,7 +45,7 @@ echo 'VITE_NAVER_MAP_CLIENT_ID=<발급받은 Client ID>' > .env.local
 
 **NCP 콘솔 도메인 등록**: Maps 애플리케이션의 Web 서비스 URL에 아래 주소를 등록해야 지도가 뜹니다.
 
-- 배포 주소 `https://landmark-c5f.pages.dev`(커스텀 도메인을 쓰면 그것도)
+- 운영 도메인 `https://landmark.sch0718.dev`와 Pages 기본 주소 `https://landmark-c5f.pages.dev`
 - `http://localhost:5173`(`yarn dev`)
 - `http://localhost:8788`(`yarn dev:full`)
 
@@ -172,7 +172,9 @@ node scripts/measure-ui-assets.mjs dist/assets
 
 ## 배포 (Cloudflare Pages)
 
-비공개 GitHub repo `sch0718/landmark`의 `main`을 Cloudflare Pages 프로젝트 `landmark`에 연결했습니다. 배포 주소는 **https://landmark-c5f.pages.dev**, 브랜치 미리보기는 `https://<이름>.landmark-c5f.pages.dev`입니다.
+비공개 GitHub repo `sch0718/landmark`의 `main`을 Cloudflare Pages 프로젝트 `landmark`에 연결했습니다. 운영 주소는 커스텀 도메인 **https://landmark.sch0718.dev**이고(Pages 프로젝트의 Custom domains에 연결), Pages 기본 주소 `https://landmark-c5f.pages.dev`도 그대로 열립니다. 브랜치 미리보기는 `https://<이름>.landmark-c5f.pages.dev`입니다.
+
+장소·여행은 브라우저에 주소(출처)별로 따로 저장됩니다. 기본 주소에서 쓰던 기기는 그 주소에서 `전체 백업`을 받아 운영 도메인에서 `복원`하세요. 서버 함수가 받는 출처는 `src/server/http.ts`의 허용 목록에 있습니다(도메인을 바꾸면 여기와 `src/share-viewer/encode.ts`의 `DEFAULT_APP_URL`, `src/sections/trips/planner/naver-directions.ts`의 `APP_NAME`을 함께 고칩니다).
 
 | 설정                                | 값                                                               |
 | ----------------------------------- | ---------------------------------------------------------------- |
@@ -234,7 +236,8 @@ node scripts/measure-ui-assets.mjs dist/assets
 
 - [x] Cloudflare Pages에 repo 연결(`sch0718/landmark` `main` → `https://landmark-c5f.pages.dev`, 2026-10-12 확인)
 - [ ] Pages 빌드 명령(`yarn build:ci`)·출력(`dist`)·`NODE_VERSION=24`·`VITE_NAVER_MAP_CLIENT_ID` 설정 확인
-- [ ] NCP 콘솔 Web 서비스 URL에 `https://landmark-c5f.pages.dev`·`http://localhost:5173`·`http://localhost:8788` 등록
+- [ ] NCP 콘솔 Web 서비스 URL에 `https://landmark.sch0718.dev`·`https://landmark-c5f.pages.dev`·`http://localhost:5173`·`http://localhost:8788` 등록
+- [x] 커스텀 도메인 `landmark.sch0718.dev` 연결(Cloudflare Registrar, Pages Custom domains, 2026-10-18)
 - [x] NCP Maps 애플리케이션에서 Reverse Geocoding 켜기(2026-10-12 확인)
 - [ ] 배포 주소에서 링크 추가(`/api/place`)·폴더 가져오기(`/api/naver-folder`)·여행 구간 경로(`/api/route`) 동작 확인
 - [ ] 실제 여행 yaml 작성 → `yarn collect` → 커밋·push → 배포 확인

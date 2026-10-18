@@ -11,6 +11,7 @@ import {
 
 describe('isAllowedOrigin', () => {
   it.each([
+    'https://landmark.sch0718.dev',
     'https://landmark-c5f.pages.dev',
     'https://feat-place-adding.landmark-c5f.pages.dev',
     'https://1a2b3c4d.landmark-c5f.pages.dev',
@@ -31,6 +32,10 @@ describe('isAllowedOrigin', () => {
     ['https localhost', 'https://localhost:5173'],
     ['경로가 붙은 값', 'https://landmark-c5f.pages.dev/'],
     ['사용자 정보', 'https://landmark-c5f.pages.dev@evil.com'],
+    ['운영 도메인 접미사 위장', 'https://landmark.sch0718.dev.evil.com'],
+    ['운영 도메인 아래 서브도메인', 'https://x.landmark.sch0718.dev'],
+    ['운영 도메인 상위', 'https://sch0718.dev'],
+    ['http 운영 도메인', 'http://landmark.sch0718.dev'],
     ['문자열 null', 'null'],
     ['빈 값', ''],
   ])('%s 거부 (%s)', (_label, origin) => {
