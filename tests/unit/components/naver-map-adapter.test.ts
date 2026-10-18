@@ -143,27 +143,6 @@ function installSdk() {
 }
 
 describe('NaverMapAdapter SDK 계약', () => {
-  it('지도 click은 onMapClick으로, 마커 DOM에서 온 click은 거른다', async () => {
-    const sdk = installSdk();
-    const adapter = new NaverMapAdapter('id');
-    const onMap = vi.fn();
-    adapter.onMapClick(onMap);
-    const pending = adapter.mount(document.createElement('div'));
-    release();
-    await pending;
-    adapter.setMarkers([
-      { id: 'p1', lng: 128, lat: 37.5, color: '#000', clusterable: false, label: '가' },
-    ]);
-    const click = [...sdk.listeners].find((l) => (l as { name: string }).name === 'click') as {
-      callback: (e?: unknown) => void;
-    };
-    click.callback({ domEvent: { target: document.createElement('div') } });
-    expect(onMap).toHaveBeenCalledTimes(1);
-    const markerEl = sdk.labels.at(-1)!;
-    click.callback({ domEvent: { target: markerEl.firstElementChild ?? markerEl } });
-    expect(onMap).toHaveBeenCalledTimes(1);
-    adapter.destroy();
-  });
   // SDK 막대는 대신 쓸 ＋/− 버튼을 그리는 쪽(MapView)만 끈다. 공유 지도(`share-map/main.ts`)처럼 옵션 없이 만들면
   // 터치 전용 기기에서도 막대를 보인다 — 끄기만 하면 한 손가락 축소 수단이 없어진다.
   it.each([
@@ -189,6 +168,107 @@ describe('NaverMapAdapter SDK 계약', () => {
     }
   });
 
+  describe('지도 바탕 누르기(onMapClick)', () => {
+    async function setup(markers: Parameters<NaverMapAdapter['setMarkers']>[0]) {
+      vi.useFakeTimers();
+      const sdk = installSdk();
+      const adapter = new NaverMapAdapter('id');
+      const onMap = vi.fn();
+      adapter.onMapClick(onMap);
+      const pending = adapter.mount(document.createElement('div'));
+      release();
+      await pending;
+      adapter.setMarkers(markers);
+      const click = [...sdk.listeners].find((l) => (l as { name: string }).name === 'click') as {
+        callback: (e?: unknown) => void;
+      };
+      return { sdk, adapter, onMap, click: click.callback };
+    }
+    const one = [{ id: 'p1', lng: 128, lat: 37.5, color: '#000', clusterable: false, label: '가' }];
+
+    it('마커 바탕이 아닌 곳의 지도 click은 미룬 뒤 한 번 알린다', async () => {
+      const { adapter, onMap, click } = await setup(one);
+      try {
+        click({ pointerEvent: { target: document.createElement('div') } });
+        expect(onMap).not.toHaveBeenCalled();
+        vi.runAllTimers();
+        expect(onMap).toHaveBeenCalledTimes(1);
+      } finally {
+        adapter.destroy();
+        vi.useRealTimers();
+      }
+    });
+
+    it.each(['pointerEvent', 'domEvent'])('%s의 target이 마커 아이콘이면 거른다', async (field) => {
+      const { sdk, adapter, onMap, click } = await setup(one);
+      try {
+        const markerEl = sdk.labels.at(-1)!;
+        click({ [field]: { target: markerEl.firstElementChild ?? markerEl } });
+        vi.runAllTimers();
+        expect(onMap).not.toHaveBeenCalled();
+      } finally {
+        adapter.destroy();
+        vi.useRealTimers();
+      }
+    });
+
+    it('이벤트에 DOM 이벤트 필드가 없어도, 같은 처리 안에 아이콘 click이 오면(뒤·앞) 거른다', async () => {
+      const { sdk, adapter, onMap, click } = await setup(one);
+      try {
+        const markerEl = sdk.labels.at(-1)!;
+        click(undefined);
+        markerEl.click();
+        vi.runAllTimers();
+        expect(onMap).not.toHaveBeenCalled();
+
+        markerEl.click();
+        click(undefined);
+        vi.runAllTimers();
+        expect(onMap).not.toHaveBeenCalled();
+
+        // 아이콘 click이 지나간 뒤의 지도 바탕 누르기는 다시 알린다.
+        click(undefined);
+        vi.runAllTimers();
+        expect(onMap).toHaveBeenCalledTimes(1);
+      } finally {
+        adapter.destroy();
+        vi.useRealTimers();
+      }
+    });
+
+    it('클러스터 아이콘도 마커 표시를 달고, 눌러도 지도 click으로 알리지 않는다', async () => {
+      const cluster = [
+        { id: 'a', lng: 128, lat: 37.5, color: '#000', clusterable: true, label: 'a' },
+        { id: 'b', lng: 128, lat: 37.5, color: '#000', clusterable: true, label: 'b' },
+      ];
+      const { sdk, adapter, onMap, click } = await setup(cluster);
+      try {
+        const icons = sdk.labels.slice(-1);
+        expect(icons).toHaveLength(1);
+        expect(icons[0]!.hasAttribute('data-map-marker')).toBe(true);
+        click(undefined);
+        icons[0]!.click();
+        vi.runAllTimers();
+        expect(onMap).not.toHaveBeenCalled();
+      } finally {
+        adapter.destroy();
+        vi.useRealTimers();
+      }
+    });
+
+    it('미룬 지도 click은 destroy 뒤에 알리지 않는다', async () => {
+      const { adapter, onMap, click } = await setup(one);
+      try {
+        click({ pointerEvent: { target: document.createElement('div') } });
+        adapter.destroy();
+        vi.runAllTimers();
+        expect(onMap).not.toHaveBeenCalled();
+      } finally {
+        adapter.destroy();
+        vi.useRealTimers();
+      }
+    });
+  });
   it('resize가 Size를 전달하고 SDK가 바꾼 center/zoom을 복원하며 bounds를 알린다', async () => {
     const sdk = installSdk();
     const adapter = new NaverMapAdapter('id');
