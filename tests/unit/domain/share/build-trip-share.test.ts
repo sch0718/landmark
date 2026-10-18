@@ -8,6 +8,7 @@ import {
 } from 'src/domain/share/build-trip-share';
 import { buildShareDoc } from 'src/domain/share/build-share';
 import { checkShareTrip } from 'src/domain/share/check-share-trip';
+import { WALK_MAX_M } from 'src/domain/trips/geo';
 import { dayLegs, type Leg } from 'src/domain/trips/query';
 import { emptyLibrary, type Library, type Place } from 'src/schema/library';
 import { ShareDocSchema, ShareDocV2Schema, type ShareDay } from 'src/schema/share';
@@ -147,12 +148,28 @@ describe('buildTripShareDoc', () => {
     expect(d2!.startTime).toBe('09:30');
   });
 
-  it('uses the effective mode of dayLegs for legs', () => {
-    // A>B는 사람이 walk를 골랐지만 직선 10km라 걷기 한도를 넘어 car로 돌아온다
-    const lib = makeLib();
+  it('uses the effective mode of dayLegs for legs, not the stored legModes value', () => {
+    // A>B: 사람이 walk를 골랐고 직선 약 8.8km라 걷기 한도(WALK_MAX_M 50km) 안이므로 walk 그대로.
+    // B>H: 사람이 walk를 골랐지만 H를 북쪽으로 약 89km 옮겨 한도를 넘으므로 car로 돌아온다.
+    const base = makeLib({
+      legModes: f<Record<string, 'car' | 'walk'>>({ [`${A}>${B}`]: 'walk', [`${B}>${H}`]: 'walk' }),
+    });
+    const lib: Library = {
+      ...base,
+      places: { ...base.places, [H]: { ...base.places[H]!, lat: 38.5 } },
+    };
+    const effective = dayLegs(lib, lib.trips[TRIP_ID]!, 0);
+    expect(effective.find((l) => l.from.id === B && l.to.id === H)!.straightM).toBeGreaterThan(
+      WALK_MAX_M,
+    );
+
     const doc = build(lib);
-    const modes = dayLegs(lib, lib.trips[TRIP_ID]!, 0).map((l) => l.mode);
-    expect(doc.trips[0]!.days[0]!.legs.map((l) => l.mode)).toEqual(modes);
+    const legs = doc.trips[0]!.days[0]!.legs;
+    expect(legs.find((l) => l.from === A && l.to === B)!.mode).toBe('walk');
+    expect(legs.find((l) => l.from === B && l.to === H)!.mode).toBe('car');
+    expect(legs.map((l) => l.mode)).toEqual(effective.map((l) => l.mode));
+    // 사람이 고른 값은 legModes에 그대로 남는다.
+    expect(doc.trips[0]!.legModes[`${B}>${H}`]).toBe('walk');
   });
 
   it('excludes candidates when includeCandidates is false', () => {
@@ -348,6 +365,31 @@ describe('thinPaths', () => {
   it('returns the input unchanged when within max', () => {
     const days = [mkDay(300, 200)];
     expect(thinPaths(days, 500)).toBe(days);
+  });
+
+  it('stays within max when many short lines would hit the 2-point floor', () => {
+    // 3점짜리 100개 + 500점짜리 2개(1,300점) → 400점. 같은 비율로 솎으면 짧은 선이 2점에 걸려 506점이 된다.
+    const days = [mkDay(...Array.from({ length: 100 }, () => 3)), mkDay(500, 500)];
+    const snapshot = JSON.stringify(days);
+    const out = thinPaths(days, 400);
+    expect(JSON.stringify(days)).toBe(snapshot);
+    const src = days.flatMap((d) => d.legs.map((l) => l.path));
+    const got = out.flatMap((d) => d.legs.map((l) => l.path));
+    expect(got.reduce((a, p) => a + p.length, 0)).toBeLessThanOrEqual(400);
+    got.forEach((path, i) => {
+      expect(path.length).toBeGreaterThanOrEqual(2);
+      expect(path[0]).toEqual(src[i]![0]);
+      expect(path.at(-1)).toEqual(src[i]!.at(-1));
+    });
+    // 남는 점은 긴 선이 받는다.
+    expect(got.at(-1)!.length).toBeGreaterThan(90);
+  });
+
+  it('keeps 2 points per line when max is below that floor', () => {
+    const out = thinPaths([mkDay(10, 10, 10)], 4);
+    expect(out[0]!.legs.map((l) => l.path.length)).toEqual([2, 2, 2]);
+    const twos = [mkDay(2, 2, 1)];
+    expect(thinPaths(twos, 4)).toBe(twos);
   });
 
   it('leaves empty and single-point lines alone', () => {

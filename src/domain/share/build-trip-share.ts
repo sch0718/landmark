@@ -130,26 +130,50 @@ function toShareLeg(leg: Leg, time: ShareLegTime): ShareLeg {
 }
 
 /**
- * 문서 전체 경로선 점이 `max`를 넘으면 구간마다 같은 비율로 점을 솎는다. 점이 2개 이상인 선은
- * 첫·끝 점을 남기고(그래서 2점 아래로는 줄이지 않는다), 입력은 바꾸지 않는다.
+ * 문서 전체 경로선 점이 `max`를 넘으면 솎는다. 점이 2개 이상인 선은 첫·끝 점 2개를 먼저 남기고, 남는 예산을
+ * 선마다 덜어 낼 수 있는 점 수(점 수 − 2)에 비례해 나눈다(나머지는 큰 몫부터 하나씩). 그래서 2점씩 남겨도
+ * `max` 안에 들 수 있으면 결과는 `max` 이하이고, 그렇지 않으면 선마다 2점을 남긴다. 점이 2개 미만인 선은
+ * 그대로 두며, 입력은 바꾸지 않는다.
  */
 export function thinPaths(days: ShareDay[], max: number): ShareDay[] {
-  let total = 0;
-  for (const day of days) for (const leg of day.legs) total += leg.path.length;
+  const lines = days.flatMap((day) => day.legs.map((leg) => leg.path.length));
+  const total = lines.reduce((a, n) => a + n, 0);
   if (total <= max) return days;
 
-  const ratio = max / total;
+  // 2점 이상인 선의 덜어 낼 수 있는 점(n − 2)과, 첫·끝 점·짧은 선을 남긴 뒤의 예산.
+  const spare = lines.map((n) => (n >= 2 ? n - 2 : 0));
+  const spareTotal = spare.reduce((a, n) => a + n, 0);
+  if (spareTotal === 0) return days; // 모든 선이 이미 2점 이하라 덜어 낼 점이 없다.
+  const fixed = total - spareTotal;
+  const budget = Math.max(0, max - fixed);
+
+  // 큰 나머지 방식: 몫의 정수 부분을 주고, 남는 점은 나머지가 큰 선부터 하나씩(정수 계산).
+  const extra = spare.map((e) => Math.floor((e * budget) / spareTotal));
+  let left = budget - extra.reduce((a, n) => a + n, 0);
+  const byRemainder = spare
+    .map((e, i) => ({ i, r: (e * budget) % spareTotal }))
+    .filter(({ r }) => r > 0)
+    .sort((a, b) => b.r - a.r || a.i - b.i);
+  for (const { i } of byRemainder) {
+    if (left === 0) break;
+    extra[i]! += 1;
+    left -= 1;
+  }
+
+  let at = 0;
   return days.map((day) => ({
     ...day,
-    legs: day.legs.map((leg) => ({ ...leg, path: thinLine(leg.path, ratio) })),
+    legs: day.legs.map((leg) => {
+      const keep = 2 + extra[at++]!;
+      return { ...leg, path: thinLine(leg.path, keep) };
+    }),
   }));
 }
 
-/** 선의 점을 `ratio` 비율로 고르게 솎는다. 점이 2개 미만이면 그대로. */
-function thinLine(path: [number, number][], ratio: number): [number, number][] {
+/** 선의 점을 `keep`개로 고르게 솎는다(첫·끝 점은 남긴다). 점이 2개 미만이면 그대로. */
+function thinLine(path: [number, number][], keep: number): [number, number][] {
   const n = path.length;
-  if (n < 2) return path;
-  const keep = Math.min(n, Math.max(2, Math.floor(n * ratio)));
+  if (n < 2 || keep >= n) return path;
   const out: [number, number][] = [];
   for (let i = 0; i < keep; i++) {
     out.push(path[Math.round((i * (n - 1)) / (keep - 1))]!);
