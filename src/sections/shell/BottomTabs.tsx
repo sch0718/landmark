@@ -1,8 +1,10 @@
 import Box from '@mui/material/Box';
-import { Link, useLocation } from 'react-router';
+import type { MouseEvent } from 'react';
+import { Link, matchPath, useLocation } from 'react-router';
 import { PlusIcon } from 'src/components/icons';
+import { paths } from 'src/routes/paths';
 import { ADD_LABEL, isNavActive, NAV_ITEMS } from 'src/sections/shell/nav-items';
-import { sheetStateOf } from 'src/sections/shell/sheet-state';
+import { sheetStateOf, useCloseSheet } from 'src/sections/shell/sheet-state';
 
 const TAB_SX = {
   flex: 1,
@@ -32,6 +34,10 @@ const TAB_SX = {
 export function BottomTabs({ onAdd }: { onAdd: (opener: HTMLElement) => void }) {
   const { pathname, state } = useLocation();
   const placeOn = sheetStateOf(state).from;
+  // 상세 시트가 열려 있으면 켜진 탭은 시트 뒤 화면이다. 그 탭을 누르면 새 기록을 쌓지 않고 시트를 닫아
+  // 뒤로 가기 한 번이면 닫히는 규칙(스펙 §4.4)을 지킨다. 다른 탭은 그대로 링크로 간다.
+  const sheetOpen = matchPath(paths.place(':id'), pathname) !== null;
+  const closeSheet = useCloseSheet();
   return (
     <Box
       component="nav"
@@ -86,6 +92,23 @@ export function BottomTabs({ onAdd }: { onAdd: (opener: HTMLElement) => void }) 
             component={Link}
             to={item.to}
             aria-current={active ? 'page' : undefined}
+            onClick={
+              sheetOpen && active
+                ? (event: MouseEvent) => {
+                    // 새 탭으로 열기(보조 키·가운데 단추)는 브라우저에 맡긴다.
+                    if (
+                      event.button !== 0 ||
+                      event.metaKey ||
+                      event.ctrlKey ||
+                      event.shiftKey ||
+                      event.altKey
+                    )
+                      return;
+                    event.preventDefault();
+                    closeSheet();
+                  }
+                : undefined
+            }
             sx={{ ...TAB_SX, ...(active && { color: 'var(--tm-text-primary)' }) }}
           >
             <item.Icon aria-hidden="true" />

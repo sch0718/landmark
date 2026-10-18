@@ -19,7 +19,7 @@ import { DETAIL_WIDTH, LIST_WIDTH } from 'src/sections/shell/pane-widths';
 import { PlaceSheet } from 'src/sections/shell/PlaceSheet';
 import { DetailSlot, ListSlot, MapSlot } from 'src/sections/shell/ShellSlots';
 import type { SheetSnap } from 'src/sections/shell/sheet-snap';
-import { sheetLocationState, sheetStateOf } from 'src/sections/shell/sheet-state';
+import { sheetLocationState, sheetStateOf, useCloseSheet } from 'src/sections/shell/sheet-state';
 import { MAIN_ID, SkipLink } from 'src/sections/shell/SkipLink';
 import { StorageBanner } from 'src/sections/shell/StorageBanner';
 import { useLayout } from 'src/sections/shell/use-layout';
@@ -192,14 +192,11 @@ export function AppShell() {
   // `/import`로 들어오면 주소를 `/`로 바꾸고 공유 파일 가져오기 흐름을 연다.
   useImportEntry();
 
+  const closeSheet = useCloseSheet();
   const closeDetail = () => {
-    // 휴대폰은 시트를 연 기록을 되감아 모바일 뒤로가기와 어긋나지 않게 한다. 앱 안에서 연 기록이 아니면
-    // (링크로 바로 들어옴) 앱을 벗어나지 않도록 뒤 화면으로 바꿔치기한다. 펼치기·접기가 기록 항목을
-    // 바꿔치기해 `location.key`가 바뀌므로 키 대신 `inApp`으로 판단한다.
+    // 휴대폰은 시트를 연 기록을 되감는다(`useCloseSheet`, 하단 탭과 같은 규칙).
     if (layout === 'compact') {
-      const current = sheetStateOf(location.state);
-      if (current.inApp) void navigate(-1);
-      else void navigate(current.from === 'map' ? paths.map : paths.library, { replace: true });
+      closeSheet();
       return;
     }
     void navigate(paths.library);

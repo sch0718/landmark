@@ -1,3 +1,6 @@
+import { useCallback } from 'react';
+import { useLocation, useNavigate } from 'react-router';
+import { paths } from 'src/routes/paths';
 import type { SheetSnap } from 'src/sections/shell/sheet-snap';
 
 /** 휴대폰 상세 시트 뒤에 깔리는 화면. */
@@ -25,4 +28,19 @@ export function sheetStateOf(state: unknown): SheetState {
 
 export function sheetLocationState(sheet: SheetState): { sheet: SheetState } {
   return { sheet };
+}
+
+/**
+ * 휴대폰 상세 시트를 닫는다(시트의 `닫기`·끌어 내리기·Esc, 시트 뒤 화면의 하단 탭). 시트를 연 기록을 되감아 모바일
+ * 뒤로 가기와 어긋나지 않게 한다. 앱 안에서 연 기록이 아니면(링크로 바로 들어옴) 앱을 벗어나지 않도록 뒤 화면으로
+ * 바꿔치기한다. 펼치기·접기가 기록 항목을 바꿔치기해 `location.key`가 바뀌므로 키 대신 `inApp`으로 판단한다.
+ */
+export function useCloseSheet(): () => void {
+  const navigate = useNavigate();
+  const { state } = useLocation();
+  return useCallback(() => {
+    const current = sheetStateOf(state);
+    if (current.inApp) void navigate(-1);
+    else void navigate(current.from === 'map' ? paths.map : paths.library, { replace: true });
+  }, [navigate, state]);
 }

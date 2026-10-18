@@ -196,6 +196,48 @@ describe('AppShell layout', () => {
     expect(await screen.findByRole('region', { name: '지도' })).toBeInTheDocument();
   });
 
+  it('compact: tapping the tab behind the sheet closes it like 닫기 (one back step, no new entry)', async () => {
+    mockViewport(390);
+    const { router } = await renderApp({ path: '/map' });
+    await act(async () => {
+      await router.navigate(PLACE, { state: MAP_OPEN });
+    });
+    await userEvent.click(within(bottomNav()).getByRole('link', { name: '지도' }));
+    expect(router.state.location.pathname).toBe('/map');
+    expect(router.state.historyAction).toBe('POP');
+    await waitFor(() =>
+      expect(screen.queryByRole('region', { name: '장소 상세' })).not.toBeInTheDocument(),
+    );
+    cleanup();
+
+    const list = await renderApp({ path: '/' });
+    await act(async () => {
+      await list.router.navigate(PLACE, { state: LIST_OPEN });
+    });
+    await userEvent.click(within(bottomNav()).getByRole('link', { name: '보관함' }));
+    expect(list.router.state.location.pathname).toBe('/');
+    expect(list.router.state.historyAction).toBe('POP');
+    cleanup();
+
+    // 링크로 바로 들어온 시트는 앱을 벗어나지 않게 뒤 화면으로 바꿔치기한다.
+    const direct = await renderApp({ path: PLACE });
+    await userEvent.click(within(bottomNav()).getByRole('link', { name: '지도' }));
+    expect(direct.router.state.location.pathname).toBe('/map');
+    expect(direct.router.state.historyAction).toBe('REPLACE');
+  });
+
+  it('compact: tapping another tab while the sheet is open navigates normally', async () => {
+    mockViewport(390);
+    const { router } = await renderApp({ path: '/map' });
+    await act(async () => {
+      await router.navigate(PLACE, { state: MAP_OPEN });
+    });
+    await userEvent.click(within(bottomNav()).getByRole('link', { name: '보관함' }));
+    expect(router.state.location.pathname).toBe('/');
+    expect(router.state.historyAction).toBe('PUSH');
+    expect(await screen.findByRole('region', { name: '장소 목록' })).toBeInTheDocument();
+  });
+
   it('treats a trailing slash as the same path', async () => {
     mockViewport(390);
     await renderApp({ path: '/map/' });
