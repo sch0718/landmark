@@ -90,6 +90,33 @@ describe('상세 닫기 (넓은·중간)', () => {
     expect(router.state.location.pathname).toBe(`/place/${id(2)}`);
   });
 
+  it('잘린 이름 툴팁이 열려 있으면 Esc는 툴팁만 닫고, 다음 Esc가 장소를 닫는다', async () => {
+    const user = userEvent.setup();
+    const { router } = await renderLibrary(sampleLibrary(), {
+      width: 1280,
+      path: '/',
+      prefs: { libraryView: 'list' },
+    });
+    await router.navigate(`/place/${id(2)}`);
+    await findCloseButton();
+    const row = document.querySelector<HTMLElement>(`[data-place-id="${id(2)}"]`)!;
+    const name = row.querySelector<HTMLElement>('[data-truncated-text]')!;
+    // jsdom은 배치가 없어 넘침 크기를 심는다.
+    Object.defineProperty(name, 'clientWidth', { configurable: true, value: 100 });
+    Object.defineProperty(name, 'scrollWidth', { configurable: true, value: 240 });
+    // 키보드 입력 뒤의 포커스라 툴팁이 뜬다.
+    await user.keyboard('{Shift}');
+    row.focus();
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(name.textContent!);
+
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('tooltip')).not.toBeInTheDocument());
+    expect(router.state.location.pathname).toBe(`/place/${id(2)}`);
+
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(router.state.location.pathname).toBe('/'));
+  });
+
   it('닫기를 키보드로 누르면 포커스가 연 장소의 목록 행으로 간다', async () => {
     const user = userEvent.setup();
     const { router } = await renderLibrary(sampleLibrary(), {

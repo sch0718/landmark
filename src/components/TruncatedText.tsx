@@ -101,6 +101,19 @@ export function TruncatedText({
     };
   }, [lines]);
 
+  // 툴팁이 열려 있으면 Esc는 툴팁만 닫는다(WCAG 1.4.13). 문서 capture 단계에서 먼저 받아 `preventDefault`로
+  // 처리했다고 표시하므로, 문서 bubble 단계의 상세 닫기 Esc(`useEscapeClose`)는 이 Esc를 무시한다.
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing) return;
+      event.preventDefault();
+      setOpen(false);
+    };
+    document.addEventListener('keydown', onKeyDown, true);
+    return () => document.removeEventListener('keydown', onKeyDown, true);
+  }, [open]);
+
   return (
     <Tooltip
       title={children}
