@@ -3,7 +3,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setAppRuntimeForTest } from 'src/lib/effect/runtime';
 import { prefetchWhenIdle } from 'src/lib/prefetch';
 import { createMemoryStorage } from 'src/repositories/edit-layer-repo';
-import { loadTripTodayPage, PANEL_CHUNKS, ROUTE_CHUNKS } from 'src/routes/lazy-routes';
+import {
+  loadTripShareDialog,
+  loadTripTodayPage,
+  PANEL_CHUNKS,
+  ROUTE_CHUNKS,
+} from 'src/routes/lazy-routes';
 import { PREFETCH_CHUNKS } from 'src/sections/shell/ShellRoute';
 import { LIBRARY_KEY } from 'src/services/library-store';
 import { mockViewport, renderApp } from '../sections/shell/harness';
@@ -129,6 +134,8 @@ describe('라우트 화면 나눠 받기', () => {
     expect(prefetchWhenIdle).toHaveBeenCalledWith(PREFETCH_CHUNKS);
     // 화면 단위와 추가 칸 단계·내보내기 대화상자 단위가 모두 들어 있다.
     expect(PANEL_CHUNKS.length).toBeGreaterThan(0);
+    // 일정 공유 창도 한가할 때 미리 받는다.
+    expect(PANEL_CHUNKS).toContain(loadTripShareDialog);
     expect(PREFETCH_CHUNKS).toEqual([...ROUTE_CHUNKS, ...PANEL_CHUNKS]);
   });
 });

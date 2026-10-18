@@ -10,6 +10,7 @@ import { dayEndpoints, tripDates, visibleStops } from 'src/domain/trips/query';
 import { formatClock, formatSlack, formatSpan, type PointTime } from 'src/domain/trips/schedule';
 import type { Place } from 'src/schema/library';
 import type { Stop, Trip } from 'src/schema/trip';
+import { TripShareDialogHost } from 'src/sections/share-export/TripShareDialogHost';
 import { DayHeader } from 'src/sections/trips/planner/DayHeader';
 import { DayTail } from 'src/sections/trips/planner/DayTail';
 import { HoursNotice, noticeFor } from 'src/sections/trips/planner/HoursNotice';
@@ -232,7 +233,7 @@ function StopRow({
 }
 
 /**
- * Day 시간표 몸통(스펙 §2.3): 머리(출발 시각·출발점, `순서 정리`, `여행 설정`), 장소 행과 구간 행, 꼬리(숙소·합계).
+ * Day 시간표 몸통(스펙 §2.3): 머리(출발 시각·출발점, `순서 정리`, `여행 설정`, `일정 공유`), 장소 행과 구간 행, 꼬리(숙소·합계).
  * 같은 지점 구간(직선 10m 미만)은 계산에는 넣되(0분) 행은 보이지 않는다. 장소 행을 누르면 지도 위 카드를 연다.
  * 구간·시각(`plan`)은 계획 화면이 한 번 구해 지도와 함께 쓴다. 오프라인 안내도 계획 화면이 한 번 보인다.
  */
@@ -255,6 +256,7 @@ export function DayTimeline({
   const stops = visibleStops(library, day);
   const optimize = useOptimizeDay(trip.id, dayIndex);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const { points, totals } = plan.schedule;
   const offset = start === null ? 0 : 1;
   const legs = plan.legs;
@@ -291,8 +293,10 @@ export function DayTimeline({
         canOptimize={stops.length >= 2}
         onOptimize={() => void optimize()}
         onSettings={() => setSettingsOpen(true)}
+        onShare={() => setShareOpen(true)}
       />
       <TripSettingsDialog trip={trip} open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <TripShareDialogHost open={shareOpen} onClose={() => setShareOpen(false)} tripId={trip.id} />
       <Box
         component="ol"
         ref={setListRef}

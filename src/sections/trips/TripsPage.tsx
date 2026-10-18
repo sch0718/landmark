@@ -20,6 +20,7 @@ import type { Library } from 'src/schema/library';
 import type { Trip } from 'src/schema/trip';
 import { paths } from 'src/routes/paths';
 import { EmptyState } from 'src/sections/library/EmptyState';
+import { TripShareDialogHost } from 'src/sections/share-export/TripShareDialogHost';
 import { TripFormDialog } from 'src/sections/trips/TripFormDialog';
 import { periodLabel } from 'src/sections/trips/trip-dates';
 import { libraryAtom, useLibraryAction } from 'src/stores/library-state';
@@ -147,7 +148,7 @@ function TripList({
   );
 }
 
-/** `/trips`: 여행 목록. 새 여행 만들기, 이름 바꾸기, 삭제(되돌리기 토스트). */
+/** `/trips`: 여행 목록. 새 여행 만들기, 이름 바꾸기, 일정 공유, 삭제(되돌리기 토스트). */
 export function TripsPage() {
   useDocumentTitle('여행');
   const library = useAtomValue(libraryAtom);
@@ -168,6 +169,8 @@ export function TripsPage() {
   const [menu, setMenu] = useState<{ tripId: string; anchor: HTMLElement } | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  // 일정 공유 창. 한 번 연 뒤에는 닫아도 마운트를 두고 `open`만 바꾼다(`LazyDialogHost`).
+  const [sharing, setSharing] = useState<{ tripId: string; open: boolean } | null>(null);
 
   const menuTrip = menu === null ? undefined : library.trips[menu.tripId];
   const renamingTrip = renaming === null ? undefined : library.trips[renaming];
@@ -257,6 +260,15 @@ export function TripsPage() {
           이름 바꾸기
         </MenuItem>
         <MenuItem
+          sx={{ minHeight: 44 }}
+          onClick={() => {
+            if (menu !== null) setSharing({ tripId: menu.tripId, open: true });
+            setMenu(null);
+          }}
+        >
+          일정 공유
+        </MenuItem>
+        <MenuItem
           sx={{ minHeight: 44, color: 'error.main' }}
           onClick={() => {
             setDeleting(menu?.tripId ?? null);
@@ -285,6 +297,13 @@ export function TripsPage() {
             origin: renamingTrip.origin.value,
           }}
           onClose={() => setRenaming(null)}
+        />
+      )}
+      {sharing !== null && (
+        <TripShareDialogHost
+          open={sharing.open}
+          onClose={() => setSharing({ ...sharing, open: false })}
+          tripId={sharing.tripId}
         />
       )}
       {deletingTrip !== undefined && (

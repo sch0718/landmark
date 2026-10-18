@@ -1,0 +1,69 @@
+import Button from '@mui/material/Button';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
+import { Suspense, useId, useState, type ReactNode } from 'react';
+import { ChunkErrorBoundary } from 'src/components/ChunkErrorBoundary';
+import { ChunkErrorNotice } from 'src/components/ChunkErrorNotice';
+import { LoadingNotice } from 'src/components/LoadingNotice';
+
+type Props = { open: boolean; onClose(): void; heading: string; children: ReactNode };
+
+/** 실제 대화상자가 오기 전에 보이는 틀: 같은 제목과 닫기 버튼 안에 `children`(기다림·새 버전 안내)을 넣는다. */
+function ShellDialog({
+  open,
+  onClose,
+  heading,
+  children,
+}: {
+  open: boolean;
+  onClose(): void;
+  heading: string;
+  children: ReactNode;
+}) {
+  const titleId = useId();
+  return (
+    <Dialog open={open} onClose={onClose} aria-labelledby={titleId} fullWidth maxWidth="xs">
+      <DialogTitle id={titleId}>{heading}</DialogTitle>
+      <DialogContent>{children}</DialogContent>
+      <DialogActions>
+        <Button onClick={onClose} sx={{ minHeight: 44 }}>
+          닫기
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+/**
+ * 나눠 받는 대화상자(`children`, `React.lazy`)를 처음 열 때 받아 그린다. 한 번 열린 뒤에는 닫아도 마운트를 지우지 않고
+ * `open`만 바꾼다: 공유 파일 창은 `open`이 `false`로 바뀔 때 진행 중인 저장·공유를 무효로 하므로(스펙 §2),
+ * 닫을 때 마운트를 지우면 닫은 창의 저장이 이어진다. 파일을 받는 동안은 같은 제목(`heading`)의 대화상자 안에
+ * 기다림 표시와 닫기 버튼을 보이고, 받지 못하면(새 배포 뒤 옛 파일 없음) 그 안에 새 버전 안내를 보인다.
+ */
+export function LazyDialogHost({ open, onClose, heading, children }: Props) {
+  // 렌더 중 상태 갱신으로, 처음 열리는 그 렌더부터 마운트한다.
+  const [everOpened, setEverOpened] = useState(open);
+  if (open && !everOpened) setEverOpened(true);
+  if (!everOpened) return null;
+  return (
+    <ChunkErrorBoundary
+      fallback={
+        <ShellDialog open={open} onClose={onClose} heading={heading}>
+          <ChunkErrorNotice />
+        </ShellDialog>
+      }
+    >
+      <Suspense
+        fallback={
+          <ShellDialog open={open} onClose={onClose} heading={heading}>
+            <LoadingNotice />
+          </ShellDialog>
+        }
+      >
+        {children}
+      </Suspense>
+    </ChunkErrorBoundary>
+  );
+}
