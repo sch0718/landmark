@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { checkShareTrip, dayPoints } from 'src/domain/share/check-share-trip';
 import { computeSchedule } from 'src/domain/trips/schedule';
 import type { ShareDocV2, ShareLeg } from 'src/schema/share';
 import { dayView, placeIdOfPin, tripPins, type DayRow } from 'src/share-viewer/trip-view';
@@ -107,6 +108,39 @@ describe('dayView', () => {
     expect(dayView(trip, 0).rows[0]).toEqual({ kind: 'no-start', departMin: 540 });
     const { pins } = tripPins(doc, { kind: 'day', dayIndex: 0 });
     expect(pins.filter((p) => p.id.startsWith('start:'))).toEqual([]);
+  });
+
+  it('숙소 id가 빈 문자열이면 관계 검사·dayPoints처럼 도착점이 없다(행·핀 모두)', () => {
+    // 장소 'a'와 '', Stop 'a', 숙소 '', 구간 없음: 관계 검사를 통과하는 문서.
+    const doc = makeShareV2Doc();
+    const a = doc.places.find((p) => p.id === IDS.a)!;
+    doc.places = [a, { ...a, id: '', name: '빈 id 장소' }];
+    const trip = doc.trips[0]!;
+    trip.endDate = trip.startDate;
+    trip.originId = null;
+    trip.candidateIds = [];
+    trip.legModes = {};
+    trip.days = [
+      {
+        startTime: '09:00',
+        lodgingId: '',
+        stops: [{ placeId: IDS.a, stayMin: 60, fixedTime: null }],
+        legs: [],
+      },
+    ];
+    expect(checkShareTrip(doc)).toEqual([]);
+    expect(dayPoints(trip, 0)).toEqual([IDS.a]);
+
+    const view = dayView(trip, 0);
+    expect(view.rows.map((r) => r.kind)).toEqual(['no-start', 'stop']);
+    expect(view.hasLegs).toBe(false);
+    const { pins } = tripPins(doc, { kind: 'day', dayIndex: 0 });
+    expect(pins.filter((p) => p.id.startsWith('end:'))).toEqual([]);
+    expect(pins.map((p) => p.id)).toEqual([IDS.a]);
+
+    // 빈 숙소로 가는 구간을 넣으면 관계 검사가 거절한다(셋이 같은 규칙).
+    trip.days[0]!.legs = [leg(IDS.a, '')];
+    expect(checkShareTrip(doc).length).toBeGreaterThan(0);
   });
 
   it('고정 10:00인데 10:20에 도착하면 slackMin은 -20', () => {

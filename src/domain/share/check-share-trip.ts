@@ -20,7 +20,13 @@ export function dayStartId(trip: ShareTrip, dayIndex: number): string | null {
   return start ? start : null;
 }
 
-/** 그날 점 목록: [출발점?, …Stop, 도착점?]. 출발점은 `dayStartId`. */
+/** 그날 도착점(숙소) 장소 id. 없으면(빈 id 포함) null. */
+export function dayEndId(trip: ShareTrip, dayIndex: number): string | null {
+  const end = trip.days[dayIndex]?.lodgingId ?? null;
+  return end ? end : null;
+}
+
+/** 그날 점 목록: [출발점?, …Stop, 도착점?]. 출발점은 `dayStartId`, 도착점은 `dayEndId`. */
 export function dayPoints(trip: ShareTrip, dayIndex: number): string[] {
   const day = trip.days[dayIndex];
   if (!day) return [];
@@ -28,7 +34,8 @@ export function dayPoints(trip: ShareTrip, dayIndex: number): string[] {
   const points: string[] = [];
   if (start !== null) points.push(start);
   for (const stop of day.stops) points.push(stop.placeId);
-  if (day.lodgingId) points.push(day.lodgingId);
+  const end = dayEndId(trip, dayIndex);
+  if (end !== null) points.push(end);
   return points;
 }
 

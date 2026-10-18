@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { checkShareTrip, dayPoints, SHARE_TRIP_LIMITS } from 'src/domain/share/check-share-trip';
+import {
+  checkShareTrip,
+  dayEndId,
+  dayPoints,
+  SHARE_TRIP_LIMITS,
+} from 'src/domain/share/check-share-trip';
 import type { ShareDocV2, ShareLeg, ShareTrip } from 'src/schema/share';
 import { IDS, leg, makeShareV2Doc as makeDoc } from '../../helpers/share-v2-doc';
 
@@ -197,5 +202,18 @@ describe('dayPoints', () => {
     t.originId = null;
     t.days[0]!.stops = [];
     expect(dayPoints(t, 0)).toEqual([IDS.hotel]);
+  });
+});
+
+describe('dayEndId', () => {
+  it('그날 숙소 id. null·빈 문자열·없는 날은 null이고, dayPoints의 끝과 같다', () => {
+    const trip = makeDoc().trips[0]!;
+    expect(dayEndId(trip, 0)).toBe(IDS.hotel);
+    expect(dayPoints(trip, 0).at(-1)).toBe(IDS.hotel);
+    expect(dayEndId(trip, 1)).toBeNull();
+    expect(dayEndId(trip, 5)).toBeNull();
+    trip.days[0]!.lodgingId = '';
+    expect(dayEndId(trip, 0)).toBeNull();
+    expect(dayPoints(trip, 0)).toEqual([IDS.home, IDS.a, IDS.b]);
   });
 });

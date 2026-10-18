@@ -1,4 +1,4 @@
-import { dayPoints, dayStartId } from 'src/domain/share/check-share-trip';
+import { dayEndId, dayPoints, dayStartId } from 'src/domain/share/check-share-trip';
 import { computeSchedule } from 'src/domain/trips/schedule';
 import type { ShareDocV2, ShareLeg, SharePlace, ShareStop, ShareTrip } from 'src/schema/share';
 import type { MapLine, MapPin } from 'src/share-protocol';
@@ -45,7 +45,7 @@ export function dayView(trip: ShareTrip, dayIndex: number): DayView {
     };
   }
   const startId = dayStartId(trip, dayIndex);
-  const endId = day.lodgingId;
+  const endId = dayEndId(trip, dayIndex);
   const hasStart = startId !== null;
   const hasEnd = endId !== null;
 
@@ -177,8 +177,9 @@ export function tripPins(doc: ShareDocV2, tab: TripTab): { pins: MapPin[]; lines
       const icon = dayIndex === 0 ? '🏠' : '🛏';
       pinOf(`${START_PREFIX}${startId}`, startId, (n) => `${icon} ${n}`, dayIndex, 'endpoint');
     }
-    if (day.lodgingId !== null && day.lodgingId !== startId) {
-      pinOf(`${END_PREFIX}${day.lodgingId}`, day.lodgingId, (n) => `🛏 ${n}`, dayIndex, 'endpoint');
+    const endId = dayEndId(trip, dayIndex);
+    if (endId !== null && endId !== startId) {
+      pinOf(`${END_PREFIX}${endId}`, endId, (n) => `🛏 ${n}`, dayIndex, 'endpoint');
     }
 
     const points = dayPoints(trip, dayIndex);
