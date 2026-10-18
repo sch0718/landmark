@@ -307,20 +307,91 @@ describe('library map', () => {
     expect(fakeMap()).toBeInTheDocument();
   });
 
-  it('re-focuses the open place when the filter changes', async () => {
+  it('고른 마커를 다시 누르면 선택이 풀린다', async () => {
     const user = userEvent.setup();
     const { router } = await renderLibrary(sampleLibrary(), { prefs: { libraryView: 'list' } });
     await ready();
-    await router.navigate(`/place/${id(2)}`);
+    await user.click(marker(2)!);
+    expect(router.state.location.pathname).toBe(`/place/${id(2)}`);
     await waitFor(() => expect(marker(2)).toHaveAttribute('aria-pressed', 'true'));
-    const before = fakeAdapter().fitCalls.length;
-    fakeAdapter().setCamera({ center: [127, 36], zoom: 9 });
+
+    await user.click(marker(2)!);
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/'));
+    await waitFor(() => expect(marker(2)).not.toHaveAttribute('aria-pressed'));
+  });
+
+  it('지도 빈 곳을 누르면 선택이 풀리고 카메라는 그대로다', async () => {
+    const { router } = await renderLibrary(sampleLibrary(), { prefs: { libraryView: 'list' } });
+    await ready();
+    await router.navigate(`/place/${id(2)}`);
+    await waitFor(() => expectFocusedOn([128.95, 37.77]));
+    const camera = fakeAdapter().getCamera();
+
+    fireEvent.click(fakeMap());
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/'));
+    expect(fakeAdapter().getCamera()).toEqual(camera);
+  });
+
+  it('장소가 안 열렸을 때 빈 곳을 눌러도 아무 일 없다', async () => {
+    const { router } = await renderLibrary(sampleLibrary(), { path: '/map' });
+    await ready();
+    fireEvent.click(fakeMap());
+    expect(router.state.location.pathname).toBe('/map');
+  });
+
+  it('거르기로 열린 장소가 결과에서 빠지면 선택을 풀고, 결과 전체에 맞춘다', async () => {
+    const user = userEvent.setup();
+    // 샘플 장소는 좌표가 모두 같다. 속초 횟집만 속초로 옮겨 맞추기 점을 가른다.
+    const base = sampleLibrary();
+    const library: Library = {
+      ...base,
+      places: { ...base.places, [id(3)]: { ...base.places[id(3)]!, lng: 128.59, lat: 38.2 } },
+    };
+    const { router } = await renderLibrary(library, { prefs: { libraryView: 'list' } });
+    await ready();
+    await router.navigate(`/place/${id(3)}`); // 속초 횟집(맛집·바다뷰)
+    await waitFor(() => expect(marker(3)).toHaveAttribute('aria-pressed', 'true'));
+    const fits = fakeAdapter().fitCalls.length;
+
+    // 열린 상세의 라벨 고르개도 같은 이름의 묶음이라, 목록 위 필터 칩(첫 번째)을 집는다.
+    await user.click(
+      within(screen.getAllByRole('group', { name: '라벨' })[0]!).getByRole('button', {
+        name: /^카페/,
+      }),
+    );
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/'));
+    await waitFor(() => expect(fakeAdapter().fitCalls.length).toBeGreaterThan(fits));
+    // 강제로 보이던 열린 장소(`fit: false`)는 맞추기 점에 들지 않는다. 점이 하나면 그 근처 상자로 넓혀 맞춘다.
+    const fitted = fakeAdapter().fitCalls.at(-1)!;
+    for (const [lng, lat] of fitted) {
+      expect(lng).toBeCloseTo(128.95, 1);
+      expect(lat).toBeCloseTo(37.77, 1);
+    }
+    expect(shownMarkers()).toEqual([id(2)]);
+    // 거르기 한 번에 기록이 둘 쌓이지 않는다(교체).
+    expect(router.state.historyAction).toBe('REPLACE');
+  });
+
+  it('열린 장소가 결과 안에 남으면 선택은 그대로이고 그 장소로 확대하지 않는다', async () => {
+    const user = userEvent.setup();
+    const { router } = await renderLibrary(sampleLibrary(), { prefs: { libraryView: 'list' } });
+    await ready();
+    await router.navigate(`/place/${id(3)}`);
+    await waitFor(() => expect(fakeAdapter().getCamera()?.zoom).toBe(16));
+    const panned = { center: [127, 36] as [number, number], zoom: 9 };
+    fakeAdapter().setCamera(panned);
+    const fits = fakeAdapter().fitCalls.length;
 
     await user.type(screen.getByRole('searchbox', { name: '장소 검색' }), '횟집');
 
-    // 새 필터로 맞춘 뒤 열린 장소로 다시 모은다.
-    await waitFor(() => expect(fakeAdapter().fitCalls.length).toBeGreaterThan(before));
-    await waitFor(() => expectFocusedOn([128.95, 37.77]));
+    await waitFor(() => expect(fakeAdapter().fitCalls.length).toBeGreaterThan(fits));
+    expect(router.state.location.pathname).toBe(`/place/${id(3)}`);
+    expect(marker(3)).toHaveAttribute('aria-pressed', 'true');
+    // 가짜 fitBounds는 카메라를 옮기지 않는다: 열린 장소로 다시 모으지 않았다.
+    expect(fakeAdapter().getCamera()).toEqual(panned);
   });
 
   it('opening the same place twice moves the map each time', async () => {
