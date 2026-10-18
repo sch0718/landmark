@@ -28,7 +28,7 @@ type NaverMaps = {
     opts: Record<string, unknown>,
   ) => Overlay & { setCenter?(c: unknown): void; setRadius?(r: number): void };
   Event: {
-    addListener(target: unknown, name: string, cb: () => void): unknown;
+    addListener(target: unknown, name: string, cb: (event?: unknown) => void): unknown;
     removeListener(listener: unknown): void;
   };
 };
@@ -66,6 +66,15 @@ function createMyLocationDotElement(): HTMLElement {
   return el;
 }
 
+/** 마커·클러스터 아이콘 DOM 표시. 그 위를 누른 것이 지도 `click`으로도 오면 걸러 낸다. */
+const MARKER_ATTR = 'data-map-marker';
+
+/** SDK `click` 이벤트가 마커 아이콘에서 시작됐는가(`domEvent`는 SDK가 넘기는 원래 DOM 이벤트). */
+function fromMarker(event: unknown): boolean {
+  const target = (event as { domEvent?: { target?: unknown } } | undefined)?.domEvent?.target;
+  return target instanceof Element && target.closest(`[${MARKER_ATTR}]`) !== null;
+}
+
 const maps = (): NaverMaps => (window as unknown as { naver: { maps: NaverMaps } }).naver.maps;
 
 export class NaverMapAdapter implements MapAdapter {
@@ -83,6 +92,7 @@ export class NaverMapAdapter implements MapAdapter {
   private markerClickCleanups: (() => void)[] = [];
   private markerCb: ((id: string) => void) | null = null;
   private boundsCb: ((b: Bounds) => void) | null = null;
+  private mapClickCb: (() => void) | null = null;
 
   /**
    * @param options.zoomControl SDK 확대·축소 막대를 보일까(기본 보임). 대신 쓸 ＋/− 버튼을 직접 그리는 쪽
@@ -108,6 +118,10 @@ export class NaverMapAdapter implements MapAdapter {
         this.drawMarkers();
         const b = this.currentBounds();
         if (b) this.boundsCb?.(b);
+      }),
+      m.Event.addListener(map, 'click', (event?: unknown) => {
+        if (fromMarker(event)) return;
+        this.mapClickCb?.();
       }),
     );
     this.drawPolylines();
@@ -227,6 +241,10 @@ export class NaverMapAdapter implements MapAdapter {
     this.markerCb = cb;
   }
 
+  onMapClick(cb: () => void): void {
+    this.mapClickCb = cb;
+  }
+
   onBoundsChange(cb: (b: Bounds) => void): void {
     this.boundsCb = cb;
   }
@@ -234,6 +252,7 @@ export class NaverMapAdapter implements MapAdapter {
   destroy(): void {
     this.destroyed = true;
     this.markerCb = null;
+    this.mapClickCb = null;
     this.boundsCb = null;
     this.markers = [];
     this.lines = [];
@@ -279,6 +298,7 @@ export class NaverMapAdapter implements MapAdapter {
         icon: { content: el, anchor: { x: 0, y: 0 } },
         zIndex,
       });
+      el.setAttribute(MARKER_ATTR, '');
       el.addEventListener('click', onClick);
       this.markerClickCleanups.push(() => el.removeEventListener('click', onClick));
       el.style.cursor = 'pointer';

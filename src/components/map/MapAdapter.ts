@@ -58,6 +58,8 @@ export interface MapAdapter {
   setCamera(camera: MapCamera): void;
   fitBounds(points: [number, number][], padding?: MapPadding): void;
   onMarkerClick(cb: (id: string) => void): void;
+  /** 마커·클러스터가 아닌 지도 바탕을 눌렀을 때. 끌기·핀치는 누르기가 아니다. */
+  onMapClick(cb: () => void): void;
   onBoundsChange(cb: (b: Bounds) => void): void;
   destroy(): void;
 }

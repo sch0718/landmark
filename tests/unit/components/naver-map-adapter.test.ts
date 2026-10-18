@@ -119,7 +119,7 @@ function installSdk() {
       Polyline: Overlay,
       Circle,
       Event: {
-        addListener: (_: unknown, name: string, callback: () => void) => {
+        addListener: (_: unknown, name: string, callback: (e?: unknown) => void) => {
           const listener = { name, callback };
           listeners.add(listener);
           return listener;
@@ -143,6 +143,27 @@ function installSdk() {
 }
 
 describe('NaverMapAdapter SDK 계약', () => {
+  it('지도 click은 onMapClick으로, 마커 DOM에서 온 click은 거른다', async () => {
+    const sdk = installSdk();
+    const adapter = new NaverMapAdapter('id');
+    const onMap = vi.fn();
+    adapter.onMapClick(onMap);
+    const pending = adapter.mount(document.createElement('div'));
+    release();
+    await pending;
+    adapter.setMarkers([
+      { id: 'p1', lng: 128, lat: 37.5, color: '#000', clusterable: false, label: '가' },
+    ]);
+    const click = [...sdk.listeners].find((l) => (l as { name: string }).name === 'click') as {
+      callback: (e?: unknown) => void;
+    };
+    click.callback({ domEvent: { target: document.createElement('div') } });
+    expect(onMap).toHaveBeenCalledTimes(1);
+    const markerEl = sdk.labels.at(-1)!;
+    click.callback({ domEvent: { target: markerEl.firstElementChild ?? markerEl } });
+    expect(onMap).toHaveBeenCalledTimes(1);
+    adapter.destroy();
+  });
   // SDK 막대는 대신 쓸 ＋/− 버튼을 그리는 쪽(MapView)만 끈다. 공유 지도(`share-map/main.ts`)처럼 옵션 없이 만들면
   // 터치 전용 기기에서도 막대를 보인다 — 끄기만 하면 한 손가락 축소 수단이 없어진다.
   it.each([
@@ -246,7 +267,7 @@ describe('NaverMapAdapter SDK 계약', () => {
     expect(resources.snapshot()).toMatchObject({
       activeAdapters: 1,
       callbackSlots: 2,
-      sdkListeners: 1,
+      sdkListeners: 2, // idle + click
       overlays: 2,
     });
     const idle = [...sdk.listeners][0] as { callback: () => void };
@@ -258,9 +279,9 @@ describe('NaverMapAdapter SDK 계약', () => {
     expect(bounds).toHaveBeenCalledTimes(1);
     expect(sdk.listeners.size).toBe(0);
     expect(sdk.overlays.size).toBe(0);
-    expect(sdk.removeListener).toHaveBeenCalledTimes(1);
+    expect(sdk.removeListener).toHaveBeenCalledTimes(2); // idle + click
     expect(sdk.map.destroy).toHaveBeenCalledTimes(1);
-    expect(adapter).toMatchObject({ markerCb: null, boundsCb: null });
+    expect(adapter).toMatchObject({ markerCb: null, boundsCb: null, mapClickCb: null });
     expect(Object.values(resources.snapshot()).every((count) => count === 0)).toBe(true);
   });
   it('선택된 마커는 더 높은 zIndex로 그린다', async () => {
