@@ -78,6 +78,8 @@ export function PlaceSheet({ snap, onSnapChange, onClose, children }: Props) {
 
   const onPointerDown = (event: PointerEvent<HTMLElement>) => {
     if (event.button !== 0) return;
+    // 이미 끌고 있거나 보조 손가락이면 무시한다(첫 손가락의 끌기를 지킨다).
+    if (drag.current !== null || !event.isPrimary) return;
     if (snap === 'full' && !headerRef.current?.contains(event.target as Node)) return;
     const now = performance.now();
     drag.current = {
@@ -93,6 +95,12 @@ export function PlaceSheet({ snap, onSnapChange, onClose, children }: Props) {
   const onPointerMove = (event: PointerEvent<HTMLElement>) => {
     const d = drag.current;
     if (d === null || d.pointerId !== event.pointerId) return;
+    // 단추가 이미 떼어졌는데 `up`을 못 받은 것(시트 밖에서 뗌)이다. 끌기를 버린다.
+    if (event.buttons === 0) {
+      drag.current = null;
+      if (d.active) setOffset(null);
+      return;
+    }
     const dy = event.clientY - d.startY;
     if (!d.active) {
       if (Math.abs(dy) < DRAG_SLOP_PX) return;
@@ -146,6 +154,8 @@ export function PlaceSheet({ snap, onSnapChange, onClose, children }: Props) {
   const onFocus = (event: FocusEvent<HTMLElement>) => {
     const root = rootRef.current;
     if (snap !== 'half' || root === null || event.target === root) return;
+    // 포털(라벨 고르기 창 등)에서 올라온 포커스는 시트 안 요소가 아니라 잰 위치가 맞지 않는다.
+    if (!root.contains(event.target)) return;
     if (headerRef.current?.contains(event.target)) return;
     const visibleBottom = root.getBoundingClientRect().top + halfPx;
     if (event.target.getBoundingClientRect().bottom > visibleBottom) onSnapChange('full');
@@ -172,6 +182,7 @@ export function PlaceSheet({ snap, onSnapChange, onClose, children }: Props) {
       onPointerMove={onPointerMove}
       onPointerUp={(event) => endDrag(event, false)}
       onPointerCancel={(event) => endDrag(event, true)}
+      onLostPointerCapture={(event) => endDrag(event, true)}
       onClickCapture={onClickCapture}
       onFocus={onFocus}
       onKeyDown={onKeyDown}
@@ -188,6 +199,7 @@ export function PlaceSheet({ snap, onSnapChange, onClose, children }: Props) {
         transform,
         transition: offset === null ? 'transform 200ms ease-out' : 'none',
         touchAction: snap === 'half' ? 'none' : 'auto',
+        userSelect: offset === null ? undefined : 'none',
         '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
         '&:focus': { outline: 'none' },
       }}
