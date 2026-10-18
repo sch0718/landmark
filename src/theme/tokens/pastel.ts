@@ -9,6 +9,8 @@ const light: Tokens = {
   text: { primary: '#18181B', secondary: '#52525B', muted: '#71717A' },
   border: '#E4E4E7',
   borderStrong: '#91919E',
+  error: '#D32F2F',
+  errorHover: '#932020',
   accent: { main: '#18181B', contrast: '#D9F99D', text: '#18181B', gradient: '#18181B' },
   label: {
     red: { fill: '#FFD6CC', text: '#8A2A14', marker: '#E8553A' },
@@ -34,6 +36,8 @@ const dark: Tokens = {
   text: { primary: '#F4F4F5', secondary: '#B4B4BC', muted: '#8E8E98' },
   border: '#34343A',
   borderStrong: '#71717D',
+  error: '#FF7A70',
+  errorHover: '#E86A60',
   accent: { main: '#D9F99D', contrast: '#18181B', text: '#D9F99D', gradient: '#D9F99D' },
   label: {
     red: { fill: '#4A2520', text: '#FFB8A8', marker: '#FF7A5C' },

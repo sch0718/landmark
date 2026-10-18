@@ -12,6 +12,16 @@ export type Tokens = {
   border: string;
   /** 입력칸·체크 상자 테두리. `bg.raised` 위에서 3:1 이상. 목록 구분선 등은 `border`. */
   borderStrong: string;
+  /**
+   * 늦음·오류 글자 색(MUI `error.main`, `--tm-error`). `bg.surface`·`bg.raised` 위에서 4.5:1 이상.
+   * MUI 기본 다크 값(#f44336)은 어두운 바탕에서 대비가 모자라 테마마다 둔다.
+   */
+  error: string;
+  /**
+   * 빨간 채운 버튼에 마우스를 올렸을 때의 바탕(MUI `error.dark`). 그 버튼 글자(`error.contrastText`)가 4.5:1 이상.
+   * 라이트는 MUI가 만들던 값 그대로, 다크는 MUI 자동값(#B2554E)이 검정 글자와 3.95라 따로 둔다.
+   */
+  errorHover: string;
   accent: {
     main: string;
     /** `main` 위에 올리는 글자·아이콘 색. */

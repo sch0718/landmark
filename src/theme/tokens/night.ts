@@ -12,6 +12,8 @@ const dark: Tokens = {
   text: { primary: '#E8ECF8', secondary: '#AAB3D0', muted: '#8C96B8' },
   border: '#2B3558',
   borderStrong: '#6A76A0',
+  error: '#FF7A70',
+  errorHover: '#E86A60',
   accent: {
     // 그라데이션 시작색(#7C5CFF)은 흰 글자와의 대비가 4.35라서, 단색으로 쓰는 main은 살짝 짙게 한다.
     main: '#7857FF',
@@ -44,6 +46,8 @@ const light: Tokens = {
   text: { primary: '#151B33', secondary: '#4A5373', muted: '#626F90' },
   border: '#DDE2F0',
   borderStrong: '#8692B2',
+  error: '#D32F2F',
+  errorHover: '#932020',
   accent: {
     main: '#6A4BF0',
     contrast: '#FFFFFF',

@@ -12,6 +12,7 @@ export function cssVarsOf(tokens: Tokens): Record<string, string> {
     '--tm-bg-base': tokens.bg.base,
     '--tm-bg-surface': tokens.bg.surface,
     '--tm-bg-raised': tokens.bg.raised,
+    '--tm-error': tokens.error,
     '--tm-text-primary': tokens.text.primary,
     '--tm-text-secondary': tokens.text.secondary,
     '--tm-text-muted': tokens.text.muted,
@@ -48,6 +49,7 @@ export function createAppTheme(name: ThemeName, mode: ColorMode): Theme {
     palette: {
       mode,
       primary: { main: t.accent.main, contrastText: t.accent.contrast },
+      error: { main: t.error, dark: t.errorHover },
       background: { default: t.bg.base, paper: t.bg.surface },
       text: { primary: t.text.primary, secondary: t.text.secondary, disabled: t.text.muted },
       divider: t.border,

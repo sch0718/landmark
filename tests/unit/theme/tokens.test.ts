@@ -62,6 +62,14 @@ describe('design tokens', () => {
     }
   });
 
+  it('error (늦음·오류 글자) on bg.surface·bg.raised contrast >= 4.5', () => {
+    for (const { name, mode, tokens } of all) {
+      for (const bg of [tokens.bg.surface, tokens.bg.raised]) {
+        expect(contrast(tokens.error, bg), `${name}/${mode} on ${bg}`).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+  });
+
   it('text.primary on bg.base contrast >= 4.5', () => {
     for (const { name, mode, tokens } of all) {
       expect(
