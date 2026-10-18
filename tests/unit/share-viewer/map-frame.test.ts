@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ShareDoc, SharePlace } from 'src/schema/share';
-import { envelope, type FromMap, type ToMap } from 'src/share-protocol';
+import { envelope, type FromMap, type MapLine, type MapPin, type ToMap } from 'src/share-protocol';
 import {
   DEFAULT_MAP_URL,
   READY_TIMEOUT_MS,
@@ -271,5 +271,110 @@ describe('connectMapFrame', () => {
       envelope({ kind: 'init', places }),
       envelope({ kind: 'focus', placeId: 'c' }),
     ]);
+  });
+
+  describe('일정 모드(draw)', () => {
+    const pins: MapPin[] = [
+      { id: 'a', label: '1 서혜커피', lng: 127.1, lat: 37.3, day: 0, role: 'stop' },
+      { id: 'start:b', label: '🏠 장소 b', lng: 127.2, lat: 37.4, day: 0, role: 'endpoint' },
+    ];
+    const lines: MapLine[] = [
+      {
+        id: 'b>a',
+        day: 0,
+        walk: false,
+        path: [
+          [127.2, 37.4],
+          [127.1, 37.3],
+        ],
+      },
+    ];
+
+    it('ready(maxV 2)이면 v 2 draw 다음 v 2 focus를 보낸다(부른 순서와 상관없이)', () => {
+      const { port, receive, sent } = setup();
+      port.focus('a');
+      port.draw({ pins, lines });
+      receive({ kind: 'ready', maxV: 2 });
+      expect(sent()).toEqual([
+        envelope({ kind: 'draw', pins, lines }, 2),
+        envelope({ kind: 'focus', placeId: 'a' }, 2),
+      ]);
+      expect(sent().map((m) => m.v)).toEqual([2, 2]);
+    });
+
+    it('ready 뒤 draw·focus는 바로 v 2로 보내고 같은 종류는 마지막 것만 다시 보낸다', () => {
+      const { port, receive, sent } = setup();
+      receive({ kind: 'ready', maxV: 2 });
+      expect(sent()).toEqual([envelope({ kind: 'init', places: toMapPlaces(makeDoc()) })]);
+      port.draw({ pins, lines });
+      port.draw({ pins: [], lines: [] });
+      port.focus('start:b');
+      expect(
+        sent()
+          .slice(1)
+          .map((m) => [m.kind, m.v]),
+      ).toEqual([
+        ['draw', 2],
+        ['draw', 2],
+        ['focus', 2],
+      ]);
+
+      const before = sent().length;
+      receive({ kind: 'ready', maxV: 2 });
+      expect(sent().slice(before)).toEqual([
+        envelope({ kind: 'draw', pins: [], lines: [] }, 2),
+        envelope({ kind: 'focus', placeId: 'start:b' }, 2),
+      ]);
+    });
+
+    it('ready(maxV 1)이면 v 1 init(라벨 색 장소)과 접두사를 뗀 focus만 보내고 draw는 보내지 않는다', () => {
+      const { port, receive, sent, places } = setup();
+      port.draw({ pins, lines });
+      port.focus('start:b');
+      receive({ kind: 'ready', maxV: 1 });
+      expect(sent()).toEqual([
+        envelope({ kind: 'init', places }),
+        envelope({ kind: 'focus', placeId: 'b' }),
+      ]);
+      expect(sent().every((m) => m.v === 1 && m.kind !== 'draw')).toBe(true);
+
+      // ready 뒤에 부르는 draw도 보내지 않고, focus는 접두사를 뗀다.
+      port.draw({ pins, lines });
+      port.focus('end:c');
+      expect(sent().slice(2)).toEqual([envelope({ kind: 'focus', placeId: 'c' })]);
+    });
+
+    it('ready가 두 번 와도 두 번째에 마지막 draw를 다시 보낸다', () => {
+      const { port, receive, sent } = setup();
+      receive({ kind: 'ready', maxV: 2 });
+      port.draw({ pins, lines });
+      const before = sent().length;
+      receive({ kind: 'ready', maxV: 2 });
+      expect(sent().slice(before)).toEqual([envelope({ kind: 'draw', pins, lines }, 2)]);
+    });
+
+    it('select로 고른 핀은 다시 읽힌 지도에 focus로 되살린다', () => {
+      const { port, receive, sent, onSelect } = setup();
+      port.draw({ pins, lines });
+      receive({ kind: 'ready', maxV: 2 });
+      receive({ kind: 'select', placeId: 'start:b' });
+      expect(onSelect).toHaveBeenCalledWith('start:b');
+      const before = sent().length;
+      receive({ kind: 'ready', maxV: 2 });
+      expect(sent().slice(before)).toEqual([
+        envelope({ kind: 'draw', pins, lines }, 2),
+        envelope({ kind: 'focus', placeId: 'start:b' }, 2),
+      ]);
+    });
+
+    it('draw를 부르지 않은 장소 모드는 maxV 2에서도 v 1 init이다', () => {
+      const { port, receive, sent, places } = setup();
+      port.focus('a');
+      receive({ kind: 'ready', maxV: 2 });
+      expect(sent()).toEqual([
+        envelope({ kind: 'init', places }),
+        envelope({ kind: 'focus', placeId: 'a' }),
+      ]);
+    });
   });
 });

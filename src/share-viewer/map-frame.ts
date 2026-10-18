@@ -1,6 +1,23 @@
 import type { ShareDoc } from 'src/schema/share';
-import { envelope, parseFromMap, type MapPlace, type ToMap } from 'src/share-protocol';
-import type { MapPort } from './render';
+import {
+  envelope,
+  parseFromMap,
+  type MapLine,
+  type MapPin,
+  type MapPlace,
+  type ToMap,
+} from 'src/share-protocol';
+import { placeIdOfPin } from './trip-view';
+
+/**
+ * 보기 화면이 지도에 알리는 창구. 장소 모드는 `focus`·`filter`(v1)만, 일정 모드는 `draw`(v2)를 더 쓴다.
+ * `focus`의 id는 장소 모드에서는 장소 id, 일정 모드에서는 핀 id(`start:`·`end:` 접두사 포함)다.
+ */
+export type MapPort = {
+  focus(id: string | null): void;
+  filter(ids: string[]): void;
+  draw(layers: { pins: MapPin[]; lines: MapLine[] }): void;
+};
 
 /**
  * 지도 페이지(GitHub Pages)를 iframe으로 띄우고 `postMessage`로만 주고받는다(spec §2.4, §4.5).
@@ -37,7 +54,7 @@ export function toMapPlaces(doc: ShareDoc): MapPlace[] {
 
 export function connectMapFrame(
   host: HTMLElement,
-  opts: { mapUrl: string; places: MapPlace[]; onSelect(placeId: string): void; win?: Window },
+  opts: { mapUrl: string; places: MapPlace[]; onSelect(id: string): void; win?: Window },
 ): MapPort {
   const win = opts.win ?? window;
   const d = host.ownerDocument;
@@ -54,11 +71,35 @@ export function connectMapFrame(
 
   let ready = false;
   let tilesFailed = false;
-  // 종류별 마지막 focus·filter(부른 순서). ready가 올 때마다 init 뒤에 다시 보낸다:
-  // ready 전에 부른 것을 늦게 보내고, 지도 페이지가 다시 읽혀도 거른 상태·고른 장소를 되살린다.
+  // 지도 페이지가 아는 가장 높은 규약(`ready.maxV`). ready 전에는 0이다.
+  let maxV = 0;
+  // 종류별 마지막 focus·filter·draw(부른 순서). ready가 올 때마다 다시 보낸다:
+  // ready 전에 부른 것을 늦게 보내고, 지도 페이지가 다시 읽혀도 그린 것·거른 상태·고른 장소를 되살린다.
   const latest: ToMap[] = [];
 
-  const post = (msg: ToMap) => iframe.contentWindow?.postMessage(envelope(msg), origin);
+  // 일정 모드(`draw`를 한 번이라도 부른 경우). 지도 페이지가 v2를 알면 draw로 그리고,
+  // 모르면 v1 init(모든 장소)으로 대신해 draw는 보내지 않는다(spec §6.2).
+  const tripMode = () => latest.some((m) => m.kind === 'draw');
+  const drawing = () => tripMode() && maxV >= 2;
+
+  const postV = (msg: ToMap, v: 1 | 2) =>
+    iframe.contentWindow?.postMessage(envelope(msg, v), origin);
+  // 보낼 때의 봉투 버전과 내용을 규칙대로 고른다.
+  const post = (msg: ToMap) => {
+    if (msg.kind === 'draw') {
+      if (maxV >= 2) postV(msg, 2);
+      return;
+    }
+    if (drawing()) {
+      if (msg.kind === 'focus') postV(msg, 2);
+      return; // 일정 모드는 filter를 쓰지 않는다
+    }
+    if (msg.kind === 'focus' && tripMode() && msg.placeId !== null) {
+      postV({ kind: 'focus', placeId: placeIdOfPin(msg.placeId) }, 1);
+      return;
+    }
+    postV(msg, 1);
+  };
   const showMap = (show: boolean) => {
     iframe.hidden = !show;
     notice.hidden = show;
@@ -84,12 +125,21 @@ export function connectMapFrame(
     if (msg === null) return;
     switch (msg.kind) {
       case 'ready':
-        // 시한 뒤에 늦게 와도(느린 망) 안내를 걷고 지도를 보인다. 지도 페이지가 다시 읽히면 init을 다시 보낸다.
+        // 시한 뒤에 늦게 와도(느린 망) 안내를 걷고 지도를 보인다. 지도 페이지가 다시 읽히면 처음부터 다시 보낸다.
         win.clearTimeout(timer);
         ready = true;
+        maxV = msg.maxV;
         if (!tilesFailed) showMap(true);
-        post({ kind: 'init', places: opts.places });
-        for (const replay of latest) post(replay);
+        if (drawing()) {
+          // 마지막 draw, 그다음 마지막 focus(부른 순서와 상관없이).
+          for (const kind of ['draw', 'focus'] as const) {
+            const replay = latest.find((m) => m.kind === kind);
+            if (replay !== undefined) post(replay);
+          }
+        } else {
+          post({ kind: 'init', places: opts.places });
+          for (const replay of latest) post(replay);
+        }
         break;
       case 'select':
         // 지도는 누른 마커를 이미 강조했다. 보내지 않고, 다시 읽힐 때 되살릴 고른 장소로만 남긴다.
@@ -104,11 +154,14 @@ export function connectMapFrame(
   });
 
   return {
-    focus(placeId) {
-      send({ kind: 'focus', placeId });
+    focus(id) {
+      send({ kind: 'focus', placeId: id });
     },
-    filter(placeIds) {
-      send({ kind: 'filter', placeIds: [...placeIds] });
+    filter(ids) {
+      send({ kind: 'filter', placeIds: [...ids] });
+    },
+    draw(layers) {
+      send({ kind: 'draw', pins: layers.pins, lines: layers.lines });
     },
   };
 }
