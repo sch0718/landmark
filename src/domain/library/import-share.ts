@@ -34,7 +34,7 @@ const CUT_MARK = '…';
 const MEMO_MAX = LIBRARY_LIMITS.memoChars;
 
 type Outcome = keyof OpSummary;
-type Failure = Extract<OpResult, { ok: false }>;
+export type Failure = Extract<OpResult, { ok: false }>;
 
 /** 앞뒤 공백을 지우고 30자(UTF-16)로 자른다. */
 export function cutLabelName(name: string): string {
@@ -300,22 +300,32 @@ function placeItem(
 
 const pick = ({ name, address, lng, lat }: SharePlace) => ({ name, address, lng, lat });
 
+export type SharePlacesResult = {
+  ok: true;
+  lib: Library;
+  /** 제목 라벨 id(없으면 `undefined`). */
+  titleId: string | undefined;
+  summary: OpSummary;
+  /** 받은 장소 id → 결과(내) 장소 id. 고른 장소만 들어 있다. */
+  placeIds: ReadonlyMap<string, string>;
+};
+
 /**
  * 고른 받은 장소를 파일 순서대로 작업 중인 문서에 이어서 넣는다(스펙 §3).
  * `summary`는 결과 장소마다 처음 손댄 순간의 원래 상태로 한 번만 센다(스펙 §3.5).
- * `createdId`는 제목 라벨 id(없으면 `undefined`). 메모 머리 줄의 제목은 다듬은 파일 제목(비면 `받은 장소`)이다.
+ * 메모 머리 줄의 제목은 다듬은 파일 제목(비면 `받은 장소`)이다.
  */
-export function importShare(
+export function importSharePlaces(
   lib: Library,
   doc: ShareDoc,
   input: ShareImportInput,
   ctx: OpCtx,
-): OpResult {
+): SharePlacesResult | Failure {
   const selected = new Set(input.selected);
+  const placeIds = new Map<string, string>();
+  const summary: OpSummary = { created: 0, merged: 0, restored: 0 };
   // 고른 장소가 없으면 제목 라벨도 만들지 않는다(화면이 막지만 연산도 지킨다).
-  if (!doc.places.some((p) => selected.has(p.id))) {
-    return { ok: true, lib, summary: { created: 0, merged: 0, restored: 0 } };
-  }
+  if (!hasSelected(doc, selected)) return { ok: true, lib, titleId: undefined, summary, placeIds };
   const labels = resolveLabels(lib, doc, selected, input.titleLabel, ctx);
   if (!labels.ok) return labels;
   const base = labels.lib;
@@ -329,14 +339,33 @@ export function importShare(
     const labelIds = [...new Set([...received, ...title])];
     const { place, outcome } = placeItem(base, finder, item, labelIds, memo, ctx);
     finder.put(place);
+    placeIds.set(item.id, place.id);
     if (!outcomes.has(place.id)) outcomes.set(place.id, outcome);
   }
-  const summary: OpSummary = { created: 0, merged: 0, restored: 0 };
   for (const outcome of outcomes.values()) summary[outcome] += 1;
   return {
     ok: true,
     lib: { ...base, places: finder.places },
-    createdId: labels.titleId,
+    titleId: labels.titleId,
     summary,
+    placeIds,
   };
+}
+
+const hasSelected = (doc: ShareDoc, selected: ReadonlySet<string>) =>
+  doc.places.some((p) => selected.has(p.id));
+
+/** `importSharePlaces`를 부르고 `createdId`는 제목 라벨 id(없으면 `undefined`)로 돌려준다. */
+export function importShare(
+  lib: Library,
+  doc: ShareDoc,
+  input: ShareImportInput,
+  ctx: OpCtx,
+): OpResult {
+  if (!hasSelected(doc, new Set(input.selected))) {
+    return { ok: true, lib, summary: { created: 0, merged: 0, restored: 0 } };
+  }
+  const r = importSharePlaces(lib, doc, input, ctx);
+  if (!r.ok) return r;
+  return { ok: true, lib: r.lib, createdId: r.titleId, summary: r.summary };
 }
