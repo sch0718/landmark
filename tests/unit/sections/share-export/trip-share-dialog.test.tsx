@@ -3,9 +3,11 @@ import userEvent from '@testing-library/user-event';
 import { Effect, Layer, Result } from 'effect';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SHARE_DATA_PLACEHOLDER } from 'src/domain/share/inject';
+import { readShareHtml } from 'src/domain/share/read-share';
 import { setAppRuntimeForTest } from 'src/lib/effect/runtime';
 import type { Library } from 'src/schema/library';
 import { ShareFileDialog } from 'src/sections/share-export/ShareFileDialog';
+import { tooManyHint } from 'src/sections/share-export/TripShareDialog';
 import { RouteLookupError } from 'src/services/errors';
 import { RouteLookup } from 'src/services/route-lookup';
 import { makePlace, renderLibrary, sampleLibrary, withPlaces } from '../library/fixtures';
@@ -435,4 +437,130 @@ describe('내보내기 크기 한도', () => {
     await waitFor(() => expect(downloadMock).toHaveBeenCalledTimes(1));
     expect(toastMock).toHaveBeenCalledWith('파일을 만들었어요');
   }, 60_000);
+});
+
+// ---------- 장소 수 한도 (가져오기 1,000곳) ----------
+
+const TOO_MANY =
+  /^장소가 너무 많아요\(([\d,]+)곳\)\. Landmark는 1,000곳까지 가져올 수 있어요\. (.+)$/;
+
+describe('ShareFileDialog 장소 수 검사', () => {
+  /** 런타임(틀 받기)만 준비하고 창을 따로 그린다. 장소 `count`곳·`bytes`바이트인 html을 만드는 가짜 `make`. */
+  async function renderShareFile(count: number, withHint: boolean, bytes = 10) {
+    await renderLibrary(sampleLibrary(), { path: '/trips' });
+    const onClose = vi.fn();
+    const make = vi.fn(() =>
+      Result.succeed({ html: 'a'.repeat(bytes), fileName: '시험-20261018.html', count }),
+    );
+    const hint = vi.fn(() => '나눠 주세요');
+    await act(async () => {
+      render(
+        <ShareFileDialog
+          open
+          onClose={onClose}
+          heading="시험 창"
+          summary="시험 문구"
+          defaultTitle="시험"
+          emptyMessage={null}
+          make={make}
+          tooBigHint={() => '줄여 주세요'}
+          tooManyHint={withHint ? hint : undefined}
+        />,
+      );
+    });
+    const d = screen.getByRole('dialog', { name: '시험 창' });
+    return { d, onClose, make, hint };
+  }
+
+  it('정확히 1,000곳이면 저장한다', async () => {
+    const user = userEvent.setup();
+    const { d, onClose } = await renderShareFile(1000, true);
+    await user.click(within(d).getByRole('button', { name: '파일 저장' }));
+    await waitFor(() => expect(downloadMock).toHaveBeenCalledTimes(1));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('1,001곳이면 저장·공유하지 않고 알린다(누를 때마다 다시 본다)', async () => {
+    const user = userEvent.setup();
+    const share = stubShare(() => Promise.resolve());
+    const { d, onClose, make, hint } = await renderShareFile(1001, true);
+    await user.click(within(d).getByRole('button', { name: '파일 저장' }));
+    expect(await within(d).findByRole('alert')).toHaveTextContent(
+      '장소가 너무 많아요(1,001곳). Landmark는 1,000곳까지 가져올 수 있어요. 나눠 주세요',
+    );
+    expect(hint).toHaveBeenCalledWith({ title: '시험', includeMemo: true, now: expect.any(Date) });
+    expect(downloadMock).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(toastMock).not.toHaveBeenCalled();
+
+    await user.click(await within(d).findByRole('button', { name: '공유' }));
+    await waitFor(() => expect(make).toHaveBeenCalledTimes(2));
+    expect(share).not.toHaveBeenCalled();
+    expect(within(d).getByRole('alert').textContent).toMatch(TOO_MANY);
+    expect(downloadMock).not.toHaveBeenCalled();
+  });
+
+  it('장소 수 검사가 크기 검사보다 먼저다', async () => {
+    const user = userEvent.setup();
+    const { d } = await renderShareFile(1001, true, 5_242_881);
+    await user.click(within(d).getByRole('button', { name: '파일 저장' }));
+    expect((await within(d).findByRole('alert')).textContent).toMatch(TOO_MANY);
+    expect(downloadMock).not.toHaveBeenCalled();
+  });
+
+  it('tooManyHint가 없으면 1,001곳이어도 저장한다', async () => {
+    const user = userEvent.setup();
+    const { d } = await renderShareFile(1001, false);
+    await user.click(within(d).getByRole('button', { name: '파일 저장' }));
+    await waitFor(() => expect(downloadMock).toHaveBeenCalledTimes(1));
+    expect(within(d).queryByRole('alert')).not.toBeInTheDocument();
+  });
+});
+
+describe('일정 공유 장소 수 한도', () => {
+  /** 모두 같은 좌표라 경로를 묻지 않는다. 일정 `stops`곳(Day 1) + 후보 `candidates`곳. */
+  function manyLibrary(stops: number, candidates: number): Library {
+    const places = Array.from({ length: stops + candidates }, (_, i) => makePlace(100 + i));
+    const ids = places.map((p) => p.id);
+    const trip = makeTrip({ days: 1, stops: [ids.slice(0, stops)], candidates: ids.slice(stops) });
+    return withTrip(withPlaces(sampleLibrary(), places), trip);
+  }
+
+  it('정확히 1,000곳(일정 1곳 + 후보 999곳)이면 저장한다', async () => {
+    const user = userEvent.setup();
+    await renderLibrary(manyLibrary(1, 999), { path: '/trips' });
+    await openFromList(user);
+    await user.click(saveButton());
+    await waitFor(() => expect(downloadMock).toHaveBeenCalledTimes(1));
+    const read = readShareHtml(downloadMock.mock.calls[0]![0] as string);
+    expect(read.ok && read.doc.places).toHaveLength(1000);
+  }, 60_000);
+
+  it('1,001곳(일정 2곳 + 후보 999곳)이면 막고 후보를 끄라고 말한다. 끄면 저장되고 다시 읽힌다', async () => {
+    const user = userEvent.setup();
+    const share = stubShare(() => Promise.resolve());
+    await renderLibrary(manyLibrary(2, 999), { path: '/trips' });
+    const d = await openFromList(user);
+
+    await user.click(saveButton());
+    const alert = await within(d).findByRole('alert');
+    expect(alert.textContent).toBe(
+      "장소가 너무 많아요(1,001곳). Landmark는 1,000곳까지 가져올 수 있어요. '후보 999곳도 넣기'를 끄고 다시 해 주세요",
+    );
+    expect(downloadMock).not.toHaveBeenCalled();
+    await user.click(await within(d).findByRole('button', { name: '공유' }));
+    expect(share).not.toHaveBeenCalled();
+
+    await user.click(within(d).getByRole('checkbox', { name: '후보 999곳도 넣기' }));
+    await user.click(saveButton());
+    await waitFor(() => expect(downloadMock).toHaveBeenCalledTimes(1));
+    const read = readShareHtml(downloadMock.mock.calls[0]![0] as string);
+    expect(read.ok).toBe(true);
+    expect(read.ok && read.doc.places).toHaveLength(2);
+  }, 60_000);
+
+  it('줄이는 방법: 후보가 켜져 있고 1곳 이상이면 후보 체크를, 아니면 일정을 나누라고 말한다', () => {
+    expect(tooManyHint(999)).toBe("'후보 999곳도 넣기'를 끄고 다시 해 주세요");
+    expect(tooManyHint(null)).toBe('일정을 나눠 보내 주세요');
+  });
 });

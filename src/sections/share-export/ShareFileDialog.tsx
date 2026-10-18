@@ -12,6 +12,7 @@ import { Effect, Result } from 'effect';
 import { useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { toast } from 'sonner';
 import { downloadText } from 'src/lib/download-text';
+import { SHARE_IMPORT_LIMITS } from 'src/domain/share/read-share';
 import { startEffect } from 'src/lib/effect/runtime';
 import {
   SHARE_FILE_MAX_BYTES,
@@ -31,7 +32,7 @@ const SHARE_FAILED = '공유하지 못했어요. 파일 저장을 이용해 주�
 const DONE = '파일을 만들었어요';
 const SHARE_PREPARING = '공유 준비 중…';
 
-/** 창이 `make`·`tooBigHint`에 넘기는, 사용자가 고른 값. */
+/** 창이 `make`·`tooBigHint`·`tooManyHint`에 넘기는, 사용자가 고른 값. */
 export type ShareFileOptions = { title: string; includeMemo: boolean; now: Date };
 
 type Props = {
@@ -51,6 +52,8 @@ type Props = {
   make(template: string, opts: ShareFileOptions): Result.Result<ShareHtml, ShareDocInvalid>;
   /** 있으면 크기 검사를 켠다. 한도를 넘을 때 문구 끝에 붙일 줄이는 방법. */
   tooBigHint?(opts: ShareFileOptions): string;
+  /** 있으면 장소 수 검사를 켠다. 가져오기 한도(1,000곳)를 넘을 때 문구 끝에 붙일 줄이는 방법. */
+  tooManyHint?(opts: ShareFileOptions): string;
 };
 
 /** 이 기기에서 HTML 파일을 시스템 공유 창으로 보낼 수 있는지. 어떤 환경에서도 던지지 않는다. */
@@ -86,6 +89,10 @@ function failureMessage(e: unknown): string {
 const tooBigMessage = (bytes: number, hint: string): string =>
   `파일이 너무 커요(약 ${(bytes / 1_048_576).toFixed(1)}MB). Landmark는 5MB까지 가져올 수 있어요. ${hint}`;
 
+/** 가져오기 한도보다 장소가 많은 파일의 안내(스펙 §3.2). */
+const tooManyMessage = (count: number, hint: string): string =>
+  `장소가 너무 많아요(${count.toLocaleString('ko-KR')}곳). Landmark는 1,000곳까지 가져올 수 있어요. ${hint}`;
+
 /**
  * 공유 파일(HTML 하나)을 만드는 창의 몸통(스펙 §9.3). 장소 `내보내기`와 `일정 공유`가 같이 쓰고,
  * 둘은 제목·대상 문구·추가 체크·`make`만 다르게 넘긴다. 파일로 저장하거나, 휴대폰처럼 파일 공유가
@@ -100,6 +107,7 @@ const tooBigMessage = (bytes: number, hint: string): string =>
  *
  * `tooBigHint`가 있으면 만든 파일의 바이트를 재어 가져오기 한도를 넘을 때 저장·공유하지 않고 창 안에
  * 알린다. 재는 일은 동기라 공유 창의 사용자 동작 제약을 어기지 않는다. 누를 때마다 다시 잰다.
+ * `tooManyHint`가 있으면 그보다 먼저 담긴 장소 수를 보고, 가져오기 한도를 넘으면 같은 식으로 막는다.
  */
 export function ShareFileDialog({
   open,
@@ -111,6 +119,7 @@ export function ShareFileDialog({
   children,
   make,
   tooBigHint,
+  tooManyHint,
 }: Props) {
   const titleId = useId();
   const [title, setTitle] = useState(defaultTitle);
@@ -185,6 +194,10 @@ export function ShareFileDialog({
         return;
       }
       const made: ShareHtml = result.success;
+      if (tooManyHint !== undefined && made.count > SHARE_IMPORT_LIMITS.places) {
+        setError(tooManyMessage(made.count, tooManyHint(opts)));
+        return;
+      }
       if (tooBigHint !== undefined) {
         const bytes = shareHtmlBytes(made.html);
         if (bytes > SHARE_FILE_MAX_BYTES) {

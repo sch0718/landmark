@@ -41,6 +41,15 @@ function tooBigHint(includeMemo: boolean, candidates: number | null): string {
 }
 
 /**
+ * 장소가 가져오기 한도를 넘을 때 줄이는 방법(스펙 §3.2). 후보를 넣고 있으면(`candidates`가 null이 아니면)
+ * 후보 체크를, 아니면 일정을 나누라고 말한다.
+ */
+export function tooManyHint(candidates: number | null): string {
+  if (candidates !== null) return `'후보 ${candidates}곳도 넣기'를 끄고 다시 해 주세요`;
+  return '일정을 나눠 보내 주세요';
+}
+
+/**
  * 여행 하나를 일정 공유 파일(v2)로 만드는 창(스펙 §3.2). 몸통은 장소 `내보내기`와 같은 `ShareFileDialog`이고,
  * 이 창은 대상 문구·`후보 <C>곳도 넣기` 체크·경로 상태 줄과 v2 문서 만들기를 넘긴다. 열려 있는 동안 여행의
  * 모든 구간을 묻는다(`useTripLegs`). 받는 중에도 저장할 수 있고, 그때 답이 없는 구간은 어림값으로 들어간다.
@@ -93,6 +102,7 @@ export function TripShareDialog({ open, onClose, tripId }: Props) {
         })
       }
       tooBigHint={(opts) => tooBigHint(opts.includeMemo, withCandidates ? candidateCount : null)}
+      tooManyHint={() => tooManyHint(withCandidates ? candidateCount : null)}
     >
       {candidateCount > 0 && (
         <FormControlLabel
