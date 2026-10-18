@@ -28,7 +28,7 @@ import { paths } from 'src/routes/paths';
 import { focusIsLost, focusStepField, StepScopeContext } from 'src/sections/add-place/step-focus';
 import { ADD_LABEL } from 'src/sections/shell/nav-items';
 import { DETAIL_WIDTH } from 'src/sections/shell/pane-widths';
-import { sheetStateOf } from 'src/sections/shell/sheet-state';
+import { sheetStateOf, useCloseSheet } from 'src/sections/shell/sheet-state';
 import { MAIN_ID } from 'src/sections/shell/SkipLink';
 import { useLayout } from 'src/sections/shell/use-layout';
 import {
@@ -151,6 +151,7 @@ export function useAddFlowRoute(mapShown: boolean) {
   const prev = useRef({ step, pathname, hint });
   // 이 훅이 지도로 옮기는 중이다. 그 경로 변경으로는 핀 모드를 끝내지 않는다.
   const movingToMap = useRef(false);
+  const closeSheet = useCloseSheet();
   // 지도가 보이는 경로로 옮긴다. 기록 상태는 이때만 읽으면 되어 이벤트로 둔다(상태가 바뀔 때마다 다시 돌지 않게).
   const moveToMap = useEffectEvent(() => {
     if (!compact) {
@@ -161,8 +162,8 @@ export function useAddFlowRoute(mapShown: boolean) {
       void navigate(paths.map);
       return;
     }
-    const sheet = sheetStateOf(state);
-    if (sheet.inApp && sheet.from === 'map') void navigate(-1);
+    // 지도 위 시트는 닫기와 같다(`useCloseSheet`). 목록 위 시트는 목록에 들르지 않고 바로 바꿔치기한다.
+    if (sheetStateOf(state).from === 'map') closeSheet();
     else void navigate(paths.map, { replace: true });
   });
   useEffect(() => {
