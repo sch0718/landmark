@@ -92,6 +92,8 @@ describe('useTripLegs', () => {
     expect(pending.queriedAt).toBeNull();
     expect(pending.tollFare).toBeNull();
     expect(pending.durationS).toBeGreaterThan(0);
+    // 받은 경로가 아니면 경로선·조회 시각이 없다(빌더가 지우는 값과 같은 계약).
+    expect(pending.path).toEqual([]);
   });
 
   it('열면 상태가 없는 구간만 묻고, 네 갈래 상태를 공유 상태로 바꾼다', async () => {
@@ -147,9 +149,11 @@ describe('useTripLegs', () => {
     const noRoute = legs.routeOf(legBetween(P5, HOUSE));
     expect(noRoute).toMatchObject({ status: 'no-route', queriedAt: null, tollFare: null });
     expect(noRoute.durationS).toBeGreaterThan(0);
+    expect(noRoute.path).toEqual([]);
     const failed = legs.routeOf(legBetween(HOUSE, P3));
     expect(failed).toMatchObject({ status: 'estimated', queriedAt: null, tollFare: null });
     expect(failed.durationS).toBeGreaterThan(0);
+    expect(failed.path).toEqual([]);
   });
 
   it('연결 실패도 답으로 세고(answered) 어림값으로 넣는다', async () => {
@@ -158,5 +162,55 @@ describe('useTripLegs', () => {
     expect(hook.result.current.estimated).toBe(4);
     expect(hook.result.current.oldestQueriedAt).toBeNull();
     expect(hook.result.current.routeOf(legBetween(P2, P5)).status).toBe('estimated');
+  });
+
+  it('열면 연결 실패였던 구간도 실패한 요청과 같은 종류(refresh)로 다시 묻는다', async () => {
+    const { routes, store, legBetween, hook } = await setup(() => route(12, 1100), false);
+    const routed = { seq: 0, status: 'routed' as const, result: route(9, 4800) };
+    act(() => {
+      store.set(routeStatesAtom, {
+        [routeKeyOf(legBetween(NEAR, P2))]: routed,
+        [routeKeyOf(legBetween(P2, P5))]: routed,
+        [routeKeyOf(legBetween(P5, HOUSE))]: { seq: 0, status: 'offline', refresh: true },
+        [routeKeyOf(legBetween(HOUSE, P3))]: { seq: 0, status: 'offline', refresh: false },
+      });
+    });
+
+    hook.rerender({ on: true });
+    await waitFor(() => expect(hook.result.current.estimated).toBe(0));
+    expect(routes.calls.map((c) => `${c.from}→${c.to}:${String(c.refresh)}`).sort()).toEqual(
+      ['창가 자리→바다 숙소:true', '바다 숙소→속초 횟집:false'].sort(),
+    );
+  });
+
+  it('active인 동안 인터넷이 돌아오면(online) 연결 실패 구간만 다시 묻는다', async () => {
+    let online = false;
+    const { routes, hook } = await setup(() => (online ? route(12, 1100) : 'OFFLINE'), true);
+    await waitFor(() => expect(hook.result.current.estimated).toBe(4));
+    expect(routes.calls).toHaveLength(4);
+
+    online = true;
+    await act(async () => {
+      window.dispatchEvent(new Event('online'));
+    });
+    await waitFor(() => expect(hook.result.current.estimated).toBe(0));
+    expect(routes.calls).toHaveLength(8);
+    expect(routes.calls.slice(4).every((c) => !c.refresh)).toBe(true);
+  });
+
+  it('active가 아니면 연결 실패 구간을 열 때도 online에도 다시 묻지 않는다', async () => {
+    let online = false;
+    const { routes, hook } = await setup(() => (online ? route(12, 1100) : 'OFFLINE'), true);
+    await waitFor(() => expect(hook.result.current.estimated).toBe(4));
+    expect(routes.calls).toHaveLength(4);
+
+    hook.rerender({ on: false });
+    online = true;
+    await act(async () => {
+      window.dispatchEvent(new Event('online'));
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    expect(routes.calls).toHaveLength(4);
+    expect(hook.result.current.estimated).toBe(4);
   });
 });

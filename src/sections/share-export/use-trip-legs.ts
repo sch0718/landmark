@@ -2,12 +2,12 @@ import { useAtomValue, useStore } from 'jotai';
 import { useCallback, useEffect, useMemo } from 'react';
 import type { ShareLegTime } from 'src/domain/share/build-trip-share';
 import { dayLegs, type Leg } from 'src/domain/trips/query';
-import { forkEffect } from 'src/lib/effect/runtime';
 import {
   isSamePointLeg,
-  lookupAll,
   planLeg,
+  requestLegs,
   routeKeyOf,
+  useOnlineRetry,
 } from 'src/sections/trips/planner/use-day-plan';
 import { libraryAtom } from 'src/stores/library-state';
 import { routeStatesAtom } from 'src/stores/trip-planner';
@@ -35,8 +35,9 @@ const SAME_POINT: ShareLegTime = {
 };
 
 /**
- * 여행 하나의 모든 구간 시간(일정 공유 창, 스펙 §3.2). `active`인 동안 상태가 없는 구간만 계획 화면과 같은
- * `lookupAll`로 묻고(`routeStatesAtom`에 답이 쌓인다), 꺼지거나 화면이 사라지면 묻기를 멈춘다.
+ * 여행 하나의 모든 구간 시간(일정 공유 창, 스펙 §3.2). `active`인 동안 계획 화면과 같은 방식으로 묻는다:
+ * 상태가 없는 구간과 연결 실패였던 구간을 열 때 묻고, 인터넷이 돌아오면(`online`) 연결 실패 구간을 다시
+ * 묻는다(`routeStatesAtom`에 답이 쌓인다). 꺼지거나 화면이 사라지면 묻기를 멈춘다.
  * 그래서 여행 목록에서 창을 열어도 경로가 채워진다. 답이 없는 구간은 계획 화면처럼 직선 추정이다.
  */
 export function useTripLegs(tripId: string, active: boolean): TripLegs {
@@ -54,31 +55,26 @@ export function useTripLegs(tripId: string, active: boolean): TripLegs {
   // 요청할 구간 키. 문자열 하나로 만들어 내용이 같으면 효과가 다시 돌지 않게 한다.
   const requestKeys = useMemo(() => [...new Set(legs.map(routeKeyOf))].join('\n'), [legs]);
 
-  useEffect(() => {
-    if (!active || requestKeys === '') return;
-    const known = store.get(routeStatesAtom);
-    const pending = requestKeys
-      .split('\n')
-      .filter((key) => known[key] === undefined)
-      .map((key) => ({ key, refresh: false }));
-    if (pending.length === 0) return;
-    return forkEffect(lookupAll(store, pending));
-  }, [active, requestKeys, store]);
+  useEffect(
+    () => (active ? requestLegs(store, requestKeys) : undefined),
+    [active, requestKeys, store],
+  );
+  // 인터넷이 돌아오면 연결 실패 구간을 다시 묻는다(창이 열려 있는 동안만).
+  useOnlineRetry(store, active ? requestKeys : '');
 
   const routeOf = useCallback(
     (leg: Leg): ShareLegTime => {
       if (isSamePointLeg(leg)) return SAME_POINT;
       const planned = planLeg(leg, states[routeKeyOf(leg)]);
+      const routed = planned.status === 'routed';
       return {
         durationS: planned.time.durationS,
         distanceM: planned.time.distanceM,
         tollFare: planned.time.tollFare,
-        status:
-          planned.status === 'routed' || planned.status === 'no-route'
-            ? planned.status
-            : 'estimated',
-        queriedAt: planned.queriedAt,
-        path: planned.path,
+        status: routed ? 'routed' : planned.status === 'no-route' ? 'no-route' : 'estimated',
+        // 받은 경로가 아니면 경로선·조회 시각이 없다(계획 화면의 직선 추정 선은 넣지 않는다).
+        queriedAt: routed ? planned.queriedAt : null,
+        path: routed ? planned.path : [],
       };
     },
     [states],

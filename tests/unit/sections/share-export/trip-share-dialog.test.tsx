@@ -6,6 +6,7 @@ import { SHARE_DATA_PLACEHOLDER } from 'src/domain/share/inject';
 import { setAppRuntimeForTest } from 'src/lib/effect/runtime';
 import type { Library } from 'src/schema/library';
 import { ShareFileDialog } from 'src/sections/share-export/ShareFileDialog';
+import { RouteLookupError } from 'src/services/errors';
 import { RouteLookup } from 'src/services/route-lookup';
 import { makePlace, renderLibrary, sampleLibrary, withPlaces } from '../library/fixtures';
 import {
@@ -223,6 +224,35 @@ describe('일정 공유 창', () => {
     expect(doc.trips[0]!.days[0]!.legs.map((l) => l.status)).toEqual(['routed', 'no-route']);
     expect(toastMock).toHaveBeenCalledWith('파일을 만들었어요');
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
+  it('받는 중·연결 실패인 구간은 경로선 없는 어림값(estimated)으로 저장한다', async () => {
+    const user = userEvent.setup();
+    // 닭강정→카페거리는 끝나지 않고(받는 중), 카페거리→창가 자리는 연결 실패다.
+    let seq = 0;
+    const routeLookup = Layer.succeed(
+      RouteLookup,
+      RouteLookup.of({
+        leg: (_mode, _from, to) =>
+          Effect.suspend(() =>
+            nameAt(to) === '안목 카페거리'
+              ? Effect.never
+              : Effect.fail(new RouteLookupError({ code: 'OFFLINE', seq: ++seq, fresh: false })),
+          ),
+      }),
+    );
+    const trip = makeTrip({ stops: [[P1, P2, P5]] });
+    await renderLibrary(withTrip(plannerLibrary(), trip), { path: '/trips', routeLookup });
+    await openFromList(user);
+    await waitFor(() => expect(statusLine()).toHaveTextContent('이동 경로를 받는 중이에요 (1/2)'));
+    await user.click(saveButton());
+
+    await waitFor(() => expect(downloadMock).toHaveBeenCalledTimes(1));
+    const legs = savedDoc().trips[0]!.days[0]!.legs as unknown as Array<Record<string, unknown>>;
+    expect(legs).toHaveLength(2);
+    for (const leg of legs) {
+      expect(leg).toMatchObject({ status: 'estimated', path: [], queriedAt: null });
+    }
   });
 
   it('후보를 끄고 저장하면 후보가 빠진다', async () => {
