@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { NaverMapAdapter } from 'src/components/map/NaverMapAdapter';
+import { MAP_CLICK_DELAY_MS, NaverMapAdapter } from 'src/components/map/NaverMapAdapter';
 import { installMapResources } from './helpers/map-resources';
 
 let release!: () => void;
@@ -179,10 +179,16 @@ describe('NaverMapAdapter SDK 계약', () => {
       release();
       await pending;
       adapter.setMarkers(markers);
-      const click = [...sdk.listeners].find((l) => (l as { name: string }).name === 'click') as {
-        callback: (e?: unknown) => void;
+      const listener = (name: string) =>
+        [...sdk.listeners].find((l) => (l as { name: string }).name === name) as
+          { callback: (e?: unknown) => void } | undefined;
+      return {
+        sdk,
+        adapter,
+        onMap,
+        click: listener('click')!.callback,
+        dblclick: (e?: unknown) => listener('dblclick')?.callback(e),
       };
-      return { sdk, adapter, onMap, click: click.callback };
     }
     const one = [{ id: 'p1', lng: 128, lat: 37.5, color: '#000', clusterable: false, label: '가' }];
 
@@ -250,6 +256,41 @@ describe('NaverMapAdapter SDK 계약', () => {
         icons[0]!.click();
         vi.runAllTimers();
         expect(onMap).not.toHaveBeenCalled();
+      } finally {
+        adapter.destroy();
+        vi.useRealTimers();
+      }
+    });
+
+    it(`지도 click은 ${MAP_CLICK_DELAY_MS}ms 미룬 뒤에야 알린다`, async () => {
+      expect(MAP_CLICK_DELAY_MS).toBe(250);
+      const { adapter, onMap, click } = await setup(one);
+      try {
+        click({ pointerEvent: { target: document.createElement('div') } });
+        vi.advanceTimersByTime(MAP_CLICK_DELAY_MS - 1);
+        expect(onMap).not.toHaveBeenCalled();
+        vi.advanceTimersByTime(1);
+        expect(onMap).toHaveBeenCalledTimes(1);
+      } finally {
+        adapter.destroy();
+        vi.useRealTimers();
+      }
+    });
+
+    it('두 번 눌러 확대하면(click 뒤 dblclick) 지도 click을 알리지 않는다', async () => {
+      const { adapter, onMap, click, dblclick } = await setup(one);
+      try {
+        const div = document.createElement('div');
+        click({ pointerEvent: { target: div } });
+        vi.advanceTimersByTime(120);
+        click({ pointerEvent: { target: div } });
+        dblclick({ pointerEvent: { target: div } });
+        vi.runAllTimers();
+        expect(onMap).not.toHaveBeenCalled();
+        // 그 뒤의 한 번 누르기는 다시 알린다.
+        click({ pointerEvent: { target: div } });
+        vi.runAllTimers();
+        expect(onMap).toHaveBeenCalledTimes(1);
       } finally {
         adapter.destroy();
         vi.useRealTimers();
@@ -347,7 +388,7 @@ describe('NaverMapAdapter SDK 계약', () => {
     expect(resources.snapshot()).toMatchObject({
       activeAdapters: 1,
       callbackSlots: 2,
-      sdkListeners: 2, // idle + click
+      sdkListeners: 3, // idle + click + dblclick
       overlays: 2,
     });
     const idle = [...sdk.listeners][0] as { callback: () => void };
@@ -359,7 +400,7 @@ describe('NaverMapAdapter SDK 계약', () => {
     expect(bounds).toHaveBeenCalledTimes(1);
     expect(sdk.listeners.size).toBe(0);
     expect(sdk.overlays.size).toBe(0);
-    expect(sdk.removeListener).toHaveBeenCalledTimes(2); // idle + click
+    expect(sdk.removeListener).toHaveBeenCalledTimes(3); // idle + click + dblclick
     expect(sdk.map.destroy).toHaveBeenCalledTimes(1);
     expect(adapter).toMatchObject({ markerCb: null, boundsCb: null, mapClickCb: null });
     expect(Object.values(resources.snapshot()).every((count) => count === 0)).toBe(true);

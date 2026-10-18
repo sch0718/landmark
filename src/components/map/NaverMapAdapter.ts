@@ -66,6 +66,12 @@ function createMyLocationDotElement(): HTMLElement {
   return el;
 }
 
+/**
+ * 지도 바탕 click을 알리기까지 미루는 시간(ms). 그 사이 SDK `dblclick`(두 번 눌러 확대)이 오면 알리지 않아,
+ * 빈 곳을 두 번 눌러 확대해도 선택이 풀리지 않는다.
+ */
+export const MAP_CLICK_DELAY_MS = 250;
+
 /** 마커·클러스터 아이콘 DOM 표시. 그 위를 누른 것이 지도 `click`으로도 오면 걸러 낸다. */
 const MARKER_ATTR = 'data-map-marker';
 
@@ -150,6 +156,7 @@ export class NaverMapAdapter implements MapAdapter {
         if (b) this.boundsCb?.(b);
       }),
       m.Event.addListener(map, 'click', (event?: unknown) => this.handleMapClick(event)),
+      m.Event.addListener(map, 'dblclick', () => this.cancelMapClick()),
     );
     this.drawPolylines();
     this.drawMyLocation();
@@ -315,17 +322,24 @@ export class NaverMapAdapter implements MapAdapter {
   }
 
   /**
-   * 지도 바탕 누르기만 `mapClickCb`로 알린다. 마커 아이콘 click이 SDK 지도 click보다 늦게 올 수 있어
-   * 한 번 미룬 뒤, 그 사이 아이콘이 눌렸으면 버린다.
+   * 지도 바탕 누르기만 `mapClickCb`로 알린다. 마커 아이콘 click이 SDK 지도 click보다 늦게 올 수 있고, 두 번
+   * 눌러 확대하는 `dblclick`이 뒤따를 수 있어 `MAP_CLICK_DELAY_MS` 미룬 뒤, 그 사이 아이콘이 눌렸으면 버린다
+   * (`dblclick`은 `cancelMapClick`이 지운다).
    */
   private handleMapClick(event: unknown): void {
     if (fromMarker(event) || this.recentMarkerClick) return;
     const seq = this.markerClickSeq;
-    if (this.mapClickTimer) clearTimeout(this.mapClickTimer);
+    this.cancelMapClick();
     this.mapClickTimer = setTimeout(() => {
       this.mapClickTimer = null;
       if (seq === this.markerClickSeq) this.mapClickCb?.();
-    }, 0);
+    }, MAP_CLICK_DELAY_MS);
+  }
+
+  /** 미뤄 둔 지도 바탕 click 알림을 버린다(두 번 눌러 확대). */
+  private cancelMapClick(): void {
+    if (this.mapClickTimer) clearTimeout(this.mapClickTimer);
+    this.mapClickTimer = null;
   }
 
   private currentBounds(): Bounds | null {
