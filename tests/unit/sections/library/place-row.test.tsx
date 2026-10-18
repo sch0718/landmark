@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { setAppRuntimeForTest } from 'src/lib/effect/runtime';
 import { PlaceCard } from 'src/sections/library/PlaceCard';
 import { PlaceRow } from 'src/sections/library/PlaceRow';
+import { toggleLabel } from '../../helpers/label-picker';
 import {
   L_CAFE,
   L_FOOD,
@@ -65,7 +66,7 @@ describe('place row labels', () => {
     expect(rowOf(/강남 한 곳/)).not.toHaveTextContent('카페');
 
     const detail = screen.getByRole('region', { name: '장소 상세' });
-    await user.click(within(detail).getByRole('button', { name: '카페' }));
+    await toggleLabel(user, detail, '카페');
 
     await waitFor(() => expect(rowOf(/강남 한 곳/)).toHaveTextContent('카페'));
   });

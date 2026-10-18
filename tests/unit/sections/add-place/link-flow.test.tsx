@@ -13,6 +13,13 @@ import { addFlowAtom, addTargetAtom, linkDraftAtom } from 'src/stores/add-place'
 import { libraryAtom } from 'src/stores/library-state';
 import { installMapResources } from '../../components/helpers/map-resources';
 import {
+  attachedNames,
+  closeLabelPicker,
+  openLabelPicker,
+  pickerSearch,
+  toggleLabel,
+} from '../../helpers/label-picker';
+import {
   L_CAFE,
   L_FOOD,
   makePlace,
@@ -366,11 +373,11 @@ describe('확인 카드', () => {
     expect(
       within(card).queryByText('이미 있는 장소예요. 고른 라벨만 더할게요'),
     ).not.toBeInTheDocument();
-    await user.click(within(card).getByRole('button', { name: '카페' }));
-    expect(within(card).getByRole('button', { name: '카페' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
+    const picker = await openLabelPicker(user, card);
+    await user.click(within(picker).getByRole('checkbox', { name: /^카페/ }));
+    expect(within(picker).getByRole('checkbox', { name: /^카페/ })).toBeChecked();
+    await closeLabelPicker(user, picker);
+    expect(attachedNames(card)).toEqual(['카페']);
     await user.type(within(card).getByRole('textbox', { name: '메모' }), '창가 자리');
     await user.click(within(card).getByRole('button', { name: '추가' }));
 
@@ -405,9 +412,12 @@ describe('확인 카드', () => {
     const { user, store } = await openCard(() => naverPlace(), { ids: ['newlab01', NEW_ID] });
     const card = panel();
     await within(card).findByRole('heading', { name: '콤포트' });
-    await user.type(within(card).getByRole('textbox', { name: '새 라벨 이름' }), '데이트{Enter}');
-    const created = await within(card).findByRole('button', { name: '데이트' });
-    expect(created).toHaveAttribute('aria-pressed', 'true');
+    const picker = await openLabelPicker(user, card);
+    await user.type(pickerSearch(picker), '데이트{Enter}');
+    const created = await within(picker).findByRole('checkbox', { name: /^데이트/ });
+    expect(created).toBeChecked();
+    await closeLabelPicker(user, picker);
+    expect(attachedNames(card)).toEqual(['데이트']);
     await user.click(within(card).getByRole('button', { name: '추가' }));
     await waitFor(() => expect(placeCount(store.get(libraryAtom))).toBe(6));
     const lib = store.get(libraryAtom);
@@ -419,21 +429,19 @@ describe('확인 카드', () => {
     const { user, store } = await openCard(() => naverPlace(), { ids: ['newlab01', NEW_ID] });
     const card = panel();
     await within(card).findByRole('heading', { name: '콤포트' });
-    const nameInput = within(card).getByRole('textbox', { name: '새 라벨 이름' });
-    await user.type(nameInput, '데이트');
+    // 창이 열리면 카드가 가려지므로 추가 버튼은 미리 집어 둔다.
     const add = within(card).getByRole('button', { name: '추가' });
+    const picker = await openLabelPicker(user, card);
+    const search = pickerSearch(picker);
+    await user.type(search, '데이트');
     // 라벨 만들기가 끝나기 전에 추가를 누른다(다른 탭의 저장으로 잠금이 늦어지는 경우).
-    fireEvent.keyDown(nameInput, { key: 'Enter' });
+    fireEvent.keyDown(search, { key: 'Enter' });
     expect(add).toBeDisabled();
     fireEvent.click(add);
     expect(placeCount(store.get(libraryAtom))).toBe(5);
-    await waitFor(() =>
-      expect(within(card).getByRole('button', { name: '데이트' })).toHaveAttribute(
-        'aria-pressed',
-        'true',
-      ),
-    );
+    expect(await within(picker).findByRole('checkbox', { name: /^데이트/ })).toBeChecked();
     await waitFor(() => expect(add).toBeEnabled());
+    await closeLabelPicker(user, picker);
     await user.click(add);
     await waitFor(() => expect(store.get(libraryAtom).places[NEW_ID]).toBeDefined());
     expect(store.get(libraryAtom).places[NEW_ID]!.labelIds.value).toEqual(['newlab01']);
@@ -443,15 +451,15 @@ describe('확인 카드', () => {
     const { user, store } = await openCard();
     const card = panel();
     await within(card).findByRole('heading', { name: '콤포트' });
-    await user.type(within(card).getByRole('textbox', { name: '새 라벨 이름' }), ' 맛집 {Enter}');
+    const picker = await openLabelPicker(user, card);
+    await user.type(pickerSearch(picker), ' 맛집 {Enter}');
     await waitFor(() =>
-      expect(within(card).getByRole('button', { name: '맛집' })).toHaveAttribute(
-        'aria-pressed',
-        'true',
-      ),
+      expect(within(picker).getByRole('checkbox', { name: /^맛집/ })).toBeChecked(),
     );
-    expect(within(card).getByRole('textbox', { name: '새 라벨 이름' })).toHaveValue('');
+    expect(pickerSearch(picker)).toHaveValue('');
     expect(Object.keys(store.get(libraryAtom).labels)).toHaveLength(3);
+    await closeLabelPicker(user, picker);
+    expect(attachedNames(card)).toEqual(['맛집']);
   });
 
   it('같은 sid의 장소가 있으면 안내와 라벨 더하기를 보이고, 누르면 라벨만 더한다', async () => {
@@ -468,7 +476,7 @@ describe('확인 카드', () => {
       await within(card).findByText('이미 있는 장소예요. 고른 라벨만 더할게요'),
     ).toBeInTheDocument();
     expect(within(card).queryByRole('button', { name: '추가' })).not.toBeInTheDocument();
-    await user.click(within(card).getByRole('button', { name: '카페' }));
+    await toggleLabel(user, card, '카페');
     await user.click(within(card).getByRole('button', { name: '라벨 더하기' }));
 
     await waitFor(() => expect(router.state.location.pathname).toBe(`/place/${existing.id}`));
@@ -506,9 +514,9 @@ describe('확인 카드', () => {
 
     it('라벨을 고르면 켜지고, 메모를 쓰면 켜진다', async () => {
       const { user } = await openMerge();
-      await user.click(within(panel()).getByRole('button', { name: '카페' }));
+      await toggleLabel(user, panel(), '카페');
       expect(mergeButton()).toBeEnabled();
-      await user.click(within(panel()).getByRole('button', { name: '카페' }));
+      await toggleLabel(user, panel(), '카페');
       expect(mergeButton()).toBeDisabled();
       await user.type(within(panel()).getByRole('textbox', { name: '메모' }), '창가');
       expect(mergeButton()).toBeEnabled();
@@ -516,7 +524,7 @@ describe('확인 카드', () => {
 
     it('고른 라벨을 그사이 지웠으면(다른 탭) 고른 것이 없는 것으로 보고 다시 꺼진다', async () => {
       const { user, store } = await openMerge();
-      await user.click(within(panel()).getByRole('button', { name: '카페' }));
+      await toggleLabel(user, panel(), '카페');
       expect(mergeButton()).toBeEnabled();
 
       const current = store.get(libraryAtom);
@@ -663,7 +671,7 @@ describe('확인 카드', () => {
     expect(within(panel()).queryByRole('textbox', { name: '이름' })).not.toBeInTheDocument();
     // 라벨도 메모도 없으면 바뀔 것이 없어 꺼져 있다. 라벨을 고르면 켜진다.
     expect(within(panel()).getByRole('button', { name: '라벨 더하기' })).toBeDisabled();
-    await user.click(within(panel()).getByRole('button', { name: '카페' }));
+    await toggleLabel(user, panel(), '카페');
     await user.click(within(panel()).getByRole('button', { name: '라벨 더하기' }));
     await waitFor(() => expect(store.get(addFlowAtom)).toEqual({ step: 'closed' }));
     expect(placeCount(store.get(libraryAtom))).toBe(6);

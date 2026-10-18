@@ -11,6 +11,13 @@ import { ReverseGeocoder } from 'src/services/reverse-geocoder';
 import { addFlowAtom } from 'src/stores/add-place';
 import { libraryAtom } from 'src/stores/library-state';
 import { installMapResources } from '../../components/helpers/map-resources';
+import {
+  attachedNames,
+  closeLabelPicker,
+  openLabelPicker,
+  pickerSearch,
+  toggleLabel,
+} from '../../helpers/label-picker';
 import { L_CAFE, renderLibrary, sampleLibrary } from '../library/fixtures';
 
 const toastMock = vi.hoisted(() => {
@@ -291,7 +298,8 @@ describe('핀 입력 카드', () => {
       ),
     );
     await user.type(within(card).getByRole('textbox', { name: '이름' }), ' 서울시청 ');
-    await user.click(within(card).getByRole('button', { name: '카페' }));
+    await toggleLabel(user, card, '카페');
+    expect(attachedNames(card)).toEqual(['카페']);
     await user.type(within(card).getByRole('textbox', { name: '메모' }), '광장 앞');
     await user.click(within(card).getByRole('button', { name: '추가' }));
 
@@ -317,12 +325,15 @@ describe('핀 입력 카드', () => {
     const { user, store } = await openPinCard({ ids: ['newlab01', NEW_ID] });
     const card = panel();
     await user.type(within(card).getByRole('textbox', { name: '이름' }), '여기');
-    const nameInput = within(card).getByRole('textbox', { name: '새 라벨 이름' });
-    await user.type(nameInput, '데이트');
+    // 창이 열리면 카드가 가려지므로 추가 버튼은 미리 집어 둔다.
     const add = within(card).getByRole('button', { name: '추가' });
-    fireEvent.keyDown(nameInput, { key: 'Enter' });
+    const picker = await openLabelPicker(user, card);
+    const search = pickerSearch(picker);
+    await user.type(search, '데이트');
+    fireEvent.keyDown(search, { key: 'Enter' });
     expect(add).toBeDisabled();
     await waitFor(() => expect(add).toBeEnabled());
+    await closeLabelPicker(user, picker);
     await user.click(add);
     await waitFor(() => expect(store.get(libraryAtom).places[NEW_ID]).toBeDefined());
     expect(store.get(libraryAtom).places[NEW_ID]!.labelIds.value).toEqual(['newlab01']);

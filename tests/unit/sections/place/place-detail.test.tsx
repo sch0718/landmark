@@ -6,6 +6,7 @@ import { createMemoryStorage } from 'src/repositories/edit-layer-repo';
 import type { Library } from 'src/schema/library';
 import { LIBRARY_KEY } from 'src/services/library-store';
 import { libraryAtom } from 'src/stores/library-state';
+import { attachedNames, openLabelPicker, pickerSearch } from '../../helpers/label-picker';
 import { L_FOOD, makePlace, renderLibrary, sampleLibrary, withPlaces } from '../library/fixtures';
 
 const toastMock = vi.hoisted(() => {
@@ -110,47 +111,52 @@ describe('PlaceDetail', () => {
     expect(store.get(libraryAtom).places[P1]!.name.value).toBe('중앙시장 닭강정');
   });
 
-  it('toggle label chip and create new label with Enter; invalid name shows error', async () => {
+  it('라벨 바꾸기 창에서 켜고 끄고, Enter로 새 라벨을 만든다. 잘못된 이름은 알린다', async () => {
     const user = userEvent.setup();
     const { store } = await open(P1, { ids: ['newlabel'] });
-    const d = within(detail());
-    const food = d.getByRole('button', { name: '맛집' });
-    const cafe = d.getByRole('button', { name: '카페' });
-    expect(food).toHaveAttribute('aria-pressed', 'true');
-    expect(cafe).toHaveAttribute('aria-pressed', 'false');
+    expect(attachedNames(detail())).toEqual(['맛집']);
+    const dialog = await openLabelPicker(user, detail());
+    const food = within(dialog).getByRole('checkbox', { name: /^맛집/ });
+    const cafe = within(dialog).getByRole('checkbox', { name: /^카페/ });
+    expect(food).toBeChecked();
+    expect(cafe).not.toBeChecked();
 
     await user.click(cafe);
-    await waitFor(() => expect(cafe).toHaveAttribute('aria-pressed', 'true'));
+    await waitFor(() => expect(cafe).toBeChecked());
     expect(store.get(libraryAtom).places[P1]!.labelIds.value).toEqual([L_FOOD, 'label002']);
     await user.click(food);
-    await waitFor(() => expect(food).toHaveAttribute('aria-pressed', 'false'));
+    await waitFor(() => expect(food).not.toBeChecked());
     expect(store.get(libraryAtom).places[P1]!.labelIds.value).toEqual(['label002']);
 
-    const input = d.getByPlaceholderText('새 라벨 이름');
+    const input = pickerSearch(dialog);
     await user.type(input, '   {Enter}');
-    expect(await d.findByText('1–30자로 입력하세요')).toBeInTheDocument();
+    expect(await within(dialog).findByText('1–30자로 입력하세요')).toBeInTheDocument();
     expect(input).toHaveAttribute('aria-invalid', 'true');
     await user.clear(input);
     await user.type(input, '가'.repeat(31));
     await user.keyboard('{Enter}');
-    expect(await d.findByText('1–30자로 입력하세요')).toBeInTheDocument();
+    expect(await within(dialog).findByText('1–30자로 입력하세요')).toBeInTheDocument();
     expect(Object.keys(store.get(libraryAtom).labels)).toHaveLength(3);
     expect(toastMock.error).not.toHaveBeenCalled();
 
     await user.clear(input);
-    expect(d.queryByText('1–30자로 입력하세요')).not.toBeInTheDocument();
+    expect(within(dialog).queryByText('1–30자로 입력하세요')).not.toBeInTheDocument();
     await user.type(input, '야시장{Enter}');
-    const created = await d.findByRole('button', { name: '야시장' });
-    expect(created).toHaveAttribute('aria-pressed', 'true');
+    const created = await within(dialog).findByRole('checkbox', { name: /^야시장/ });
+    expect(created).toBeChecked();
     expect(input).toHaveValue('');
     const lib = store.get(libraryAtom);
     expect(lib.labels.newlabel!.name.value).toBe('야시장');
     expect(lib.places[P1]!.labelIds.value).toEqual(['label002', 'newlabel']);
+
+    await user.click(within(dialog).getByRole('button', { name: '완료' }));
+    await waitFor(() => expect(attachedNames(detail())).toEqual(['카페', '야시장']));
   });
 
   it('ignores Enter that only confirms a Korean composition', async () => {
+    const user = userEvent.setup();
     const { store } = await open(P1, { ids: ['newlabel'] });
-    const input = within(detail()).getByPlaceholderText('새 라벨 이름');
+    const input = pickerSearch(await openLabelPicker(user, detail()));
     fireEvent.change(input, { target: { value: '야시' } });
     fireEvent.keyDown(input, { key: 'Enter', isComposing: true, keyCode: 229 });
     await act(async () => {});
