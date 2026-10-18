@@ -44,7 +44,7 @@ type Store = ReturnType<typeof useStore>;
 /** 직선 10m 미만(NaN 포함)은 같은 지점: 묻지 않고 거리 0·시간 0. */
 export const isSamePointLeg = (leg: Leg): boolean => !(leg.straightM >= SAME_POINT_M);
 
-const routeKeyOf = (leg: Leg): string =>
+export const routeKeyOf = (leg: Leg): string =>
   routeInputKey({
     mode: leg.mode,
     from: [leg.from.lng, leg.from.lat],
@@ -88,10 +88,10 @@ function lookupLeg(store: Store, key: string, refresh: boolean) {
 }
 
 /** 다시 물을 구간(연결 실패였던 구간은 실패한 요청과 같은 종류로). */
-type LegRequest = { key: string; refresh: boolean };
+export type LegRequest = { key: string; refresh: boolean };
 
 /** 여러 구간을 차례로(동시 4개까지) 묻는다. 목록 앞쪽이 먼저 나간다. */
-const lookupAll = (store: Store, requests: LegRequest[]) =>
+export const lookupAll = (store: Store, requests: LegRequest[]) =>
   Effect.forEach(
     requests,
     ({ key, refresh }) => Effect.suspend(() => lookupLeg(store, key, refresh)),
@@ -111,7 +111,7 @@ const straightPath = (leg: Leg): [number, number][] => [
 ];
 
 /** 구간에 시간을 붙인다. 경로가 없으면(요청 전·실패) 직선 추정이다. */
-function planLeg(leg: Leg, state: RouteState | undefined): PlannedLeg {
+export function planLeg(leg: Leg, state: RouteState | undefined): PlannedLeg {
   if (isSamePointLeg(leg)) {
     return {
       ...leg,
