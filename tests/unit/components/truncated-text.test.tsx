@@ -1,0 +1,82 @@
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { afterEach, describe, expect, it } from 'vitest';
+import { TruncatedText } from 'src/components/TruncatedText';
+
+afterEach(cleanup);
+
+const NAME = '신세계 정용진이 모은 맛집-강원 강릉 순두부';
+
+/** jsdom은 배치를 하지 않아 넘침 크기가 0이다. 잘린 것처럼 보이게 크기를 심는다. */
+function fakeOverflow(el: HTMLElement, overflow: boolean) {
+  Object.defineProperty(el, 'clientWidth', { configurable: true, value: 100 });
+  Object.defineProperty(el, 'scrollWidth', { configurable: true, value: overflow ? 240 : 100 });
+  Object.defineProperty(el, 'clientHeight', { configurable: true, value: 40 });
+  Object.defineProperty(el, 'scrollHeight', { configurable: true, value: overflow ? 80 : 40 });
+}
+
+function renderInButton(props: { lines?: number } = {}) {
+  render(
+    <button type="button">
+      <TruncatedText {...props}>{NAME}</TruncatedText>
+    </button>,
+  );
+  return screen.getByText(NAME);
+}
+
+describe('TruncatedText', () => {
+  it('잘리지 않았으면 마우스를 올려도 툴팁이 없다', async () => {
+    const user = userEvent.setup();
+    const text = renderInButton();
+    fakeOverflow(text, false);
+    await user.hover(text);
+    await new Promise((r) => setTimeout(r, 300));
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+  });
+
+  it('잘렸으면 마우스를 올릴 때 전체 이름 툴팁이 뜬다', async () => {
+    const user = userEvent.setup();
+    const text = renderInButton();
+    fakeOverflow(text, true);
+    await user.hover(text);
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(NAME);
+    await user.unhover(text);
+  });
+
+  it('잘린 글자를 감싼 단추에 키보드 포커스가 오면 툴팁이 뜬다', async () => {
+    const user = userEvent.setup();
+    const text = renderInButton();
+    fakeOverflow(text, true);
+    await user.tab();
+    expect(screen.getByRole('button')).toHaveFocus();
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(NAME);
+    await user.tab();
+    await new Promise((r) => setTimeout(r, 300));
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+  });
+
+  it('마우스·터치로 눌러 생긴 포커스에는 툴팁을 띄우지 않는다', async () => {
+    const text = renderInButton();
+    fakeOverflow(text, true);
+    // 포인터를 누른 뒤의 포커스(글자 위에 마우스는 없음).
+    fireEvent.pointerDown(document.body);
+    screen.getByRole('button').focus();
+    await new Promise((r) => setTimeout(r, 300));
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+  });
+
+  it('여러 줄이면 세로 넘침으로 잰다', async () => {
+    const user = userEvent.setup();
+    const text = renderInButton({ lines: 2 });
+    fakeOverflow(text, true);
+    Object.defineProperty(text, 'scrollWidth', { configurable: true, value: 100 });
+    await user.hover(text);
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(NAME);
+    await user.unhover(text);
+  });
+
+  it('단추의 접근 이름은 그대로다', () => {
+    renderInButton();
+    expect(screen.getByRole('button', { name: NAME })).toBeInTheDocument();
+  });
+});
