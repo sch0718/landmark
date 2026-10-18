@@ -1,7 +1,14 @@
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
-import { expect, test, type Locator, type Page } from '@playwright/test';
-import { exportSeaPlaces, LIBRARY_KEY, PREFS_KEY, prefsJson, SEA_COUNT } from './fixtures';
+import { expect, test, type Page } from '@playwright/test';
+import {
+  BUILD_APP_ORIGIN,
+  emptyLibrary,
+  exportSeaPlaces,
+  pickFromSheet,
+  rowsOf,
+  SEA_COUNT,
+} from './fixtures';
 
 /**
  * 받은 공유 파일 가져오기(스펙 §2). 내보내기 시험과 같은 방법으로 "바다" 9곳을 파일로 받고,
@@ -10,44 +17,6 @@ import { exportSeaPlaces, LIBRARY_KEY, PREFS_KEY, prefsJson, SEA_COUNT } from '.
  */
 
 const TITLE = '바다';
-/** 보기 화면 링크가 가리키는 운영 앱 주소(빌드 기본값). 시험에서는 `baseURL`로 바꿔 쓴다. */
-const BUILD_APP_ORIGIN = 'https://landmark-c5f.pages.dev';
-
-/** 보관함(목록 보기)에 보이는 장소 행. */
-const rowsOf = (page: Page): Locator =>
-  page.getByRole('list', { name: '장소 목록' }).getByRole('listitem');
-
-/**
- * 내보낸 뒤의 보관함을 비운 상태로 되돌린다. 저장소 값을 빈 보관함·기본 UI 선호(필터 없음)로 덮고
- * 새로 불러온다(시드 심기는 값이 있으면 건드리지 않는다).
- */
-async function emptyLibrary(page: Page): Promise<void> {
-  await page.evaluate(
-    ({ libraryKey, prefsKey, prefs }) => {
-      localStorage.setItem(
-        libraryKey,
-        JSON.stringify({ schemaVersion: 2, places: {}, labels: {}, trips: {} }),
-      );
-      localStorage.setItem(prefsKey, prefs);
-    },
-    { libraryKey: LIBRARY_KEY, prefsKey: PREFS_KEY, prefs: prefsJson() },
-  );
-  await page.goto('/');
-  await expect(rowsOf(page)).toHaveCount(0);
-}
-
-/** 보관함 화면의 ＋ → 시트의 `공유 파일 가져오기` → `파일 고르기`에 파일을 준다. */
-async function pickFromSheet(page: Page, file: string): Promise<void> {
-  await page.getByRole('button', { name: '장소 추가', exact: true }).first().click();
-  const item = page
-    .getByRole('dialog', { name: '장소 추가' })
-    .getByRole('button', { name: '공유 파일 가져오기' });
-  await item.click();
-  await expect(item).toHaveCount(0);
-  await expect(page).toHaveURL(/\/$/);
-  await expect(page.getByRole('button', { name: '파일 고르기' })).toBeVisible();
-  await page.locator('input[type="file"]').setInputFiles(file);
-}
 
 /** 미리보기에서 `<N>곳 가져오기`를 누르고 토스트 문구를 확인한다. */
 async function importPreview(page: Page, count: number, toast: string): Promise<void> {

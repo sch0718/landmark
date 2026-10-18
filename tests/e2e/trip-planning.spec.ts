@@ -1,53 +1,14 @@
-import { expect, test, type Locator, type Page } from '@playwright/test';
-import { mockRoutes, seedStorage } from './fixtures';
-
-/** 좁은 화면(하단 시트)인가. */
-const isCompact = (page: Page): boolean => page.viewportSize()!.width < 768;
-
-/** 좁은 화면의 일정 시트 탭을 연다. 넓은 화면에는 후보 칸과 시간표가 함께 보여 아무것도 하지 않는다. */
-async function openSheetTab(page: Page, name: 'candidates' | 'Day 1' | 'Day 2'): Promise<void> {
-  if (!isCompact(page)) return;
-  const sheet = page.getByRole('region', { name: '일정 시트' });
-  await sheet.getByRole('tab', { name: name === 'candidates' ? /^후보 / : name }).click();
-}
-
-const candidatePanel = (page: Page): Locator =>
-  isCompact(page)
-    ? page.getByRole('region', { name: '일정 시트' })
-    : page.getByRole('region', { name: '후보 칸' });
-
-const timeline = (page: Page): Locator =>
-  isCompact(page)
-    ? page.getByRole('region', { name: '일정 시트' })
-    : page.getByRole('region', { name: 'Day 시간표' });
-
-/** 후보 이름으로 ＋(을/를은 받침으로 갈리므로 정규식으로 잡는다). */
-const addButton = (page: Page, name: string): Locator =>
-  candidatePanel(page).getByRole('button', {
-    name: new RegExp(`^${name}[을를] Day 1에 넣기$`),
-  });
-
-/** 보관함에서 지역 칩 `강릉` → `이 지역으로 여행 만들기` → 만들기. 계획 화면이 열린다. */
-async function createGangneungTrip(page: Page): Promise<void> {
-  await seedStorage(page, { prefs: { libraryView: 'list' } });
-  await page.goto('/');
-  await page.getByRole('group', { name: '지역' }).getByRole('button', { name: /^강릉/ }).click();
-  await page.getByRole('button', { name: '이 지역으로 여행 만들기' }).click();
-  const dialog = page.getByRole('dialog', { name: '새 여행' });
-  await expect(dialog.getByRole('textbox', { name: '여행 이름' })).toHaveValue('강릉 여행');
-  await dialog.getByRole('button', { name: '만들기', exact: true }).click();
-  await expect(page).toHaveURL(/\/trips\/[^/]+$/);
-  await expect(candidatePanel(page).getByRole('heading', { name: '강릉 여행' })).toBeVisible();
-}
-
-/** Day 1 시간표의 장소 이름을 위에서부터. */
-async function day1Names(page: Page, names: string[]): Promise<string[]> {
-  const rows = timeline(page).getByRole('list', { name: 'Day 1 일정' }).getByRole('listitem');
-  const texts = await rows.allInnerTexts();
-  return names
-    .filter((name) => texts.some((t) => t.includes(name)))
-    .sort((a, b) => texts.findIndex((t) => t.includes(a)) - texts.findIndex((t) => t.includes(b)));
-}
+import { expect, test } from '@playwright/test';
+import {
+  addButton,
+  candidatePanel,
+  createGangneungTrip,
+  day1Names,
+  isCompact,
+  mockRoutes,
+  openSheetTab,
+  timeline,
+} from './fixtures';
 
 test.describe('여행 계획', () => {
   test('@smoke 지역 칩으로 여행을 만들고 Day에 넣으면 시간표가 나온다', async ({ page }) => {
