@@ -1,4 +1,4 @@
-import { dayPoints } from 'src/domain/share/check-share-trip';
+import { dayPoints, dayStartId } from 'src/domain/share/check-share-trip';
 import { computeSchedule } from 'src/domain/trips/schedule';
 import type { ShareDocV2, ShareLeg, SharePlace, ShareStop, ShareTrip } from 'src/schema/share';
 import type { MapLine, MapPin } from 'src/share-protocol';
@@ -32,11 +32,6 @@ export type DayView = {
   oldestQueriedAt: string | null;
 };
 
-/** 그날의 출발점 장소 id(`dayPoints`와 같은 규칙). 없으면 null. */
-function startOf(trip: ShareTrip, dayIndex: number): string | null {
-  return (dayIndex === 0 ? trip.originId : trip.days[dayIndex - 1]?.lodgingId) ?? null;
-}
-
 export function dayView(trip: ShareTrip, dayIndex: number): DayView {
   const day = trip.days[dayIndex];
   const date = addDays(trip.startDate, dayIndex);
@@ -49,7 +44,7 @@ export function dayView(trip: ShareTrip, dayIndex: number): DayView {
       oldestQueriedAt: null,
     };
   }
-  const startId = startOf(trip, dayIndex);
+  const startId = dayStartId(trip, dayIndex);
   const endId = day.lodgingId;
   const hasStart = startId !== null;
   const hasEnd = endId !== null;
@@ -177,7 +172,7 @@ export function tripPins(doc: ShareDocV2, tab: TripTab): { pins: MapPin[]; lines
       pinOf(stop.placeId, stop.placeId, (n) => `${i + 1} ${n}`, dayIndex, 'stop');
     });
     // 1일차 출발점은 여행 출발지(집), 그 뒤는 전날 숙소. 출발점과 숙소가 같으면 하나만 둔다.
-    const startId = startOf(trip, dayIndex);
+    const startId = dayStartId(trip, dayIndex);
     if (startId !== null) {
       const icon = dayIndex === 0 ? '🏠' : '🛏';
       pinOf(`${START_PREFIX}${startId}`, startId, (n) => `${icon} ${n}`, dayIndex, 'endpoint');

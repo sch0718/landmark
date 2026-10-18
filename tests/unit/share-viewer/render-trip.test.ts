@@ -368,6 +368,27 @@ describe('행 누르기와 지도', () => {
     expect(other.hasAttribute('aria-current')).toBe(false);
   });
 
+  it('출발점과 숙소가 같은 Day에서 도착 행을 누르면(Enter도) 도착 행을 강조한다', () => {
+    const doc = makeShareV2Doc();
+    const day2 = doc.trips[0]!.days[1]!;
+    day2.lodgingId = IDS.hotel;
+    day2.legs = [leg(IDS.hotel, IDS.c), leg(IDS.c, IDS.hotel)];
+    mount(doc);
+    tab('Day 2 10.25(일)').click();
+    const points = () => list().querySelectorAll<HTMLElement>('article.point');
+    expect(points()).toHaveLength(2);
+
+    points()[1]!.click();
+    expect(points()[1]!.getAttribute('aria-current')).toBe('true');
+    expect(points()[0]!.hasAttribute('aria-current')).toBe(false);
+    expect(map.focus).toHaveBeenLastCalledWith(`start:${IDS.hotel}`);
+
+    points()[0]!.click();
+    points()[1]!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    expect(points()[1]!.getAttribute('aria-current')).toBe('true');
+    expect(points()[0]!.hasAttribute('aria-current')).toBe(false);
+  });
+
   it('highlight(end:숙소)는 도착 행을 강조하고 스크롤한다', () => {
     const handle = mount();
     handle.highlight(`end:${IDS.hotel}`);
@@ -393,6 +414,30 @@ describe('행 누르기와 지도', () => {
     expect(
       list().querySelectorAll<HTMLElement>('article.point')[1]!.getAttribute('aria-current'),
     ).toBe('true');
+  });
+
+  it('지금 Day의 숙소가 다른 Day의 Stop이면 접두사 없는 id는 그 Day로, end: id는 도착 행으로', () => {
+    // 숙소(hotel)는 Day 1의 숙소이자 Day 2의 Stop이다.
+    const doc = makeShareV2Doc();
+    const day2 = doc.trips[0]!.days[1]!;
+    day2.stops.push({ placeId: IDS.hotel, stayMin: 30, fixedTime: null });
+    day2.legs = [leg(IDS.hotel, IDS.c), leg(IDS.c, IDS.hotel)];
+    const handle = mount(doc);
+
+    handle.highlight(`end:${IDS.hotel}`);
+    expect(list().getAttribute('aria-label')).toBe('Day 1 일정');
+    expect(
+      list().querySelectorAll<HTMLElement>('article.point')[1]!.getAttribute('aria-current'),
+    ).toBe('true');
+
+    handle.highlight(IDS.hotel);
+    expect(tab('Day 2 10.25(일)').getAttribute('aria-selected')).toBe('true');
+    expect(list().getAttribute('aria-label')).toBe('Day 2 일정');
+    const stops = list().querySelectorAll<HTMLElement>('article.stop');
+    expect(stops[1]!.querySelector('h2')!.textContent).toBe('장소 1');
+    expect(stops[1]!.getAttribute('aria-current')).toBe('true');
+    expect(list().querySelectorAll('[aria-current]')).toHaveLength(1);
+    expect(map.focus).toHaveBeenLastCalledWith(IDS.hotel);
   });
 
   it('모르는 id는 아무것도 바꾸지 않는다', () => {

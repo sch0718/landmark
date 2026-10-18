@@ -14,13 +14,19 @@ export const SHARE_TRIP_LIMITS = {
   pathPointsTotal: 40_000,
 } as const;
 
-/** 그날 점 목록: [출발점?, …Stop, 도착점?]. 출발점은 Day 0이면 originId, 그 뒤는 전날 lodgingId. */
+/** 그날 출발점 장소 id: Day 0이면 originId, 그 뒤는 전날 lodgingId. 없으면(빈 id 포함) null. */
+export function dayStartId(trip: ShareTrip, dayIndex: number): string | null {
+  const start = dayIndex === 0 ? trip.originId : (trip.days[dayIndex - 1]?.lodgingId ?? null);
+  return start ? start : null;
+}
+
+/** 그날 점 목록: [출발점?, …Stop, 도착점?]. 출발점은 `dayStartId`. */
 export function dayPoints(trip: ShareTrip, dayIndex: number): string[] {
   const day = trip.days[dayIndex];
   if (!day) return [];
-  const start = dayIndex === 0 ? trip.originId : (trip.days[dayIndex - 1]?.lodgingId ?? null);
+  const start = dayStartId(trip, dayIndex);
   const points: string[] = [];
-  if (start) points.push(start);
+  if (start !== null) points.push(start);
   for (const stop of day.stops) points.push(stop.placeId);
   if (day.lodgingId) points.push(day.lodgingId);
   return points;

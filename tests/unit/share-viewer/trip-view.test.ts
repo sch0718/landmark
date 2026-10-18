@@ -99,6 +99,16 @@ describe('dayView', () => {
     expect(view.rows[1]).toMatchObject({ kind: 'stop', number: 1, arriveMin: 540, departMin: 600 });
   });
 
+  it('출발지 id가 빈 문자열이면 dayPoints처럼 출발점이 없다(행·핀 모두)', () => {
+    const doc = makeShareV2Doc();
+    const trip = doc.trips[0]!;
+    trip.originId = '';
+    trip.days[0]!.legs = trip.days[0]!.legs.slice(1);
+    expect(dayView(trip, 0).rows[0]).toEqual({ kind: 'no-start', departMin: 540 });
+    const { pins } = tripPins(doc, { kind: 'day', dayIndex: 0 });
+    expect(pins.filter((p) => p.id.startsWith('start:'))).toEqual([]);
+  });
+
   it('고정 10:00인데 10:20에 도착하면 slackMin은 -20', () => {
     const doc = setup([{ durationS: 4800 }]); // 09:00 + 80분 = 10:20
     day0(doc).stops[0]!.fixedTime = '10:00';

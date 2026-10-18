@@ -142,27 +142,32 @@ export function renderTripViewer(
   let rows = new Map<string, HTMLElement>();
   let currentRow: HTMLElement | null = null;
 
-  function mark(id: string): HTMLElement | null {
-    const next = rows.get(id) ?? null;
+  function markRow(next: HTMLElement | null): HTMLElement | null {
     if (currentRow !== null) currentRow.removeAttribute('aria-current');
     currentRow = next;
     if (next !== null) next.setAttribute('aria-current', 'true');
     return next;
   }
 
-  /** 누르거나 Enter·Space를 누르면 강조하고 지도를 그 핀으로 옮긴다. 링크를 누를 때는 하지 않는다. */
+  /** 지도에서 고른 핀의 행을 강조한다(핀 하나에 행이 둘이면 첫 행). */
+  const mark = (id: string): HTMLElement | null => markRow(rows.get(id) ?? null);
+
+  /**
+   * 누르거나 Enter·Space를 누르면 그 행을 강조하고 지도를 그 핀으로 옮긴다. 링크를 누를 때는 하지 않는다.
+   * 출발점과 숙소가 같은 Day는 두 행이 핀 하나를 나눠 쓰므로, 핀이 아니라 누른 행을 강조한다.
+   */
   function makeSelectable(row: HTMLElement, pinId: string) {
     row.tabIndex = 0;
     row.addEventListener('click', (event) => {
       if (event.target instanceof Element && event.target.closest('a') !== null) return;
-      mark(pinId);
+      markRow(row);
       map.focus(pinId);
     });
     row.addEventListener('keydown', (event) => {
       if (event.target !== row) return;
       if (event.key !== 'Enter' && event.key !== ' ') return;
       event.preventDefault();
-      mark(pinId);
+      markRow(row);
       map.focus(pinId);
     });
     if (!rows.has(pinId)) rows.set(pinId, row);
@@ -386,28 +391,30 @@ export function renderTripViewer(
 
   return {
     highlight(id: string) {
-      // 지금 탭에 그 핀의 행이 있으면 강조한다. 옛 지도 페이지는 접두사 없는 장소 id를 보내므로 그것도 찾는다.
-      let key = rows.has(id) ? id : null;
-      if (key === null) {
-        for (const pinId of rows.keys()) {
-          if (placeIdOfPin(pinId) === id) {
-            key = pinId;
-            break;
-          }
-        }
-      }
-      if (key !== null) {
-        const row = mark(key);
+      // 1) 지금 탭에 그 핀 id의 행이 있으면 강조한다.
+      if (rows.has(id)) {
+        const row = mark(id);
         if (row !== null) show(row);
         return;
       }
-      // 다른 Day의 점(또는 후보)이면 그 탭으로 바꾼 뒤 강조한다. 바뀐 지도에서도 그 핀을 강조한다.
+      // 2) 다른 Day의 점(또는 후보)이면 그 탭으로 바꾼 뒤 강조한다. 바뀐 지도에서도 그 핀을 강조한다.
+      //    지금 Day의 숙소가 다른 Day의 Stop이어도 그 점을 누르면 그 Day로 간다(스펙 §4.6).
       const tab = tabOfPin(id);
-      if (tab === null) return;
-      select(tab);
-      const row = mark(placeIdOfPin(id));
-      if (row !== null) show(row);
-      map.focus(placeIdOfPin(id));
+      if (tab !== null) {
+        select(tab);
+        const row = mark(placeIdOfPin(id));
+        if (row !== null) show(row);
+        map.focus(placeIdOfPin(id));
+        return;
+      }
+      // 3) 옛 지도 페이지는 접두사 없는 장소 id를 보내므로, 지금 탭에서 접두사를 뗀 id로도 찾는다.
+      for (const pinId of rows.keys()) {
+        if (placeIdOfPin(pinId) === id) {
+          const row = mark(pinId);
+          if (row !== null) show(row);
+          return;
+        }
+      }
     },
     setImportLink: importer.set,
   };
