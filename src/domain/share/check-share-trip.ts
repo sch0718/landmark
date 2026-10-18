@@ -14,9 +14,6 @@ export const SHARE_TRIP_LIMITS = {
   pathPointsTotal: 40_000,
 } as const;
 
-/** 문서 `places`의 곳 수 상한(스펙 §5.2 `places` 줄). */
-const MAX_PLACES = 1000;
-
 /** 그날 점 목록: [출발점?, …Stop, 도착점?]. 출발점은 Day 0이면 originId, 그 뒤는 전날 lodgingId. */
 export function dayPoints(trip: ShareTrip, dayIndex: number): string[] {
   const day = trip.days[dayIndex];
@@ -35,7 +32,6 @@ export function checkShareTrip(doc: ShareDocV2): string[] {
   const ids = new Set(doc.places.map((p) => p.id));
   if (ids.size !== doc.places.length) problems.push('장소 id가 겹쳐요');
   if (doc.places.length < 1) problems.push('장소가 하나도 없어요');
-  if (doc.places.length > MAX_PLACES) problems.push(`장소는 ${MAX_PLACES}곳까지예요`);
   if (doc.trips.length !== SHARE_TRIP_LIMITS.trips) {
     problems.push(`여행은 정확히 ${SHARE_TRIP_LIMITS.trips}개여야 해요`);
   }

@@ -183,26 +183,52 @@ describe('checkShareTrip', () => {
   });
 
   it('문서 전체 40,000점은 통과, 40,001점은 거절', () => {
-    const pts = (n: number): [number, number][] => Array.from({ length: n }, () => [128.9, 37.7]);
-    const spread = (total: number) =>
-      mutate((t) => {
-        const legs = t.days.flatMap((d) => d.legs);
-        legs.forEach((l) => (l.path = []));
-        let left = total;
-        for (const l of legs) {
-          const n = Math.min(left, SHARE_TRIP_LIMITS.pathPointsPerLeg);
-          l.path = pts(n);
-          left -= n;
-        }
+    // 하루에 Stop 81곳(출발지 포함 82점, 숙소 없음) → 구간 81개. 구간당 한도 500을 지키며 총점만 바꾼다.
+    const build = (total: number): ShareDocV2 => {
+      const base = makeDoc();
+      const ids = Array.from({ length: 82 }, (_, i) => `bulk${String(i).padStart(6, '0')}`);
+      const proto = base.places[0]!;
+      base.places = ids.map((id) => ({ ...proto, id }));
+      const [origin, ...stopIds] = ids;
+      const legs: ShareLeg[] = stopIds.map((to, i) => {
+        const from = i === 0 ? origin! : stopIds[i - 1]!;
+        const n = Math.max(0, Math.min(500, total - i * 500));
+        return leg(from, to, { path: Array.from({ length: n }, () => [128.9, 37.7]) });
       });
-    // 구간이 4개뿐이라 구간당 한도(500)로는 40,000에 닿지 않는다. 전체 한도는 구간을 늘려 시험한다.
-    expect(spread(2000)).toEqual([]);
+      base.trips[0] = {
+        title: '많은 구간',
+        startDate: '2026-10-24',
+        endDate: '2026-10-24',
+        originId: origin!,
+        candidateIds: [],
+        legModes: {},
+        days: [
+          {
+            startTime: '09:00',
+            lodgingId: null,
+            stops: stopIds.map((placeId) => ({ placeId, stayMin: 10, fixedTime: null })),
+            legs,
+          },
+        ],
+      };
+      return base;
+    };
+    expect(checkShareTrip(build(40_000))).toEqual([]);
+    expect(checkShareTrip(build(40_001))).toHaveLength(1);
+  });
+
+  it('장소 1,001곳이어도 checkShareTrip은 막지 않는다', () => {
+    // 장소 수 상한은 read-share의 `too-many`가 맡는다.
     const doc = makeDoc();
-    const trip = doc.trips[0]!;
-    const many = Array.from({ length: 81 }, () => leg(IDS.a, IDS.b, { path: pts(500) }));
-    trip.days[0]!.legs = many;
-    const problems = checkShareTrip(doc);
-    expect(problems.some((p) => p.includes('40000'))).toBe(true);
+    const proto = doc.places[0]!;
+    const extra = Array.from({ length: 1001 - doc.places.length }, (_, i) => ({
+      ...proto,
+      id: `extra${String(i).padStart(5, '0')}`,
+    }));
+    doc.places.push(...extra);
+    doc.trips[0]!.candidateIds.push(...extra.map((p) => p.id));
+    expect(doc.places).toHaveLength(1001);
+    expect(checkShareTrip(doc)).toEqual([]);
   });
 
   it('legModes 키 형식을 거절', () => {
