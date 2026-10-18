@@ -81,6 +81,23 @@ function fromMarker(event: unknown): boolean {
   return target instanceof Element && target.closest(`[${MARKER_ATTR}]`) !== null;
 }
 
+/** 마커 감싸개 클릭 통과 규칙을 넣는 `<style>`의 고정 id. 문서에 한 번만 넣기 위한 표시다. */
+const MARKER_STYLE_ID = 'naver-map-marker-pointer-events';
+
+/**
+ * 네이버 SDK는 `icon.content`(우리 알약)를 자기 감싸개 div에 넣는데, 알약은 `translate(-50%, -50%)`로 옮겨 그려져도
+ * 감싸개는 원래 자리(알약 오른쪽 아래로 반 칸 어긋난 사각형)에 남는다. 그 보이지 않는 사각형이 이웃 마커와
+ * 지도 바탕의 클릭을 가로채므로, 감싸개는 클릭을 통과시키고 보이는 알약만 받게 한다. SDK가 감싸개를 비동기로
+ * 붙여도 먹도록 인라인 스타일 대신 문서 규칙으로 건다.
+ */
+function ensureMarkerPointerStyle(): void {
+  if (document.getElementById(MARKER_STYLE_ID)) return;
+  const style = document.createElement('style');
+  style.id = MARKER_STYLE_ID;
+  style.textContent = `div:has(> [${MARKER_ATTR}]) { pointer-events: none; } [${MARKER_ATTR}] { pointer-events: auto; }`;
+  document.head.append(style);
+}
+
 const maps = (): NaverMaps => (window as unknown as { naver: { maps: NaverMaps } }).naver.maps;
 
 export class NaverMapAdapter implements MapAdapter {
@@ -118,6 +135,7 @@ export class NaverMapAdapter implements MapAdapter {
   async mount(el: HTMLElement): Promise<void> {
     await loadNaverSdk(this.clientId);
     if (this.destroyed) return;
+    ensureMarkerPointerStyle();
     const m = maps();
     const map = new m.Map(el, {
       center: new m.LatLng(37.5, 128.2),

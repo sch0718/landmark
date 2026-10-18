@@ -482,3 +482,40 @@ describe('NaverMapAdapter 내 위치', () => {
     expect(Object.values(resources.snapshot()).every((count) => count === 0)).toBe(true);
   });
 });
+
+describe('NaverMapAdapter 마커 감싸개 클릭 통과', () => {
+  const STYLE_ID = 'naver-map-marker-pointer-events';
+
+  async function mountOnce() {
+    installSdk();
+    const pending = new NaverMapAdapter('id').mount(document.createElement('div'));
+    release();
+    await pending;
+  }
+
+  afterEach(() => {
+    document.getElementById(STYLE_ID)?.remove();
+    document.body.replaceChildren();
+  });
+
+  it('마운트하면 감싸개는 통과·알약은 받는 규칙 style을 문서에 한 번만 넣는다', async () => {
+    await mountOnce();
+    await mountOnce();
+    const styles = document.querySelectorAll(`style#${STYLE_ID}`);
+    expect(styles).toHaveLength(1);
+    const css = styles[0]?.textContent ?? '';
+    expect(css).toContain('div:has(> [data-map-marker]) { pointer-events: none; }');
+    expect(css).toContain('[data-map-marker] { pointer-events: auto; }');
+  });
+
+  it('감싸개 div는 pointer-events:none, 안의 알약은 auto (jsdom이 :has를 지원할 때)', async () => {
+    await mountOnce();
+    const wrapper = document.createElement('div');
+    const pill = document.createElement('span');
+    pill.setAttribute('data-map-marker', '');
+    wrapper.append(pill);
+    document.body.append(wrapper);
+    expect(getComputedStyle(wrapper).pointerEvents).toBe('none');
+    expect(getComputedStyle(pill).pointerEvents).toBe('auto');
+  });
+});
