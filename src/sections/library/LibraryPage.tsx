@@ -29,6 +29,7 @@ import { nextRadius, radiusLabel } from 'src/domain/nearby';
 import type { Library } from 'src/schema/library';
 import { addCandidates } from 'src/domain/trips/ops';
 import { paths } from 'src/routes/paths';
+import { useOpenPlace } from 'src/sections/library/use-open-place';
 import { BulkBar } from 'src/sections/library/BulkBar';
 import { EmptyState } from 'src/sections/library/EmptyState';
 import { FilterBar } from 'src/sections/library/FilterBar';
@@ -156,7 +157,8 @@ export function LibraryPage() {
     if (openId !== null) requestListScroll((prev) => ({ id: openId, seq: (prev?.seq ?? 0) + 1 }));
   }, [openId, requestListScroll]);
 
-  const onOpen = useCallback((id: string) => void navigate(paths.place(id)), [navigate]);
+  const openPlace = useOpenPlace();
+  const onOpen = useCallback((id: string) => openPlace(id, 'list'), [openPlace]);
   const onToggle = useCallback((id: string) => setSelected((prev) => toggled(prev, id)), []);
 
   const changeView = (next: LibraryView) => setPrefs({ ...prefs, libraryView: next });

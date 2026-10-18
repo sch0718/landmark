@@ -4,12 +4,11 @@ import Typography from '@mui/material/Typography';
 import { Effect } from 'effect';
 import { useSetAtom } from 'jotai';
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { fieldSx } from 'src/components/field-style';
 import { addPlace } from 'src/domain/library/add-place';
 import { forkEffect } from 'src/lib/effect/runtime';
-import { paths } from 'src/routes/paths';
+import { useOpenPlace } from 'src/sections/library/use-open-place';
 import { LIBRARY_LIMITS } from 'src/schema/library';
 import { CardSection, useAliveRef, useCardLabels } from 'src/sections/add-place/card-parts';
 import {
@@ -42,7 +41,7 @@ export function PinCard({
 }) {
   const setFlow = useSetAtom(addFlowAtom);
   const { run } = useLibraryAction();
-  const navigate = useNavigate();
+  const openPlace = useOpenPlace();
   const { labels, labelIds, shownIds, toggle, createAndSelect, creating } = useCardLabels();
   const { tripId, notify, backToTrip } = useTripTarget();
   const [keepInLibrary, setKeepInLibrary] = useState(true);
@@ -121,7 +120,7 @@ export function PinCard({
     toast('추가했어요');
     if (!aliveRef.current) return;
     setFlow({ step: 'closed' });
-    void navigate(paths.place(result.createdId!));
+    openPlace(result.createdId!, 'map');
   };
 
   return (

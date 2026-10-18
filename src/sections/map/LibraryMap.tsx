@@ -2,7 +2,6 @@ import Box from '@mui/material/Box';
 import { visuallyHidden } from '@mui/utils';
 import { useAtomValue, useSetAtom, useStore } from 'jotai';
 import { useCallback, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import type { MapPadding } from 'src/components/map/MapAdapter';
 import { MapView } from 'src/components/map/MapView';
@@ -15,7 +14,7 @@ import {
   visitCounts,
 } from 'src/domain/library/query';
 import { radiusBox } from 'src/domain/nearby';
-import { paths } from 'src/routes/paths';
+import { useOpenPlace } from 'src/sections/library/use-open-place';
 import { PinModeOverlay } from 'src/sections/add-place/PinModeOverlay';
 import { useOpenPlaceId } from 'src/sections/library/use-open-place-id';
 import { LabelChips } from 'src/sections/library/LabelChips';
@@ -62,7 +61,7 @@ export function LibraryMap() {
   const [query, patch] = useLibraryQuery();
   const tokens = useThemeTokens();
   const layout = useLayout();
-  const navigate = useNavigate();
+  const openPlace = useOpenPlace();
   const requestListScroll = useSetAtom(focusPlaceAtom);
   const placeId = useOpenPlaceId();
   const flow = useAtomValue(addFlowAtom);
@@ -232,9 +231,9 @@ export function LibraryMap() {
       if (pinning) return; // 핀 모드에서는 위치만 고른다.
       setFromMarker(id);
       requestListScroll((prev) => ({ id, seq: (prev?.seq ?? 0) + 1 }));
-      void navigate(paths.place(id));
+      openPlace(id, 'map');
     },
-    [navigate, requestListScroll, pinning],
+    [openPlace, requestListScroll, pinning],
   );
 
   const labels = useMemo(() => liveLabels(library), [library]);
