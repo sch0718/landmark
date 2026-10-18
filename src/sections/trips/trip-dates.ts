@@ -1,7 +1,7 @@
-import { daysBetween } from 'src/schema/trip';
+import { daysBetween } from 'src/lib/calendar';
 
-// `addDays`는 도메인에서도 쓰므로 스키마 쪽에 두고, 기존 import 경로를 위해 다시 내보낸다.
-export { addDays } from 'src/schema/trip';
+// `addDays`는 도메인에서도 쓰므로 `src/lib/calendar`에 두고, 기존 import 경로를 위해 다시 내보낸다.
+export { addDays } from 'src/lib/calendar';
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'] as const;
 

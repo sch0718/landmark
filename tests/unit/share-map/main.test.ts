@@ -64,11 +64,11 @@ describe('startShareMap', () => {
     return { win, post, root, receive, markers };
   }
 
-  it('iframe 안이면 시작하자마자 parent에 ready(maxV 1)를 출처 "*"로 보낸다', async () => {
+  it('iframe 안이면 시작하자마자 parent에 ready(maxV 2, 봉투는 v 1)를 출처 "*"로 보낸다', async () => {
     const { post } = await setupFrame();
     expect(post).toHaveBeenCalledTimes(1);
     expect(post).toHaveBeenCalledWith(
-      { kind: 'ready', maxV: 1, source: 'tripmap-share', v: 1 },
+      { kind: 'ready', maxV: 2, source: 'tripmap-share', v: 1 },
       '*',
     );
   });
@@ -121,12 +121,81 @@ describe('startShareMap', () => {
     expect(plain.style.background).toContain('rgb(27, 27, 31)');
   });
 
+  it('v 2 봉투 draw가 오면 마커와 경로선을 그린다', async () => {
+    const { receive, markers, root } = await setupFrame();
+    const draw = envelope(
+      {
+        kind: 'draw',
+        pins: [
+          { id: 's1', label: '1 서혜커피', lng: 127.11, lat: 37.37, day: 0, role: 'stop' },
+          { id: 'start:h', label: '🏠 집', lng: 127.1, lat: 37.35, day: 0, role: 'endpoint' },
+        ],
+        lines: [
+          {
+            id: 'leg1',
+            day: 0,
+            walk: false,
+            path: [
+              [127.1, 37.35],
+              [127.11, 37.37],
+            ],
+          },
+        ],
+      },
+      2,
+    );
+    receive(draw);
+    expect(markers().map((m) => m.textContent)).toEqual(['1 서혜커피', '🏠 집']);
+    expect(root.querySelectorAll('[data-testid^="polyline-"]')).toHaveLength(1);
+  });
+
+  it('v 1 봉투 draw는 무시한다', async () => {
+    const { receive, markers } = await setupFrame();
+    receive(
+      envelope({
+        kind: 'draw',
+        pins: [{ id: 's1', label: '1', lng: 127.11, lat: 37.37, day: 0, role: 'stop' }],
+        lines: [],
+      }),
+    );
+    expect(markers()).toHaveLength(0);
+  });
+
+  it('일정 지도의 마커를 누르면 핀 id로 select를 보낸다', async () => {
+    const { receive, markers, post } = await setupFrame();
+    receive(
+      envelope(
+        {
+          kind: 'draw',
+          pins: [
+            { id: 'start:h', label: '🏠 집', lng: 127.1, lat: 37.35, day: 0, role: 'endpoint' },
+          ],
+          lines: [],
+        },
+        2,
+      ),
+    );
+    markers()[0]?.click();
+    expect(post).toHaveBeenLastCalledWith(
+      { kind: 'select', placeId: 'start:h', source: 'tripmap-share', v: 1 },
+      '*',
+    );
+  });
+
+  it('v 2 봉투의 focus도 받는다', async () => {
+    const { receive, markers } = await setupFrame();
+    receive(envelope({ kind: 'init', places: PLACES }));
+    receive(envelope({ kind: 'focus', placeId: 'b' }, 2));
+    const marker = markers().find((m) => m.textContent === '정자 빵집');
+    expect(marker?.getAttribute('aria-pressed')).toBe('true');
+  });
+
   it('가짜 지도가 아니고 클라이언트 ID가 비어 있으면 ready 뒤 tiles-failed를 보내고 지도를 만들지 않는다', async () => {
     vi.stubEnv('VITE_MAP_ADAPTER', '');
     vi.stubEnv('VITE_NAVER_MAP_CLIENT_ID', '');
     const { post, root, receive, markers } = await setupFrame();
     expect(post.mock.calls).toEqual([
-      [{ kind: 'ready', maxV: 1, source: 'tripmap-share', v: 1 }, '*'],
+      [{ kind: 'ready', maxV: 2, source: 'tripmap-share', v: 1 }, '*'],
       [{ kind: 'tiles-failed', source: 'tripmap-share', v: 1 }, '*'],
     ]);
     receive(envelope({ kind: 'init', places: PLACES }));

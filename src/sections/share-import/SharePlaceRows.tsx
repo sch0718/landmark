@@ -15,11 +15,14 @@ export function SharePlaceRows({
   selected,
   existing,
   onToggle,
+  disabled = false,
 }: {
   doc: ShareDoc;
   selected: ReadonlySet<string>;
   existing: ReadonlySet<string>;
   onToggle(id: string): void;
+  /** 행 체크박스를 잠근다(여행을 함께 가져올 때는 모든 장소가 고정이다). */
+  disabled?: boolean;
 }) {
   const labelsById = useMemo(() => {
     const byId = new Map<string, { label: ShareLabel; name: string }>();
@@ -48,13 +51,14 @@ export function SharePlaceRows({
                 gap: 1.25,
                 minHeight: 44,
                 py: 1,
-                cursor: 'pointer',
+                cursor: disabled ? 'default' : 'pointer',
               }}
             >
               <Box
                 component="input"
                 type="checkbox"
                 checked={selected.has(place.id)}
+                disabled={disabled}
                 onChange={() => onToggle(place.id)}
                 sx={{ flex: 'none', width: 20, height: 20, m: 0, mt: '2px' }}
               />

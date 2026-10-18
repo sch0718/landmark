@@ -667,6 +667,41 @@ describe('Day 머리와 꼬리', () => {
     expect(within(timeline()).getByText('첫 장소에서 출발')).toBeInTheDocument();
   });
 
+  it('`일정 공유`는 여행 설정 옆에 있고, 이미 받은 구간은 다시 묻지 않는 일정 공유 창을 연다', async () => {
+    const routes = fakeRoutes((call) =>
+      route(12, 1100, {
+        queriedAt:
+          call.to === '안목 카페거리' ? '2026-10-16T03:00:00.000Z' : '2026-10-17T03:00:00.000Z',
+      }),
+    );
+    const lib = withTrip(
+      plannerLibrary(),
+      makeTrip({
+        stops: [
+          [P1, P2],
+          [P5, P3],
+        ],
+      }),
+    );
+    await open(lib, { routes });
+    await waitFor(() => expect(routes.calls).toHaveLength(2));
+    const user = userEvent.setup();
+    const buttons = within(timeline())
+      .getAllByRole('button')
+      .map((b) => b.textContent);
+    expect(buttons.indexOf('일정 공유')).toBe(buttons.indexOf('여행 설정') + 1);
+
+    await user.click(within(timeline()).getByRole('button', { name: '일정 공유' }));
+    // 창은 처음 열 때 받으므로 한 박자 동안은 기다림 틀이 뜨고, 실제 창이 그것을 바꿔 놓는다.
+    await screen.findByRole('textbox', { name: '제목' });
+    const dialog = screen.getByRole('dialog', { name: '일정 공유' });
+    expect(within(dialog).getByText('Day 2개 · 일정 4곳')).toBeInTheDocument();
+    expect(within(dialog).getByRole('status')).toHaveTextContent(
+      '이동 시간은 10월 16일 조회 기준이에요',
+    );
+    expect(routes.calls).toHaveLength(2);
+  });
+
   it('숙소 정하기: 기본은 그날만, 체크하면 다음 날들도 같은 숙소', async () => {
     const lib = withTrip(plannerLibrary(), makeTrip({ days: 3, stops: [[P1]] }));
     const { store } = await open(lib);

@@ -1,13 +1,15 @@
 import { FOCUS_ZOOM, focusCamera } from 'src/components/map/camera';
 import type { MapAdapter, MapPadding } from 'src/components/map/MapAdapter';
 import { placeMarker } from 'src/sections/map/markers';
-import type { FromMap, MapPlace } from 'src/share-protocol';
+import type { FromMap, MapLine, MapPin, MapPlace } from 'src/share-protocol';
 import { pastel } from 'src/theme/tokens/pastel';
+import { drawLayers } from './trip-layers';
 
 /**
  * 지도 페이지의 지도(spec §2.4, §4.5). 앱과 같은 `MapAdapter`(실제는 네이버 지도 JS v3, 테스트·e2e는
  * DOM 가짜)에 앱과 같은 장소 이름 알약 마커를 그린다. 사용자 문자열은 마커 라벨이 `textContent`로만 넣는다.
- * 지도 SDK를 받는 동안 온 메시지는 상태로만 남겨 두었다가 지도가 붙은 뒤 반영한다.
+ * 두 모드가 있다: `places`(v1 `init`: 장소 이름 마커)와 `trip`(v2 `draw`: Day 색 핀·경로선). `init`은
+ * places 모드로, `draw`는 trip 모드로 바꾼다. 지도 SDK를 받는 동안 온 메시지는 상태로만 남겨 두었다가 지도가 붙은 뒤 반영한다.
  */
 
 /** 장소 하나로 갈 때(처음 1곳, focus) 줌. 처음 맞추기도 이 줌을 넘지 않는다. */
@@ -21,7 +23,10 @@ const USER_INPUTS = ['pointerdown', 'wheel', 'keydown', 'touchstart'] as const;
 
 export type ShareMap = {
   init(places: MapPlace[]): void;
-  focus(placeId: string | null): void;
+  /** 일정 지도(v2): 핀과 경로선을 그리고 맞출 핀에 맞춘다. 이전 장소·핀·선·강조는 모두 바뀐다. */
+  draw(pins: MapPin[], lines: MapLine[]): void;
+  /** places 모드는 장소 id, trip 모드는 핀 id(`start:`·`end:` 포함). */
+  focus(id: string | null): void;
   filter(placeIds: string[]): void;
 };
 
@@ -47,13 +52,16 @@ export function createShareMap(
   canvas.className = 'share-map-canvas';
   container.append(canvas);
 
+  let mode: 'places' | 'trip' = 'places';
   let places: MapPlace[] = [];
+  let pins: MapPin[] = [];
+  let lines: MapLine[] = [];
   let visible: Set<string> | null = null;
   let selectedId: string | null = null;
   let mounted = false;
   let failed = false;
-  // 지도가 붙기 전에 받은 카메라 요청: 처음 맞추기('fit') 또는 고른 장소. 나중 것이 앞의 것을 덮는다.
-  let pendingCamera: 'fit' | MapPlace | null = null;
+  // 지도가 붙기 전에 받은 카메라 요청: 처음 맞추기('fit') 또는 고른 지점. 나중 것이 앞의 것을 덮는다.
+  let pendingCamera: 'fit' | [number, number] | null = null;
   // 숨긴 iframe(display:none)에서 맞추면 컨테이너가 0x0이라 틀린다. 크기가 생기면 한 번 다시 맞춘다.
   let refitPending = false;
   // 처음 맞추기 화면을 유지하는 중인지. iframe 크기가 바뀌면(넓은↔좁은 배치, 화면 회전) 새 크기로 다시 맞춘다.
@@ -66,6 +74,12 @@ export function createShareMap(
 
   const render = () => {
     if (!mounted) return;
+    if (mode === 'trip') {
+      const layers = drawLayers(pins, lines, selectedId);
+      adapter.setMarkers(layers.markers);
+      adapter.setPolylines(layers.polylines);
+      return;
+    }
     adapter.setMarkers(
       places
         .filter((place) => visible === null || visible.has(place.id))
@@ -78,11 +92,28 @@ export function createShareMap(
           ),
         ),
     );
+    adapter.setPolylines([]);
+  };
+
+  /**
+   * 처음 맞출 점들. places 모드는 모든 장소. trip 모드는 `fit: false`가 아닌 핀(흐린 점·Day 없는 핀을 뺀다)이고,
+   * 그런 핀이 없으면 흐리지 않은 핀 전부, 그것도 없으면 모든 핀이다(`camera.ts`의 `fitPoints`와 같은 고르기).
+   */
+  const fitTargets = (): [number, number][] => {
+    if (mode === 'places') return places.map((place): [number, number] => [place.lng, place.lat]);
+    const markers = drawLayers(pins, [], null).markers;
+    const wanted = markers.filter((marker) => marker.fit !== false);
+    const pool = wanted.length > 0 ? wanted : markers;
+    const strong = pool.filter((marker) => marker.dimmed !== true);
+    return (strong.length > 0 ? strong : pool).map((marker): [number, number] => [
+      marker.lng,
+      marker.lat,
+    ]);
   };
 
   const fitAll = () => {
     refitPending = !hasSize();
-    const points = places.map((place): [number, number] => [place.lng, place.lat]);
+    const points = fitTargets();
     const first = points[0];
     autoFit = first !== undefined;
     if (first === undefined) return;
@@ -99,11 +130,18 @@ export function createShareMap(
     }
   };
 
-  const goTo = (place: MapPlace) => {
+  const goTo = (point: [number, number]) => {
     // 사용자가 고른 화면이 우선이다. 크기가 생겨도 처음 맞추기로 되돌리지 않는다.
     refitPending = false;
     autoFit = false;
-    adapter.setCamera(focusCamera([place.lng, place.lat], NO_PADDING));
+    adapter.setCamera(focusCamera(point, NO_PADDING));
+  };
+
+  /** 지금 모드에서 id가 가리키는 지점. */
+  const pointOf = (id: string): [number, number] | null => {
+    const found =
+      mode === 'trip' ? pins.find((pin) => pin.id === id) : places.find((p) => p.id === id);
+    return found === undefined ? null : [found.lng, found.lat];
   };
 
   /** 컨테이너 크기를 지도에 알린다. 크기가 바뀌어 알렸으면 true. */
@@ -157,8 +195,9 @@ export function createShareMap(
 
   adapter.setClusterStyle({ color: tokens.accent.main, textColor: tokens.accent.contrast });
   // 누른 마커를 강조한다(화면은 옮기지 않는다). 보기 화면은 그 카드만 표시하고 focus를 보내지 않는다.
+  // trip 모드에서는 핀 id(`start:<장소 id>` 포함)를 그대로 보낸다.
   adapter.onMarkerClick((id) => {
-    if (!places.some((place) => place.id === id)) return;
+    if (pointOf(id) === null) return;
     selectedId = id;
     render();
     post({ kind: 'select', placeId: id });
@@ -187,7 +226,10 @@ export function createShareMap(
 
   return {
     init(next) {
+      mode = 'places';
       places = next;
+      pins = [];
+      lines = [];
       visible = null;
       selectedId = null;
       // 붙은 뒤에도 카메라를 먼저 옮기고 그린다(붙을 때와 같은 순서, 위 mount 처리의 주석 참고).
@@ -195,16 +237,29 @@ export function createShareMap(
       else pendingCamera = 'fit';
       render();
     },
-    focus(placeId) {
-      const place = placeId === null ? undefined : places.find((p) => p.id === placeId);
-      if (place !== undefined) {
-        if (mounted) goTo(place);
-        else pendingCamera = place;
+    draw(nextPins, nextLines) {
+      mode = 'trip';
+      pins = nextPins;
+      lines = nextLines;
+      places = [];
+      visible = null;
+      selectedId = null;
+      // init과 같은 순서: 카메라를 먼저 옮기고 그린다.
+      if (mounted) fitAll();
+      else pendingCamera = 'fit';
+      render();
+    },
+    focus(id) {
+      const point = id === null ? null : pointOf(id);
+      if (point !== null) {
+        if (mounted) goTo(point);
+        else pendingCamera = point;
       }
-      selectedId = place === undefined ? null : place.id;
+      selectedId = point === null ? null : id;
       render();
     },
     filter(placeIds) {
+      // 일정 모드(trip)는 거르지 않는다 — 파일은 `draw`를 다시 보낸다.
       visible = new Set(placeIds);
       render();
     },

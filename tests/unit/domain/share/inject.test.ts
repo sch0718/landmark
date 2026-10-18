@@ -7,6 +7,7 @@ import {
   SHARE_DATA_PLACEHOLDER,
 } from 'src/domain/share/inject';
 import type { ShareDoc } from 'src/schema/share';
+import { makeShareV2Doc } from '../../helpers/share-v2-doc';
 
 const TEMPLATE =
   '<!doctype html><html><head><script type="application/json" id="tripmap-share">__TRIPMAP_DATA__</script></head><body></body></html>';
@@ -57,6 +58,22 @@ describe('injectShareDoc', () => {
     const doc = makeDoc({
       memo: `</script><script>window.__injected = 1</script><!-- ${LS_PS}`,
     });
+    const html = injectShareDoc(TEMPLATE, doc);
+    const dom = new JSDOM(html, { runScripts: 'dangerously' });
+    const { document } = dom.window;
+    const block = document.getElementById('tripmap-share')!;
+
+    expect(block.textContent).not.toContain('<');
+    expect(document.scripts.length).toBe(1);
+    expect((dom.window as unknown as { __injected?: unknown }).__injected).toBeUndefined();
+    expect(JSON.parse(block.textContent!)).toEqual(doc);
+  });
+
+  it('blocks script injection from v2 trip strings too', () => {
+    const doc = makeShareV2Doc();
+    const evil = `</script><script>window.__injected = 1</script>${LS_PS}`;
+    doc.trips[0]!.title = evil;
+    doc.trips[0]!.days[0]!.stops[0]!.note = evil;
     const html = injectShareDoc(TEMPLATE, doc);
     const dom = new JSDOM(html, { runScripts: 'dangerously' });
     const { document } = dom.window;

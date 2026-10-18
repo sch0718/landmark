@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeMapAdapter } from 'src/components/map/FakeMapAdapter';
 import type { MapMarker, MapPadding } from 'src/components/map/MapAdapter';
-import type { FromMap, MapPlace } from 'src/share-protocol';
+import { dayColor, NO_CATEGORY_COLOR } from 'src/components/map/map-colors';
+import type { FromMap, MapLine, MapPin, MapPlace } from 'src/share-protocol';
 import { FOCUS_ZOOM, createShareMap } from 'src/share-map/map';
 import { pastel } from 'src/theme/tokens/pastel';
 
@@ -625,5 +626,293 @@ describe('createShareMap', () => {
       await settle();
       expect(post).toHaveBeenCalledTimes(1);
     });
+  });
+});
+
+describe('createShareMap draw(일정 지도)', () => {
+  beforeEach(() => {
+    document.body.replaceChildren();
+  });
+
+  afterEach(() => {
+    document.body.replaceChildren();
+  });
+
+  const pin = (over: Partial<MapPin> & { id: string }): MapPin => ({
+    label: over.id,
+    lng: 127.1,
+    lat: 37.36,
+    day: 0,
+    role: 'stop',
+    ...over,
+  });
+  const S1 = pin({ id: 's1', label: '1 서혜커피', lng: 127.11, lat: 37.37 });
+  const S2 = pin({ id: 's2', label: '2 정자 빵집', lng: 127.13, lat: 37.36 });
+  const START = pin({
+    id: 'start:h',
+    label: '🏠 집',
+    lng: 127.1,
+    lat: 37.35,
+    role: 'endpoint',
+  });
+  const DIM = pin({ id: 'd1', label: '', lng: 128.5, lat: 35.1, day: 1, role: 'dim' });
+  const CAND = pin({ id: 'c1', label: '후보', lng: 129.1, lat: 35.2, day: null });
+  const LINE1: MapLine = {
+    id: 'leg1',
+    day: 0,
+    walk: false,
+    path: [
+      [127.11, 37.37],
+      [127.12, 37.365],
+      [127.13, 37.36],
+    ],
+  };
+  const LINE2: MapLine = { id: 'leg2', day: 0, walk: true, path: [[127.1, 37.35]] };
+
+  const polylineIds = (el: HTMLElement) =>
+    [...el.querySelectorAll<HTMLElement>('[data-testid^="polyline-"]')].map((n) =>
+      n.getAttribute('data-testid'),
+    );
+
+  it('draw: 핀마다 마커 하나, 선마다 경로선 하나(Day 색, 도보는 점선)', async () => {
+    const { el, handle, markerButtons, markerData } = await setup();
+    handle.draw([S1, S2, START], [LINE1, LINE2]);
+    expect(markerButtons().map((b) => b.dataset.testid)).toEqual([
+      'marker-s1',
+      'marker-s2',
+      'marker-start:h',
+    ]);
+    expect(polylineIds(el)).toEqual(['polyline-leg1', 'polyline-leg2']);
+    expect(el.querySelector<HTMLElement>('[data-testid="polyline-leg1"]')?.dataset).toMatchObject({
+      dashed: 'false',
+      color: dayColor(0),
+      points: '3',
+    });
+    expect(el.querySelector<HTMLElement>('[data-testid="polyline-leg2"]')?.dataset.dashed).toBe(
+      'true',
+    );
+    expect(markerData('start:h').borderColor).toBe('#000000');
+    expect(markerData('s1')).toMatchObject({ color: dayColor(0), clusterable: false });
+  });
+
+  it('draw: 이름은 글자 그대로(태그로 해석하지 않는다)', async () => {
+    const { handle, markerOf } = await setup();
+    handle.draw([pin({ id: 'x', label: '<b>굵게</b>' })], []);
+    expect(markerOf('x').textContent).toBe('<b>굵게</b>');
+    expect(markerOf('x').querySelector('b')).toBeNull();
+  });
+
+  it('draw: 흐린 점과 Day 없는 핀은 빼고 맞춘다(여백 40)', async () => {
+    const { handle, adapter, camera } = await setup();
+    handle.draw([S1, S2, START, DIM, CAND], []);
+    expect(adapter.fitCalls).toEqual([
+      [
+        [S1.lng, S1.lat],
+        [S2.lng, S2.lat],
+        [START.lng, START.lat],
+      ],
+    ]);
+    expect(camera()?.zoom).toBe(12);
+  });
+
+  it('draw: 맞출 핀이 없으면 흐리지 않은 핀 전부에 맞춘다(후보뿐인 날)', async () => {
+    const { handle, adapter } = await setup();
+    const other = pin({ id: 'c2', label: '후보2', lng: 129.2, lat: 35.3, day: null });
+    handle.draw([CAND, other, DIM], []);
+    expect(adapter.fitCalls).toEqual([
+      [
+        [CAND.lng, CAND.lat],
+        [other.lng, other.lat],
+      ],
+    ]);
+  });
+
+  it('draw: 맞출 곳이 1곳이면 그 지점에 줌 16(맞추기 없음)', async () => {
+    const { handle, adapter, camera } = await setup();
+    handle.draw([S1, DIM], []);
+    expect(camera()).toEqual({ center: [S1.lng, S1.lat], zoom: 16 });
+    expect(adapter.fitCalls).toHaveLength(0);
+  });
+
+  it('draw: 맞출 곳이 몇 미터 떨어져 있어 줌이 16을 넘으면 16으로 내린다', async () => {
+    const adapter = new CameraFake();
+    adapter.fitZoom = 19;
+    const { handle, camera } = await setup({ adapter });
+    handle.draw([S1, pin({ id: 'near', lng: S1.lng + 0.00005, lat: S1.lat })], []);
+    expect(camera()?.zoom).toBe(16);
+  });
+
+  it('draw: 핀이 하나도 없으면 마커·선만 비우고 카메라는 그대로', async () => {
+    const { handle, adapter, camera, markerButtons } = await setup();
+    handle.draw([S1], [LINE1]);
+    const before = camera();
+    handle.draw([], []);
+    expect(markerButtons()).toHaveLength(0);
+    expect(camera()).toEqual(before);
+    expect(adapter.fitCalls).toHaveLength(0);
+  });
+
+  it('draw를 다시 받으면 마커·선을 바꾸고 강조를 풀고 새로 맞춘다', async () => {
+    const { el, handle, markerButtons, markerData, adapter } = await setup();
+    handle.draw([S1, S2], [LINE1]);
+    handle.focus('s1');
+    expect(markerData('s1').selected).toBe(true);
+    handle.draw([S2, START], []);
+    expect(markerButtons().map((b) => b.dataset.testid)).toEqual(['marker-s2', 'marker-start:h']);
+    expect(markerData('s2').selected).toBe(false);
+    expect(polylineIds(el)).toEqual([]);
+    expect(adapter.fitCalls).toHaveLength(2);
+  });
+
+  it('init으로 돌아오면 선이 사라지고 장소 마커가 된다', async () => {
+    const { el, handle, markerButtons, markerData } = await setup();
+    handle.draw([S1, S2], [LINE1]);
+    handle.init([A, B]);
+    expect(polylineIds(el)).toEqual([]);
+    expect(markerButtons().map((b) => b.dataset.testid)).toEqual(['marker-a', 'marker-b']);
+    expect(markerData('a').clusterable).toBe(true);
+  });
+
+  it('focus: 핀 id로 줌 16으로 가서 강조한다(출발점 핀 id도)', async () => {
+    const { handle, camera, markerData } = await setup();
+    handle.draw([S1, S2, START], []);
+    handle.focus('start:h');
+    expect(camera()).toEqual({ center: [START.lng, START.lat], zoom: 16 });
+    expect(markerData('start:h').selected).toBe(true);
+    expect(markerData('s1').selected).toBe(false);
+    handle.focus(null);
+    expect(markerData('start:h').selected).toBe(false);
+  });
+
+  it('focus: 모르는 id는 지도를 움직이지 않는다', async () => {
+    const { handle, camera } = await setup();
+    handle.draw([S1, S2], []);
+    const before = camera();
+    handle.focus('nope');
+    expect(camera()).toEqual(before);
+  });
+
+  it('focus는 선을 지우지 않는다', async () => {
+    const { el, handle } = await setup();
+    handle.draw([S1, S2], [LINE1]);
+    handle.focus('s2');
+    expect(polylineIds(el)).toEqual(['polyline-leg1']);
+  });
+
+  it('마커를 누르면 핀 id(start:… 그대로)로 select를 보내고 강조한다', async () => {
+    const { handle, markerOf, post, markerData } = await setup();
+    handle.draw([S1, START], []);
+    markerOf('start:h').click();
+    expect(post).toHaveBeenLastCalledWith({ kind: 'select', placeId: 'start:h' });
+    expect(markerData('start:h').selected).toBe(true);
+    markerOf('s1').click();
+    expect(post).toHaveBeenLastCalledWith({ kind: 'select', placeId: 's1' });
+    expect(markerData('start:h').selected).toBe(false);
+  });
+
+  it('흐린 점을 눌러도 select를 보낸다(파일이 그 Day 탭으로 바꾼다)', async () => {
+    const { handle, markerOf, post } = await setup();
+    handle.draw([S1, DIM], []);
+    markerOf('d1').click();
+    expect(post).toHaveBeenLastCalledWith({ kind: 'select', placeId: 'd1' });
+  });
+
+  it('init 뒤 draw를 받으면 장소 마커는 사라지고 핀만 남는다', async () => {
+    const { handle, post, markerButtons } = await setup();
+    handle.init([A]);
+    handle.draw([S1], []);
+    expect(markerButtons().map((b) => b.dataset.testid)).toEqual(['marker-s1']);
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it('후보 핀은 회색, 흐린 점은 이름이 없고 흐리다', async () => {
+    const { handle, markerData } = await setup();
+    handle.draw([CAND, DIM], []);
+    expect(markerData('c1').color).toBe(NO_CATEGORY_COLOR);
+    expect(markerData('d1')).toMatchObject({ label: '', dimmed: true, color: dayColor(1) });
+  });
+
+  it('흐린 핀뿐이면 흐린 점 전부에 맞춘다', async () => {
+    const { handle, adapter } = await setup();
+    const dim2 = pin({ id: 'd2', label: '', lng: 128.6, lat: 35.2, day: 1, role: 'dim' });
+    handle.draw([DIM, dim2], []);
+    expect(adapter.fitCalls).toEqual([
+      [
+        [DIM.lng, DIM.lat],
+        [dim2.lng, dim2.lat],
+      ],
+    ]);
+  });
+
+  it('filter는 일정 모드에서 마커를 거르지 않는다', async () => {
+    const { handle, markerButtons } = await setup();
+    handle.draw([S1, S2], []);
+    handle.filter(['s1']);
+    expect(markerButtons()).toHaveLength(2);
+  });
+
+  it('지도가 붙기 전에 받은 draw는 붙은 뒤 마커·선·맞추기를 반영한다', async () => {
+    const adapter = new DeferredFake();
+    const { el, handle, markerButtons } = await setup({ adapter });
+    handle.draw([S1, S2, DIM], [LINE1]);
+    expect(el.querySelector('[data-testid="fake-map"]')).toBeNull();
+    adapter.finish();
+    await settle();
+    expect(markerButtons().map((b) => b.dataset.testid)).toEqual([
+      'marker-s1',
+      'marker-s2',
+      'marker-d1',
+    ]);
+    expect(polylineIds(el)).toEqual(['polyline-leg1']);
+    expect(adapter.fitCalls).toEqual([
+      [
+        [S1.lng, S1.lat],
+        [S2.lng, S2.lat],
+      ],
+    ]);
+  });
+
+  it('붙기 전에 draw 뒤 focus를 받으면 고른 핀이 우선이다', async () => {
+    const adapter = new DeferredFake();
+    const { handle, camera, markerData } = await setup({ adapter });
+    handle.draw([S1, S2], []);
+    handle.focus('s2');
+    adapter.finish();
+    await settle();
+    expect(camera()).toEqual({ center: [S2.lng, S2.lat], zoom: 16 });
+    expect(markerData('s2').selected).toBe(true);
+  });
+
+  it('카메라를 먼저 옮기고 마커를 그린다(붙은 뒤 draw)', async () => {
+    const adapter = new CameraFake();
+    const { handle } = await setup({ adapter });
+    const order: string[] = [];
+    const fit = adapter.fitBounds.bind(adapter);
+    const setMarkers = adapter.setMarkers.bind(adapter);
+    adapter.fitBounds = (points, padding) => {
+      order.push('camera');
+      fit(points, padding);
+    };
+    adapter.setMarkers = (markers) => {
+      order.push('markers');
+      setMarkers(markers);
+    };
+    handle.draw([S1, S2], []);
+    expect(order.indexOf('camera')).toBeGreaterThanOrEqual(0);
+    expect(order.lastIndexOf('camera')).toBeLessThan(order.lastIndexOf('markers'));
+  });
+
+  it('크기가 0일 때 받은 draw는 크기가 생긴 뒤 한 번 다시 맞춘다(핀 기준)', async () => {
+    const { handle, adapter, size } = await setup({ size: { w: 0, h: 0 } });
+    handle.draw([S1, S2, DIM], []);
+    expect(adapter.fitCalls).toHaveLength(1);
+    size.w = 800;
+    size.h = 600;
+    window.dispatchEvent(new Event('resize'));
+    expect(adapter.fitCalls).toHaveLength(2);
+    expect(adapter.fitCalls[1]).toEqual([
+      [S1.lng, S1.lat],
+      [S2.lng, S2.lat],
+    ]);
   });
 });

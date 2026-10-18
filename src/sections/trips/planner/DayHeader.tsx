@@ -18,10 +18,12 @@ type Props = {
   canOptimize: boolean;
   onOptimize(): void;
   onSettings(): void;
+  /** `일정 공유` 창을 연다. */
+  onShare(): void;
 };
 
 /**
- * Day 머리: 출발 시각 입력, 출발점 이름, `순서 정리`, `여행 설정`.
+ * Day 머리: 출발 시각 입력, 출발점 이름, `순서 정리`, `여행 설정`, `일정 공유`.
  * 출발 시각은 형식이 맞는 값('HH:mm')만 저장하고, 비우거나 틀린 채로 나가면 저장된 값으로 되돌린다.
  * Day가 바뀌면 부른 쪽이 `key`로 새로 만든다.
  */
@@ -33,6 +35,7 @@ export function DayHeader({
   canOptimize,
   onOptimize,
   onSettings,
+  onShare,
 }: Props) {
   // 입력 중인 값. 저장된 값이 바뀌면(저장 성공·다른 탭) 그 값으로 맞춘다.
   const [draft, setDraft] = useState({ base: startTime, value: startTime });
@@ -95,6 +98,9 @@ export function DayHeader({
       </Button>
       <Button size="small" onClick={onSettings} sx={{ minHeight: 44 }}>
         여행 설정
+      </Button>
+      <Button size="small" onClick={onShare} sx={{ minHeight: 44 }}>
+        일정 공유
       </Button>
     </Box>
   );

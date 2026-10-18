@@ -5,6 +5,7 @@ import Switch from '@mui/material/Switch';
 import Typography from '@mui/material/Typography';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import {
   defaultTitleLabel,
@@ -13,14 +14,22 @@ import {
   planShareLabels,
   shareTitle,
 } from 'src/domain/library/import-share';
+import {
+  importSharedTrip,
+  receivedTripTitle,
+  sameTripExists,
+} from 'src/domain/library/import-share-trip';
 import { fieldSx } from 'src/components/field-style';
 import { localDate } from 'src/lib/local-date';
 import { labelNameIssue } from 'src/schema/library';
-import type { ShareDoc } from 'src/schema/share';
+import type { ShareDoc, ShareDocV2 } from 'src/schema/share';
 import { resultMessage } from 'src/sections/add-place/shared';
 import { useLibraryQuery } from 'src/sections/library/use-library-query';
 import { ShareLabelRows } from 'src/sections/share-import/ShareLabelRows';
 import { SharePlaceRows } from 'src/sections/share-import/SharePlaceRows';
+import { ShareTripBox } from 'src/sections/share-import/ShareTripBox';
+import { objectParticle } from 'src/sections/trips/planner/format';
+import { paths } from 'src/routes/paths';
 import { addFlowAtom } from 'src/stores/add-place';
 import { libraryAtom, useLibraryAction } from 'src/stores/library-state';
 import { nearbyOffAtom } from 'src/stores/my-location';
@@ -39,9 +48,19 @@ export function SharePreview({ doc }: { doc: ShareDoc }) {
   const { run } = useLibraryAction();
   const [, patchQuery] = useLibraryQuery();
   const nearbyOff = useSetAtom(nearbyOffAtom);
+  const navigate = useNavigate();
 
-  const [selected, setSelected] = useState<ReadonlySet<string>>(
+  const [picked, setPicked] = useState<ReadonlySet<string>>(
     () => new Set(doc.places.map((place) => place.id)),
+  );
+  // v2 문서면 여행 칸을 보이고(기본 켬), 켜져 있으면 모든 장소를 가져온다.
+  const trip = doc.version === 2 ? doc.trips[0] : undefined;
+  const [tripSwitchOn, setTripSwitchOn] = useState(true);
+  const tripDoc: ShareDocV2 | null =
+    doc.version === 2 && trip !== undefined && tripSwitchOn ? doc : null;
+  const duplicateTrip = useMemo(
+    () => trip !== undefined && sameTripExists(library, trip),
+    [library, trip],
   );
   const [titleOn, setTitleOn] = useState(true);
   const [name, setName] = useState(() => defaultTitleLabel(doc.title));
@@ -59,6 +78,10 @@ export function SharePreview({ doc }: { doc: ShareDoc }) {
   }, []);
   const nameErrorId = useId();
   const memoNoteId = useId();
+
+  // 여행을 함께 가져올 때는 모든 장소가 고정이다(고른 상태는 스위치를 끄면 그대로 돌아온다).
+  const allIds = useMemo(() => new Set(doc.places.map((place) => place.id)), [doc]);
+  const selected = tripDoc === null ? picked : allIds;
 
   const trimmed = name.trim();
   const nameIssue = labelNameIssue(name);
@@ -82,7 +105,7 @@ export function SharePreview({ doc }: { doc: ShareDoc }) {
   const canImport = count > 0 && (!titleOn || nameValid) && !saving;
 
   const toggle = (id: string) =>
-    setSelected((current) => {
+    setPicked((current) => {
       const next = new Set(current);
       if (!next.delete(id)) next.add(id);
       return next;
@@ -94,11 +117,22 @@ export function SharePreview({ doc }: { doc: ShareDoc }) {
     setSaving(true);
     const input = { selected: selectedIds, titleLabel, appendMemo };
     // 이어지는 연산이 없어 `summary`·`createdId`(제목 라벨 id)는 `run` 결과에 그대로 실려 온다.
-    const result = await run((lib, ctx) => importShare(lib, doc, input, ctx));
+    // 여행을 함께 가져올 때는 `importSharedTrip`이 장소를 먼저 합치고 새 여행을 만든다(`createdId`는 여행 id).
+    const result = await run((lib, ctx) =>
+      tripDoc === null
+        ? importShare(lib, doc, input, ctx)
+        : importSharedTrip(lib, tripDoc, { titleLabel, appendMemo }, ctx),
+    );
     // 칸이 닫힌 뒤에도 가져오기는 이미 저장소에 반영됐으므로 결과는 알린다.
     if (result.ok) {
-      const message = result.summary === undefined ? null : resultMessage(result.summary);
-      if (message !== null) toast(message);
+      const placesMessage = result.summary === undefined ? null : resultMessage(result.summary);
+      if (tripDoc === null) {
+        if (placesMessage !== null) toast(placesMessage);
+      } else {
+        const title = receivedTripTitle(tripDoc.trips[0]!.title);
+        const head = `여행 ‘${title}’${objectParticle(title)} 가져왔어요`;
+        toast(placesMessage === null ? head : `${head}. ${placesMessage}`);
+      }
     }
     // 칸이 닫혔다면 잠금 해제·필터·흐름 닫기는 건드리지 않는다(새 흐름을 닫을 수 있다).
     if (!aliveRef.current) return;
@@ -107,6 +141,12 @@ export function SharePreview({ doc }: { doc: ShareDoc }) {
     // 연산 거절(OpRejected)은 보고되지 않는다. 제목 라벨 이름은 화면이 막으므로 드물고,
     // 그때는 미리보기와 선택을 그대로 두고 버튼만 다시 켠다.
     if (!result.ok) return;
+    if (tripDoc !== null) {
+      // 목록 필터는 건드리지 않고, 새 여행의 계획 화면으로 간다.
+      setFlow({ step: 'closed' });
+      if (result.createdId !== undefined) void navigate(paths.trip(result.createdId));
+      return;
+    }
     // 제목 라벨을 붙였으면 방금 가져온 장소가 모두 보이도록 그 라벨로 거르고 검색어·지역·방문 필터를 비운다.
     if (result.createdId !== undefined) {
       patchQuery({
@@ -131,6 +171,15 @@ export function SharePreview({ doc }: { doc: ShareDoc }) {
         <Typography variant="body2" sx={{ color: 'var(--tm-text-secondary)' }}>
           {`${localDate(doc.createdAt)} 만든 파일`}
         </Typography>
+
+        {trip !== undefined && (
+          <ShareTripBox
+            trip={trip}
+            on={tripSwitchOn}
+            onChange={setTripSwitchOn}
+            duplicate={duplicateTrip}
+          />
+        )}
 
         {plan.labels.length > 0 && (
           <Box sx={{ mt: 2 }}>
@@ -190,22 +239,31 @@ export function SharePreview({ doc }: { doc: ShareDoc }) {
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 0.5, mt: 1 }}>
           <Button
             size="small"
-            disabled={count === doc.places.length}
-            onClick={() => setSelected(new Set(doc.places.map((place) => place.id)))}
+            disabled={tripDoc !== null || count === doc.places.length}
+            onClick={() => setPicked(new Set(allIds))}
             sx={{ minHeight: 44 }}
           >
             모두 선택
           </Button>
           <Button
             size="small"
-            disabled={count === 0}
-            onClick={() => setSelected(new Set())}
+            disabled={tripDoc !== null || count === 0}
+            onClick={() => setPicked(new Set())}
             sx={{ minHeight: 44 }}
           >
             모두 해제
           </Button>
         </Box>
-        <SharePlaceRows doc={doc} selected={selected} existing={existing} onToggle={toggle} />
+        {tripDoc !== null && (
+          <Box sx={{ ...NOTE_SX, mt: 0, mb: 0.5 }}>여행에 쓰이는 장소는 모두 가져와요</Box>
+        )}
+        <SharePlaceRows
+          doc={doc}
+          selected={selected}
+          existing={existing}
+          onToggle={toggle}
+          disabled={tripDoc !== null}
+        />
       </Box>
       <Box
         sx={{
@@ -230,7 +288,7 @@ export function SharePreview({ doc }: { doc: ShareDoc }) {
           onClick={() => void submit()}
           sx={{ minHeight: 44 }}
         >
-          {`${count}곳 가져오기`}
+          {tripDoc === null ? `${count}곳 가져오기` : '여행 가져오기'}
         </Button>
       </Box>
     </Box>

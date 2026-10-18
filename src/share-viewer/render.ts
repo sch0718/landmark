@@ -3,16 +3,15 @@ import type { ShareDoc, ShareLabel, SharePlace } from 'src/schema/share';
 import { pastel } from 'src/theme/tokens/pastel';
 import type { Tokens } from 'src/theme/tokens';
 import type { ImportLink } from './encode';
+import type { MapPort } from './map-frame';
 
 /**
  * 보기 화면 그리기. 사용자 문자열은 `textContent`·속성 값으로만 DOM에 넣는다(`innerHTML` 금지).
  * 지도는 이 파일이 모른다: 호출하는 쪽이 넘기는 `MapPort`로만 알린다.
  */
 
-export type MapPort = {
-  focus(placeId: string | null): void;
-  filter(placeIds: string[]): void;
-};
+// `MapPort`는 지도 연결(`map-frame.ts`)이 정의한다. 기존 import 경로를 위해 다시 내보낸다.
+export type { MapPort } from './map-frame';
 
 /** 앱의 `--tm-*` 변수 이름과 같은 규칙으로 토큰을 펼친다(`create-app-theme.ts`와 같은 이름). */
 function cssVarsOf(t: Tokens): string {
@@ -24,6 +23,7 @@ function cssVarsOf(t: Tokens): string {
     '--tm-text-secondary': t.text.secondary,
     '--tm-text-muted': t.text.muted,
     '--tm-border': t.border,
+    '--tm-error': t.error,
     '--tm-accent-main': t.accent.main,
     '--tm-accent-contrast': t.accent.contrast,
     '--tm-accent-text': t.accent.text,
@@ -62,7 +62,7 @@ export function naverUrl(place: SharePlace): string {
   return `https://map.naver.com/p/search/${encodeURIComponent(query)}`;
 }
 
-function el<K extends keyof HTMLElementTagNameMap>(
+export function el<K extends keyof HTMLElementTagNameMap>(
   doc: Document,
   tag: K,
   text?: string,
@@ -75,7 +75,7 @@ function el<K extends keyof HTMLElementTagNameMap>(
 }
 
 /** 새 탭에서 앱을 여는 링크(`Landmark에 담기`·`Landmark 열기`). */
-function newTabLink(doc: Document, text: string, href: string): HTMLAnchorElement {
+export function newTabLink(doc: Document, text: string, href: string): HTMLAnchorElement {
   const a = el(doc, 'a', text, 'import-link');
   a.href = href;
   a.target = '_blank';
@@ -83,7 +83,7 @@ function newTabLink(doc: Document, text: string, href: string): HTMLAnchorElemen
   return a;
 }
 
-function labelChip(doc: Document, label: ShareLabel): HTMLSpanElement {
+export function labelChip(doc: Document, label: ShareLabel): HTMLSpanElement {
   const chip = el(doc, 'span', label.name, 'chip');
   chip.dataset.color = label.color;
   return chip;
@@ -95,6 +95,71 @@ function localDate(iso: string): string {
   if (Number.isNaN(d.getTime())) return '';
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}.${pad(d.getMonth() + 1)}.${pad(d.getDate())}`;
+}
+
+/**
+ * 장소 카드(이름·라벨 칩·주소·메모·한 줄 평·`네이버 지도에서 보기`). 누르기·포커스 동작은 부르는 쪽이 붙인다.
+ * 한 줄 평은 v2 문서의 장소에만 있다.
+ */
+export function placeCard(
+  d: Document,
+  place: SharePlace,
+  labelById: ReadonlyMap<string, ShareLabel>,
+): HTMLElement {
+  const article = el(d, 'article');
+  article.tabIndex = 0;
+  article.append(el(d, 'h2', place.name));
+  // 앱과 같이 장소의 labelIds 순서로 보인다(첫 라벨이 대표 — 마커 색도 이것을 쓴다).
+  const placeLabels = place.labelIds
+    .map((id) => labelById.get(id))
+    .filter((l): l is ShareLabel => l !== undefined);
+  if (placeLabels.length > 0) {
+    const chips = el(d, 'div', undefined, 'chips');
+    for (const label of placeLabels) chips.append(labelChip(d, label));
+    article.append(chips);
+  }
+  article.append(el(d, 'p', place.address, 'address'));
+  // 메모는 줄바꿈을 살린다(`white-space: pre-wrap`은 .memo에 있다). 링크로 바꾸지 않는다.
+  if (place.memo !== undefined) article.append(el(d, 'p', place.memo, 'memo'));
+  if (place.review !== undefined) article.append(el(d, 'p', `한 줄 평 ${place.review}`, 'review'));
+  article.append(naverLink(d, place));
+  return article;
+}
+
+/** `네이버 지도에서 보기` 링크(새 탭). */
+export function naverLink(d: Document, place: SharePlace): HTMLAnchorElement {
+  const link = el(d, 'a', '네이버 지도에서 보기');
+  link.href = naverUrl(place);
+  link.target = '_blank';
+  link.rel = 'noopener noreferrer';
+  return link;
+}
+
+/**
+ * `Landmark에 담기` 자리. 해시 없는 주소로 먼저 그리고, 압축이 끝나면 `set`이 바꾼다.
+ * 링크가 너무 커 담지 못하면 `tooBigNote`와 `Landmark 열기`로 바꾼다.
+ */
+export function importControl(
+  d: Document,
+  app: string,
+  tooBigNote: string,
+): { slot: HTMLElement; set(link: ImportLink): void } {
+  const slot = el(d, 'div', undefined, 'import');
+  const anchor = newTabLink(d, 'Landmark에 담기', `${app}/import`);
+  slot.append(anchor);
+  return {
+    slot,
+    set(link) {
+      if (link.kind === 'direct') {
+        anchor.href = link.href;
+      } else if (link.kind === 'too-big') {
+        slot.replaceChildren(
+          el(d, 'p', tooBigNote, 'import-note'),
+          newTabLink(d, 'Landmark 열기', link.href),
+        );
+      }
+    },
+  };
 }
 
 export function renderViewer(
@@ -118,10 +183,12 @@ export function renderViewer(
     el(d, 'p', date === '' ? `${doc.places.length}곳` : `${date} · ${doc.places.length}곳`),
   );
   // 앱으로 가져가는 링크. 해시 없는 주소로 먼저 그리고, 압축이 끝나면 `setImportLink`가 바꾼다.
-  const importSlot = el(d, 'div', undefined, 'import');
-  const importAnchor = newTabLink(d, 'Landmark에 담기', `${opts.app}/import`);
-  importSlot.append(importAnchor);
-  header.append(importSlot);
+  const importer = importControl(
+    d,
+    opts.app,
+    '장소가 많아 바로 담을 수 없어요. Landmark에서 이 파일을 가져와 주세요',
+  );
+  header.append(importer.slot);
   root.append(header);
 
   // 지도 자리와 목록
@@ -145,28 +212,8 @@ export function renderViewer(
 
   for (const place of doc.places) {
     const li = el(d, 'li');
-    const article = el(d, 'article');
+    const article = placeCard(d, place, labelById);
     article.dataset.placeId = place.id;
-    article.tabIndex = 0;
-
-    article.append(el(d, 'h2', place.name));
-    // 앱과 같이 장소의 labelIds 순서로 보인다(첫 라벨이 대표 — 마커 색도 이것을 쓴다).
-    const placeLabels = place.labelIds
-      .map((id) => labelById.get(id))
-      .filter((l): l is ShareLabel => l !== undefined);
-    if (placeLabels.length > 0) {
-      const chips = el(d, 'div', undefined, 'chips');
-      for (const label of placeLabels) chips.append(labelChip(d, label));
-      article.append(chips);
-    }
-    article.append(el(d, 'p', place.address, 'address'));
-    // 메모는 줄바꿈을 살린다(`white-space: pre-wrap`은 .memo에 있다). 링크로 바꾸지 않는다.
-    if (place.memo !== undefined) article.append(el(d, 'p', place.memo, 'memo'));
-    const link = el(d, 'a', '네이버 지도에서 보기');
-    link.href = naverUrl(place);
-    link.target = '_blank';
-    link.rel = 'noopener noreferrer';
-    article.append(link);
 
     // 링크를 눌렀을 때는 카드 동작(지도 이동)을 하지 않는다. 키보드는 카드 자체에서 온 것만 받는다.
     article.addEventListener('click', (event) => {
@@ -235,21 +282,7 @@ export function renderViewer(
       const card = mark(placeId);
       if (card !== null) card.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     },
-    setImportLink(link) {
-      if (link.kind === 'direct') {
-        importAnchor.href = link.href;
-      } else if (link.kind === 'too-big') {
-        importSlot.replaceChildren(
-          el(
-            d,
-            'p',
-            '장소가 많아 바로 담을 수 없어요. Landmark에서 이 파일을 가져와 주세요',
-            'import-note',
-          ),
-          newTabLink(d, 'Landmark 열기', link.href),
-        );
-      }
-    },
+    setImportLink: importer.set,
   };
 }
 

@@ -51,7 +51,7 @@ header .import-note {
 .import-link {
   display: inline-flex;
   align-items: center;
-  min-height: 36px;
+  min-height: 44px;
   padding: 0 14px;
   border: 1px solid var(--tm-border);
   border-radius: 999px;
@@ -62,8 +62,9 @@ header .import-note {
   text-decoration: none;
 }
 
-.import-link:focus-visible {
-  outline: 2px solid var(--tm-accent-main);
+/* 포커스 표시는 앱 테마와 같은 값(스펙 §14). */
+:focus-visible {
+  outline: 2px solid var(--tm-accent-text);
   outline-offset: 2px;
 }
 
@@ -149,11 +150,6 @@ article {
   background: var(--tm-bg-surface);
   box-shadow: var(--tm-shadow-1);
   cursor: pointer;
-}
-
-article:focus-visible {
-  outline: 2px solid var(--tm-accent-main);
-  outline-offset: 2px;
 }
 
 article[aria-current='true'] {
@@ -274,6 +270,163 @@ footer {
   text-align: center;
 }
 
+/* 일정 모드: Day 탭 줄 + 시간표. Day 색은 번호 동그라미 테두리·탭 아래 막대로만 쓴다(글자 바탕으로 쓰지 않는다). */
+
+.trip-panel {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.tabs {
+  display: flex;
+  flex: none;
+  gap: 4px;
+  padding: 4px 16px 0;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--tm-border);
+}
+
+.tab {
+  flex: none;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 0;
+  border-bottom: 4px solid transparent;
+  background: transparent;
+  color: var(--tm-text-secondary);
+  font: inherit;
+  font-size: 0.875rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.tab[aria-selected='true'] {
+  border-bottom-color: var(--tab-color);
+  color: var(--tm-text-primary);
+  font-weight: 600;
+}
+
+.tab-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.tab-body ul {
+  overflow: visible;
+}
+
+.cand-note {
+  margin: 12px 16px 0;
+  color: var(--tm-text-secondary);
+  font-size: 0.875rem;
+}
+
+.tab-body li + li {
+  margin-top: 8px;
+}
+
+.row {
+  display: flex;
+  gap: 12px;
+  min-height: 44px;
+}
+
+article.row {
+  align-items: flex-start;
+}
+
+.row.point {
+  align-items: center;
+  padding-block: 8px;
+}
+
+.point-line {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.num {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 3px solid var(--tm-border);
+  border-radius: 50%;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.stop-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.stop-body p {
+  margin: 4px 0 0;
+  font-size: 0.875rem;
+}
+
+.times {
+  color: var(--tm-text-secondary);
+}
+
+.late {
+  color: var(--tm-error);
+  font-weight: 700;
+}
+
+.review {
+  color: var(--tm-text-secondary);
+}
+
+.leg {
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 12px;
+  padding-inline: 8px;
+  color: var(--tm-text-secondary);
+  font-size: 0.875rem;
+}
+
+.directions {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding-inline: 8px;
+  color: var(--tm-accent-text);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.totals {
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+  border-top: 1px solid var(--tm-border);
+  font-size: 0.875rem;
+}
+
+.totals p {
+  margin: 0;
+}
+
+.queried {
+  color: var(--tm-text-muted);
+}
+
+li.plain,
+li.empty {
+  padding: 8px;
+  color: var(--tm-text-secondary);
+  font-size: 0.875rem;
+}
+
 @media (min-width: 768px) {
   header,
   .filters {
@@ -297,6 +450,41 @@ footer {
   ul {
     grid-column: 1;
     grid-row: 1;
+    padding-inline: 24px 16px;
+  }
+
+  /* 일정 모드: 왼쪽 칸(머리글 → Day 탭 줄 → 시간표) 400px + 오른쪽 지도. */
+  #root[data-mode='trip'] {
+    display: grid;
+    grid-template-columns: 400px 1fr;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+  }
+
+  #root[data-mode='trip'] header {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  #root[data-mode='trip'] main {
+    display: contents;
+  }
+
+  #root[data-mode='trip'] #map {
+    grid-column: 2;
+    grid-row: 1 / -1;
+  }
+
+  #root[data-mode='trip'] .trip-panel {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  #root[data-mode='trip'] footer {
+    grid-column: 1;
+    grid-row: 3;
+  }
+
+  #root[data-mode='trip'] .tabs {
     padding-inline: 24px 16px;
   }
 }

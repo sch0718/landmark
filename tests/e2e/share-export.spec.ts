@@ -1,7 +1,13 @@
 import { statSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { exportSeaPlaces, SEA_COUNT, SHARE_MAP_URL, SHARE_VIEWER_FILE } from './fixtures';
+import {
+  exportSeaPlaces,
+  SEA_COUNT,
+  SHARE_MAP_URL,
+  SHARE_VIEWER_FILE,
+  TEMPLATE_LIMIT,
+} from './fixtures';
 
 /**
  * 내보낸 HTML 파일을 `file://`로 열어 확인한다(spec §6.2–§6.3).
@@ -12,8 +18,6 @@ import { exportSeaPlaces, SEA_COUNT, SHARE_MAP_URL, SHARE_VIEWER_FILE } from './
  */
 
 const MAP_FAILED = '지도를 불러오지 못했어요. 목록과 네이버 지도 링크는 그대로 쓸 수 있어요';
-/** 보기 화면 틀(데이터 제외) 크기 한도. */
-const TEMPLATE_LIMIT = 51_200;
 /** 그중 "카페" 라벨도 붙은 곳: 강릉(안목)과 제주(애월)라 처음 맞춘 지도에서 마커가 겹치지 않는다. */
 const SEA_CAFES = ['안목해변 커피거리', '애월 카페거리'];
 

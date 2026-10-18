@@ -362,6 +362,26 @@ describe('카드 메뉴', () => {
     expect(await screen.findByText('강릉 여행')).toBeInTheDocument();
   });
 
+  it('메뉴의 `일정 공유`는 이름 바꾸기와 삭제 사이에 있고 일정 공유 창을 연다', async () => {
+    await renderLibrary(lib(), { path: '/trips' });
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: '‘강릉 여행’ 메뉴' }));
+    expect(screen.getAllByRole('menuitem').map((m) => m.textContent)).toEqual([
+      '이름 바꾸기',
+      '일정 공유',
+      '삭제',
+    ]);
+    await user.click(screen.getByRole('menuitem', { name: '일정 공유' }));
+    // 창은 처음 열 때 받으므로 한 박자 동안은 기다림 틀이 뜨고, 실제 창이 그것을 바꿔 놓는다.
+    await screen.findByRole('textbox', { name: '제목' });
+    const dialog = screen.getByRole('dialog', { name: '일정 공유' });
+    expect(
+      within(dialog).getByText('‘강릉 여행’ 일정을 HTML 파일 하나로 만들어요'),
+    ).toBeInTheDocument();
+    await user.click(within(dialog).getByRole('button', { name: '닫기' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
   it('여행 카드를 누르면 /trips/<id>로 간다', async () => {
     const { router } = await renderLibrary(lib(), { path: '/trips' });
     const user = userEvent.setup();

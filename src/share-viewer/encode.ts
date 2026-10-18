@@ -50,18 +50,36 @@ export async function encodeShareHash(doc: ShareDoc): Promise<string> {
   return toBase64Url(merged);
 }
 
+/**
+ * 가져오기 링크에 실을 사본. v2는 경로선(`path`)을 뺀다 — 가져올 때 쓰지 않고 해시 길이만 늘리기 때문이다.
+ * 시간·조회 시각은 남겨 문서 검사가 같게 한다. v1은 그대로 돌려준다.
+ */
+export function hashDoc(doc: ShareDoc): ShareDoc {
+  if (doc.version !== 2) return doc;
+  return {
+    ...doc,
+    trips: doc.trips.map((trip) => ({
+      ...trip,
+      days: trip.days.map((day) => ({
+        ...day,
+        legs: day.legs.map((leg) => ({ ...leg, path: [] })),
+      })),
+    })),
+  };
+}
+
 export type ImportLink =
   { kind: 'direct'; href: string } | { kind: 'too-big'; href: string } | { kind: 'unsupported' };
 
 /**
- * 문서를 담은 가져오기 링크. 값이 `MAX_HASH_CHARS`를 넘으면 해시 없는 앱 주소만 돌려주고(`too-big`),
+ * 문서를 담은 가져오기 링크(v2는 경로선을 뺀 사본 — `hashDoc`). 값이 `MAX_HASH_CHARS`를 넘으면 해시 없는 앱 주소만 돌려주고(`too-big`),
  * 이 브라우저에 압축 기능이 없거나 압축에 실패하면 `unsupported`.
  */
 export async function importLink(doc: ShareDoc, app: string): Promise<ImportLink> {
   if (typeof CompressionStream === 'undefined') return { kind: 'unsupported' };
   let value: string;
   try {
-    value = await encodeShareHash(doc);
+    value = await encodeShareHash(hashDoc(doc));
   } catch {
     return { kind: 'unsupported' };
   }

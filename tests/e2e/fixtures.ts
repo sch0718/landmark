@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { expect, type Page, type TestInfo } from '@playwright/test';
+import { expect, type Locator, type Page, type TestInfo } from '@playwright/test';
 
 /** 옛 여행 가져오기 시험용 fixture(`global-setup`이 `public/data/`로 복사한다). */
 export const E2E_PUBLIC_ID = 'e2etest000001';
@@ -20,6 +20,10 @@ export const SHARE_MAP_URL = 'http://localhost:5174/';
 export const SHARE_VIEWER_FILE = fileURLToPath(
   new URL('../../public/share-viewer.html', import.meta.url),
 );
+/** 보기 화면 틀(데이터 제외) 크기 한도. */
+export const TEMPLATE_LIMIT = 51_200;
+/** 보기 화면 링크가 가리키는 운영 앱 주소(빌드 기본값). 시험에서는 `baseURL`로 바꿔 쓴다. */
+export const BUILD_APP_ORIGIN = 'https://landmark-c5f.pages.dev';
 
 const SEED_FILE = fileURLToPath(new URL('../fixtures/library/seed.json', import.meta.url));
 
@@ -149,4 +153,93 @@ export async function mockRoutes(page: Page): Promise<RouteCall[]> {
     });
   });
   return calls;
+}
+
+/** 좁은 화면(하단 시트)인가. */
+export const isCompact = (page: Page): boolean => page.viewportSize()!.width < 768;
+
+/** 좁은 화면의 일정 시트 탭을 연다. 넓은 화면에는 후보 칸과 시간표가 함께 보여 아무것도 하지 않는다. */
+export async function openSheetTab(
+  page: Page,
+  name: 'candidates' | 'Day 1' | 'Day 2',
+): Promise<void> {
+  if (!isCompact(page)) return;
+  const sheet = page.getByRole('region', { name: '일정 시트' });
+  await sheet.getByRole('tab', { name: name === 'candidates' ? /^후보 / : name }).click();
+}
+
+/** 계획 화면의 후보 칸(좁은 화면은 일정 시트). */
+export const candidatePanel = (page: Page): Locator =>
+  isCompact(page)
+    ? page.getByRole('region', { name: '일정 시트' })
+    : page.getByRole('region', { name: '후보 칸' });
+
+/** 계획 화면의 Day 시간표(좁은 화면은 일정 시트). */
+export const timeline = (page: Page): Locator =>
+  isCompact(page)
+    ? page.getByRole('region', { name: '일정 시트' })
+    : page.getByRole('region', { name: 'Day 시간표' });
+
+/** 후보 이름으로 ＋(을/를은 받침으로 갈리므로 정규식으로 잡는다). */
+export const addButton = (page: Page, name: string): Locator =>
+  candidatePanel(page).getByRole('button', {
+    name: new RegExp(`^${name}[을를] Day 1에 넣기$`),
+  });
+
+/** 보관함에서 지역 칩 `강릉` → `이 지역으로 여행 만들기` → 만들기. 계획 화면이 열린다. */
+export async function createGangneungTrip(page: Page): Promise<void> {
+  await seedStorage(page, { prefs: { libraryView: 'list' } });
+  await page.goto('/');
+  await page.getByRole('group', { name: '지역' }).getByRole('button', { name: /^강릉/ }).click();
+  await page.getByRole('button', { name: '이 지역으로 여행 만들기' }).click();
+  const dialog = page.getByRole('dialog', { name: '새 여행' });
+  await expect(dialog.getByRole('textbox', { name: '여행 이름' })).toHaveValue('강릉 여행');
+  await dialog.getByRole('button', { name: '만들기', exact: true }).click();
+  await expect(page).toHaveURL(/\/trips\/[^/]+$/);
+  await expect(candidatePanel(page).getByRole('heading', { name: '강릉 여행' })).toBeVisible();
+}
+
+/** Day 1 시간표의 장소 이름을 위에서부터. */
+export async function day1Names(page: Page, names: string[]): Promise<string[]> {
+  const rows = timeline(page).getByRole('list', { name: 'Day 1 일정' }).getByRole('listitem');
+  const texts = await rows.allInnerTexts();
+  return names
+    .filter((name) => texts.some((t) => t.includes(name)))
+    .sort((a, b) => texts.findIndex((t) => t.includes(a)) - texts.findIndex((t) => t.includes(b)));
+}
+
+/** 보관함(목록 보기)에 보이는 장소 행. */
+export const rowsOf = (page: Page): Locator =>
+  page.getByRole('list', { name: '장소 목록' }).getByRole('listitem');
+
+/**
+ * 내보낸 뒤의 보관함을 비운 상태로 되돌린다. 저장소 값을 빈 보관함·기본 UI 선호(필터 없음)로 덮고
+ * 새로 불러온다(시드 심기는 값이 있으면 건드리지 않는다).
+ */
+export async function emptyLibrary(page: Page): Promise<void> {
+  await page.evaluate(
+    ({ libraryKey, prefsKey, prefs }) => {
+      localStorage.setItem(
+        libraryKey,
+        JSON.stringify({ schemaVersion: 2, places: {}, labels: {}, trips: {} }),
+      );
+      localStorage.setItem(prefsKey, prefs);
+    },
+    { libraryKey: LIBRARY_KEY, prefsKey: PREFS_KEY, prefs: prefsJson() },
+  );
+  await page.goto('/');
+  await expect(rowsOf(page)).toHaveCount(0);
+}
+
+/** 보관함 화면의 ＋ → 시트의 `공유 파일 가져오기` → `파일 고르기`에 파일을 준다. */
+export async function pickFromSheet(page: Page, file: string): Promise<void> {
+  await page.getByRole('button', { name: '장소 추가', exact: true }).first().click();
+  const item = page
+    .getByRole('dialog', { name: '장소 추가' })
+    .getByRole('button', { name: '공유 파일 가져오기' });
+  await item.click();
+  await expect(item).toHaveCount(0);
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole('button', { name: '파일 고르기' })).toBeVisible();
+  await page.locator('input[type="file"]').setInputFiles(file);
 }

@@ -44,7 +44,7 @@ type Store = ReturnType<typeof useStore>;
 /** 직선 10m 미만(NaN 포함)은 같은 지점: 묻지 않고 거리 0·시간 0. */
 export const isSamePointLeg = (leg: Leg): boolean => !(leg.straightM >= SAME_POINT_M);
 
-const routeKeyOf = (leg: Leg): string =>
+export const routeKeyOf = (leg: Leg): string =>
   routeInputKey({
     mode: leg.mode,
     from: [leg.from.lng, leg.from.lat],
@@ -88,10 +88,10 @@ function lookupLeg(store: Store, key: string, refresh: boolean) {
 }
 
 /** 다시 물을 구간(연결 실패였던 구간은 실패한 요청과 같은 종류로). */
-type LegRequest = { key: string; refresh: boolean };
+export type LegRequest = { key: string; refresh: boolean };
 
 /** 여러 구간을 차례로(동시 4개까지) 묻는다. 목록 앞쪽이 먼저 나간다. */
-const lookupAll = (store: Store, requests: LegRequest[]) =>
+export const lookupAll = (store: Store, requests: LegRequest[]) =>
   Effect.forEach(
     requests,
     ({ key, refresh }) => Effect.suspend(() => lookupLeg(store, key, refresh)),
@@ -102,8 +102,47 @@ const lookupAll = (store: Store, requests: LegRequest[]) =>
  * 연결 실패였던 구간을 다시 물을 요청. 실패한 요청과 같은 종류(`다시 계산` 여부)로 보낸다: `다시 계산`이
  * 연결 실패했는데 보통 요청으로 다시 물으면 캐시의 이전 경로(먼저 시작한 요청의 답)가 답해 순서에서 진다.
  */
-const offlineRetry = (key: string, known: RouteState | undefined): LegRequest[] =>
+export const offlineRetry = (key: string, known: RouteState | undefined): LegRequest[] =>
   known?.status === 'offline' ? [{ key, refresh: known.refresh }] : [];
+
+/**
+ * 구간 키 목록(줄바꿈으로 이은 문자열)을 묻는다: 상태가 없는 구간은 보통 요청으로, 연결 실패였던 구간은
+ * `offlineRetry`로. 이미 답을 받은 구간은 묻지 않는다. 물을 것이 없으면 아무것도 하지 않는다.
+ * 돌려주는 함수는 진행 중인 요청을 멈춘다(효과 정리용).
+ */
+export function requestLegs(store: Store, requestKeys: string): (() => void) | undefined {
+  if (requestKeys === '') return;
+  const states = store.get(routeStatesAtom);
+  const pending = requestKeys.split('\n').flatMap((key) => {
+    const known = states[key];
+    return known === undefined ? [{ key, refresh: false }] : offlineRetry(key, known);
+  });
+  if (pending.length === 0) return;
+  return forkEffect(lookupAll(store, pending));
+}
+
+/**
+ * 인터넷이 돌아오면(`online`) 구간 키 목록 중 연결 실패로 어림값을 쓰던 구간만 다시 묻는다.
+ * `requestKeys`가 빈 문자열이면 듣지 않는다.
+ */
+export function useOnlineRetry(store: Store, requestKeys: string): void {
+  useEffect(() => {
+    if (requestKeys === '') return;
+    let cancel: (() => void) | null = null;
+    const onOnline = () => {
+      const states = store.get(routeStatesAtom);
+      const offline = requestKeys.split('\n').flatMap((key) => offlineRetry(key, states[key]));
+      if (offline.length === 0) return;
+      cancel?.();
+      cancel = forkEffect(lookupAll(store, offline));
+    };
+    window.addEventListener('online', onOnline);
+    return () => {
+      window.removeEventListener('online', onOnline);
+      cancel?.();
+    };
+  }, [requestKeys, store]);
+}
 
 const straightPath = (leg: Leg): [number, number][] => [
   [leg.from.lng, leg.from.lat],
@@ -111,7 +150,7 @@ const straightPath = (leg: Leg): [number, number][] => [
 ];
 
 /** 구간에 시간을 붙인다. 경로가 없으면(요청 전·실패) 직선 추정이다. */
-function planLeg(leg: Leg, state: RouteState | undefined): PlannedLeg {
+export function planLeg(leg: Leg, state: RouteState | undefined): PlannedLeg {
   if (isSamePointLeg(leg)) {
     return {
       ...leg,
@@ -201,34 +240,10 @@ export function useDayPlan(tripId: string, dayIndex: number): DayPlan {
     return [...keys].join('\n');
   }, [library, trip, dayIndex]);
 
-  useEffect(() => {
-    if (requestKeys === '') return;
-    const states = store.get(routeStatesAtom);
-    const pending = requestKeys.split('\n').flatMap((key) => {
-      const known = states[key];
-      return known === undefined ? [{ key, refresh: false }] : offlineRetry(key, known);
-    });
-    if (pending.length === 0) return;
-    return forkEffect(lookupAll(store, pending));
-  }, [requestKeys, store]);
+  useEffect(() => requestLegs(store, requestKeys), [requestKeys, store]);
 
   // 인터넷이 돌아오면 연결 실패로 어림값을 쓰던 구간만 다시 묻는다.
-  useEffect(() => {
-    if (requestKeys === '') return;
-    let cancel: (() => void) | null = null;
-    const onOnline = () => {
-      const states = store.get(routeStatesAtom);
-      const offline = requestKeys.split('\n').flatMap((key) => offlineRetry(key, states[key]));
-      if (offline.length === 0) return;
-      cancel?.();
-      cancel = forkEffect(lookupAll(store, offline));
-    };
-    window.addEventListener('online', onOnline);
-    return () => {
-      window.removeEventListener('online', onOnline);
-      cancel?.();
-    };
-  }, [requestKeys, store]);
+  useOnlineRetry(store, requestKeys);
 
   const planned = useMemo(
     () => legs.map((leg, i) => planLeg(leg, dayStates[i])),

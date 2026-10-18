@@ -5,9 +5,11 @@ import {
   appUrl,
   DEFAULT_APP_URL,
   encodeShareHash,
+  hashDoc,
   importLink,
   MAX_HASH_CHARS,
 } from 'src/share-viewer/encode';
+import { makeShareV2Doc } from '../helpers/share-v2-doc';
 
 function place(i: number, over: Partial<SharePlace> = {}): SharePlace {
   return {
@@ -112,5 +114,40 @@ describe('importLink', () => {
     expect(await importLink(makeDoc([place(1)]), 'https://x.test')).toEqual({
       kind: 'unsupported',
     });
+  });
+});
+
+describe('hashDoc', () => {
+  it('v2는 모든 구간의 path를 비운 사본을 돌려주고 원본은 그대로다', () => {
+    const doc = makeShareV2Doc();
+    const before = JSON.stringify(doc);
+    const out = hashDoc(doc);
+    if (out.version !== 2) throw new Error('v2여야 해요');
+    const legs = out.trips.flatMap((t) => t.days.flatMap((d) => d.legs));
+    expect(legs.length).toBeGreaterThan(0);
+    expect(legs.every((l) => l.path.length === 0)).toBe(true);
+    expect(JSON.stringify(doc)).toBe(before);
+    expect(doc.trips[0]!.days[0]!.legs[0]!.path.length).toBeGreaterThan(0);
+    // 시간·조회 시각은 남는다.
+    expect(legs[0]).toMatchObject({ durationS: 600, queriedAt: '2026-10-16T04:58:00.000Z' });
+  });
+
+  it('v1은 그대로 돌려준다', () => {
+    const doc = makeDoc([place(1)]);
+    expect(hashDoc(doc)).toBe(doc);
+  });
+});
+
+describe('importLink v2', () => {
+  it('경로선 없는 문서로 풀리며 앱 readShareHash가 받아들인다', async () => {
+    const link = await importLink(makeShareV2Doc(), 'https://x.test');
+    expect(link.kind).toBe('direct');
+    if (link.kind !== 'direct') return;
+    const result = await readShareHash(link.href.slice('https://x.test/import#d='.length));
+    expect(result.ok).toBe(true);
+    if (!result.ok || result.doc.version !== 2) return;
+    expect(result.doc.trips[0]!.days.every((d) => d.legs.every((l) => l.path.length === 0))).toBe(
+      true,
+    );
   });
 });
