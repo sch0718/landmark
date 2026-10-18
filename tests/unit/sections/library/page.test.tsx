@@ -196,6 +196,19 @@ describe('닫으면 목록 스크롤 되돌리기', () => {
     return el!;
   };
   const id = (n: number) => `place${String(n).padStart(5, '0')}`;
+  const detail = () => within(screen.getByRole('region', { name: '장소 상세' }));
+  /** 경로 전환은 transition으로 그려지므로, 상세가 그 장소로 바뀔 때까지 기다린다. */
+  const openPlace = async (
+    router: Awaited<ReturnType<typeof renderLibrary>>['router'],
+    n: number,
+    name: string,
+  ) => {
+    await router.navigate(`/place/${id(n)}`);
+    await waitFor(() => expect(detail().getByRole('heading', { name })).toBeInTheDocument());
+  };
+  const closeDetail = async (user: ReturnType<typeof userEvent.setup>) => {
+    await user.click(detail().getByRole('button', { name: '닫기' }));
+  };
 
   it('마커로 열어 목록이 움직였어도 닫으면 열기 전 자리로 돌아간다', async () => {
     const user = userEvent.setup();
@@ -209,13 +222,9 @@ describe('닫으면 목록 스크롤 되돌리기', () => {
     act(() => store.set(focusPlaceAtom, { id: id(3), seq: 99 }));
     box.scrollTop = 400;
     fireEvent.scroll(box);
-    await router.navigate(`/place/${id(3)}`);
+    await openPlace(router, 3, '속초 횟집');
 
-    await user.click(
-      await within(screen.getByRole('region', { name: '장소 상세' })).findByRole('button', {
-        name: '닫기',
-      }),
-    );
+    await closeDetail(user);
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/'));
     expect(box.scrollTop).toBe(120);
@@ -227,18 +236,91 @@ describe('닫으면 목록 스크롤 되돌리기', () => {
     const box = scroller();
     box.scrollTop = 120;
     fireEvent.scroll(box);
-    await router.navigate(`/place/${id(3)}`);
+    await openPlace(router, 3, '속초 횟집');
     await user.type(screen.getByRole('searchbox', { name: '장소 검색' }), '횟집');
     box.scrollTop = 30;
     fireEvent.scroll(box);
 
-    await user.click(
-      within(screen.getByRole('region', { name: '장소 상세' })).getByRole('button', {
-        name: '닫기',
-      }),
-    );
+    await closeDetail(user);
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/'));
     expect(box.scrollTop).toBe(30);
+  });
+
+  it('거르기가 바뀐 채 닫은 뒤 다시 열고 닫아도 옛 자리로 튀지 않는다', async () => {
+    const user = userEvent.setup();
+    const { router } = await renderLibrary(sampleLibrary(), { prefs: { libraryView: 'list' } });
+    const box = scroller();
+    box.scrollTop = 120;
+    fireEvent.scroll(box);
+    await openPlace(router, 3, '속초 횟집');
+    await user.type(screen.getByRole('searchbox', { name: '장소 검색' }), '횟집');
+    // 브라우저가 거르기에 맞춰 자리를 줄이지만 scroll 이벤트는 오지 않는 경우.
+    box.scrollTop = 0;
+    await closeDetail(user);
+    await waitFor(() => expect(router.state.location.pathname).toBe('/'));
+
+    await openPlace(router, 4, '강남 한 곳');
+    await closeDetail(user);
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/'));
+    expect(box.scrollTop).toBe(0);
+  });
+
+  it('열리지 못한 스크롤 요청 뒤 사용자가 직접 스크롤하면 그 자리를 기억한다', async () => {
+    const user = userEvent.setup();
+    const { router, store } = await renderLibrary(sampleLibrary(), {
+      prefs: { libraryView: 'list' },
+    });
+    const box = scroller();
+    box.scrollTop = 120;
+    fireEvent.scroll(box);
+    // 요청만 오고 장소는 열리지 않는다.
+    act(() => store.set(focusPlaceAtom, { id: id(3), seq: 99 }));
+    fireEvent.wheel(box);
+    box.scrollTop = 200;
+    fireEvent.scroll(box);
+    await openPlace(router, 3, '속초 횟집');
+    box.scrollTop = 400;
+    fireEvent.scroll(box);
+
+    await closeDetail(user);
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/'));
+    expect(box.scrollTop).toBe(200);
+  });
+
+  it('열린 채 다른 장소로 옮겨도 닫으면 처음 자리로 돌아간다', async () => {
+    const user = userEvent.setup();
+    const { router } = await renderLibrary(sampleLibrary(), { prefs: { libraryView: 'list' } });
+    const box = scroller();
+    box.scrollTop = 120;
+    fireEvent.scroll(box);
+    await openPlace(router, 3, '속초 횟집');
+    box.scrollTop = 400;
+    fireEvent.scroll(box);
+    await openPlace(router, 4, '강남 한 곳');
+    box.scrollTop = 500;
+    fireEvent.scroll(box);
+
+    await closeDetail(user);
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/'));
+    expect(box.scrollTop).toBe(120);
+  });
+
+  it('브라우저 뒤로가기로 닫아도 되돌린다', async () => {
+    const { router } = await renderLibrary(sampleLibrary(), { prefs: { libraryView: 'list' } });
+    const box = scroller();
+    box.scrollTop = 120;
+    fireEvent.scroll(box);
+    await openPlace(router, 3, '속초 횟집');
+    box.scrollTop = 400;
+    fireEvent.scroll(box);
+
+    await act(() => router.navigate(-1));
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/'));
+    await waitFor(() => expect(box.scrollTop).toBe(120));
   });
 });
