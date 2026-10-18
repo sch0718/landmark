@@ -23,7 +23,7 @@ export const SHARE_VIEWER_FILE = fileURLToPath(
 /** 보기 화면 틀(데이터 제외) 크기 한도. */
 export const TEMPLATE_LIMIT = 51_200;
 /** 보기 화면 링크가 가리키는 운영 앱 주소(빌드 기본값). 시험에서는 `baseURL`로 바꿔 쓴다. */
-export const BUILD_APP_ORIGIN = 'https://landmark-c5f.pages.dev';
+export const BUILD_APP_ORIGIN = 'https://landmark.sch0718.dev';
 
 const SEED_FILE = fileURLToPath(new URL('../fixtures/library/seed.json', import.meta.url));
 

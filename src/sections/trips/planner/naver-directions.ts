@@ -6,7 +6,7 @@ export type DirectionsLeg = {
 };
 
 /** 네이버 지도 URL Scheme의 `appname`: 배포 도메인. */
-const APP_NAME = 'landmark-c5f.pages.dev';
+const APP_NAME = 'landmark.sch0718.dev';
 
 const valid = (p: { lng: number; lat: number }): boolean =>
   Number.isFinite(p.lng) &&

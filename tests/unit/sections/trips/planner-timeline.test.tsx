@@ -177,7 +177,7 @@ describe('구간과 경로 상태', () => {
     const href = link.getAttribute('href')!;
     expect(href).toMatch(/^nmap:\/\/route\/walk\?slat=37\.75&slng=128\.9&sname=/);
     expect(href).toContain('&dlat=37.75&dlng=128.905&dname=');
-    expect(href).toContain('&appname=landmark-c5f.pages.dev');
+    expect(href).toContain('&appname=landmark.sch0718.dev');
     // 앱 주소는 새 탭으로 열지 않는다.
     expect(link).not.toHaveAttribute('target');
     expect(link).not.toHaveAttribute('rel');

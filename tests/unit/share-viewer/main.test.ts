@@ -64,7 +64,7 @@ describe('보기 화면 진입점', () => {
     const a = [...document.querySelectorAll('header a')].find(
       (el) => el.textContent === 'Landmark에 담기',
     );
-    expect(a?.getAttribute('href')).toBe('https://landmark-c5f.pages.dev/import');
+    expect(a?.getAttribute('href')).toBe('https://landmark.sch0718.dev/import');
     expect(importLinkMock).toHaveBeenCalledTimes(1);
     expect(unhandled).toEqual([]);
   });

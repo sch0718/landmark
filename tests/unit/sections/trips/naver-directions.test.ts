@@ -18,7 +18,7 @@ describe('naverDirectionsUrl', () => {
     expect(params.get('dlat')).toBe('37.7715');
     expect(params.get('dlng')).toBe('128.9506');
     expect(params.get('dname')).toBe('안목 카페거리, 강릉');
-    expect(params.get('appname')).toBe('landmark-c5f.pages.dev');
+    expect(params.get('appname')).toBe('landmark.sch0718.dev');
   });
 
   it('app: 이름은 percent 인코딩되어 쉼표·&·공백이 값을 깨지 않는다', () => {
