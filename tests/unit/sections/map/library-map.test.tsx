@@ -943,6 +943,65 @@ describe('library map 근처 모드의 지도 맞추기', () => {
   });
 });
 
+describe('library map 근처 모드의 선택 풀기 (스펙 A1 §4)', () => {
+  freezeClockAfterFix();
+
+  const search = () => screen.getByRole('searchbox', { name: '장소 검색' });
+  const radius = (name: string) =>
+    within(screen.getByRole('group', { name: '반경' })).getByRole('button', { name });
+  async function nearbyOn() {
+    const user = userEvent.setup();
+    const rendered = await renderWithLocation(nearbyLibrary(), { prefs: { libraryView: 'list' } });
+    await ready();
+    await pickNearby(user);
+    await waitFor(() => expect(rendered.fake.requests).toHaveLength(1));
+    await answer(rendered.fake);
+    await waitFor(() => expect(shownMarkers().sort()).toEqual([id(1), id(2)]));
+    return { user, ...rendered };
+  }
+
+  it('반경 안 장소를 연 채 검색어가 그 장소를 남기면 그대로, 빼면 선택을 푼다', async () => {
+    const { user, router } = await nearbyOn();
+    await router.navigate(`/place/${id(1)}`); // 가 식당(0.5km)
+    await waitFor(() => expect(marker(1)).toHaveAttribute('aria-pressed', 'true'));
+
+    await user.type(search(), '식당');
+    await waitFor(() => expect(shownMarkers()).toEqual([id(1)]));
+    expect(router.state.location.pathname).toBe(`/place/${id(1)}`);
+
+    await user.clear(search());
+    await user.type(search(), '카페');
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/'));
+    expect(router.state.historyAction).toBe('REPLACE');
+  });
+
+  it('반경 밖 장소를 연 채 검색어를 바꾸면, 검색어에 맞아도 결과(반경 안)에 없어 선택을 푼다', async () => {
+    const { user, router } = await nearbyOn();
+    await router.navigate(`/place/${id(3)}`); // 나 식당(4km, 반경 3km 밖)
+    await waitFor(() => expect(marker(3)).toHaveAttribute('aria-pressed', 'true'));
+
+    await user.type(search(), '식당');
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/'));
+  });
+
+  it('반경 밖 장소를 연 채 반경을 바꿔도(근처 쪽 변화) 선택을 풀지 않는다', async () => {
+    const { user, router } = await nearbyOn();
+    await router.navigate(`/place/${id(4)}`); // 다 카페(20km)
+    await waitFor(() => expect(marker(4)).toHaveAttribute('aria-pressed', 'true'));
+    const fits = fakeAdapter().fitCalls.length;
+
+    await user.click(radius('10km'));
+    await waitFor(() => expect(fakeAdapter().fitCalls.length).toBeGreaterThan(fits));
+    await user.click(radius('1km'));
+    await waitFor(() => expect(shownMarkers().sort()).toEqual([id(1), id(4)]));
+
+    expect(router.state.location.pathname).toBe(`/place/${id(4)}`);
+    expect(marker(4)).toHaveAttribute('aria-pressed', 'true');
+  });
+});
+
 describe('library map 좁은 화면의 근처 칩', () => {
   freezeClockAfterFix();
 
