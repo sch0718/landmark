@@ -189,6 +189,8 @@ export function useAddFlowRoute(mapShown: boolean) {
       return;
     }
     if (!needsMap || mapShown) return;
+    // 이미 옮기는 중인데 경로가 아직 그대로다(기록 이동이 끝나기 전에 다시 돌았다). 또 옮기면 뒤로 두 번 간다.
+    if (movingToMap.current) return;
     // 단계에 막 들어왔거나(폭이 바뀌어) 지도가 안 보이게 됐다.
     movingToMap.current = true;
     moveToMap();
