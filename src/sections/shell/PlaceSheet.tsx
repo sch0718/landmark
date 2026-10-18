@@ -22,6 +22,27 @@ import { MAIN_ID } from 'src/sections/shell/SkipLink';
 /** 마지막 움직임이 이보다 오래전이면(ms) 손가락이 멈춘 뒤 뗀 것이라 빠르기를 0으로 본다. */
 const STALE_MOVE_MS = 100;
 
+/** 글을 쓰지 않는 `input` 종류. 이 칸들의 Esc는 시트를 닫는다. */
+const NON_TEXT_INPUTS = new Set([
+  'button',
+  'checkbox',
+  'radio',
+  'reset',
+  'submit',
+  'image',
+  'range',
+  'color',
+  'file',
+]);
+
+/** 글을 쓰는 칸(입력칸·메모·날짜 등)인가. 그 칸의 Esc는 칸의 몫이다(입력 취소·조합 취소). */
+function isEditable(target: EventTarget): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  if (target.isContentEditable) return true;
+  if (target instanceof HTMLInputElement) return !NON_TEXT_INPUTS.has(target.type);
+  return target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement;
+}
+
 type Drag = {
   pointerId: number;
   startY: number;
@@ -165,7 +186,9 @@ export function PlaceSheet({ snap, onSnapChange, onClose, children }: Props) {
 
   const onKeyDown = (event: KeyboardEvent) => {
     // 편집칸·라벨 고르기 창이 먼저 쓴 Esc는 시트를 닫지 않는다(포털 이벤트도 React 트리로 올라온다).
+    // 글을 쓰는 칸에서 누른 Esc와 한글 조합 중의 Esc도 그 칸의 몫이다(스펙 §4.6).
     if (event.key !== 'Escape' || event.defaultPrevented) return;
+    if (event.nativeEvent.isComposing || event.keyCode === 229 || isEditable(event.target)) return;
     event.preventDefault();
     onClose();
   };

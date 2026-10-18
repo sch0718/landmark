@@ -54,6 +54,8 @@ function Harness({
               안쪽 단추
             </button>
             <input aria-label="편집칸" onKeyDown={(event) => event.preventDefault()} />
+            <textarea aria-label="메모칸" />
+            <input type="checkbox" aria-label="고르기칸" />
           </PlaceSheet>
         )}
       </div>
@@ -121,6 +123,21 @@ describe('PlaceSheet', () => {
     fireEvent.keyDown(screen.getByRole('textbox', { name: '편집칸' }), { key: 'Escape' });
     expect(onClose).toHaveBeenCalledTimes(1);
     fireEvent.keyDown(sheet, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(2);
+  });
+
+  it('글을 쓰는 칸(textarea 등)의 Esc와 한글 조합 중의 Esc는 시트를 닫지 않는다', async () => {
+    const onClose = vi.fn();
+    const sheet = await open({ onClose });
+    fireEvent.keyDown(screen.getByRole('textbox', { name: '메모칸' }), { key: 'Escape' });
+    expect(onClose).not.toHaveBeenCalled();
+    fireEvent.keyDown(sheet, { key: 'Escape', isComposing: true });
+    fireEvent.keyDown(sheet, { key: 'Escape', keyCode: 229 });
+    expect(onClose).not.toHaveBeenCalled();
+    // 시트 안의 단추·체크 상자에서 누른 Esc는 닫는다(글을 쓰는 칸이 아니다).
+    fireEvent.keyDown(screen.getByRole('button', { name: '안쪽 단추' }), { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+    fireEvent.keyDown(screen.getByRole('checkbox', { name: '고르기칸' }), { key: 'Escape' });
     expect(onClose).toHaveBeenCalledTimes(2);
   });
 
