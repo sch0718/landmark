@@ -90,7 +90,7 @@ export function LibraryPage() {
   const [visitedSort, setVisitedSort] = useAtom(visitedSortAtom);
   const [nearbyState, setNearby] = useAtom(nearbyAtom);
   const nearbyOff = useSetAtom(nearbyOffAtom);
-  // 근처 줄의 ×·빈 상태의 `반경 넓히기`는 누르면 사라질 수 있어, 포커스를 남는 단추로 옮긴다.
+  // 근처 줄의 ×·빈 상태의 `반경 넓히기`·`필터 지우기`는 누르면 사라질 수 있어, 포커스를 남는 단추로 옮긴다.
   const sortButtonRef = useRef<HTMLButtonElement>(null);
   const nearbyBarRef = useRef<NearbyBarHandle>(null);
   const startNearby = useStartNearby();
@@ -243,7 +243,13 @@ export function LibraryPage() {
     });
   };
   // 정렬은 그대로 둔다. `patch`를 거치면 저장되지 않는 `다녀온 날순`이 꺼지므로 `patchQuery`로 직접 쓴다.
-  const clearFilters = () => patchQuery({ ...DEFAULT_QUERY, sort: query.sort });
+  // 근처 모드는 끈다(스펙 §4.2·§13 결정 11 (다)). 켜 둔 반경 때문에 필터를 풀어도 장소가 숨으면 안 된다.
+  // 빈 상태와 그 단추가 사라지므로 포커스는 정렬 단추로 옮긴다.
+  const clearFilters = () => {
+    patchQuery({ ...DEFAULT_QUERY, sort: query.sort });
+    nearbyOff();
+    sortButtonRef.current?.focus();
+  };
   // 고른 장소를 기존 여행의 후보에 더한다. 이미 그 여행에 있는 곳은 건너뛰고 새로 넣은 수만 알린다.
   // 저장이 끝나기 전에 또 누르면(두 번 탭) 무시한다. 토스트가 두 번 뜨지 않게.
   const addingToTrip = useRef(false);
@@ -316,6 +322,7 @@ export function LibraryPage() {
         <NearbyBar
           ref={nearbyBarRef}
           count={places.length}
+          hidden={sorted.length - places.length}
           onTurnedOff={() => sortButtonRef.current?.focus()}
         />
       </Box>
