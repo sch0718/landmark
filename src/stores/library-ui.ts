@@ -8,3 +8,9 @@ export const focusPlaceAtom: PrimitiveAtom<{ id: string; seq: number } | null> =
   id: string;
   seq: number;
 } | null>(null);
+
+/**
+ * 장소를 열기 전에 보던 보관함 화면: `list`(`/`) 또는 `map`(`/map`). 상세를 닫으면 이리로 돌아간다(스펙 A1 §3.1).
+ * 셸(`AppShell`)이 장소가 열리지 않은 보관함 경로를 볼 때마다 정한다.
+ */
+export const detailOriginAtom: PrimitiveAtom<'list' | 'map'> = atom<'list' | 'map'>('list');

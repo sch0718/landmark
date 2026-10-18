@@ -2,9 +2,9 @@ import Box from '@mui/material/Box';
 import IconButton from '@mui/material/IconButton';
 import type { SxProps, Theme } from '@mui/material/styles';
 import { visuallyHidden } from '@mui/utils';
-import { useAtomValue, useSetAtom } from 'jotai';
-import { useState, type ReactNode } from 'react';
-import { matchPath, Outlet, useLocation, useNavigate } from 'react-router';
+import { useAtom, useAtomValue, useSetAtom } from 'jotai';
+import { useLayoutEffect, type ReactNode } from 'react';
+import { matchPath, Outlet, useLocation } from 'react-router';
 import { ChevronLeftIcon, XIcon } from 'src/components/icons';
 import { useDocumentTitle } from 'src/lib/use-document-title';
 import { paths } from 'src/routes/paths';
@@ -19,6 +19,11 @@ import { DETAIL_WIDTH, LIST_WIDTH } from 'src/sections/shell/pane-widths';
 import { DetailSlot, ListSlot, MapSlot } from 'src/sections/shell/ShellSlots';
 import { MAIN_ID, SkipLink } from 'src/sections/shell/SkipLink';
 import { StorageBanner } from 'src/sections/shell/StorageBanner';
+import {
+  useCloseDetail,
+  useEscapeClose,
+  useFocusReturnOnClose,
+} from 'src/sections/shell/use-close-detail';
 import { useLayout } from 'src/sections/shell/use-layout';
 import {
   addFlowAtom,
@@ -28,6 +33,7 @@ import {
   showsAddPanel,
 } from 'src/stores/add-place';
 import { libraryAtom } from 'src/stores/library-state';
+import { detailOriginAtom } from 'src/stores/library-ui';
 
 /** 슬롯 하나. 랜드마크(`aria-label`)와 스크롤을 맡는다. */
 function Pane({
@@ -58,7 +64,7 @@ type DetailMode = 'column' | 'overlay' | 'sheet';
 /**
  * 상세 슬롯 하나. 폭에 따라 모양만 바뀌고 트리 위치는 그대로라서(`column` ↔ `overlay`) 창 폭이
  * 1280px을 오가도 안쪽 상세가 다시 만들어지지 않는다.
- * - `column`: 넓은 화면의 오른쪽 칸(항상 있고, 고른 장소가 없으면 안내만 보인다).
+ * - `column`: 넓은 화면의 오른쪽 칸(항상 있고, 고른 장소가 없으면 안내만 보인다. 열려 있으면 닫기가 있다).
  * - `overlay`: 중간 폭에서 지도 오른쪽을 덮는 360px 패널.
  * - `sheet`: 좁은 화면의 전체 화면 시트.
  */
@@ -73,6 +79,8 @@ function DetailPane({
 }) {
   const floating = mode !== 'column';
   const sheet = mode === 'sheet';
+  // 넓은 화면 칸도 장소가 열려 있으면 닫기를 둔다(스펙 A1 §3.2). 안내만 보일 때는 없다.
+  const closable = floating || placeId !== null;
   return (
     <Box
       component="section"
@@ -103,7 +111,7 @@ function DetailPane({
             }),
       }}
     >
-      {floating && (
+      {closable && (
         <Box sx={{ flex: 'none', display: 'flex', p: 0.5 }}>
           <IconButton onClick={onClose} aria-label={sheet ? '목록으로' : '닫기'}>
             {sheet ? <ChevronLeftIcon aria-hidden="true" /> : <XIcon aria-hidden="true" />}
@@ -160,9 +168,7 @@ function LibraryViewTitle({
  */
 export function AppShell() {
   const layout = useLayout();
-  const location = useLocation();
-  const { pathname } = location;
-  const navigate = useNavigate();
+  const { pathname } = useLocation();
   // ＋추가 시트. 계획 화면도 여행 대상을 붙여 열 수 있도록 atom에 둔다. 레일·탭의 ＋는 대상 없이 열고,
   // 흐름을 닫을 때 포커스가 돌아올 곳으로 자신을 남긴다.
   const addOpen = useAtomValue(addSheetOpenAtom);
@@ -184,26 +190,22 @@ export function AppShell() {
   // 중간 폭에서는 핀 모드가 상세 오버레이를 내린다(아래 `body`의 분기와 같다).
   const detailShown = layout === 'compact' || (!adding && (layout === 'wide' || !pinning));
 
-  // 좁은 화면에서 장소 시트 뒤에 깔리는 화면(목록/지도). 마지막으로 본 쪽을 기억한다.
-  const [origin, setOrigin] = useState<'list' | 'map'>('list');
+  // 장소를 열기 전에 보던 화면(목록/지도). 좁은 화면에서는 시트 뒤에 깔 화면, 모든 폭에서 닫을 때 돌아갈 곳이다.
+  const [origin, setOrigin] = useAtom(detailOriginAtom);
   const viewOrigin = isMap ? 'map' : 'list';
-  if (placeId === null && isLibraryView && origin !== viewOrigin) setOrigin(viewOrigin); // 렌더 중 상태 갱신
+  useLayoutEffect(() => {
+    if (placeId === null && isLibraryView) setOrigin(viewOrigin);
+  }, [placeId, isLibraryView, viewOrigin, setOrigin]);
   const sheetOnMap = placeId !== null && origin === 'map';
   // 좁은 화면은 지도 탭에서만 지도가 가리지 않고 보인다(장소 시트는 지도를 덮는다).
   useAddFlowRoute(layout === 'compact' ? isMap : isLibraryView);
   // `/import`로 들어오면 주소를 `/`로 바꾸고 공유 파일 가져오기 흐름을 연다.
   useImportEntry();
 
-  const closeDetail = () => {
-    // 좁은 화면은 시트를 연 기록을 되감아 모바일 뒤로가기와 어긋나지 않게 한다. 앱 안에서 연
-    // 기록이 없으면(링크로 바로 들어옴) 앱을 벗어나지 않도록 기록을 교체한다.
-    if (layout === 'compact') {
-      if (location.key !== 'default') void navigate(-1);
-      else void navigate(origin === 'map' ? paths.map : paths.library, { replace: true });
-      return;
-    }
-    void navigate(paths.library);
-  };
+  const closeDetail = useCloseDetail();
+  // Esc로 닫기. 추가 칸·핀 모드는 자기 Esc가 있다.
+  useEscapeClose(isLibraryView && placeId !== null && !adding && !pinning, () => closeDetail());
+  useFocusReturnOnClose(placeId);
 
   let body: ReactNode;
   if (!isLibraryView) {
@@ -236,7 +238,7 @@ export function AppShell() {
             <DetailPane
               mode={wide ? 'column' : 'overlay'}
               placeId={placeId}
-              onClose={closeDetail}
+              onClose={() => closeDetail()}
             />
           )
         )}
@@ -254,7 +256,9 @@ export function AppShell() {
             <ListSlot />
           </Pane>
         )}
-        {placeId !== null && <DetailPane mode="sheet" placeId={placeId} onClose={closeDetail} />}
+        {placeId !== null && (
+          <DetailPane mode="sheet" placeId={placeId} onClose={() => closeDetail()} />
+        )}
       </Box>
     );
   }

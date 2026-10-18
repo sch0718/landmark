@@ -96,7 +96,11 @@ describe('library map with a detail overlay', () => {
 
     setWidth(1100);
 
-    await waitFor(() => expect(screen.getByRole('button', { name: '닫기' })).toBeInTheDocument());
+    await waitFor(() =>
+      expect(getComputedStyle(screen.getByRole('region', { name: '장소 상세' })).position).toBe(
+        'absolute',
+      ),
+    );
     await waitFor(() => expectUncovered(128.95));
     expect(fakeAdapter()).toBe(adapter);
   });
@@ -125,7 +129,9 @@ describe('library map with a detail overlay', () => {
     setWidth(1280);
 
     await waitFor(() =>
-      expect(screen.queryByRole('button', { name: '닫기' })).not.toBeInTheDocument(),
+      expect(getComputedStyle(screen.getByRole('region', { name: '장소 상세' })).position).not.toBe(
+        'absolute',
+      ),
     );
     expect(fakeAdapter().getCamera()).toEqual(panned);
   });
