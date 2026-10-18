@@ -255,6 +255,7 @@ export function LibraryMap() {
             onChange={patch}
             labels={labels}
             counts={counts}
+            background="var(--tm-bg-surface)"
             leading={
               nearby.active || showVisit ? (
                 <>

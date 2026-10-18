@@ -15,14 +15,59 @@ type Props = {
   labels: Label[];
   /** `labelCounts` 결과. 라벨 없음은 `'unlabeled'` 키. */
   counts: ReadonlyMap<string, number>;
-  /** 끝에 `라벨 관리` 링크를 둔다(기본 켬). 다른 화면 위의 창(보관함 고르기)에서는 끈다. */
+  /** 맨 앞에 `라벨 관리` 링크를 고정한다(기본 켬). 다른 화면 위의 창(보관함 고르기)에서는 끈다. */
   manageLink?: boolean;
   /** 라벨 묶음 앞에 둘 칩 묶음(방문 칩). 있으면 구분선을 사이에 둔다. */
   leading?: ReactNode;
+  /** 고정된 링크의 바탕색(칩 줄이 놓인 바탕과 같게). 기본 `var(--tm-bg-base)`. */
+  background?: string;
 };
 
-/** 한 줄로 가로 스크롤되는 라벨 필터 칩 줄(모두 포함 · 미분류 · 라벨들 · 라벨 관리). */
-export function LabelChips({ query, onChange, labels, counts, manageLink = true, leading }: Props) {
+/** `라벨 관리` 링크. 칩 줄 맨 앞에 붙어(가로 스크롤해도) 늘 보인다(스펙 A1 §6). */
+function ManageLink({ background }: { background: string }) {
+  return (
+    <Box
+      component={Link}
+      to={paths.labels}
+      sx={{
+        position: 'sticky',
+        left: 0,
+        zIndex: 1,
+        flex: 'none',
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 0.5,
+        minHeight: 44,
+        // 줄의 왼쪽 여백(px 2)까지 덮어, 스크롤된 칩이 링크 왼쪽으로 비치지 않게 한다.
+        ml: -2,
+        pl: 2,
+        pr: 1.5,
+        bgcolor: background,
+        borderRight: '1px solid var(--tm-border)',
+        color: 'var(--tm-text-secondary)',
+        fontSize: 14,
+        fontWeight: 700,
+        textDecoration: 'none',
+        whiteSpace: 'nowrap',
+        '&:focus-visible': { outlineOffset: -2 },
+      }}
+    >
+      <TagsIcon aria-hidden="true" width={14} height={14} />
+      라벨 관리
+    </Box>
+  );
+}
+
+/** 한 줄로 가로 스크롤되는 라벨 필터 칩 줄(라벨 관리 · 모두 포함 · 미분류 · 라벨들). */
+export function LabelChips({
+  query,
+  onChange,
+  labels,
+  counts,
+  manageLink = true,
+  leading,
+  background = 'var(--tm-bg-base)',
+}: Props) {
   const toggleLabel = (id: string) =>
     onChange({
       unlabeled: false,
@@ -36,6 +81,7 @@ export function LabelChips({ query, onChange, labels, counts, manageLink = true,
 
   return (
     <Box sx={{ display: 'flex', gap: 0.5, overflowX: 'auto', px: 2, scrollbarWidth: 'none' }}>
+      {manageLink && <ManageLink background={background} />}
       {leading}
       {leading !== undefined && (
         <Box
@@ -82,29 +128,6 @@ export function LabelChips({ query, onChange, labels, counts, manageLink = true,
             </Box>
           </ChipButton>
         ))}
-        {manageLink && (
-          <Box
-            component={Link}
-            to={paths.labels}
-            sx={{
-              flex: 'none',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 0.5,
-              minHeight: 44,
-              px: 1.5,
-              color: 'var(--tm-text-secondary)',
-              fontSize: 14,
-              fontWeight: 700,
-              textDecoration: 'none',
-              whiteSpace: 'nowrap',
-              '&:focus-visible': { outlineOffset: -2 },
-            }}
-          >
-            <TagsIcon aria-hidden="true" width={14} height={14} />
-            라벨 관리
-          </Box>
-        )}
       </Box>
     </Box>
   );
