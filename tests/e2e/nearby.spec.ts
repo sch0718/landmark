@@ -40,6 +40,7 @@ test.describe('내 근처 저장 장소', () => {
     await expect(page.getByRole('button', { name: '가까운 순', exact: true })).toBeVisible();
     const status = page.getByRole('status').filter({ hasText: '내 위치에서 3km 안' });
     await expect(status).toContainText('2곳');
+    await expect(status).toContainText(`3km 밖 ${SEED_PLACE_COUNT - 2}곳은 숨김`);
     await expect(rows(page)).toHaveCount(2);
     await expect(rows(page).nth(0)).toContainText('강릉 중앙시장');
     await expect(rows(page).nth(0)).toContainText('570m');

@@ -8,6 +8,7 @@ import { QUERY_PERSIST_DELAY_MS } from 'src/sections/library/use-library-query';
 import { SLOW_LOCATE_MS } from 'src/sections/nearby/NearbyBar';
 import { CURRENT_OPTIONS, Geolocation } from 'src/services/geolocation';
 import { PREFS_KEY } from 'src/services/prefs-store';
+import { myLocationAtom, nearbyAtom } from 'src/stores/my-location';
 import { fakeGeolocation, type FakeCoords } from '../../helpers/fake-geolocation';
 import { L_CAFE, L_FOOD, makeLabel, makePlace, renderLibrary } from './fixtures';
 
@@ -158,7 +159,7 @@ describe('library 가까운 순', () => {
     expect(fake.requests[0]!.options).toEqual(CURRENT_OPTIONS);
 
     await answer(fake);
-    expect(statusOf('내 위치에서 3km 안 · 2곳 · 14:05 기준')).not.toBeNull();
+    expect(statusOf('내 위치에서 3km 안 · 2곳 · 14:05 기준 · 3km 밖 2곳은 숨김')).not.toBeNull();
     expect(screen.getByText('직선거리')).toBeInTheDocument();
     expect(order()).toEqual(['가 식당', '라 카페']);
     expect(shown()[0]).toContain('500m');
@@ -174,7 +175,9 @@ describe('library 가까운 순', () => {
     await user.click(radiusChip('1km'));
     expect(radiusChip('1km')).toHaveAttribute('aria-pressed', 'true');
     expect(radiusChip('3km')).toHaveAttribute('aria-pressed', 'false');
-    expect(screen.getByText('내 위치에서 1km 안 · 1곳 · 14:05 기준')).toBeInTheDocument();
+    expect(
+      screen.getByText('내 위치에서 1km 안 · 1곳 · 14:05 기준 · 1km 밖 3곳은 숨김'),
+    ).toBeInTheDocument();
     expect(order()).toEqual(['가 식당']);
 
     await user.click(radiusChip('전체'));
@@ -208,18 +211,45 @@ describe('library 가까운 순', () => {
 
     await user.click(radiusChip('500m'));
     expect(screen.getByText('반경 500m 안에 저장한 곳이 없어요')).toBeInTheDocument();
-    expect(screen.getByText('내 위치에서 500m 안 · 0곳 · 14:05 기준')).toBeInTheDocument();
+    expect(
+      screen.getByText('내 위치에서 500m 안 · 0곳 · 14:05 기준 · 500m 밖 3곳은 숨김'),
+    ).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: '반경 넓히기' }));
     expect(radiusChip('1km')).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByText('반경 1km 안에 저장한 곳이 없어요')).toBeInTheDocument();
     expect(fake.requests).toHaveLength(1);
   });
 
-  it('shows the filter empty state when the filter alone leaves nothing, and 필터 지우기 keeps nearby on', async () => {
+  it('counts only the filtered places outside the radius, and drops the count at 전체 or 0', async () => {
     const user = userEvent.setup();
     const { fake } = await setup();
     await startNearby(user, fake);
     await answer(fake);
+
+    // 라벨 필터: 맛집 2곳 중 4km `나 식당`만 3km 밖이다. 카페(2km·20km)는 세지 않는다.
+    await user.click(labelChip('맛집 2'));
+    expect(statusOf('내 위치에서 3km 안 · 1곳 · 14:05 기준 · 3km 밖 1곳은 숨김')).not.toBeNull();
+
+    // 반경을 바꾸면 숨은 수도 따라 바뀐다. 10km 안에 둘 다 들면 0곳이라 덧붙이지 않는다.
+    await user.click(radiusChip('1km'));
+    expect(statusOf('내 위치에서 1km 안 · 1곳 · 14:05 기준 · 1km 밖 1곳은 숨김')).not.toBeNull();
+    await user.click(radiusChip('10km'));
+    expect(statusOf('내 위치에서 10km 안 · 2곳 · 14:05 기준')).not.toHaveTextContent('숨김');
+
+    // 전체는 숨기는 곳이 없으므로 덧붙이지 않는다.
+    await user.click(labelChip('맛집 2'));
+    await user.click(radiusChip('전체'));
+    expect(statusOf('내 위치에서 가까운 순 · 4곳 · 14:05 기준')).not.toHaveTextContent('숨김');
+  });
+
+  it('shows the filter empty state when the filter alone leaves nothing, and 필터 지우기 turns nearby off', async () => {
+    const user = userEvent.setup();
+    const { fake, store } = await setup();
+    await startNearby(user, fake);
+    await answer(fake);
+    await user.click(radiusChip('1km'));
+    const fix = store.get(myLocationAtom).fix;
+    expect(fix).not.toBeNull();
 
     await user.type(screen.getByRole('searchbox', { name: '장소 검색' }), '없는 장소');
     expect(screen.getByText('조건에 맞는 장소가 없어요')).toBeInTheDocument();
@@ -227,9 +257,14 @@ describe('library 가까운 순', () => {
     expect(screen.queryByText(/저장한 곳이 없어요/)).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '필터 지우기' }));
-    expect(order()).toEqual(['가 식당', '라 카페']);
-    expect(nearbyBarShown()).toBe(true);
-    expect(screen.getByText('내 위치에서 3km 안 · 2곳 · 14:05 기준')).toBeInTheDocument();
+    // 필터와 함께 근처 모드도 끈다(스펙 §13 결정 11 (다)). 반경과 얻은 위치는 그대로다.
+    expect(nearbyBarShown()).toBe(false);
+    expect(order()).toEqual(RECENT);
+    expect(shown().join()).not.toMatch(/\d(m|km)/);
+    expect(store.get(nearbyAtom)).toEqual({ on: false, radiusM: 1000 });
+    expect(store.get(myLocationAtom).fix).toBe(fix);
+    // `필터 지우기`가 빈 상태와 함께 사라지므로 포커스는 정렬 단추로 간다.
+    expect(document.activeElement).toBe(sortButton('최근 저장순'));
   });
 
   it('warns when the accuracy is worse than 1km', async () => {
@@ -328,7 +363,7 @@ describe('library 가까운 순', () => {
 
     // 목록은 지난 위치 기준 그대로이고, 그 기준 시각을 오류 문장 아래에 남긴다.
     const status = statusOf(UNAVAILABLE)!;
-    expect(status).toHaveTextContent('내 위치에서 3km 안 · 2곳 · 14:05 기준');
+    expect(status).toHaveTextContent('내 위치에서 3km 안 · 2곳 · 14:05 기준 · 3km 밖 2곳은 숨김');
     expect(order()).toEqual(['가 식당', '라 카페']);
     expect(screen.getByRole('button', { name: '다시 시도' })).toBeInTheDocument();
   });

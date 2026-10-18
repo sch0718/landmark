@@ -59,6 +59,8 @@ export type NearbyBarHandle = {
 type Props = {
   /** 지금 목록에 보이는 장소 수(반경 안). */
   count: number;
+  /** 필터 결과 중 반경 밖이라 숨은 장소 수(스펙 §13 결정 11). 0이거나 반경이 `전체`면 문장에 넣지 않는다. */
+  hidden: number;
   /** `가까운 순 끄기`(×)로 근처 모드를 끈 직후. × 단추가 함께 사라지므로 부른 쪽이 포커스를 옮긴다. */
   onTurnedOff?(): void;
   ref?: Ref<NearbyBarHandle>;
@@ -68,7 +70,7 @@ type Props = {
  * 근처 줄(스펙 §4.2). 근처 모드일 때만 필터 줄 아래에 붙는다.
  * 1줄: 상태 문장(`role="status"`) · `직선거리` · `다시 찾기`/`다시 시도` · `가까운 순 끄기`. 2줄: 반경 칩.
  */
-export function NearbyBar({ count, onTurnedOff, ref }: Props) {
+export function NearbyBar({ count, hidden, onTurnedOff, ref }: Props) {
   const nearby = useAtomValue(nearbyAtom);
   const setNearby = useSetAtom(nearbyAtom);
   const turnOff = useSetAtom(nearbyOffAtom);
@@ -97,9 +99,10 @@ export function NearbyBar({ count, onTurnedOff, ref }: Props) {
   const basisSentence = (() => {
     if (basis === null) return null;
     const at = dayjs(basis.at).format('HH:mm');
-    return nearby.radiusM === null
-      ? `내 위치에서 가까운 순 · ${count}곳 · ${at} 기준`
-      : `내 위치에서 ${radiusLabel(nearby.radiusM)} 안 · ${count}곳 · ${at} 기준`;
+    if (nearby.radiusM === null) return `내 위치에서 가까운 순 · ${count}곳 · ${at} 기준`;
+    const radius = radiusLabel(nearby.radiusM);
+    const hiddenNote = hidden > 0 ? ` · ${radius} 밖 ${hidden}곳은 숨김` : '';
+    return `내 위치에서 ${radius} 안 · ${count}곳 · ${at} 기준${hiddenNote}`;
   })();
   let sentence: string;
   if (failed) {
