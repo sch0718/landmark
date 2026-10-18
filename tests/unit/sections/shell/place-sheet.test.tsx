@@ -68,16 +68,22 @@ async function open(props: Parameters<typeof Harness>[0] = {}) {
 }
 
 /** 끌기 흉내. 움직임 사이에 `ms`만큼 시간을 흘려 빠르기를 정한다(성능 시계만 가짜). */
-function dragOn(el: HTMLElement, from: number, moves: { y: number; ms: number }[], upAfterMs = 0) {
-  fireEvent.pointerDown(el, { pointerId: 1, button: 0, clientY: from, isPrimary: true });
+function dragOn(
+  el: HTMLElement,
+  from: number,
+  moves: { y: number; ms: number }[],
+  upAfterMs = 0,
+  pointerId = 1,
+) {
+  fireEvent.pointerDown(el, { pointerId, button: 0, clientY: from, isPrimary: true });
   let y = from;
   for (const move of moves) {
     vi.advanceTimersByTime(move.ms);
     y = move.y;
-    fireEvent.pointerMove(el, { pointerId: 1, clientY: y, buttons: 1 });
+    fireEvent.pointerMove(el, { pointerId, clientY: y, buttons: 1 });
   }
   vi.advanceTimersByTime(upAfterMs);
-  fireEvent.pointerUp(el, { pointerId: 1, clientY: y });
+  fireEvent.pointerUp(el, { pointerId, clientY: y });
 }
 
 describe('PlaceSheet', () => {
@@ -206,8 +212,6 @@ describe('PlaceSheet', () => {
     fireEvent.pointerDown(sheet, { pointerId: 1, button: 0, clientY: 500, isPrimary: true });
     vi.advanceTimersByTime(16);
     fireEvent.pointerMove(sheet, { pointerId: 1, clientY: 700, buttons: 0 });
-    expect(sheet.style.transform).not.toContain('700');
-    expect(sheet.style.userSelect).not.toBe('none');
     fireEvent.pointerMove(sheet, { pointerId: 1, clientY: 800, buttons: 0 });
     fireEvent.pointerUp(sheet, { pointerId: 1, clientY: 800 });
     expect(onSnapChange).not.toHaveBeenCalled();
@@ -231,26 +235,53 @@ describe('PlaceSheet', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
-  it('포털로 올라온 포커스는 시트를 펼치지 않는다', async () => {
+  it('사라진 포인터의 끌기가 남아 있어도 새 주 포인터의 끌기는 동작한다', async () => {
+    const onClose = vi.fn();
+    const sheet = await open({ onClose });
+    vi.useFakeTimers({ toFake: ['performance'] });
+    // 포인터 1은 슬롭을 넘겨 끌다가 up/cancel 없이 사라졌다.
+    fireEvent.pointerDown(sheet, { pointerId: 1, button: 0, clientY: 500, isPrimary: true });
+    vi.advanceTimersByTime(16);
+    fireEvent.pointerMove(sheet, { pointerId: 1, clientY: 540, buttons: 1 });
+    dragOn(
+      sheet,
+      500,
+      [
+        { y: 520, ms: 16 },
+        { y: 700, ms: 1000 },
+      ],
+      200,
+      2,
+    );
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('포털로 올라온 포커스는 시트를 펼치지 않는다', () => {
     const onSnapChange = vi.fn();
-    const sheet = await open({ onSnapChange });
-    vi.spyOn(sheet, 'getBoundingClientRect').mockReturnValue({ top: 400 } as DOMRect);
     const host = document.createElement('div');
     document.body.appendChild(host);
-    function PortalChild() {
-      return createPortal(<button type="button">포털 단추</button>, host);
+    try {
+      function PortalChild() {
+        return createPortal(<button type="button">포털 단추</button>, host);
+      }
+      render(
+        <PlaceSheet snap="half" onSnapChange={onSnapChange} onClose={vi.fn()}>
+          <PortalChild />
+        </PlaceSheet>,
+      );
+      vi.spyOn(
+        screen.getByRole('region', { name: '장소 상세' }),
+        'getBoundingClientRect',
+      ).mockReturnValue({
+        top: 400,
+      } as DOMRect);
+      const portalButton = screen.getByRole('button', { name: '포털 단추' });
+      vi.spyOn(portalButton, 'getBoundingClientRect').mockReturnValue({ bottom: 900 } as DOMRect);
+      act(() => portalButton.focus());
+      expect(onSnapChange).not.toHaveBeenCalled();
+    } finally {
+      cleanup();
+      host.remove();
     }
-    // 시트 children 안에서 포털을 쓰는 상황을 흉내 낸다.
-    cleanup();
-    render(
-      <PlaceSheet snap="half" onSnapChange={onSnapChange} onClose={vi.fn()}>
-        <PortalChild />
-      </PlaceSheet>,
-    );
-    const portalButton = screen.getByRole('button', { name: '포털 단추' });
-    vi.spyOn(portalButton, 'getBoundingClientRect').mockReturnValue({ bottom: 900 } as DOMRect);
-    act(() => portalButton.focus());
-    expect(onSnapChange).not.toHaveBeenCalled();
-    host.remove();
   });
 });

@@ -78,8 +78,9 @@ export function PlaceSheet({ snap, onSnapChange, onClose, children }: Props) {
 
   const onPointerDown = (event: PointerEvent<HTMLElement>) => {
     if (event.button !== 0) return;
-    // 이미 끌고 있거나 보조 손가락이면 무시한다(첫 손가락의 끌기를 지킨다).
-    if (drag.current !== null || !event.isPrimary) return;
+    // 보조 손가락은 무시한다. 새 주 포인터가 왔는데 다른 포인터의 끌기가 남아 있으면 그 포인터는 사라진 것이라 버린다.
+    if (!event.isPrimary) return;
+    if (drag.current?.active) setOffset(null);
     if (snap === 'full' && !headerRef.current?.contains(event.target as Node)) return;
     const now = performance.now();
     drag.current = {
@@ -182,7 +183,6 @@ export function PlaceSheet({ snap, onSnapChange, onClose, children }: Props) {
       onPointerMove={onPointerMove}
       onPointerUp={(event) => endDrag(event, false)}
       onPointerCancel={(event) => endDrag(event, true)}
-      onLostPointerCapture={(event) => endDrag(event, true)}
       onClickCapture={onClickCapture}
       onFocus={onFocus}
       onKeyDown={onKeyDown}
