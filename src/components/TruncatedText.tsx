@@ -40,6 +40,21 @@ const clampSx = (lines: number) =>
 /** 키보드 포커스를 받는 가장 가까운 조작 요소(행·칩 단추, 링크). */
 const FOCUS_HOST = 'button, a[href], [tabindex]:not([tabindex="-1"])';
 
+/** 말줄임 글자 요소 표시. 값은 줄 수다. 한 조작 요소 안의 여러 글자 중 툴팁을 띄울 하나를 고를 때 쓴다. */
+const TEXT_ATTR = 'data-truncated-text';
+
+/**
+ * 조작 요소(`host`) 안에서 **잘린 첫 번째** 말줄임 글자(DOM 순서). 행 하나에 이름·칩·지역이 함께 있어도 키보드
+ * 포커스 툴팁은 하나만 띄운다. 안쪽의 다른 조작 요소에 든 글자는 그쪽 몫이라 뺀다.
+ */
+function firstTruncatedIn(host: HTMLElement): HTMLElement | null {
+  for (const el of host.querySelectorAll<HTMLElement>(`[${TEXT_ATTR}]`)) {
+    if (el.closest(FOCUS_HOST) !== host) continue;
+    if (isTruncated(el, Number(el.getAttribute(TEXT_ATTR)) || 1)) return el;
+  }
+  return null;
+}
+
 type Props = {
   /** 보이는 글자이자 툴팁 내용. */
   children: string;
@@ -67,14 +82,15 @@ export function TruncatedText({
   const ref = useRef<HTMLElement>(null);
   const [open, setOpen] = useState(false);
 
-  // 감싼 조작 요소가 키보드 포커스를 받으면 연다. 글자 자체는 포커스를 받지 않는다.
+  // 감싼 조작 요소가 키보드 포커스를 받으면 연다. 글자 자체는 포커스를 받지 않는다. 같은 조작 요소 안에 말줄임
+  // 글자가 여럿이면 잘린 첫 번째만 연다(툴팁이 겹쳐 뜨지 않게).
   useEffect(() => {
     watchModality();
     const el = ref.current;
     const host = el?.closest<HTMLElement>(FOCUS_HOST);
     if (!el || !host) return;
     const onFocus = () => {
-      if (keyboardModality && isTruncated(el, lines)) setOpen(true);
+      if (keyboardModality && firstTruncatedIn(host) === el) setOpen(true);
     };
     const onBlur = () => setOpen(false);
     host.addEventListener('focus', onFocus);
@@ -101,6 +117,7 @@ export function TruncatedText({
       <Box
         component={component}
         ref={ref}
+        data-truncated-text={lines}
         data-part={part}
         sx={[clampSx(lines), ...(Array.isArray(sx) ? sx : [sx])]}
       >

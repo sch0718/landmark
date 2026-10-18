@@ -76,6 +76,57 @@ describe('TruncatedText', () => {
     await user.unhover(text);
   });
 
+  describe('한 단추 안에 여럿', () => {
+    const FIRST = '신세계 정용진이 모은 맛집-강원';
+    const SECOND = '강원도 강릉시 초당동 순두부길';
+    function renderTwo() {
+      render(
+        <>
+          <button type="button">
+            <TruncatedText>{FIRST}</TruncatedText>
+            <TruncatedText>{SECOND}</TruncatedText>
+          </button>
+          <button type="button">다음</button>
+        </>,
+      );
+      return [screen.getByText(FIRST), screen.getByText(SECOND)] as const;
+    }
+
+    it('둘 다 잘렸으면 키보드 포커스로 첫 번째 글자 툴팁 하나만 뜬다', async () => {
+      const user = userEvent.setup();
+      const [first, second] = renderTwo();
+      fakeOverflow(first, true);
+      fakeOverflow(second, true);
+      await user.tab();
+      expect(await screen.findByRole('tooltip')).toHaveTextContent(FIRST);
+      await new Promise((r) => setTimeout(r, 300));
+      expect(screen.getAllByRole('tooltip')).toHaveLength(1);
+      await user.tab();
+    });
+
+    it('첫째가 안 잘리고 둘째만 잘렸으면 둘째 툴팁이 뜬다', async () => {
+      const user = userEvent.setup();
+      const [first, second] = renderTwo();
+      fakeOverflow(first, false);
+      fakeOverflow(second, true);
+      await user.tab();
+      expect(await screen.findByRole('tooltip')).toHaveTextContent(SECOND);
+      await new Promise((r) => setTimeout(r, 300));
+      expect(screen.getAllByRole('tooltip')).toHaveLength(1);
+      await user.tab();
+    });
+
+    it('마우스 오버는 각자 뜬다(둘째 위에 올리면 둘째)', async () => {
+      const user = userEvent.setup();
+      const [first, second] = renderTwo();
+      fakeOverflow(first, true);
+      fakeOverflow(second, true);
+      await user.hover(second);
+      expect(await screen.findByRole('tooltip')).toHaveTextContent(SECOND);
+      await user.unhover(second);
+    });
+  });
+
   it('단추의 접근 이름은 그대로다', () => {
     renderInButton();
     expect(screen.getByRole('button', { name: NAME })).toBeInTheDocument();
