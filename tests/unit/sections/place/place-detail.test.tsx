@@ -47,6 +47,8 @@ describe('PlaceDetail', () => {
     expect(link).toHaveAttribute('href', 'https://m.place.naver.com/place/1001');
     expect(link).toHaveAttribute('target', '_blank');
     expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'));
+    // 반쯤 시트를 마우스로 끌 때 링크 끌기(브라우저 기본 동작)가 시트 끌기를 끊지 않게 한다.
+    expect(link).toHaveAttribute('draggable', 'false');
   });
 
   it('naver link only for naver source', async () => {
@@ -151,6 +153,19 @@ describe('PlaceDetail', () => {
 
     await user.click(within(dialog).getByRole('button', { name: '완료' }));
     await waitFor(() => expect(attachedNames(detail())).toEqual(['카페', '야시장']));
+  });
+
+  it('휴대폰 시트에서 라벨 바꾸기 창의 Esc는 창만 닫고 시트는 남기며 포커스를 라벨 바꾸기로 돌린다', async () => {
+    const user = userEvent.setup();
+    const { router } = await open(P1, { width: 390 });
+    const sheet = detail();
+    expect(within(sheet).getByRole('button', { name: '닫기' })).toBeInTheDocument();
+    const dialog = await openLabelPicker(user, sheet);
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(dialog).not.toBeInTheDocument());
+    expect(router.state.location.pathname).toBe(`/place/${P1}`);
+    expect(detail()).toBe(sheet);
+    expect(within(sheet).getByRole('button', { name: '라벨 바꾸기' })).toHaveFocus();
   });
 
   it('ignores Enter that only confirms a Korean composition', async () => {
