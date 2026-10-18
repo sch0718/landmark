@@ -49,7 +49,7 @@ export function createAppTheme(name: ThemeName, mode: ColorMode): Theme {
     palette: {
       mode,
       primary: { main: t.accent.main, contrastText: t.accent.contrast },
-      error: { main: t.error },
+      error: { main: t.error, dark: t.errorHover },
       background: { default: t.bg.base, paper: t.bg.surface },
       text: { primary: t.text.primary, secondary: t.text.secondary, disabled: t.text.muted },
       divider: t.border,

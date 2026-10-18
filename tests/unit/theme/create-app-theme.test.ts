@@ -77,3 +77,43 @@ describe('오류 색', () => {
     }
   });
 });
+
+describe('빨간 채운 버튼', () => {
+  /** `#RRGGBB`·`#fff`·`rgba(r, g, b, a)`를 [r, g, b, a]로. */
+  function rgba(color: string): [number, number, number, number] {
+    const m = /^rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)$/.exec(color);
+    if (m) return [Number(m[1]), Number(m[2]), Number(m[3]), m[4] === undefined ? 1 : Number(m[4])];
+    const hex = color.length === 4 ? color.replace(/[0-9a-f]/gi, (c) => c + c) : color;
+    return [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).concat(1) as [
+      number,
+      number,
+      number,
+      number,
+    ];
+  }
+  const lum = ([r, g, b]: number[]) => {
+    const ch = (v: number) => {
+      const c = v / 255;
+      return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    };
+    return 0.2126 * ch(r!) + 0.7152 * ch(g!) + 0.0722 * ch(b!);
+  };
+  const ratio = (fg: string, bg: string) => {
+    const [br, bg2, bb] = rgba(bg);
+    const [fr, fg2, fb, a] = rgba(fg);
+    const mixed = [fr * a + br * (1 - a), fg2 * a + bg2 * (1 - a), fb * a + bb * (1 - a)];
+    const [hi, lo] = [lum(mixed), lum([br, bg2, bb])].sort((x, y) => y - x);
+    return (hi! + 0.05) / (lo! + 0.05);
+  };
+
+  it('글자가 평소(error.main)와 마우스를 올렸을 때(error.dark) 모두 4.5:1 이상', () => {
+    for (const name of Object.keys(TOKENS) as (keyof typeof TOKENS)[]) {
+      for (const mode of ['light', 'dark'] as const) {
+        const { main, dark, contrastText } = createAppTheme(name, mode).palette.error;
+        expect(ratio(contrastText, main), `${name}/${mode} main`).toBeGreaterThanOrEqual(4.5);
+        expect(ratio(contrastText, dark), `${name}/${mode} hover`).toBeGreaterThanOrEqual(4.5);
+        expect(dark, `${name}/${mode}`).toBe(TOKENS[name][mode].errorHover);
+      }
+    }
+  });
+});

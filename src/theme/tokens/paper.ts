@@ -12,6 +12,7 @@ const light: Tokens = {
   border: '#E8DFCF',
   borderStrong: '#A2906E',
   error: '#D32F2F',
+  errorHover: '#932020',
   accent: { main: '#C2492D', contrast: '#FFFFFF', text: '#B4401F', gradient: '#C2492D' },
   label: {
     red: { fill: '#F6DDD3', text: '#A63A20', marker: '#C2492D' },
@@ -38,6 +39,7 @@ const dark: Tokens = {
   border: '#3A3329',
   borderStrong: '#82735C',
   error: '#FF7A70',
+  errorHover: '#E86A60',
   accent: { main: '#E8795B', contrast: '#1B1713', text: '#E8795B', gradient: '#E8795B' },
   label: {
     red: { fill: '#43251C', text: '#F4B09B', marker: '#E2684A' },
