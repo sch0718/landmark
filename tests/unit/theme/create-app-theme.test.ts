@@ -65,3 +65,15 @@ describe('createAppTheme', () => {
     },
   );
 });
+
+describe('오류 색', () => {
+  it('MUI error.main과 --tm-error는 토큰의 error다', () => {
+    for (const name of Object.keys(TOKENS) as (keyof typeof TOKENS)[]) {
+      for (const mode of ['light', 'dark'] as const) {
+        const tokens = TOKENS[name][mode];
+        expect(createAppTheme(name, mode).palette.error.main, `${name}/${mode}`).toBe(tokens.error);
+        expect(cssVarsOf(tokens)['--tm-error'], `${name}/${mode}`).toBe(tokens.error);
+      }
+    }
+  });
+});
