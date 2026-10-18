@@ -174,7 +174,8 @@ export function TruncatedText({
   // 열려 있는 동안: Esc는 툴팁만 닫는다(WCAG 1.4.13). 문서 capture 단계에서 먼저 받아 `preventDefault`로 처리했다고
   // 표시하므로, 문서 bubble 단계의 상세 닫기 Esc(`useEscapeClose`)는 이 Esc를 무시한다. 고정 위치가 글자와 어긋나지
   // 않게 스크롤로 글자가 움직이거나 창 크기가 바뀌면 닫는다. 포커스가 끌어온 스크롤처럼 글자가 그 자리면 둔다.
-  useEffect(() => {
+  // 툴팁이 화면에 붙는 커밋과 함께 달도록 레이아웃 효과로 둔다(일반 효과면 그 사이에 온 스크롤·Esc를 놓친다).
+  useLayoutEffect(() => {
     if (!open) return;
     const shut = () => {
       clearTimeout(timer.current);
