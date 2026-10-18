@@ -2,7 +2,8 @@ import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { RouterProvider, createMemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { sheetStateOf, useOpenPlace, type SheetFrom } from 'src/sections/library/use-open-place';
+import { useOpenPlace } from 'src/sections/library/use-open-place';
+import { sheetStateOf, type SheetFrom } from 'src/sections/shell/sheet-state';
 import { mockViewport } from '../shell/harness';
 
 afterEach(() => {

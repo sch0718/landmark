@@ -1,7 +1,7 @@
 import type { ComponentType, SVGProps } from 'react';
 import { HomeIcon, MapIcon, RouteIcon, SettingsIcon } from 'src/components/icons';
 import { paths } from 'src/routes/paths';
-import type { SheetFrom } from 'src/sections/library/use-open-place';
+import type { SheetFrom } from 'src/sections/shell/sheet-state';
 
 export type NavLinkItem = {
   key: 'library' | 'map' | 'trips' | 'settings';

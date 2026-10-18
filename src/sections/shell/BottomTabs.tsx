@@ -1,8 +1,8 @@
 import Box from '@mui/material/Box';
 import { Link, useLocation } from 'react-router';
 import { PlusIcon } from 'src/components/icons';
-import { sheetStateOf } from 'src/sections/library/use-open-place';
 import { ADD_LABEL, isNavActive, NAV_ITEMS } from 'src/sections/shell/nav-items';
+import { sheetStateOf } from 'src/sections/shell/sheet-state';
 
 const TAB_SX = {
   flex: 1,
