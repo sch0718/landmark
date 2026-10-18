@@ -42,7 +42,11 @@ if (doc === null) {
     // 길찾기 링크는 좁은 화면(767px 이하)에서 앱 주소를 쓴다. 폭이 바뀌면 지금 링크도 바꾼다(스펙 §4.4).
     const narrow = window.matchMedia('(max-width: 767px)');
     const trip = renderTripViewer(root, doc, port, { app, compact: () => narrow.matches });
-    narrow.addEventListener('change', () => trip.refreshDirections());
+    // Safari 13 이하는 `addListener`만 있다. 둘 다 없으면 듣지 않는다(링크는 열 때 모양 그대로). 여기서 던지면
+    // 보기 화면 전체가 깨지므로 있는지 보고 건다.
+    const refresh = () => trip.refreshDirections();
+    if (typeof narrow.addEventListener === 'function') narrow.addEventListener('change', refresh);
+    else if (typeof narrow.addListener === 'function') narrow.addListener(refresh);
     handle = trip;
   } else {
     handle = renderViewer(root, doc, port, { app });

@@ -149,4 +149,40 @@ describe('보기 화면 진입점', () => {
     expect(href()).toMatch(/^nmap:\/\//);
     expect(matchMedia).toHaveBeenCalledTimes(1);
   });
+
+  it('옛 브라우저(addListener만 있음)에서도 화면 폭이 바뀌면 길찾기 링크를 다시 정한다', async () => {
+    const query = {
+      matches: true,
+      media: '(max-width: 767px)',
+      listeners: [] as Array<() => void>,
+      addListener(listener: () => void) {
+        this.listeners.push(listener);
+      },
+    };
+    window.matchMedia = (() => query as unknown as MediaQueryList) as typeof window.matchMedia;
+    setData(makeShareV2Doc());
+    importLinkMock.mockResolvedValue({ kind: 'unsupported' });
+    await import('src/share-viewer/main');
+    const href = () =>
+      document.querySelector<HTMLAnchorElement>('a.directions')!.getAttribute('href');
+    expect(href()).toMatch(/^nmap:\/\//);
+    expect(query.listeners).toHaveLength(1);
+
+    query.matches = false;
+    for (const listener of query.listeners) listener();
+    expect(href()).toMatch(/^https:\/\/map\.naver\.com\/p\/directions\//);
+  });
+
+  it('화면 폭 변화를 들을 수 없는 브라우저에서도 던지지 않고 보기 화면을 그린다', async () => {
+    window.matchMedia = ((query: string) =>
+      ({ matches: true, media: query }) as unknown as MediaQueryList) as typeof window.matchMedia;
+    setData(makeShareV2Doc());
+    importLinkMock.mockResolvedValue({ kind: 'unsupported' });
+    await expect(import('src/share-viewer/main')).resolves.toBeDefined();
+    expect(document.querySelector('[role=tablist]')).not.toBeNull();
+    expect(document.querySelector<HTMLAnchorElement>('a.directions')!.getAttribute('href')).toMatch(
+      /^nmap:\/\//,
+    );
+    expect(portMock.draw).toHaveBeenCalledTimes(1);
+  });
 });
