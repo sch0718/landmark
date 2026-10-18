@@ -80,6 +80,29 @@ describe('LabelPickerDialog', () => {
     expect(rowNames()).toEqual(['카페', '맛집', '바다뷰']);
   });
 
+  it('닫히는 동안에도 순서와 개수를 그대로 보인다', () => {
+    const { rerender, view } = setup();
+    rerender(view(false, [L_SEA, L_CAFE]));
+    // 페이드 아웃 동안 창은 아직 DOM에 있다.
+    expect(rowNames()).toEqual(['바다뷰', '맛집', '카페']);
+    expect(within(dialog()).getByRole('checkbox', { name: /^맛집/ })).toHaveAccessibleName(
+      '맛집 2곳',
+    );
+  });
+
+  it('만드는 중에 Enter를 또 눌러도 한 번만 만든다', async () => {
+    let finish!: (result: LibraryActionResult) => void;
+    const onCreate = vi.fn(() => new Promise<LibraryActionResult>((resolve) => (finish = resolve)));
+    setup({ onCreate });
+    const search = screen.getByRole('searchbox', { name: '라벨 검색 또는 새 라벨 이름' });
+    await userEvent.type(search, '야시장{Enter}{Enter}');
+    expect(onCreate).toHaveBeenCalledTimes(1);
+    finish({ ok: true });
+    await waitFor(() => expect(search).toHaveValue(''));
+    await userEvent.type(search, '국밥{Enter}');
+    expect(onCreate).toHaveBeenCalledTimes(2);
+  });
+
   it('검색어로 거르고, 맞는 게 없으면 알린다', async () => {
     setup();
     const search = screen.getByRole('searchbox', { name: '라벨 검색 또는 새 라벨 이름' });

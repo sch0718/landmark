@@ -2,7 +2,7 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
 import { useAtomValue } from 'jotai';
-import { useId, useMemo, useState, type KeyboardEvent } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { fieldSx } from 'src/components/field-style';
 import { LabelGlyph, PlusIcon } from 'src/components/icons';
 import { DEFAULT_QUERY, labelCounts } from 'src/domain/library/query';
@@ -82,32 +82,46 @@ export function LabelPickerDialog({
   const errorId = useId();
   const [text, setText] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [order, setOrder] = useState<string[] | null>(null);
-  const counts = useMemo(
-    () => (open ? labelCounts(library, DEFAULT_QUERY) : new Map<string, number>()),
-    [library, open],
-  );
+  const [order, setOrder] = useState<string[]>([]);
+  const [prevOpen, setPrevOpen] = useState(false);
+  const counts = useMemo(() => labelCounts(library, DEFAULT_QUERY), [library]);
+  // 만들기가 끝나기를 기다리는 중인가(Enter 두 번·누르기 겹침 막기), 창을 연 횟수(늦게 끝난 만들기가 다시 연 창을 건드리지 않게).
+  const creating = useRef(false);
+  const session = useRef(0);
 
-  // 열릴 때 순서를 정하고 검색을 비운다. 닫히면 다음 열기를 위해 잊는다(렌더 중 상태 갱신).
-  if (open && order === null) {
-    setOrder(orderLabelsForPicker(labels, attachedIds, counts));
-    setText('');
-    setError(null);
+  // 닫힘에서 열림으로 바뀔 때만 순서를 정하고 검색을 비운다. 닫히는 동안(페이드 아웃)에는 그대로 둔다(렌더 중 상태 갱신).
+  if (open !== prevOpen) {
+    setPrevOpen(open);
+    if (open) {
+      setOrder(orderLabelsForPicker(labels, attachedIds, counts));
+      setText('');
+      setError(null);
+    }
   }
-  if (!open && order !== null) setOrder(null);
+  useEffect(() => {
+    if (open) session.current += 1;
+  }, [open]);
 
   const attached = new Set(attachedIds);
   const trimmed = text.trim();
-  const shown = filterLabels(arrangeLabels(labels, order ?? []), text);
+  const shown = filterLabels(arrangeLabels(labels, order), text);
   const creatable = canCreateLabel(labels, text);
 
   const create = async () => {
-    const result = await onCreate(text);
-    if (result.ok) {
-      setText('');
-      setError(null);
-    } else {
-      setError(rejectionMessage(result.error));
+    if (creating.current) return;
+    creating.current = true;
+    const opened = session.current;
+    try {
+      const result = await onCreate(text);
+      if (opened !== session.current) return;
+      if (result.ok) {
+        setText('');
+        setError(null);
+      } else {
+        setError(rejectionMessage(result.error));
+      }
+    } finally {
+      creating.current = false;
     }
   };
 
@@ -133,7 +147,7 @@ export function LabelPickerDialog({
             backgroundImage: 'none',
             ...(compact
               ? { pt: 'env(safe-area-inset-top, 0px)' }
-              : { height: 'min(640px, 80dvh)' }),
+              : { maxHeight: 'min(640px, 80dvh)' }),
           },
         },
       }}
@@ -223,7 +237,7 @@ export function LabelPickerDialog({
                     >
                       {label.name.value}
                     </Box>
-                    {/* 접근 이름이 `맛집 2곳`으로 읽히게 이름과 개수를 블록 요소로 나눈다(flex 항목이라 겉모양은 같다). */}
+                    {/* 접근 이름이 `맛집 2곳`으로 읽히게 이름과 개수를 `inline`이 아닌 요소로 나눈다(flex 항목이라 겉모양은 같다). */}
                     <Box
                       component="span"
                       sx={{
