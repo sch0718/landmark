@@ -32,9 +32,10 @@ test.describe('휴대폰 상세 시트', { tag: '@mobile' }, () => {
     await expect.poll(() => visibleSheetHeight(page)).toBeLessThanOrEqual(320.5);
 
     // 다른 마커를 누르면 시트 내용만 바뀐다.
-    // 반쯤 연 시트가 아래쪽 마커를 가리므로 시트 위에 보이는 마커를 고른다.
+    // 반쯤 연 시트가 아래쪽 마커를 가리므로 시트 위에 보이는 마커를 고른다. 가짜 지도는 마커를 겹치지 않게 떼어
+    // 놓지 않아(글꼴에 따라 옆 마커의 이름표가 덮는다) 좌표 클릭 대신 마커 버튼에 click 이벤트를 보낸다.
     const other = '영금정';
-    await marker(page, other).click();
+    await marker(page, other).dispatchEvent('click');
     await expect(sheet.getByRole('button', { name: '이름 수정' })).toContainText(other);
 
     // 펼치고 접는다.
