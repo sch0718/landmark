@@ -45,7 +45,8 @@ type Props = {
  * - 다 펼침: 부모 높이 전체. 머리 줄만 끌리고 안쪽은 스크롤한다.
  * - 끌기 없이도 `펼치기`/`접기`·`닫기` 버튼과 Esc로 다 할 수 있다. 반쯤일 때 가려진 요소에 포커스가 가면 펼친다.
  * - 열리면 포커스를 시트로 옮기고, 시트 안에 포커스가 있던 채 닫히면 연 요소(없으면 본문)로 돌린다.
- * 부모는 `position: relative; overflow: hidden`이어야 한다(반쯤일 때 아래로 내려간 부분을 자른다).
+ * 부모는 `position: relative`이고 `overflow: clip`으로 넘치는 부분을 잘라야 한다(반쯤일 때 아래로 내려간 부분을
+ * 자른다). `hidden`은 포커스 이동만으로도 스크롤될 수 있어 쓰지 않는다.
  */
 export function PlaceSheet({ snap, onSnapChange, onClose, children }: Props) {
   const halfPx = useSheetHalfPx();

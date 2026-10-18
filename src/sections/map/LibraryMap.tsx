@@ -24,6 +24,7 @@ import { placeMarker, toMarkers } from 'src/sections/map/markers';
 import { NearbyMapChip } from 'src/sections/nearby/NearbyMapChip';
 import { useNearby } from 'src/sections/nearby/use-nearby';
 import { DETAIL_WIDTH } from 'src/sections/shell/pane-widths';
+import { useSheetHalfPx } from 'src/sections/shell/sheet-snap';
 import { useLayout } from 'src/sections/shell/use-layout';
 import { addFlowAtom, showsAddPanel } from 'src/stores/add-place';
 import { libraryAtom } from 'src/stores/library-state';
@@ -78,6 +79,10 @@ export function LibraryMap() {
   // 중간 폭에서는 상세 칸이나 추가 칸이 지도 오른쪽을 덮는다. 핀 모드에는 셸이 상세를 내려 지도 전체를 쓴다.
   const detailOverlaid =
     layout === 'medium' && !pinning && (placeId !== null || showsAddPanel(flow));
+  // 휴대폰에서는 상세 시트가 지도 아래쪽을 덮는다(이 지도가 그려져 있으면 시트 뒤가 지도다). 다 펼치면 지도가
+  // 통째로 가려지므로 여백은 늘 반쯤 높이로 둔다.
+  const sheetOverlaid = layout === 'compact' && !pinning && placeId !== null;
+  const sheetHalf = useSheetHalfPx();
   // 지금 지도 중심(핀 모드의 조준점 자리). 지도가 영역 변경을 알릴 때마다 갱신된다.
   const [center, setCenter] = useState<[number, number] | null>(null);
 
@@ -172,14 +177,15 @@ export function LibraryMap() {
     }
   }
 
-  // 중간 폭에서 상세 오버레이가 새로 지도를 덮으면(넓은 화면에서 줄이거나 마커를 눌러 열 때) 열어 둔 장소를
-  // 가려지지 않는 쪽으로 다시 모은다. 임시 마커가 있으면(핀 모드에서 입력 카드로 넘어갈 때) 그 위치를 모은다.
-  // 오버레이가 사라질 때는 장소가 계속 보이므로 지도를 그대로 둔다.
-  const [seenOverlay, setSeenOverlay] = useState(detailOverlaid);
-  if (seenOverlay !== detailOverlaid) {
-    setSeenOverlay(detailOverlaid);
-    const open = !detailOverlaid || placeId === null ? undefined : library.places[placeId];
-    if (detailOverlaid && tempPoint !== null) {
+  // 상세 덮개(중간 폭 오버레이·휴대폰 시트)가 새로 지도를 덮으면(넓은 화면에서 줄이거나 마커를 눌러 열 때) 열어 둔
+  // 장소를 가려지지 않는 쪽으로 다시 모은다. 임시 마커가 있으면(핀 모드에서 입력 카드로 넘어갈 때) 그 위치를 모은다.
+  // 덮개가 사라질 때는 장소가 계속 보이므로 지도를 그대로 둔다.
+  const covered = detailOverlaid || sheetOverlaid;
+  const [seenOverlay, setSeenOverlay] = useState(covered);
+  if (seenOverlay !== covered) {
+    setSeenOverlay(covered);
+    const open = !covered || placeId === null ? undefined : library.places[placeId];
+    if (covered && tempPoint !== null) {
       setFocus({ point: [tempPoint.lng, tempPoint.lat], seq: (focus?.seq ?? 0) + 1 });
     } else if (open !== undefined && open.deletedAt === null) {
       setFocus({ point: [open.lng, open.lat], seq: (focus?.seq ?? 0) + 1 });
@@ -243,7 +249,15 @@ export function LibraryMap() {
     () => hasVisited(library) || query.visited !== 'all',
     [library, query.visited],
   );
-  const padding = detailOverlaid ? OVERLAID_PADDING : BASE_PADDING;
+  const padding = useMemo(
+    () =>
+      detailOverlaid
+        ? OVERLAID_PADDING
+        : sheetOverlaid
+          ? { ...BASE_PADDING, bottom: sheetHalf + EDGE }
+          : BASE_PADDING,
+    [detailOverlaid, sheetOverlaid, sheetHalf],
+  );
 
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
