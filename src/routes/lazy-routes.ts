@@ -33,7 +33,7 @@ export const LegacyImportPage = lazy(() =>
 );
 
 /**
- * 추가 칸의 단계 화면과 공유 내보내기·일정 공유·백업 되살리기 대화상자도 열 때 받는다. 핀 찍기 덮개(`PinModeOverlay`)는 지도 위에 바로
+ * 추가 칸의 단계 화면과 공유 내보내기·일정 공유·백업 되살리기·라벨 고르기 대화상자도 열 때 받는다. 핀 찍기 덮개(`PinModeOverlay`)는 지도 위에 바로
  * 떠야 해서 나누지 않는다. 받기가 실패하면 쓰는 쪽(`AddPlaceHost`·`ExportHtmlDialogHost`)의 `ChunkErrorBoundary`가
  * 그 칸·대화상자 안에 새 버전 안내를 보인다. 되살리기·일정 공유 대화상자(`RestoreDialogHost`·`TripShareDialogHost`)도 같다.
  */
@@ -51,6 +51,9 @@ export const loadExportHtmlDialog = lazyChunk(
 export const loadRestoreDialog = lazyChunk(() => import('src/sections/backup/RestoreDialog'));
 export const loadTripShareDialog = lazyChunk(
   () => import('src/sections/share-export/TripShareDialog'),
+);
+export const loadLabelPickerDialog = lazyChunk(
+  () => import('src/sections/place/LabelPickerDialog'),
 );
 
 export const LinkInputPanel = lazy(() =>
@@ -78,6 +81,9 @@ export const RestoreDialog = lazy(() =>
 export const TripShareDialog = lazy(() =>
   loadTripShareDialog().then((m) => ({ default: m.TripShareDialog })),
 );
+export const LabelPickerDialog = lazy(() =>
+  loadLabelPickerDialog().then((m) => ({ default: m.LabelPickerDialog })),
+);
 
 /** 첫 화면을 그린 뒤 한가할 때 미리 받는 화면 단위들. */
 export const ROUTE_CHUNKS: readonly (() => Promise<unknown>)[] = [
@@ -89,7 +95,7 @@ export const ROUTE_CHUNKS: readonly (() => Promise<unknown>)[] = [
   loadLegacyImportPage,
 ];
 
-/** 같은 때 미리 받는 추가 칸 단계와 내보내기·되살리기·일정 공유 대화상자 단위들. */
+/** 같은 때 미리 받는 추가 칸 단계와 내보내기·되살리기·일정 공유·라벨 고르기 대화상자 단위들. */
 export const PANEL_CHUNKS: readonly (() => Promise<unknown>)[] = [
   loadLinkInputPanel,
   loadCandidateCard,
@@ -100,4 +106,5 @@ export const PANEL_CHUNKS: readonly (() => Promise<unknown>)[] = [
   loadExportHtmlDialog,
   loadRestoreDialog,
   loadTripShareDialog,
+  loadLabelPickerDialog,
 ];
