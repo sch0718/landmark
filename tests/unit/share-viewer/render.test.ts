@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ShareDoc, SharePlace } from 'src/schema/share';
+import type { ShareDocV1, SharePlace } from 'src/schema/share';
 import {
   applyTheme,
   naverUrl,
@@ -20,7 +20,7 @@ function place(over: Partial<SharePlace> & { id: string }): SharePlace {
   };
 }
 
-function makeDoc(over: Partial<ShareDoc> = {}): ShareDoc {
+function makeDoc(over: Partial<ShareDocV1> = {}): ShareDocV1 {
   return {
     format: 'tripmap-share',
     version: 1,
@@ -51,7 +51,7 @@ beforeEach(() => {
   Element.prototype.scrollIntoView = vi.fn();
 });
 
-function mount(doc: ShareDoc) {
+function mount(doc: ShareDocV1) {
   return renderViewer(root, doc, map as unknown as MapPort, { app: APP });
 }
 
