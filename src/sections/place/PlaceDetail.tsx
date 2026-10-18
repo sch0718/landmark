@@ -200,7 +200,7 @@ function PlaceBody({ place, level }: { place: Place; level: HeadingLevel }) {
         <LabelPicker
           labels={labels}
           attachedIds={place.labelIds.value}
-          onToggle={(labelId) => void run((lib, ctx) => toggleLabel(lib, id, labelId, ctx))}
+          onToggle={(labelId) => run((lib, ctx) => toggleLabel(lib, id, labelId, ctx))}
           onCreate={(name) => run((lib, ctx) => createAndAttachLabel(lib, id, name, ctx))}
         />
       </Section>

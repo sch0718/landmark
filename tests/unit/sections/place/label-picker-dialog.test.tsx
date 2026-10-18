@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createStore, Provider } from 'jotai';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -18,10 +18,12 @@ function setup({
   attachedIds = [L_SEA],
   onCreate = vi.fn(async (): Promise<LibraryActionResult> => ({ ok: true }) as LibraryActionResult),
   width = 1280,
+  onToggle = vi.fn(),
 }: {
   attachedIds?: string[];
   onCreate?: (name: string) => Promise<LibraryActionResult>;
   width?: number;
+  onToggle?: (labelId: string) => void | Promise<LibraryActionResult>;
 } = {}) {
   mockViewport(width);
   const library = sampleLibrary();
@@ -30,7 +32,6 @@ function setup({
   const labels = Object.values(library.labels).sort(
     (a, b) => a.order.value - b.order.value,
   ) as Label[];
-  const onToggle = vi.fn();
   const onClose = vi.fn();
   const view = (open: boolean, ids = attachedIds) => (
     <Provider store={store}>
@@ -97,6 +98,37 @@ describe('LabelPickerDialog', () => {
     rerender(view(false, [L_SEA]));
     rerender(view(true, [L_SEA]));
     expect(cafe()).not.toBeChecked();
+  });
+
+  it('저장이 실패하면(onToggle이 ok: false로 끝남) 누른 체크를 저장된 값으로 되돌린다', async () => {
+    let finish!: (result: LibraryActionResult) => void;
+    const onToggle = vi.fn(() => new Promise<LibraryActionResult>((resolve) => (finish = resolve)));
+    setup({ onToggle });
+    const cafe = () => within(dialog()).getByRole('checkbox', { name: /^카페/ });
+    await userEvent.click(cafe());
+    expect(cafe()).toBeChecked();
+    await act(async () => {
+      finish({ ok: false, error: new Error('저장소 오류') } as LibraryActionResult);
+    });
+    expect(cafe()).not.toBeChecked();
+  });
+
+  it('창을 다시 연 뒤에 끝난 실패는 새 체크를 건드리지 않는다', async () => {
+    const finishes: ((result: LibraryActionResult) => void)[] = [];
+    const onToggle = vi.fn(
+      () => new Promise<LibraryActionResult>((resolve) => finishes.push(resolve)),
+    );
+    const { rerender, view } = setup({ onToggle });
+    const cafe = () => within(dialog()).getByRole('checkbox', { name: /^카페/ });
+    await userEvent.click(cafe());
+    rerender(view(false));
+    rerender(view(true));
+    await userEvent.click(cafe());
+    expect(cafe()).toBeChecked();
+    await act(async () => {
+      finishes[0]!({ ok: false, error: new Error('x') } as LibraryActionResult);
+    });
+    expect(cafe()).toBeChecked();
   });
 
   it('다시 열면 그때의 붙은 라벨 기준으로 순서를 새로 정한다', () => {

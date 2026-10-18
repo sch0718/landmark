@@ -13,8 +13,8 @@ type Props = {
   labels: Label[];
   /** 이 장소에 붙은 라벨 id. */
   attachedIds: readonly string[];
-  /** 라벨을 켜거나 끈다. 실패는 호출한 쪽이 알린다(토스트). */
-  onToggle(labelId: string): void;
+  /** 라벨을 켜거나 끈다. 실패는 호출한 쪽이 알린다(토스트). 저장 결과를 돌려주면 창이 실패한 체크를 되돌린다. */
+  onToggle(labelId: string): void | Promise<LibraryActionResult>;
   /** 이름으로 라벨을 만들어(같은 이름이 있으면 그것을) 붙인다. */
   onCreate(name: string): Promise<LibraryActionResult>;
 };

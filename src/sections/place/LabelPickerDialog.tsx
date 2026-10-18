@@ -24,8 +24,11 @@ type Props = {
   labels: Label[];
   /** 이 장소에 붙은 라벨 id. */
   attachedIds: readonly string[];
-  /** 라벨을 켜거나 끈다. 실패는 호출한 쪽이 알린다(토스트). */
-  onToggle(labelId: string): void;
+  /**
+   * 라벨을 켜거나 끈다. 실패는 호출한 쪽이 알린다(토스트). 저장 결과를 돌려주면 실패했을 때 누른 체크를 되돌린다
+   * (추가 카드처럼 바로 반영하는 쪽은 돌려주지 않는다).
+   */
+  onToggle(labelId: string): void | Promise<LibraryActionResult>;
   /** 이름으로 라벨을 만들어(같은 이름이 있으면 그것을) 붙인다. */
   onCreate(name: string): Promise<LibraryActionResult>;
 };
@@ -117,7 +120,19 @@ export function LabelPickerDialog({
   const isChecked = (id: string) => pending.get(id) ?? attached.has(id);
   const toggle = (id: string) => {
     setPending(new Map(pending).set(id, !isChecked(id)));
-    onToggle(id);
+    const saving = onToggle(id);
+    if (saving === undefined) return;
+    const opened = session.current;
+    void saving.then((result) => {
+      // 실패하면 저장된 값으로 보이게 그 체크를 놓는다. 그사이 창을 다시 열었으면 새 체크를 건드리지 않는다.
+      if (result.ok || opened !== session.current) return;
+      setPending((now) => {
+        if (!now.has(id)) return now;
+        const next = new Map(now);
+        next.delete(id);
+        return next;
+      });
+    });
   };
   const trimmed = text.trim();
   const shown = filterLabels(arrangeLabels(labels, order), text);
