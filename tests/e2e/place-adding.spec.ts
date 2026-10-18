@@ -85,11 +85,11 @@ async function submitLink(page: Page, text: string): Promise<void> {
 const isCompact = (page: Page): boolean => page.viewportSize()!.width < 768;
 
 /**
- * 좁은 화면에서 전체 화면 상세 시트를 닫고 보관함 탭의 목록을 연다. 상세가 하단 탭을 덮고,
- * `목록으로`는 직전 화면(`/map`일 수 있다)으로 돌아가므로 탭도 한 번 누른다.
+ * 좁은 화면에서 상세 시트를 닫고 보관함 탭의 목록을 연다. 시트는 지도 위에서 열렸으므로
+ * 닫으면 지도로 돌아간다.
  */
 async function showLibraryTab(page: Page, detail: Locator): Promise<void> {
-  await detail.getByRole('button', { name: '목록으로' }).click();
+  await detail.getByRole('button', { name: '닫기' }).click();
   await page
     .getByRole('navigation', { name: '하단 메뉴' })
     .getByRole('link', { name: '보관함' })
@@ -119,12 +119,13 @@ test.describe('장소 추가', () => {
     }
 
     // 라벨을 새로 만들면 고른 상태가 된다.
-    await page.getByRole('textbox', { name: '새 라벨 이름' }).fill('데이트');
-    await page.getByRole('textbox', { name: '새 라벨 이름' }).press('Enter');
-    await expect(page.getByRole('button', { name: '데이트', exact: true })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
+    await page.getByRole('button', { name: '라벨 바꾸기' }).click();
+    const picker = page.getByRole('dialog', { name: '라벨 바꾸기' });
+    const search = picker.getByRole('searchbox', { name: '라벨 검색 또는 새 라벨 이름' });
+    await search.fill('데이트');
+    await search.press('Enter');
+    await expect(picker.getByRole('checkbox', { name: /^데이트/ })).toBeChecked();
+    await picker.getByRole('button', { name: '완료' }).click();
 
     await page.getByRole('button', { name: '추가', exact: true }).click();
 
@@ -132,9 +133,7 @@ test.describe('장소 추가', () => {
     await expect(page).toHaveURL(/\/place\/[^/]+$/);
     const detail = page.getByRole('region', { name: '장소 상세' });
     await expect(detail.getByRole('button', { name: '이름 수정' })).toContainText('콤포트');
-    await expect(
-      detail.getByRole('group', { name: '라벨' }).getByRole('button', { name: '데이트' }),
-    ).toHaveAttribute('aria-pressed', 'true');
+    await expect(detail.getByRole('list', { name: '붙은 라벨' })).toContainText('데이트');
 
     // 목록 행 1, 지도 마커 1(좁은 화면은 목록·지도가 다른 탭이라 탭을 옮겨 본다).
     if (isCompact(page)) {

@@ -106,21 +106,25 @@ test.describe('모바일', { tag: '@mobile' }, () => {
     await tabs.getByRole('link', { name: '보관함' }).click();
     await expect(page).toHaveURL(/\/$/);
 
-    // 카드를 누르면 전체 화면 시트로 상세가 열린다.
+    // 카드를 누르면 다 펼친 시트로 상세가 열린다(하단 탭은 그대로 보인다).
     const id = placeIdByName('칠성조선소');
     await page.getByRole('button', { name: /칠성조선소/ }).click();
     await expect(page).toHaveURL(new RegExp(`/place/${id}$`));
     const sheet = page.getByRole('region', { name: '장소 상세' });
-    await expect(sheet.getByRole('button', { name: '목록으로' })).toBeVisible();
+    await expect(sheet.getByRole('button', { name: '접기' })).toBeVisible();
+    await expect(tabs).toBeVisible();
     const box = await sheet.boundingBox();
     expect(box!.width).toBeGreaterThanOrEqual(page.viewportSize()!.width - 1);
 
     // 새 라벨을 만들어 붙인다.
-    await sheet.getByRole('textbox', { name: '새 라벨 이름' }).fill('재방문');
-    await sheet.getByRole('textbox', { name: '새 라벨 이름' }).press('Enter');
-    await expect(
-      sheet.getByRole('group', { name: '라벨' }).getByRole('button', { name: '재방문' }),
-    ).toHaveAttribute('aria-pressed', 'true');
+    await sheet.getByRole('button', { name: '라벨 바꾸기' }).click();
+    const picker = page.getByRole('dialog', { name: '라벨 바꾸기' });
+    const search = picker.getByRole('searchbox', { name: '라벨 검색 또는 새 라벨 이름' });
+    await search.fill('재방문');
+    await search.press('Enter');
+    await expect(picker.getByRole('checkbox', { name: /^재방문/ })).toBeChecked();
+    await picker.getByRole('button', { name: '완료' }).click();
+    await expect(sheet.getByRole('list', { name: '붙은 라벨' })).toContainText('재방문');
 
     // 메모를 쓰면 저장됨이 보인다.
     await memoBox(sheet).fill('두 번째 방문: 💛 팥빙수');
@@ -131,7 +135,7 @@ test.describe('모바일', { tag: '@mobile' }, () => {
     }
 
     // 뒤로 가면 카드에 메모와 새 라벨이 보인다.
-    await sheet.getByRole('button', { name: '목록으로' }).click();
+    await sheet.getByRole('button', { name: '닫기' }).click();
     await expect(page).toHaveURL(/\/$/);
     const card = page.getByRole('button', { name: /칠성조선소/ });
     await expect(card).toContainText('두 번째 방문: 💛 팥빙수');

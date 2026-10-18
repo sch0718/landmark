@@ -99,7 +99,7 @@ test.describe('다녀옴·한 줄 평: 모바일', { tag: '@mobile' }, () => {
     await review.press('Enter');
     await expect(sheet.getByRole('button', { name: '한 줄 평 수정' })).toContainText('일출 최고');
 
-    await sheet.getByRole('button', { name: '목록으로' }).click();
+    await sheet.getByRole('button', { name: '닫기' }).click();
     await expect(page).toHaveURL(/\/$/);
     const card = page.getByRole('button', { name: /경포대/ });
     await expect(card).toContainText(`다녀옴 ${todaySeoul().replaceAll('-', '.')}`);
