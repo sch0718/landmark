@@ -33,6 +33,8 @@ type Props = {
   /** 클러스터 마커의 색. 없으면 어댑터 기본색. */
   clusterStyle?: ClusterStyle;
   onMarkerClick(id: string): void;
+  /** 마커가 아닌 지도 바탕을 눌렀을 때. */
+  onMapClick?(): void;
   onBoundsChange?(b: Bounds): void;
   /** 카메라가 바뀔 때마다(영역 변경 알림과 같은 때) 지도 중심 좌표(경도, 위도)를 알린다. */
   onCenterChange?(center: [number, number]): void;
@@ -130,6 +132,7 @@ export function MapView(props: Props) {
       }
     }
     adapter.onMarkerClick((id) => latest.current.onMarkerClick(id));
+    adapter.onMapClick(() => latest.current.onMapClick?.());
     adapter.onBoundsChange((b) => {
       latest.current.onBoundsChange?.(b);
       const camera = adapter.getCamera();

@@ -7,6 +7,7 @@ import DialogContentText from '@mui/material/DialogContentText';
 import DialogTitle from '@mui/material/DialogTitle';
 import { useState } from 'react';
 import { LabelGlyph } from 'src/components/icons';
+import { TruncatedText } from 'src/components/TruncatedText';
 import type { Label } from 'src/schema/library';
 import { labelColors } from 'src/sections/library/label-style';
 
@@ -68,18 +69,7 @@ export function MergeDialog({ from, targets, counts, onCancel, onConfirm }: Prop
                 <Box component="span" sx={{ display: 'inline-flex', color: tone.marker }}>
                   <LabelGlyph name={label.icon.value} size={18} />
                 </Box>
-                <Box
-                  component="span"
-                  sx={{
-                    flex: 1,
-                    minWidth: 0,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {label.name.value}
-                </Box>
+                <TruncatedText sx={{ flex: 1, minWidth: 0 }}>{label.name.value}</TruncatedText>
               </Box>
             );
           })}

@@ -66,7 +66,7 @@ describe('AppShell layout', () => {
     const mapSlot = within(map).getByTestId('map-host');
     const detail = screen.getByRole('region', { name: '장소 상세' });
     const detailSlot = within(detail).getByText('장소를 찾을 수 없어요');
-    expect(screen.queryByRole('button', { name: '닫기' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '닫기' })).toBeInTheDocument();
 
     viewport.setWidth(1279);
     expect(screen.getByRole('region', { name: '지도' })).toBe(map);

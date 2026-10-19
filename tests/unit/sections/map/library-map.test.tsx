@@ -6,6 +6,7 @@ import { setAppRuntimeForTest } from 'src/lib/effect/runtime';
 import { emptyLibrary, type Library, type Place } from 'src/schema/library';
 import type { Prefs } from 'src/schema/prefs';
 import { Geolocation } from 'src/services/geolocation';
+import { addFlowAtom } from 'src/stores/add-place';
 import { libraryAtom } from 'src/stores/library-state';
 import { focusPlaceAtom } from 'src/stores/library-ui';
 import { TOKENS } from 'src/theme/tokens';
@@ -96,7 +97,11 @@ describe('library map with a detail overlay', () => {
 
     setWidth(1100);
 
-    await waitFor(() => expect(screen.getByRole('button', { name: '닫기' })).toBeInTheDocument());
+    await waitFor(() =>
+      expect(getComputedStyle(screen.getByRole('region', { name: '장소 상세' })).position).toBe(
+        'absolute',
+      ),
+    );
     await waitFor(() => expectUncovered(128.95));
     expect(fakeAdapter()).toBe(adapter);
   });
@@ -125,7 +130,9 @@ describe('library map with a detail overlay', () => {
     setWidth(1280);
 
     await waitFor(() =>
-      expect(screen.queryByRole('button', { name: '닫기' })).not.toBeInTheDocument(),
+      expect(getComputedStyle(screen.getByRole('region', { name: '장소 상세' })).position).not.toBe(
+        'absolute',
+      ),
     );
     expect(fakeAdapter().getCamera()).toEqual(panned);
   });
@@ -301,20 +308,136 @@ describe('library map', () => {
     expect(fakeMap()).toBeInTheDocument();
   });
 
-  it('re-focuses the open place when the filter changes', async () => {
+  it('고른 마커를 다시 누르면 선택이 풀린다', async () => {
     const user = userEvent.setup();
     const { router } = await renderLibrary(sampleLibrary(), { prefs: { libraryView: 'list' } });
     await ready();
+    await user.click(marker(2)!);
+    expect(router.state.location.pathname).toBe(`/place/${id(2)}`);
+    await waitFor(() => expect(marker(2)).toHaveAttribute('aria-pressed', 'true'));
+
+    await user.click(marker(2)!);
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/'));
+    await waitFor(() => expect(marker(2)).not.toHaveAttribute('aria-pressed'));
+  });
+
+  it('지도 빈 곳을 누르면 선택이 풀리고 카메라는 그대로다', async () => {
+    const { router } = await renderLibrary(sampleLibrary(), { prefs: { libraryView: 'list' } });
+    await ready();
+    await router.navigate(`/place/${id(2)}`);
+    await waitFor(() => expectFocusedOn([128.95, 37.77]));
+    const camera = fakeAdapter().getCamera();
+
+    fireEvent.click(fakeMap());
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/'));
+    expect(fakeAdapter().getCamera()).toEqual(camera);
+  });
+
+  it('장소가 안 열렸을 때 빈 곳을 눌러도 아무 일 없다', async () => {
+    const { router } = await renderLibrary(sampleLibrary(), { path: '/map' });
+    await ready();
+    fireEvent.click(fakeMap());
+    expect(router.state.location.pathname).toBe('/map');
+  });
+
+  it('추가 칸이 열려 있으면 고른 마커를 다시 눌러도 선택이 풀리지 않는다', async () => {
+    const user = userEvent.setup();
+    const { router, store } = await renderLibrary(sampleLibrary(), {
+      prefs: { libraryView: 'list' },
+    });
+    await ready();
     await router.navigate(`/place/${id(2)}`);
     await waitFor(() => expect(marker(2)).toHaveAttribute('aria-pressed', 'true'));
-    const before = fakeAdapter().fitCalls.length;
-    fakeAdapter().setCamera({ center: [127, 36], zoom: 9 });
+    act(() => store.set(addFlowAtom, { step: 'link', hint: 'place' }));
+
+    await user.click(marker(2)!);
+
+    expect(router.state.location.pathname).toBe(`/place/${id(2)}`);
+    expect(marker(2)).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('추가 칸이 열려 있으면 빈 곳을 눌러도 선택이 풀리지 않는다', async () => {
+    const { router, store } = await renderLibrary(sampleLibrary(), {
+      prefs: { libraryView: 'list' },
+    });
+    await ready();
+    await router.navigate(`/place/${id(2)}`);
+    await waitFor(() => expect(marker(2)).toHaveAttribute('aria-pressed', 'true'));
+    act(() => store.set(addFlowAtom, { step: 'link', hint: 'place' }));
+
+    fireEvent.click(fakeMap());
+
+    expect(router.state.location.pathname).toBe(`/place/${id(2)}`);
+  });
+
+  it('핀 모드에서는 빈 곳을 눌러도 선택이 풀리지 않는다', async () => {
+    const { router, store } = await renderLibrary(sampleLibrary(), {
+      prefs: { libraryView: 'list' },
+    });
+    await ready();
+    await router.navigate(`/place/${id(2)}`);
+    await waitFor(() => expect(marker(2)).toHaveAttribute('aria-pressed', 'true'));
+    act(() => store.set(addFlowAtom, { step: 'pin', name: '', start: null }));
+
+    fireEvent.click(fakeMap());
+
+    expect(router.state.location.pathname).toBe(`/place/${id(2)}`);
+  });
+
+  it('거르기로 열린 장소가 결과에서 빠지면 선택을 풀고, 결과 전체에 맞춘다', async () => {
+    const user = userEvent.setup();
+    // 샘플 장소는 좌표가 모두 같다. 속초 횟집만 속초로 옮겨 맞추기 점을 가른다.
+    const base = sampleLibrary();
+    const library: Library = {
+      ...base,
+      places: { ...base.places, [id(3)]: { ...base.places[id(3)]!, lng: 128.59, lat: 38.2 } },
+    };
+    const { router } = await renderLibrary(library, { prefs: { libraryView: 'list' } });
+    await ready();
+    await router.navigate(`/place/${id(3)}`); // 속초 횟집(맛집·바다뷰)
+    await waitFor(() => expect(marker(3)).toHaveAttribute('aria-pressed', 'true'));
+    const fits = fakeAdapter().fitCalls.length;
+
+    // 열린 상세의 라벨 고르개도 같은 이름의 묶음이라, 목록 위 필터 칩(첫 번째)을 집는다.
+    await user.click(
+      within(screen.getAllByRole('group', { name: '라벨' })[0]!).getByRole('button', {
+        name: /^카페/,
+      }),
+    );
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/'));
+    await waitFor(() => expect(fakeAdapter().fitCalls.length).toBeGreaterThan(fits));
+    // 강제로 보이던 열린 장소(`fit: false`)는 맞추기 점에 들지 않는다. 점이 하나면 그 근처 상자로 넓혀 맞춘다.
+    const fitted = fakeAdapter().fitCalls.at(-1)!;
+    expect(fitted.length).toBeGreaterThan(0);
+    for (const [lng, lat] of fitted) {
+      expect(lng).toBeCloseTo(128.95, 1);
+      expect(lat).toBeCloseTo(37.77, 1);
+    }
+    expect(shownMarkers()).toEqual([id(2)]);
+    // 거르기 한 번에 기록이 둘 쌓이지 않는다(교체).
+    expect(router.state.historyAction).toBe('REPLACE');
+  });
+
+  it('열린 장소가 결과 안에 남으면 선택은 그대로이고 그 장소로 확대하지 않는다', async () => {
+    const user = userEvent.setup();
+    const { router } = await renderLibrary(sampleLibrary(), { prefs: { libraryView: 'list' } });
+    await ready();
+    await router.navigate(`/place/${id(3)}`);
+    await waitFor(() => expect(fakeAdapter().getCamera()?.zoom).toBe(16));
+    const panned = { center: [127, 36] as [number, number], zoom: 9 };
+    fakeAdapter().setCamera(panned);
+    const fits = fakeAdapter().fitCalls.length;
 
     await user.type(screen.getByRole('searchbox', { name: '장소 검색' }), '횟집');
 
-    // 새 필터로 맞춘 뒤 열린 장소로 다시 모은다.
-    await waitFor(() => expect(fakeAdapter().fitCalls.length).toBeGreaterThan(before));
-    await waitFor(() => expectFocusedOn([128.95, 37.77]));
+    await waitFor(() => expect(fakeAdapter().fitCalls.length).toBeGreaterThan(fits));
+    expect(router.state.location.pathname).toBe(`/place/${id(3)}`);
+    expect(marker(3)).toHaveAttribute('aria-pressed', 'true');
+    // 가짜 fitBounds는 카메라를 옮기지 않는다: 열린 장소로 다시 모으지 않았다.
+    expect(fakeAdapter().getCamera()).toEqual(panned);
   });
 
   it('opening the same place twice moves the map each time', async () => {
@@ -851,6 +974,65 @@ describe('library map 근처 모드의 지도 맞추기', () => {
 
     await waitFor(() => expect(toastMock.error).toHaveBeenCalledWith(DENIED));
     expect(status().textContent).toBe('');
+  });
+});
+
+describe('library map 근처 모드의 선택 풀기 (스펙 A1 §4)', () => {
+  freezeClockAfterFix();
+
+  const search = () => screen.getByRole('searchbox', { name: '장소 검색' });
+  const radius = (name: string) =>
+    within(screen.getByRole('group', { name: '반경' })).getByRole('button', { name });
+  async function nearbyOn() {
+    const user = userEvent.setup();
+    const rendered = await renderWithLocation(nearbyLibrary(), { prefs: { libraryView: 'list' } });
+    await ready();
+    await pickNearby(user);
+    await waitFor(() => expect(rendered.fake.requests).toHaveLength(1));
+    await answer(rendered.fake);
+    await waitFor(() => expect(shownMarkers().sort()).toEqual([id(1), id(2)]));
+    return { user, ...rendered };
+  }
+
+  it('반경 안 장소를 연 채 검색어가 그 장소를 남기면 그대로, 빼면 선택을 푼다', async () => {
+    const { user, router } = await nearbyOn();
+    await router.navigate(`/place/${id(1)}`); // 가 식당(0.5km)
+    await waitFor(() => expect(marker(1)).toHaveAttribute('aria-pressed', 'true'));
+
+    await user.type(search(), '식당');
+    await waitFor(() => expect(shownMarkers()).toEqual([id(1)]));
+    expect(router.state.location.pathname).toBe(`/place/${id(1)}`);
+
+    await user.clear(search());
+    await user.type(search(), '카페');
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/'));
+    expect(router.state.historyAction).toBe('REPLACE');
+  });
+
+  it('반경 밖 장소를 연 채 검색어를 바꾸면, 검색어에 맞아도 결과(반경 안)에 없어 선택을 푼다', async () => {
+    const { user, router } = await nearbyOn();
+    await router.navigate(`/place/${id(3)}`); // 나 식당(4km, 반경 3km 밖)
+    await waitFor(() => expect(marker(3)).toHaveAttribute('aria-pressed', 'true'));
+
+    await user.type(search(), '식당');
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/'));
+  });
+
+  it('반경 밖 장소를 연 채 반경을 바꿔도(근처 쪽 변화) 선택을 풀지 않는다', async () => {
+    const { user, router } = await nearbyOn();
+    await router.navigate(`/place/${id(4)}`); // 다 카페(20km)
+    await waitFor(() => expect(marker(4)).toHaveAttribute('aria-pressed', 'true'));
+    const fits = fakeAdapter().fitCalls.length;
+
+    await user.click(radius('10km'));
+    await waitFor(() => expect(fakeAdapter().fitCalls.length).toBeGreaterThan(fits));
+    await user.click(radius('1km'));
+    await waitFor(() => expect(shownMarkers().sort()).toEqual([id(1), id(4)]));
+
+    expect(router.state.location.pathname).toBe(`/place/${id(4)}`);
+    expect(marker(4)).toHaveAttribute('aria-pressed', 'true');
   });
 });
 

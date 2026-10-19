@@ -8,6 +8,7 @@ import { useSetAtom } from 'jotai';
 import { useId, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { CheckIcon, ChevronLeftIcon, EllipsisIcon } from 'src/components/icons';
+import { TruncatedText } from 'src/components/TruncatedText';
 import { tripDates } from 'src/domain/trips/query';
 import { paths } from 'src/routes/paths';
 import type { Trip } from 'src/schema/trip';
@@ -73,17 +74,9 @@ export function TodayHeader({ trip, model, onPickDay, extraMenu, badge }: Props)
         <Box component="h1" sx={{ m: 0, fontSize: 18, fontWeight: 800, lineHeight: 1.3 }}>
           오늘 일정
         </Box>
-        <Box
-          sx={{
-            fontSize: 13,
-            color: 'var(--tm-text-secondary)',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-          }}
-        >
+        <TruncatedText component="div" sx={{ fontSize: 13, color: 'var(--tm-text-secondary)' }}>
           {`${trip.title.value} · ${dayLabel(trip, model.dayIndex)}`}
-        </Box>
+        </TruncatedText>
         {badge}
       </Box>
       <IconButton

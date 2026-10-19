@@ -18,6 +18,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import Box from '@mui/material/Box';
+import { TruncatedText } from 'src/components/TruncatedText';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { toast } from 'sonner';
@@ -158,19 +159,7 @@ function LabelRow({ label, count, linked, onOpen, openerRef }: RowProps) {
         >
           <LabelGlyph name={label.icon.value} />
         </Box>
-        <Box
-          component="span"
-          sx={{
-            flex: 1,
-            minWidth: 0,
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-            fontWeight: 700,
-          }}
-        >
-          {name}
-        </Box>
+        <TruncatedText sx={{ flex: 1, minWidth: 0, fontWeight: 700 }}>{name}</TruncatedText>
         <Box
           component="span"
           sx={{ flex: 'none', fontSize: 13, color: 'var(--tm-text-secondary)' }}

@@ -2,8 +2,8 @@ import Box from '@mui/material/Box';
 import IconButton from '@mui/material/IconButton';
 import type { SxProps, Theme } from '@mui/material/styles';
 import { visuallyHidden } from '@mui/utils';
-import { useAtomValue, useSetAtom } from 'jotai';
-import type { ReactNode } from 'react';
+import { useAtom, useAtomValue, useSetAtom } from 'jotai';
+import { useLayoutEffect, type ReactNode } from 'react';
 import { matchPath, Outlet, useLocation, useNavigate } from 'react-router';
 import { XIcon } from 'src/components/icons';
 import { useDocumentTitle } from 'src/lib/use-document-title';
@@ -19,9 +19,14 @@ import { DETAIL_WIDTH, LIST_WIDTH } from 'src/sections/shell/pane-widths';
 import { PlaceSheet } from 'src/sections/shell/PlaceSheet';
 import { DetailSlot, ListSlot, MapSlot } from 'src/sections/shell/ShellSlots';
 import type { SheetSnap } from 'src/sections/shell/sheet-snap';
-import { sheetLocationState, sheetStateOf, useCloseSheet } from 'src/sections/shell/sheet-state';
+import { sheetLocationState, sheetStateOf } from 'src/sections/shell/sheet-state';
 import { MAIN_ID, SkipLink } from 'src/sections/shell/SkipLink';
 import { StorageBanner } from 'src/sections/shell/StorageBanner';
+import {
+  useCloseDetail,
+  useEscapeClose,
+  useFocusReturnOnClose,
+} from 'src/sections/shell/use-close-detail';
 import { useLayout } from 'src/sections/shell/use-layout';
 import {
   addFlowAtom,
@@ -31,6 +36,7 @@ import {
   showsAddPanel,
 } from 'src/stores/add-place';
 import { libraryAtom } from 'src/stores/library-state';
+import { detailOriginAtom } from 'src/stores/library-ui';
 
 /** 슬롯 하나. 랜드마크(`aria-label`)와 스크롤을 맡는다. */
 function Pane({
@@ -61,7 +67,7 @@ type DetailMode = 'column' | 'overlay';
 /**
  * 넓은·중간 화면의 상세 슬롯. 폭에 따라 모양만 바뀌고 트리 위치는 그대로라서(`column` ↔ `overlay`) 창 폭이
  * 1280px을 오가도 안쪽 상세가 다시 만들어지지 않는다. 휴대폰은 `PlaceSheet`를 쓴다.
- * - `column`: 넓은 화면의 오른쪽 칸(항상 있고, 고른 장소가 없으면 안내만 보인다).
+ * - `column`: 넓은 화면의 오른쪽 칸(항상 있고, 고른 장소가 없으면 안내만 보인다. 열려 있으면 닫기가 있다).
  * - `overlay`: 중간 폭에서 지도 오른쪽을 덮는 360px 패널.
  */
 function DetailPane({
@@ -74,6 +80,7 @@ function DetailPane({
   onClose: () => void;
 }) {
   const overlay = mode === 'overlay';
+  const closable = overlay || placeId !== null;
   return (
     <Box
       component="section"
@@ -103,7 +110,7 @@ function DetailPane({
             }),
       }}
     >
-      {overlay && (
+      {closable && (
         <Box sx={{ flex: 'none', display: 'flex', p: 0.5 }}>
           <IconButton onClick={onClose} aria-label="닫기">
             <XIcon aria-hidden="true" />
@@ -184,23 +191,20 @@ export function AppShell() {
   // 중간 폭에서는 핀 모드가 상세 오버레이를 내린다(아래 `body`의 분기와 같다).
   const detailShown = layout === 'compact' || (!adding && (layout === 'wide' || !pinning));
 
-  // 휴대폰 상세 시트의 뒤 화면·단계(스펙 §4.4). 기록 상태가 유일한 출처다(새로고침에도 남는다).
+  const [, setOrigin] = useAtom(detailOriginAtom);
+  const viewOrigin = isMap ? 'map' : 'list';
+  useLayoutEffect(() => {
+    if (placeId === null && isLibraryView) setOrigin(viewOrigin);
+  }, [placeId, isLibraryView, viewOrigin, setOrigin]);
   const sheet = placeId === null ? null : sheetStateOf(location.state);
   const sheetOnMap = sheet?.from === 'map';
-  // 좁은 화면은 지도 탭에서만 추가 흐름의 지도를 쓴다(장소 시트 뒤의 지도는 시트가 다 펼치면 가려진다).
   useAddFlowRoute(layout === 'compact' ? isMap : isLibraryView);
   // `/import`로 들어오면 주소를 `/`로 바꾸고 공유 파일 가져오기 흐름을 연다.
   useImportEntry();
 
-  const closeSheet = useCloseSheet();
-  const closeDetail = () => {
-    // 휴대폰은 시트를 연 기록을 되감는다(`useCloseSheet`, 하단 탭과 같은 규칙).
-    if (layout === 'compact') {
-      closeSheet();
-      return;
-    }
-    void navigate(paths.library);
-  };
+  const closeDetail = useCloseDetail();
+  useEscapeClose(isLibraryView && placeId !== null && !adding && !pinning, () => closeDetail());
+  useFocusReturnOnClose(placeId);
 
   // 펼치기·접기: 지금 기록 항목의 상태만 바꾼다(새 항목 없음).
   const changeSnap = (snap: SheetSnap) => {
@@ -242,7 +246,7 @@ export function AppShell() {
             <DetailPane
               mode={wide ? 'column' : 'overlay'}
               placeId={placeId}
-              onClose={closeDetail}
+              onClose={() => closeDetail()}
             />
           )
         )}
@@ -272,7 +276,7 @@ export function AppShell() {
           </Pane>
         )}
         {sheet !== null && (
-          <PlaceSheet snap={sheet.snap} onSnapChange={changeSnap} onClose={closeDetail}>
+          <PlaceSheet snap={sheet.snap} onSnapChange={changeSnap} onClose={() => closeDetail()}>
             <DetailSlot placeId={placeId} />
           </PlaceSheet>
         )}

@@ -1,7 +1,7 @@
 import Box from '@mui/material/Box';
 import { visuallyHidden } from '@mui/utils';
 import { useAtomValue, useSetAtom, useStore } from 'jotai';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import type { MapPadding } from 'src/components/map/MapAdapter';
 import { MapView } from 'src/components/map/MapView';
@@ -25,6 +25,7 @@ import { NearbyMapChip } from 'src/sections/nearby/NearbyMapChip';
 import { useNearby } from 'src/sections/nearby/use-nearby';
 import { DETAIL_WIDTH } from 'src/sections/shell/pane-widths';
 import { useSheetHalfPx } from 'src/sections/shell/sheet-snap';
+import { useCloseDetail } from 'src/sections/shell/use-close-detail';
 import { useLayout } from 'src/sections/shell/use-layout';
 import { addFlowAtom, showsAddPanel } from 'src/stores/add-place';
 import { libraryAtom } from 'src/stores/library-state';
@@ -47,7 +48,9 @@ const LOCATED_MESSAGE = '내 위치를 지도에 표시했어요';
 
 /**
  * 보관함 지도(스펙 §4.5). 목록과 같은 필터(`useLibraryQuery`)로 거른 장소를 라벨 색 마커로 보여 준다.
- * - 마커를 누르면 그 장소의 상세로 가고, 목록은 그 행으로 스크롤한다(`focusPlaceAtom`).
+ * - 마커를 누르면 그 장소의 상세로 가고, 목록은 그 행으로 스크롤한다(`focusPlaceAtom`). 고른 마커를 다시
+ *   누르거나 지도 빈 곳을 누르면 선택을 푼다.
+ * - 거르기가 바뀌면 지도를 결과 전체에 맞추고, 열린 장소가 결과 밖이면 선택을 푼다(스펙 A1 §4).
  * - 목록·상세에서 장소를 고르면(경로의 `/place/:id`) 지도가 그 장소로 움직인다. 방금 지도에서 누른 장소는
  *   상세 오버레이가 새로 생기는 경우에만 옮긴다.
  * - 좁은 화면(`/map`)에서는 위에 근처·방문·라벨 필터 칩 한 줄을 둔다.
@@ -63,6 +66,7 @@ export function LibraryMap() {
   const tokens = useThemeTokens();
   const layout = useLayout();
   const openPlace = useOpenPlace();
+  const closeDetail = useCloseDetail();
   const requestListScroll = useSetAtom(focusPlaceAtom);
   const placeId = useOpenPlaceId();
   const flow = useAtomValue(addFlowAtom);
@@ -104,7 +108,8 @@ export function LibraryMap() {
       return shown;
     }
     const [hidden] = toMarkers([open], library.labels, tokens, placeId);
-    return [...shown, hidden!];
+    // 맞추기에서는 뺀다: 지도는 거르기 결과에 맞춘다(스펙 A1 §4). 마커는 보인다.
+    return [...shown, { ...hidden!, fit: false as const }];
   }, [places, library.places, library.labels, tokens, placeId]);
 
   // 임시 마커: 선택된 장소처럼 강조색 테두리로 그리고 클러스터에 넣지 않는다.
@@ -165,17 +170,16 @@ export function LibraryMap() {
     if (nearby.radiusM !== null) return radiusBox(origin, nearby.radiusM);
     return [...places.map((p): [number, number] => [p.lng, p.lat]), origin];
   }, [activeFix, nearby.radiusM, places]);
-  // 필터(근처 말고 `query`)가 바뀌면 열어 둔 장소가 새 범위에서 벗어나 안 보이지 않도록, 맞춘 뒤에 그 장소로
-  // 다시 모은다. 근처 쪽 변화(켜기·반경·새 위치·`내 위치 보기`)는 반경 맞추기가 이겨야 하므로 모으지 않는다.
+  // 거르기(`query`)가 바뀌면 지도는 `fitKey`로 결과 전체에 맞춘다(스펙 A1 §4). 열린 장소가 새 결과에서 빠지면
+  // 선택을 푼다(기록은 교체). 결과 안이면 선택·강조는 그대로 두고 그 장소로 확대하지 않는다. 근처 쪽 변화
+  // (켜기·반경·새 위치)는 `query`가 아니라 풀지 않는다(기존 규칙: 열린 장소는 반경 밖이어도 보인다).
   const queryKey = JSON.stringify(query);
-  const [seenQueryKey, setSeenQueryKey] = useState(queryKey);
-  if (seenQueryKey !== queryKey) {
-    setSeenQueryKey(queryKey);
-    const open = placeId === null ? undefined : library.places[placeId];
-    if (open !== undefined && open.deletedAt === null) {
-      setFocus({ point: [open.lng, open.lat], seq: (focus?.seq ?? 0) + 1 });
-    }
-  }
+  const seenQueryKey = useRef(queryKey);
+  useEffect(() => {
+    if (seenQueryKey.current === queryKey) return;
+    seenQueryKey.current = queryKey;
+    if (placeId !== null && !places.some((p) => p.id === placeId)) closeDetail({ replace: true });
+  }, [queryKey, placeId, places, closeDetail]);
 
   // 상세 덮개(중간 폭 오버레이·휴대폰 시트)가 새로 지도를 덮으면(넓은 화면에서 줄이거나 마커를 눌러 열 때) 열어 둔
   // 장소를 가려지지 않는 쪽으로 다시 모은다. 임시 마커가 있으면(핀 모드에서 입력 카드로 넘어갈 때) 그 위치를 모은다.
@@ -231,16 +235,29 @@ export function LibraryMap() {
     setAnnouncement(LOCATED_MESSAGE);
   }, [locate, store]);
 
+  // 추가 칸이 열려 있는 동안은 마커 다시 누르기·빈 곳 누르기로 선택을 풀지 않는다(스펙 A1 §3.2).
+  const adding = showsAddPanel(flow);
   const onMarkerClick = useCallback(
     (id: string) => {
       if (id === CANDIDATE_MARKER_ID) return; // 아직 보관함에 없는 후보다.
       if (pinning) return; // 핀 모드에서는 위치만 고른다.
+      // 고른 마커를 다시 누르면 선택을 푼다(스펙 A1 §3.2). 추가 칸이 열려 있으면 그대로 둔다.
+      if (id === placeId) {
+        if (!adding) closeDetail();
+        return;
+      }
       setFromMarker(id);
       requestListScroll((prev) => ({ id, seq: (prev?.seq ?? 0) + 1 }));
       openPlace(id, 'map');
     },
-    [openPlace, requestListScroll, pinning],
+    [openPlace, requestListScroll, pinning, adding, placeId, closeDetail],
   );
+
+  // 지도 빈 곳을 누르면 선택을 푼다. 핀 모드(조준점 조작)와 추가 칸이 열려 있을 때는 그쪽 몫이다.
+  const onMapClick = useCallback(() => {
+    if (pinning || adding || placeId === null) return;
+    closeDetail();
+  }, [pinning, adding, placeId, closeDetail]);
 
   const labels = useMemo(() => liveLabels(library), [library]);
   const counts = useMemo(() => labelCounts(library, query), [library, query]);
@@ -268,6 +285,7 @@ export function LibraryMap() {
             onChange={patch}
             labels={labels}
             counts={counts}
+            background="var(--tm-bg-surface)"
             leading={
               nearby.active || showVisit ? (
                 <>
@@ -292,6 +310,7 @@ export function LibraryMap() {
           clusterStyle={clusterStyle}
           padding={padding}
           onMarkerClick={onMarkerClick}
+          onMapClick={onMapClick}
           focus={focus}
           fitKey={fitKey}
           onUnavailable={setUnavailable}

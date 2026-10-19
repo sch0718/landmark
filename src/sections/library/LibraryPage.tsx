@@ -34,6 +34,7 @@ import { BulkBar } from 'src/sections/library/BulkBar';
 import { EmptyState } from 'src/sections/library/EmptyState';
 import { FilterBar } from 'src/sections/library/FilterBar';
 import { useLibraryQuery } from 'src/sections/library/use-library-query';
+import { useListScrollRestore } from 'src/sections/library/use-list-scroll-restore';
 import { useOpenPlaceId } from 'src/sections/library/use-open-place-id';
 import { BentoView } from 'src/sections/library/views/BentoView';
 import { CardsView } from 'src/sections/library/views/CardsView';
@@ -48,6 +49,8 @@ import { NearbyBar, type NearbyBarHandle } from 'src/sections/nearby/NearbyBar';
 import { useNearby, useStartNearby } from 'src/sections/nearby/use-nearby';
 import { ExportHtmlDialogHost } from 'src/sections/share-export/ExportHtmlDialogHost';
 import { exportTargets } from 'src/sections/share-export/export-targets';
+import { useCloseDetail } from 'src/sections/shell/use-close-detail';
+import { useLayout } from 'src/sections/shell/use-layout';
 import { libraryAtom, useLibraryAction } from 'src/stores/library-state';
 import { focusPlaceAtom } from 'src/stores/library-ui';
 import { nearbyAtom, nearbyOffAtom } from 'src/stores/my-location';
@@ -111,6 +114,8 @@ export function LibraryPage() {
   const openId = useOpenPlaceId();
   const requestListScroll = useSetAtom(focusPlaceAtom);
   const [scrollElement, setScrollElement] = useState<HTMLElement | null>(null);
+  // 장소를 닫으면 목록을 열기 전 자리로 되돌린다.
+  useListScrollRestore(scrollElement, openId, JSON.stringify(query));
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [exporting, setExporting] = useState(false);
   // `여행에 넣기`의 여행 고르기 창, 그리고 새 여행 대화상자(제목·처음 후보).
@@ -128,6 +133,17 @@ export function LibraryPage() {
   // 근처 모드이고 위치가 있으면 반경 안만 가까운 순. 선택·내보내기도 이 목록 기준이다.
   const nearby = useNearby(sorted);
   const places = nearby.places;
+  const compact = useLayout() === 'compact';
+  const closeDetail = useCloseDetail();
+  const queryKey = JSON.stringify(query);
+  const seenQueryKey = useRef(queryKey);
+  useEffect(() => {
+    if (seenQueryKey.current === queryKey) return;
+    seenQueryKey.current = queryKey;
+    if (compact && openId !== null && !places.some((place) => place.id === openId)) {
+      closeDetail({ replace: true });
+    }
+  }, [queryKey, compact, openId, places, closeDetail]);
   const showVisit = useMemo(
     () => hasVisited(library) || query.visited !== 'all',
     [library, query.visited],

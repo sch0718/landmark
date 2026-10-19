@@ -9,6 +9,7 @@ import {
   L_CAFE,
   L_FOOD,
   L_SEA,
+  makeLabel,
   makePlace,
   renderLibrary,
   sampleLibrary,
@@ -173,5 +174,43 @@ describe('place row distance', () => {
     expect(card).toHaveTextContent('2.4km');
     expect(card).not.toHaveTextContent('강릉시');
     expect(card).toHaveAccessibleName(expect.stringContaining('내 위치에서 2.4km'));
+  });
+});
+
+describe('PlaceRow 긴 이름', () => {
+  it('이름이 잘렸으면 마우스를 올릴 때 전체 이름 툴팁이 뜬다', async () => {
+    const user = userEvent.setup();
+    const name = '신세계 정용진이 모은 맛집-강원 강릉 초당 순두부 본점';
+    render(
+      <PlaceRow
+        place={makePlace(1, { name })}
+        region="강릉"
+        labels={[makeLabel('label001', '저장 많은 TV 맛집 강원 100선', 'red', 'utensils', 0)]}
+        selecting={false}
+        selected={false}
+        onOpen={() => {}}
+        onToggle={() => {}}
+      />,
+    );
+    const text = screen.getByText(name);
+    Object.defineProperty(text, 'clientWidth', { configurable: true, value: 100 });
+    Object.defineProperty(text, 'scrollWidth', { configurable: true, value: 300 });
+    await user.hover(text);
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(name);
+  });
+
+  it('행에 장소 id 표시가 있다(닫은 뒤 포커스 복귀용)', () => {
+    render(
+      <PlaceRow
+        place={makePlace(1, { name: '가' })}
+        region="강릉"
+        labels={[]}
+        selecting={false}
+        selected={false}
+        onOpen={() => {}}
+        onToggle={() => {}}
+      />,
+    );
+    expect(screen.getByRole('button')).toHaveAttribute('data-place-id', 'place00001');
   });
 });

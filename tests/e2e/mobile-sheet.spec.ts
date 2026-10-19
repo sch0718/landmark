@@ -14,6 +14,47 @@ const visibleSheetHeight = async (page: Page): Promise<number> => {
 };
 
 test.describe('휴대폰 상세 시트', { tag: '@mobile' }, () => {
+  test('같은 마커·지도 바탕·시트 밖 Esc로 선택을 풀고, 직접 연 시트도 접은 뒤 앱 안에서 닫힌다', async ({
+    page,
+  }) => {
+    await seedStorage(page);
+    await page.goto('/map');
+    const first = marker(page, '칠성조선소');
+    const other = marker(page, '영금정');
+    const open = async () => {
+      await first.dispatchEvent('click');
+      await expect(sheetOf(page)).toBeVisible();
+      await expect(first).toHaveAttribute('aria-pressed', 'true');
+    };
+    const closed = async () => {
+      await expect(page).toHaveURL(/\/map$/);
+      await expect(sheetOf(page)).toHaveCount(0);
+      await expect(first).not.toHaveAttribute('aria-pressed', 'true');
+    };
+
+    await open();
+    await first.dispatchEvent('click');
+    await closed();
+
+    await open();
+    await page.getByTestId('fake-map').dispatchEvent('click');
+    await closed();
+
+    await open();
+    await other.dispatchEvent('click');
+    await expect(sheetOf(page).getByRole('button', { name: '이름 수정' })).toContainText('영금정');
+    await other.focus();
+    await page.keyboard.press('Escape');
+    await closed();
+
+    await page.goto('/settings');
+    await page.goto(`/place/${placeIdByName('칠성조선소')}`);
+    await sheetOf(page).getByRole('button', { name: '펼치기' }).click();
+    await sheetOf(page).getByRole('button', { name: '접기' }).click();
+    await sheetOf(page).getByRole('button', { name: '닫기', exact: true }).click();
+    await closed();
+  });
+
   test('@smoke 지도에서 반쯤 열고, 다른 마커로 바꾸고, 펼치고 접고, 뒤로 한 번에 지도로', async ({
     page,
   }) => {
