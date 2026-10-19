@@ -177,6 +177,16 @@ describe('TruncatedText 터치', () => {
     expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
   });
 
+  it('길게 눌러 연 뒤 터치가 취소되면(브라우저가 스크롤로 넘겨받음) 바로 닫힌다', () => {
+    vi.useFakeTimers();
+    const text = renderTouch();
+    fireEvent.touchStart(text);
+    act(() => vi.advanceTimersByTime(TOOLTIP_TOUCH_DELAY_MS));
+    expect(screen.getByRole('tooltip')).toBeInTheDocument();
+    fireEvent.touchCancel(text);
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+  });
+
   it('touch={false}면 길게 눌러도 열지 않는다', () => {
     vi.useFakeTimers();
     const text = renderTouch(false);

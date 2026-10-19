@@ -225,7 +225,9 @@ export function TruncatedText({
           timer.current = setTimeout(openIfTruncated, TOOLTIP_TOUCH_DELAY_MS);
         }}
         onTouchMove={touch ? clearTimer : undefined}
-        onTouchCancel={touch ? clearTimer : undefined}
+        // 브라우저가 스크롤로 터치를 넘겨받으면 `touchend` 없이 `touchcancel`만 와 닫기 타이머가 걸리지 않는다.
+        // 스크롤에 글자가 안 움직이는 고정 헤더면 스크롤 닫기도 안 걸리니, 열린 툴팁도 여기서 닫는다.
+        onTouchCancel={touch ? close : undefined}
         onTouchEnd={() => {
           touchedAt.current = Date.now();
           if (!touch) return;
