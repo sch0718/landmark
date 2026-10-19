@@ -171,8 +171,10 @@ export function TruncatedText({
     anchorAt.current = { top: anchor.top, left: anchor.left };
   }, [open, children]);
 
-  // 열려 있는 동안: Esc는 툴팁만 닫는다(WCAG 1.4.13). 문서 capture 단계에서 먼저 받아 `preventDefault`로 처리했다고
-  // 표시하므로, 문서 bubble 단계의 상세 닫기 Esc(`useEscapeClose`)는 이 Esc를 무시한다. 고정 위치가 글자와 어긋나지
+  // 열려 있는 동안: Esc는 툴팁만 닫는다(WCAG 1.4.13). 이벤트 경로에서 가장 먼저 받는 문서 capture 단계에서 받아
+  // 전파를 멈추므로 뒤의 처리기(React 루트의 MUI 대화상자 Esc 닫기, 문서 bubble 단계의 상세 닫기 `useEscapeClose`)는
+  // 이 Esc를 받지 못한다. MUI 대화상자는 `defaultPrevented`를 보지 않아 `preventDefault`만으로는 막히지 않는다.
+  // `preventDefault`는 처리했다는 표시로 함께 둔다. 고정 위치가 글자와 어긋나지
   // 않게 스크롤로 글자가 움직이거나 창 크기가 바뀌면 닫는다. 포커스가 끌어온 스크롤처럼 글자가 그 자리면 둔다.
   // 툴팁이 화면에 붙는 커밋과 함께 달도록 레이아웃 효과로 둔다(일반 효과면 그 사이에 온 스크롤·Esc를 놓친다).
   useLayoutEffect(() => {
@@ -184,6 +186,7 @@ export function TruncatedText({
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing) return;
       event.preventDefault();
+      event.stopPropagation();
       shut();
     };
     const onScroll = () => {
