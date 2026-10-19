@@ -25,9 +25,11 @@
 | `v0.13.2` | `cf25516` | 근처 줄에 반경 밖 숨은 수(`· 3km 밖 N곳은 숨김`), 사용자의 `필터 지우기`도 근처 모드를 끔 (#30, 병합 `bf78a5d`) · 고침: 다크 테마의 늦음·오류 글자와 빨간 버튼 대비 4.5:1 이상 (#29) | ✅ |
 | `v0.14.0` | `c3bc22a` | 여행 일정 공유: 일정 공유 파일(v2)·보기 화면 일정 모드·지도 페이지 규약 v2·여행째 가져오기 (#31) | ✅ |
 | `v0.14.1` | `881907a` | 운영 도메인 `landmark.sch0718.dev`: 서버 함수 허용 출처, 보기 화면 `Landmark에 담기` 기본 주소, 네이버 지도 앱 길찾기 `appname` (#33) | ✅ |
+| `v0.14.2` | `8d94fd0` | 선택 풀기(마커 다시 누르기·지도 빈 곳·Esc·넓은 화면 닫기), 거를 때 지도를 결과에 맞춤, 긴 이름 툴팁, `라벨 관리` 맨 앞 (#35, A1) | ✅ 저장 형식 그대로. 열기 전 화면은 메모리에만 있다 |
+| `v0.14.3` | `c795029` | 휴대폰 상세를 지도·목록 위 아래쪽 시트로(반쯤/다 펼침), 라벨 칸은 붙은 라벨 + `라벨 바꾸기` 창(검색·많이 쓴 순·새 라벨) (#36, A2) | ✅ 저장 형식 그대로. 시트 단계·뒤 화면은 브라우저 기록 상태(`history.state`)에만 있어 옛 버전은 무시한다 |
 
 - 마지막 열은 2026-10-17에 `v0.8.0`·`v0.9.0`·`v0.10.0`의 `src/schema`로 지금 형식의 문서(`visitedOn`·`review`·`folders` 포함)를 읽어 확인했다(차례로 셋 다 지움 / `folders`만 지움 / 모두 유지). `v0.3.0`~`v0.7.2`는 `v0.8.0`과 저장 형식이 같다. 새 버전을 낼 때 저장 형식에 필드를 더했다면 그보다 옛 버전 줄을 모두 다시 본다.
-- 보관함은 각 기기의 localStorage(`tripmap:library:v2`)에만 있다. `v0.3.0`~`v0.8.0` 사이는 저장 형식이 같아 데이터 걱정 없이 오갈 수 있다. 그 뒤로는 선택 필드만 더했다(`v0.9.0` 장소의 `visitedOn`·`review`, `v0.10.0` 보관함의 `folders`). `v0.11.0`~`v0.14.1`은 보관함 저장 형식을 바꾸지 않았다(`v0.13.0`이 더한 `tripmap:hours:v1`은 지워도 다시 받는 캐시다. `v0.14.0`이 가져온 여행·장소도 지금 스키마 그대로다). 옛 버전은 모르는 필드를 손상으로 보지 않고 떼어 낸 채 읽으므로 화면은 그대로 열리지만, **옛 버전에서 무엇이든 저장하는 순간 그 필드가 지워진다.** 되돌리기 전에 설정 › 백업에서 백업 파일을 받아 두면, 새 버전으로 돌아온 뒤 그 파일로 되살릴 수 있다.
+- 보관함은 각 기기의 localStorage(`tripmap:library:v2`)에만 있다. `v0.3.0`~`v0.8.0` 사이는 저장 형식이 같아 데이터 걱정 없이 오갈 수 있다. 그 뒤로는 선택 필드만 더했다(`v0.9.0` 장소의 `visitedOn`·`review`, `v0.10.0` 보관함의 `folders`). `v0.11.0`~`v0.14.3`은 보관함 저장 형식을 바꾸지 않았다(`v0.13.0`이 더한 `tripmap:hours:v1`은 지워도 다시 받는 캐시다. `v0.14.0`이 가져온 여행·장소도 지금 스키마 그대로다). 옛 버전은 모르는 필드를 손상으로 보지 않고 떼어 낸 채 읽으므로 화면은 그대로 열리지만, **옛 버전에서 무엇이든 저장하는 순간 그 필드가 지워진다.** 되돌리기 전에 설정 › 백업에서 백업 파일을 받아 두면, 새 버전으로 돌아온 뒤 그 파일로 되살릴 수 있다.
 - `v0.9.0`부터 화면 선호(`tripmap:prefs`)에 선택 키 `query.visited`가 있다. 옛 버전은 이 키를 떼어 내고 읽어 테마·보기 설정은 그대로다(리터럴 값은 늘리지 않았다).
 - **손상 화면**: 옛 버전은 모르는 형식을 손상으로 보고 `tripmap:library:v2:corrupt-<시각>`에 백업을 남긴 뒤 `백업 파일 받기`·`새로 시작`을 보인다. 이때 **`새로 시작`을 누르지 않는다**(보관함이 비워진다). 다시 새 버전으로 되돌리면 원래 데이터를 그대로 읽는다(옛 버전은 원본 키를 지우지 않는다 — `새로 시작`을 눌렀을 때만 지운다).
 - 공유 HTML 파일은 그 안에 보기 화면이 들어 있어 앱 버전과 상관없이 열린다. 공유 지도 페이지(`gh-pages`)는 따로 배포된다(아래).
@@ -61,17 +63,19 @@ PR을 만들어 CI를 통과하면 병합한다. 그 PR의 변경 일부(묶음 
 
 | 되돌리려는 PR | 먼저 되돌릴 PR(이 순서로) | 예 |
 |---|---|---|
-| #33 `881907a` | 없음 | |
-| F7 `c3bc22a` | #33 | #33이 F7이 고친 `src/share-viewer/encode.ts`·`tests/e2e/fixtures.ts`·`tests/unit/share-viewer/main.test.ts`·`tests/unit/sections/trips/planner-timeline.test.tsx`를 다시 고쳤다 |
-| #29 `cf25516` | #33 → F7 | 겹치는 파일은 없지만 규칙대로 새 것부터 |
-| #30 `bf78a5d` | #33 → F7 → #29 | 겹치는 파일은 없지만 규칙대로 새 것부터 |
-| #27 `0643a95` | #33 → F7 → #29 → #30 | |
-| F6 `279cdcf` | #33 → F7 → #29 → #30 → #27 | #27이 F6의 `tests/unit/services/hours-lookup.test.ts`를 고쳤고, F7이 F6의 `DayTimeline.tsx`·`playwright.config.ts`를 고쳤다 |
-| F5 `c908b2c` | #33 → F7 → #29 → #30 → #27 → F6 | F6이 F5의 `DAY_ROLLOVER_HOUR`·`addDays`를 쓰고, F7이 F5의 `trip-dates.ts`·`use-day-plan.ts`·`schema/trip.ts`(`addDays`를 `src/lib/calendar.ts`로)·`TripsPage.tsx`·`lazy-routes.ts`를 고쳤다 |
-| F4 `553310e` | #33 → F7 → #29 → #30 → #27 → F6 → F5 | F7이 F4의 `SharePreview.tsx`를 고쳤고, #30이 F4의 `NearbyBar.tsx`·`LibraryPage.tsx`를 고쳤고, F5가 F4의 위치 서비스·`MyLocationButton`·`formatDistanceM`을 쓰고 위치 서비스를 고쳤다 |
-| F3 `7d81384` | #33 → F7 → #29 → #30 → #27 → F6 → F5 → F4 | F4 Task 6이 F3의 `FolderResync.tsx`·`FolderList.tsx`에 근처 모드 끄기를 더했다 |
-| F2 `1732bdb` | #33 → F7 → #29 → #30 → #27 → F6 → F5 → F4 → F3 | F5가 F2의 `setVisitedOn`·`visitedOnOf`를 쓰고, F3·F4가 F2의 파일을 고쳤다 |
-| F1 `9711e53` | #33 → F7 → #29 → #30 → #27 → F6 → F5 → F4 → F3 → F2 | F2·F3·F4가 F1의 `backup-state.ts`·`summary.ts` 등을 고쳤다 |
+| #36 `c795029` | 없음 | |
+| #35 `8d94fd0` | #36 | #36이 #35가 고친 `src/sections/shell/AppShell.tsx`·`use-close-detail.ts`, `src/sections/map/LibraryMap.tsx`, `src/sections/library/LibraryPage.tsx`와 시험(`tests/e2e/library.spec.ts`, `tests/unit/sections/map/library-map.test.tsx`·`library/place-row.test.tsx`·`shell/app-shell.test.tsx`·`shell/close-detail.test.tsx`)을 다시 고쳤다(휴대폰에서 `useCloseDetail`이 시트 기록을 되감는다) |
+| #33 `881907a` | #36 → #35 | 겹치는 파일은 없지만 규칙대로 새 것부터 |
+| F7 `c3bc22a` | #36 → #35 → #33 | #33이 F7이 고친 `src/share-viewer/encode.ts`·`tests/e2e/fixtures.ts`·`tests/unit/share-viewer/main.test.ts`·`tests/unit/sections/trips/planner-timeline.test.tsx`를 다시 고쳤다 |
+| #29 `cf25516` | #36 → #35 → #33 → F7 | 겹치는 파일은 없지만 규칙대로 새 것부터 |
+| #30 `bf78a5d` | #36 → #35 → #33 → F7 → #29 | 겹치는 파일은 없지만 규칙대로 새 것부터 |
+| #27 `0643a95` | #36 → #35 → #33 → F7 → #29 → #30 | |
+| F6 `279cdcf` | #36 → #35 → #33 → F7 → #29 → #30 → #27 | #27이 F6의 `tests/unit/services/hours-lookup.test.ts`를 고쳤고, F7이 F6의 `DayTimeline.tsx`·`playwright.config.ts`를 고쳤다 |
+| F5 `c908b2c` | #36 → #35 → #33 → F7 → #29 → #30 → #27 → F6 | F6이 F5의 `DAY_ROLLOVER_HOUR`·`addDays`를 쓰고, F7이 F5의 `trip-dates.ts`·`use-day-plan.ts`·`schema/trip.ts`(`addDays`를 `src/lib/calendar.ts`로)·`TripsPage.tsx`·`lazy-routes.ts`를 고쳤다 |
+| F4 `553310e` | #36 → #35 → #33 → F7 → #29 → #30 → #27 → F6 → F5 | F7이 F4의 `SharePreview.tsx`를 고쳤고, #30이 F4의 `NearbyBar.tsx`·`LibraryPage.tsx`를 고쳤고, F5가 F4의 위치 서비스·`MyLocationButton`·`formatDistanceM`을 쓰고 위치 서비스를 고쳤다 |
+| F3 `7d81384` | #36 → #35 → #33 → F7 → #29 → #30 → #27 → F6 → F5 → F4 | F4 Task 6이 F3의 `FolderResync.tsx`·`FolderList.tsx`에 근처 모드 끄기를 더했다 |
+| F2 `1732bdb` | #36 → #35 → #33 → F7 → #29 → #30 → #27 → F6 → F5 → F4 → F3 | F5가 F2의 `setVisitedOn`·`visitedOnOf`를 쓰고, F3·F4가 F2의 파일을 고쳤다 |
+| F1 `9711e53` | #36 → #35 → #33 → F7 → #29 → #30 → #27 → F6 → F5 → F4 → F3 → F2 | F2·F3·F4가 F1의 `backup-state.ts`·`summary.ts` 등을 고쳤다 |
 
 2026-10-17에 `c908b2c`에서 F5 → F4 → F3 → F2 → F1 순서로 `git revert -m 1 <병합 커밋>`을 하나씩 실행했다. 다섯 번 모두 충돌이 없었고, 매번 `src`·`tests`가 그 PR이 들어오기 바로 전 커밋과 똑같았으며, typecheck와 시험이 통과했다.
 
@@ -98,6 +102,15 @@ PR을 만들어 CI를 통과하면 병합한다. 그 PR의 변경 일부(묶음 
 F 묶음 사이에 다른 PR이 끼면 그 PR도 같은 기준(앞 PR의 파일을 고쳤는가)으로 본다.
 
 2026-10-18에 `881907a`(#33 병합 뒤 `main`, `v0.14.1`)에서 #33 → F7 순서로 이어서 되돌렸다. 두 번 모두 충돌이 없었고 `src`·`tests`·`functions`가 그 PR 바로 전 커밋과 같았으며(#33 뒤 `d1c2c1b`, F7 뒤 `fca5dae`) typecheck와 시험이 통과했다(3319 → 2997개). 그 뒤 순서는 위 `c3bc22a`에서 확인한 것과 같다.
+
+2026-10-19에 `c795029`(#36 병합 뒤 `main`, `v0.14.3`)에서 #36 → #35 → #33 → F7 순서로 `git revert -m 1 <병합 커밋>`을 이어서 실행했다. 네 번 모두 충돌이 없었고, 매번 `src`·`tests`·`functions`가 그 PR 바로 전 커밋과 같았으며, typecheck와 시험이 통과했다. #35만 바로 되돌리면 `src/sections/shell/AppShell.tsx`·`use-close-detail.ts`, `src/sections/map/LibraryMap.tsx`, `tests/unit/sections/shell/close-detail.test.tsx`에서 충돌한다.
+
+| 되돌린 뒤 | 같아진 커밋 | 시험 |
+|---|---|---|
+| #36 | `8d94fd0` | 3385 |
+| #35 | `fc7c062` | 3324 |
+| #33 | `d1c2c1b` | 3319 |
+| F7 | `fca5dae` | 2997 |
 
 특정 버전의 코드를 그대로 보려면 `git switch --detach v0.4.0`.
 
