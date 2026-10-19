@@ -2,6 +2,7 @@ import Box from '@mui/material/Box';
 import { visuallyHidden } from '@mui/utils';
 import { CheckIcon } from 'src/components/icons';
 import { isVisited } from 'src/domain/library/visit';
+import { TruncatedText } from 'src/components/TruncatedText';
 import { formatDistanceM } from 'src/domain/nearby';
 import type { Label, Place } from 'src/schema/library';
 import { labelColors } from 'src/sections/library/label-style';
@@ -84,6 +85,7 @@ export function PlaceRow({
       type="button"
       aria-pressed={selecting ? selected : undefined}
       aria-current={current ? 'true' : undefined}
+      data-place-id={place.id}
       {...gestures}
       sx={{
         ...ITEM_BUTTON_SX,
@@ -96,19 +98,9 @@ export function PlaceRow({
       }}
     >
       {selecting && <SelectMark checked={selected} />}
-      <Box
-        component="span"
-        sx={{
-          flex: 1,
-          minWidth: 0,
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-          fontWeight: 700,
-        }}
-      >
+      <TruncatedText touch={false} sx={{ flex: 1, minWidth: 0, fontWeight: 700 }}>
         {place.name.value}
-      </Box>
+      </TruncatedText>
       {isVisited(place) && (
         <>
           {/* 색만으로 알리지 않는다: 체크는 장식이고 같은 뜻을 숨은 글자가 읽어 준다. */}
@@ -139,9 +131,9 @@ export function PlaceRow({
           {chips.map((label) => {
             const color = labelColors(label.color.value);
             return (
-              <Box
+              <TruncatedText
                 key={label.id}
-                component="span"
+                touch={false}
                 sx={{
                   flex: '0 1 auto',
                   minWidth: 0,
@@ -152,13 +144,10 @@ export function PlaceRow({
                   fontSize: 11,
                   fontWeight: 700,
                   lineHeight: 1.6,
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
                 }}
               >
                 {label.name.value}
-              </Box>
+              </TruncatedText>
             );
           })}
           {more > 0 && (
@@ -171,20 +160,29 @@ export function PlaceRow({
           )}
         </Box>
       )}
-      <Box
-        component="span"
-        sx={{
-          flex: 'none',
-          maxWidth: '35%',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-          fontSize: 13,
-          color: 'var(--tm-text-secondary)',
-        }}
-      >
-        <RegionOrDistance region={region} distanceM={distanceM} />
-      </Box>
+      {distanceM === undefined ? (
+        <TruncatedText
+          touch={false}
+          sx={{ flex: 'none', maxWidth: '35%', fontSize: 13, color: 'var(--tm-text-secondary)' }}
+        >
+          {region}
+        </TruncatedText>
+      ) : (
+        <Box
+          component="span"
+          sx={{
+            flex: 'none',
+            maxWidth: '35%',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            fontSize: 13,
+            color: 'var(--tm-text-secondary)',
+          }}
+        >
+          <RegionOrDistance region={region} distanceM={distanceM} />
+        </Box>
+      )}
     </Box>
   );
 }

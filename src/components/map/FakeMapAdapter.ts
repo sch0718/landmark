@@ -23,6 +23,7 @@ export class FakeMapAdapter implements MapAdapter {
   private myLocation: MyLocation | null = null;
   private markerCb: ((id: string) => void) | null = null;
   private boundsCb: ((b: Bounds) => void) | null = null;
+  private mapCb: (() => void) | null = null;
   private markers: MapMarker[] = [];
   private lines: MapPolyline[] = [];
   private markerNodes = new Map<
@@ -34,12 +35,19 @@ export class FakeMapAdapter implements MapAdapter {
   /** 테스트용: `setMyLocation` 호출마다 받은 값을 기록한다. */
   readonly myLocationCalls: (MyLocation | null)[] = [];
 
+  /** 마커 단추가 아닌 곳(지도 바탕)을 누르면 알린다. */
+  private readonly handleRootClick = (event: MouseEvent): void => {
+    if (event.target instanceof Element && event.target.closest('[data-testid^="marker-"]')) return;
+    this.mapCb?.();
+  };
+
   mount(el: HTMLElement): Promise<void> {
     const root = document.createElement('div');
     root.setAttribute('data-testid', 'fake-map');
     root.dataset.instanceId = String(++nextInstanceId);
     root.style.cssText =
       'position:relative;width:100%;height:100%;background:#e8eef3;overflow:auto';
+    root.addEventListener('click', this.handleRootClick);
     el.appendChild(root);
     this.root = root;
     this.markerRoot = document.createElement('div');
@@ -110,6 +118,10 @@ export class FakeMapAdapter implements MapAdapter {
     this.markerCb = cb;
   }
 
+  onMapClick(cb: () => void): void {
+    this.mapCb = cb;
+  }
+
   onBoundsChange(cb: (b: Bounds) => void): void {
     this.boundsCb = cb;
     if (this.root) cb(FAKE_BOUNDS);
@@ -120,9 +132,11 @@ export class FakeMapAdapter implements MapAdapter {
     this.markerNodes.clear();
     this.markerCb = null;
     this.boundsCb = null;
+    this.mapCb = null;
     this.markers = [];
     this.lines = [];
     this.myLocation = null;
+    this.root?.removeEventListener('click', this.handleRootClick);
     this.root?.remove();
     this.root = null;
     this.markerRoot = null;

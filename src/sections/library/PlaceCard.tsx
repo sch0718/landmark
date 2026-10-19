@@ -1,5 +1,6 @@
 import Box from '@mui/material/Box';
 import { CheckIcon } from 'src/components/icons';
+import { TruncatedText } from 'src/components/TruncatedText';
 import { formatVisitDate, reviewOf, visitedOnOf } from 'src/domain/library/visit';
 import { LabelBadge } from 'src/sections/library/LabelBadge';
 import {
@@ -44,6 +45,7 @@ export function PlaceCard({
       type="button"
       aria-pressed={selecting ? selected : undefined}
       aria-current={current ? 'true' : undefined}
+      data-place-id={place.id}
       {...gestures}
       sx={{
         ...ITEM_BUTTON_SX,
@@ -59,9 +61,9 @@ export function PlaceCard({
     >
       {selecting && <SelectMark checked={selected} />}
       <Box component="span" sx={{ display: 'block', flex: 1, minWidth: 0 }}>
-        <Box component="span" data-part="name" sx={{ ...clamp(2), fontWeight: 800 }}>
+        <TruncatedText lines={2} touch={false} data-part="name" sx={{ fontWeight: 800 }}>
           {place.name.value}
-        </Box>
+        </TruncatedText>
         {memo !== '' && (
           <Box
             component="span"
@@ -124,7 +126,7 @@ export function PlaceCard({
             <RegionOrDistance region={region} distanceM={distanceM} />
           </Box>
           {labels.map((label) => (
-            <LabelBadge key={label.id} label={label} />
+            <LabelBadge key={label.id} label={label} touch={false} />
           ))}
         </Box>
       </Box>

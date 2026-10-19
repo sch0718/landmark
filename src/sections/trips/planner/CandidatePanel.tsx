@@ -5,6 +5,7 @@ import IconButton from '@mui/material/IconButton';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { useMemo, useState, type Ref } from 'react';
 import { PanelLeftCloseIcon, PlusIcon } from 'src/components/icons';
+import { TruncatedText } from 'src/components/TruncatedText';
 import { liveLabels } from 'src/domain/library/query';
 import { regionsByPlace } from 'src/domain/library/region';
 import { visibleCandidates } from 'src/domain/trips/query';
@@ -106,18 +107,7 @@ function CandidateRow({
           borderRadius: 'var(--tm-radius-sm)',
         }}
       >
-        <Box
-          component="span"
-          sx={{
-            display: 'block',
-            fontWeight: 700,
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {name}
-        </Box>
+        <TruncatedText sx={{ display: 'block', fontWeight: 700 }}>{name}</TruncatedText>
         <Box
           component="span"
           sx={{ display: 'block', fontSize: 12, color: 'var(--tm-text-secondary)' }}
