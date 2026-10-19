@@ -3,8 +3,15 @@ import Button from '@mui/material/Button';
 import Drawer from '@mui/material/Drawer';
 import IconButton from '@mui/material/IconButton';
 import { useAtom, useAtomValue, useSetAtom, useStore } from 'jotai';
-import { Suspense, useEffect, useRef, type KeyboardEvent, type RefObject } from 'react';
-import { useLocation, useNavigate } from 'react-router';
+import {
+  Suspense,
+  useEffect,
+  useEffectEvent,
+  useRef,
+  type KeyboardEvent,
+  type RefObject,
+} from 'react';
+import { matchPath, useLocation, useNavigate } from 'react-router';
 import { ChunkErrorBoundary } from 'src/components/ChunkErrorBoundary';
 import { ChunkErrorNotice } from 'src/components/ChunkErrorNotice';
 import { XIcon } from 'src/components/icons';
@@ -21,6 +28,7 @@ import { paths } from 'src/routes/paths';
 import { focusIsLost, focusStepField, StepScopeContext } from 'src/sections/add-place/step-focus';
 import { ADD_LABEL } from 'src/sections/shell/nav-items';
 import { DETAIL_WIDTH } from 'src/sections/shell/pane-widths';
+import { sheetStateOf, useCloseSheet } from 'src/sections/shell/sheet-state';
 import { MAIN_ID } from 'src/sections/shell/SkipLink';
 import { useLayout } from 'src/sections/shell/use-layout';
 import {
@@ -120,6 +128,9 @@ function StepContent({
  * - 핀 모드(`pin`)와 확인 카드·핀 카드(`candidate`·`pin-card`, 고른 위치를 지도에 보이려고 — 스펙 §2.2.2)는
  *   지도가 필요하다.
  *   좁은 화면은 지도 탭(`/map`)으로, 그 밖은 지도가 있는 보관함(`/`)으로 간다(예: 넓은 화면의 `/labels`).
+ *   좁은 화면의 상세 시트(`/place/:id`)에서 가면 시트를 두고 떠나는 것이라, 뒤로 가기가 시트를 다시 열지 않게
+ *   새 기록을 쌓지 않는다(스펙 §4.4): 앱 안에서 지도 위에 연 시트는 연 기록을 되감아 그 지도로 돌아가고, 그 밖은
+ *   시트 기록을 `/map`으로 바꿔치기한다.
  * - 핀 모드 중에 경로가 바뀌면(뒤로 가기·목록에서 장소 고르기·다른 메뉴) 지도가 계속 보여도 핀 모드를
  *   끝낸다(스펙 §2.4). 이 훅이 지도로 옮긴 이동은 예외다.
  * 흐름이 끝나면(`closed`가 되면, 어느 길로든) 붙여 둔 여행 대상(`addTargetAtom`)과 연 요소(`addOpenerAtom`)를 버린다.
@@ -132,7 +143,7 @@ export function useAddFlowRoute(mapShown: boolean) {
   const setLinkDraft = useSetAtom(linkDraftAtom);
   const layout = useLayout();
   const navigate = useNavigate();
-  const { pathname } = useLocation();
+  const { pathname, state } = useLocation();
   const compact = layout === 'compact';
   const step = flow.step;
   const needsMap = step === 'pin' || step === 'candidate' || step === 'pin-card';
@@ -140,6 +151,21 @@ export function useAddFlowRoute(mapShown: boolean) {
   const prev = useRef({ step, pathname, hint });
   // 이 훅이 지도로 옮기는 중이다. 그 경로 변경으로는 핀 모드를 끝내지 않는다.
   const movingToMap = useRef(false);
+  const closeSheet = useCloseSheet();
+  // 지도가 보이는 경로로 옮긴다. 기록 상태는 이때만 읽으면 되어 이벤트로 둔다(상태가 바뀔 때마다 다시 돌지 않게).
+  const moveToMap = useEffectEvent(() => {
+    if (!compact) {
+      void navigate(paths.library);
+      return;
+    }
+    if (matchPath(paths.place(':id'), pathname) === null) {
+      void navigate(paths.map);
+      return;
+    }
+    // 지도 위 시트는 닫기와 같다(`useCloseSheet`). 목록 위 시트는 목록에 들르지 않고 바로 바꿔치기한다.
+    if (sheetStateOf(state).from === 'map') closeSheet();
+    else void navigate(paths.map, { replace: true });
+  });
   useEffect(() => {
     const before = prev.current;
     prev.current = { step, pathname, hint };
@@ -163,9 +189,11 @@ export function useAddFlowRoute(mapShown: boolean) {
       return;
     }
     if (!needsMap || mapShown) return;
+    // 이미 옮기는 중인데 경로가 아직 그대로다(기록 이동이 끝나기 전에 다시 돌았다). 또 옮기면 뒤로 두 번 간다.
+    if (movingToMap.current) return;
     // 단계에 막 들어왔거나(폭이 바뀌어) 지도가 안 보이게 됐다.
     movingToMap.current = true;
-    void navigate(compact ? paths.map : paths.library);
+    moveToMap();
   }, [
     step,
     hint,
@@ -173,7 +201,6 @@ export function useAddFlowRoute(mapShown: boolean) {
     needsMap,
     mapShown,
     compact,
-    navigate,
     setFlow,
     setTarget,
     setOpener,

@@ -163,7 +163,15 @@ function PlaceBody({ place, level }: { place: Place; level: HeadingLevel }) {
       </Box>
       {url !== null && (
         <Box sx={{ mt: 1.5 }}>
-          <Box component="a" href={url} target="_blank" rel="noopener noreferrer" sx={BUTTON_SX}>
+          {/* 끌 수 없게 한다: 반쯤 시트를 마우스로 끌 때 링크 끌기가 시트 끌기를 끊는다(pointercancel). */}
+          <Box
+            component="a"
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            draggable={false}
+            sx={BUTTON_SX}
+          >
             <ExternalLinkIcon aria-hidden="true" />
             네이버 지도에서 열기
           </Box>
@@ -192,7 +200,7 @@ function PlaceBody({ place, level }: { place: Place; level: HeadingLevel }) {
         <LabelPicker
           labels={labels}
           attachedIds={place.labelIds.value}
-          onToggle={(labelId) => void run((lib, ctx) => toggleLabel(lib, id, labelId, ctx))}
+          onToggle={(labelId) => run((lib, ctx) => toggleLabel(lib, id, labelId, ctx))}
           onCreate={(name) => run((lib, ctx) => createAndAttachLabel(lib, id, name, ctx))}
         />
       </Section>

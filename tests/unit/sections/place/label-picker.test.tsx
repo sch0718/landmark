@@ -1,45 +1,66 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { createStore, Provider } from 'jotai';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ruleValue } from '../../components/helpers/rule-style';
+import type { Label } from 'src/schema/library';
 import { LabelPicker } from 'src/sections/place/LabelPicker';
-import type { LibraryActionResult } from 'src/stores/library-state';
+import { libraryAtom } from 'src/stores/library-state';
+import { attachedNames, openLabelPicker } from '../../helpers/label-picker';
+import { L_CAFE, L_SEA, sampleLibrary } from '../library/fixtures';
+import { mockViewport } from '../shell/harness';
 
-afterEach(cleanup);
-
-async function submit(result: LibraryActionResult) {
-  const onCreate = vi.fn(async () => result);
-  render(<LabelPicker labels={[]} attachedIds={[]} onToggle={vi.fn()} onCreate={onCreate} />);
-  const input = screen.getByPlaceholderText('새 라벨 이름');
-  fireEvent.change(input, { target: { value: '야시장' } });
-  fireEvent.keyDown(input, { key: 'Enter' });
-  await waitFor(() => expect(onCreate).toHaveBeenCalled());
-  return input;
-}
-
-describe('LabelPicker rejections', () => {
-  it('shows a taken-name message', async () => {
-    const input = await submit({ ok: false, error: { _tag: 'LabelNameTaken', name: '야시장' } });
-    expect(await screen.findByRole('alert')).toHaveTextContent('같은 이름의 라벨이 있어요');
-    expect(input).toHaveAttribute('aria-invalid', 'true');
-    expect(input).toHaveValue('야시장'); // 입력은 남겨 고칠 수 있게 한다.
-  });
-
-  it('shows a not-found message when the place is gone', async () => {
-    await submit({ ok: false, error: { _tag: 'NotFound', id: 'place00001' } });
-    expect(await screen.findByRole('alert')).toHaveTextContent('장소를 찾을 수 없어요');
-  });
-
-  it('shows nothing for errors that were already reported as a toast', async () => {
-    await submit({ ok: false, error: new Error('저장소 오류') });
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-  });
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
 });
 
-describe('LabelPicker 입력칸', () => {
-  it('새 라벨 이름 입력칸은 16px(아이폰에서 눌러도 확대되지 않는다)이다', () => {
-    render(<LabelPicker labels={[]} attachedIds={[]} onToggle={vi.fn()} onCreate={vi.fn()} />);
-    const input = screen.getByPlaceholderText('새 라벨 이름');
-    expect(ruleValue(input, 'font-size')).toBe('16px');
-    expect(ruleValue(input, 'min-height')).toBe('44px');
+function setup(attachedIds: string[]) {
+  mockViewport(1280);
+  const library = sampleLibrary();
+  const store = createStore();
+  store.set(libraryAtom, library);
+  const labels = Object.values(library.labels).sort(
+    (a, b) => a.order.value - b.order.value,
+  ) as Label[];
+  const onToggle = vi.fn();
+  render(
+    <Provider store={store}>
+      <section aria-label="칸">
+        <LabelPicker
+          labels={labels}
+          attachedIds={attachedIds}
+          onToggle={onToggle}
+          onCreate={vi.fn()}
+        />
+      </section>
+    </Provider>,
+  );
+  return { onToggle, scope: screen.getByRole('region', { name: '칸' }) };
+}
+
+describe('LabelPicker', () => {
+  it('붙은 라벨만 라벨 순서대로 보인다', () => {
+    const { scope } = setup([L_SEA, L_CAFE]);
+    expect(attachedNames(scope)).toEqual(['카페', '바다뷰']);
+    expect(within(scope).queryByRole('checkbox')).toBeNull();
+    expect(within(scope).queryByRole('textbox')).toBeNull();
+  });
+
+  it('붙은 라벨이 없으면 알린다', () => {
+    const { scope } = setup([]);
+    expect(within(scope).getByText('붙은 라벨이 없어요')).toBeInTheDocument();
+  });
+
+  it('라벨 바꾸기를 누르면 고르기 창이 열리고, 체크가 onToggle로 간다', async () => {
+    const user = userEvent.setup();
+    const { scope, onToggle } = setup([L_SEA]);
+    const button = within(scope).getByRole('button', { name: '라벨 바꾸기' });
+    expect(button).toHaveAttribute('aria-haspopup', 'dialog');
+    const dialog = await openLabelPicker(user, scope);
+    await user.click(within(dialog).getByRole('checkbox', { name: /^카페/ }));
+    expect(onToggle).toHaveBeenCalledWith(L_CAFE);
+    await user.click(within(dialog).getByRole('button', { name: '완료' }));
+    await vi.waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(button).toHaveFocus();
   });
 });

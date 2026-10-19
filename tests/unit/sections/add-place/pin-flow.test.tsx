@@ -11,6 +11,13 @@ import { ReverseGeocoder } from 'src/services/reverse-geocoder';
 import { addFlowAtom } from 'src/stores/add-place';
 import { libraryAtom } from 'src/stores/library-state';
 import { installMapResources } from '../../components/helpers/map-resources';
+import {
+  attachedNames,
+  closeLabelPicker,
+  openLabelPicker,
+  pickerSearch,
+  toggleLabel,
+} from '../../helpers/label-picker';
 import { L_CAFE, renderLibrary, sampleLibrary } from '../library/fixtures';
 
 const toastMock = vi.hoisted(() => {
@@ -291,7 +298,8 @@ describe('핀 입력 카드', () => {
       ),
     );
     await user.type(within(card).getByRole('textbox', { name: '이름' }), ' 서울시청 ');
-    await user.click(within(card).getByRole('button', { name: '카페' }));
+    await toggleLabel(user, card, '카페');
+    expect(attachedNames(card)).toEqual(['카페']);
     await user.type(within(card).getByRole('textbox', { name: '메모' }), '광장 앞');
     await user.click(within(card).getByRole('button', { name: '추가' }));
 
@@ -317,12 +325,15 @@ describe('핀 입력 카드', () => {
     const { user, store } = await openPinCard({ ids: ['newlab01', NEW_ID] });
     const card = panel();
     await user.type(within(card).getByRole('textbox', { name: '이름' }), '여기');
-    const nameInput = within(card).getByRole('textbox', { name: '새 라벨 이름' });
-    await user.type(nameInput, '데이트');
+    // 창이 열리면 카드가 가려지므로 추가 버튼은 미리 집어 둔다.
     const add = within(card).getByRole('button', { name: '추가' });
-    fireEvent.keyDown(nameInput, { key: 'Enter' });
+    const picker = await openLabelPicker(user, card);
+    const search = pickerSearch(picker);
+    await user.type(search, '데이트');
+    fireEvent.keyDown(search, { key: 'Enter' });
     expect(add).toBeDisabled();
     await waitFor(() => expect(add).toBeEnabled());
+    await closeLabelPicker(user, picker);
     await user.click(add);
     await waitFor(() => expect(store.get(libraryAtom).places[NEW_ID]).toBeDefined());
     expect(store.get(libraryAtom).places[NEW_ID]!.labelIds.value).toEqual(['newlab01']);
@@ -469,6 +480,48 @@ describe('좁은 화면', () => {
     await act(() => router.navigate(-1));
     await waitFor(() => expect(router.state.location.pathname).toBe('/'));
     expect(store.get(addFlowAtom)).toEqual({ step: 'closed' });
+  });
+
+  it('지도 위 상세 시트에서 핀 모드에 들어가면 시트를 닫듯 지도로 돌아가, 뒤로 가기가 시트를 다시 열지 않는다', async () => {
+    const user = userEvent.setup();
+    const { router, store } = await renderLibrary(sampleLibrary(), { width: 390 });
+    await user.click(screen.getByRole('link', { name: '지도' }));
+    await act(() =>
+      router.navigate('/place/place00001', {
+        state: { sheet: { from: 'map', snap: 'half', inApp: true } },
+      }),
+    );
+    await mapReady();
+    await openFrom(user, '지도에서 핀 찍기');
+    await waitFor(() => expect(router.state.location.pathname).toBe('/map'));
+    // 새 기록을 쌓지 않고 시트를 연 기록을 되감았다.
+    expect(router.state.historyAction).toBe('POP');
+    expect(await screen.findByTestId('pin-crosshair')).toBeInTheDocument();
+
+    await act(() => router.navigate(-1));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/'));
+    expect(store.get(addFlowAtom)).toEqual({ step: 'closed' });
+    expect(screen.queryByRole('region', { name: '장소 상세' })).not.toBeInTheDocument();
+  });
+
+  it('목록 위 상세 시트에서 핀 모드에 들어가면 시트 기록을 지도로 바꿔치기한다', async () => {
+    const user = userEvent.setup();
+    const { router, store } = await renderLibrary(sampleLibrary(), { width: 390 });
+    await act(() =>
+      router.navigate('/place/place00001', {
+        state: { sheet: { from: 'list', snap: 'full', inApp: true } },
+      }),
+    );
+    await openFrom(user, '지도에서 핀 찍기');
+    await mapReady();
+    await waitFor(() => expect(router.state.location.pathname).toBe('/map'));
+    expect(router.state.historyAction).toBe('REPLACE');
+    expect(await screen.findByTestId('pin-crosshair')).toBeInTheDocument();
+
+    await act(() => router.navigate(-1));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/'));
+    expect(store.get(addFlowAtom)).toEqual({ step: 'closed' });
+    expect(screen.queryByRole('region', { name: '장소 상세' })).not.toBeInTheDocument();
   });
 
   it('확인 카드가 열리면 지도 탭으로 바꿔 후보 마커를 보인다', async () => {

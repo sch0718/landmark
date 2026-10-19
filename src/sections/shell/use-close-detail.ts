@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from 'react-router';
 import { paths } from 'src/routes/paths';
 import { focusIsLost } from 'src/sections/add-place/step-focus';
 import { MAIN_ID } from 'src/sections/shell/SkipLink';
+import { sheetStateOf, useCloseSheet } from 'src/sections/shell/sheet-state';
 import { useLayout } from 'src/sections/shell/use-layout';
 import { detailOriginAtom } from 'src/stores/library-ui';
 
@@ -20,19 +21,21 @@ export type CloseDetailOptions = {
  */
 export function useCloseDetail(): (options?: CloseDetailOptions) => void {
   const layout = useLayout();
-  const { key } = useLocation();
+  const { state } = useLocation();
   const navigate = useNavigate();
+  const closeSheet = useCloseSheet();
   const origin = useAtomValue(detailOriginAtom);
   return useCallback(
     ({ replace = false }: CloseDetailOptions = {}) => {
-      const target = origin === 'map' ? paths.map : paths.library;
-      if (layout === 'compact' && !replace && key !== 'default') {
-        void navigate(-1);
+      if (layout === 'compact' && !replace) {
+        closeSheet();
         return;
       }
+      const from = layout === 'compact' ? sheetStateOf(state).from : origin;
+      const target = from === 'map' ? paths.map : paths.library;
       void navigate(target, { replace: replace || layout === 'compact' });
     },
-    [layout, key, navigate, origin],
+    [layout, state, closeSheet, navigate, origin],
   );
 }
 
@@ -53,7 +56,13 @@ export function useEscapeClose(enabled: boolean, close: () => void): void {
   useEffect(() => {
     if (!enabled) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing) return;
+      if (
+        event.key !== 'Escape' ||
+        event.defaultPrevented ||
+        event.isComposing ||
+        event.keyCode === 229
+      )
+        return;
       if (event.target instanceof Element && event.target.closest(TYPING)) return;
       if (document.querySelector(LAYERS) !== null) return;
       event.preventDefault();

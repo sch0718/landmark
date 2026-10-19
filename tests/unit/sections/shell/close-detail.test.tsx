@@ -41,6 +41,19 @@ const findCloseButton = async () =>
   });
 
 describe('상세 닫기 (넓은·중간)', () => {
+  it('휴대폰 목록 위 시트를 접은 뒤 필터로 열린 장소가 빠지면 목록으로 돌아간다', async () => {
+    const user = userEvent.setup();
+    const { router } = await renderLibrary(sampleLibrary(), {
+      width: 390,
+      prefs: { libraryView: 'list' },
+    });
+    await user.click(document.querySelector<HTMLElement>(`[data-place-id="${id(1)}"]`)!);
+    await user.click(await screen.findByRole('button', { name: '접기' }));
+    await user.type(screen.getByRole('searchbox', { name: '장소 검색' }), '카페');
+    await waitFor(() => expect(router.state.location.pathname).toBe('/'));
+    expect(screen.queryByRole('region', { name: '장소 상세' })).not.toBeInTheDocument();
+  });
+
   it('넓은 화면 상세 칸에도 닫기가 있고, 누르면 목록으로 돌아가 안내만 남는다', async () => {
     const user = userEvent.setup();
     const { router } = await renderLibrary(sampleLibrary(), {

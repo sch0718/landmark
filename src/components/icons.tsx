@@ -21,6 +21,8 @@ import PencilIcon from '~icons/lucide/pencil';
 import XIcon from '~icons/lucide/x';
 import CheckIcon from '~icons/lucide/check';
 import ChevronLeftIcon from '~icons/lucide/chevron-left';
+import ChevronUpIcon from '~icons/lucide/chevron-up';
+import ChevronDownIcon from '~icons/lucide/chevron-down';
 import LayoutDashboardIcon from '~icons/lucide/layout-dashboard';
 import RowsIcon from '~icons/lucide/rows-3';
 import LayoutGridIcon from '~icons/lucide/layout-grid';
@@ -92,6 +94,8 @@ export {
   XIcon,
   CheckIcon,
   ChevronLeftIcon,
+  ChevronUpIcon,
+  ChevronDownIcon,
   LayoutDashboardIcon,
   RowsIcon,
   LayoutGridIcon,

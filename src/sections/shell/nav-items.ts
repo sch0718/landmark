@@ -1,6 +1,7 @@
 import type { ComponentType, SVGProps } from 'react';
 import { HomeIcon, MapIcon, RouteIcon, SettingsIcon } from 'src/components/icons';
 import { paths } from 'src/routes/paths';
+import type { SheetFrom } from 'src/sections/shell/sheet-state';
 
 export type NavLinkItem = {
   key: 'library' | 'map' | 'trips' | 'settings';
@@ -18,10 +19,17 @@ export const NAV_ITEMS: readonly (NavLinkItem | 'add')[] = [
   { key: 'settings', label: '설정', to: paths.settings, Icon: SettingsIcon },
 ];
 
-/** 장소 상세(`/place/:id`)는 보관함의 일부라 보관함 항목이 켜져 있다. */
-export function isNavActive(item: NavLinkItem, pathname: string): boolean {
-  if (item.key === 'library') {
-    return pathname === paths.library || pathname.startsWith(`${paths.place('')}`);
+/**
+ * 장소 상세(`/place/:id`)는 보관함의 일부라 보관함 항목이 켜져 있다. 다만 휴대폰에서 시트 뒤가 지도면
+ * (`placeOn` = `'map'`) 지도 항목이 켜져 있다.
+ */
+export function isNavActive(
+  item: NavLinkItem,
+  pathname: string,
+  placeOn: SheetFrom = 'list',
+): boolean {
+  if (pathname.startsWith(`${paths.place('')}`)) {
+    return item.key === (placeOn === 'map' ? 'map' : 'library');
   }
   return pathname === item.to || pathname.startsWith(`${item.to}/`);
 }

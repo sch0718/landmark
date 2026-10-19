@@ -29,6 +29,7 @@ import { nextRadius, radiusLabel } from 'src/domain/nearby';
 import type { Library } from 'src/schema/library';
 import { addCandidates } from 'src/domain/trips/ops';
 import { paths } from 'src/routes/paths';
+import { useOpenPlace } from 'src/sections/library/use-open-place';
 import { BulkBar } from 'src/sections/library/BulkBar';
 import { EmptyState } from 'src/sections/library/EmptyState';
 import { FilterBar } from 'src/sections/library/FilterBar';
@@ -48,6 +49,8 @@ import { NearbyBar, type NearbyBarHandle } from 'src/sections/nearby/NearbyBar';
 import { useNearby, useStartNearby } from 'src/sections/nearby/use-nearby';
 import { ExportHtmlDialogHost } from 'src/sections/share-export/ExportHtmlDialogHost';
 import { exportTargets } from 'src/sections/share-export/export-targets';
+import { useCloseDetail } from 'src/sections/shell/use-close-detail';
+import { useLayout } from 'src/sections/shell/use-layout';
 import { libraryAtom, useLibraryAction } from 'src/stores/library-state';
 import { focusPlaceAtom } from 'src/stores/library-ui';
 import { nearbyAtom, nearbyOffAtom } from 'src/stores/my-location';
@@ -130,6 +133,17 @@ export function LibraryPage() {
   // 근처 모드이고 위치가 있으면 반경 안만 가까운 순. 선택·내보내기도 이 목록 기준이다.
   const nearby = useNearby(sorted);
   const places = nearby.places;
+  const compact = useLayout() === 'compact';
+  const closeDetail = useCloseDetail();
+  const queryKey = JSON.stringify(query);
+  const seenQueryKey = useRef(queryKey);
+  useEffect(() => {
+    if (seenQueryKey.current === queryKey) return;
+    seenQueryKey.current = queryKey;
+    if (compact && openId !== null && !places.some((place) => place.id === openId)) {
+      closeDetail({ replace: true });
+    }
+  }, [queryKey, compact, openId, places, closeDetail]);
   const showVisit = useMemo(
     () => hasVisited(library) || query.visited !== 'all',
     [library, query.visited],
@@ -159,7 +173,8 @@ export function LibraryPage() {
     if (openId !== null) requestListScroll((prev) => ({ id: openId, seq: (prev?.seq ?? 0) + 1 }));
   }, [openId, requestListScroll]);
 
-  const onOpen = useCallback((id: string) => void navigate(paths.place(id)), [navigate]);
+  const openPlace = useOpenPlace();
+  const onOpen = useCallback((id: string) => openPlace(id, 'list'), [openPlace]);
   const onToggle = useCallback((id: string) => setSelected((prev) => toggled(prev, id)), []);
 
   const changeView = (next: LibraryView) => setPrefs({ ...prefs, libraryView: next });
