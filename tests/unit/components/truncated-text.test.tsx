@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { TOOLTIP_TOUCH_DELAY_MS, TruncatedText } from 'src/components/TruncatedText';
@@ -117,6 +117,22 @@ describe('TruncatedText', () => {
       expect(await screen.findByRole('tooltip')).toHaveTextContent(SECOND);
       await new Promise((r) => setTimeout(r, 300));
       expect(screen.getAllByRole('tooltip')).toHaveLength(1);
+      await user.tab();
+    });
+
+    it('키보드 포커스로 첫째 툴팁을 연 뒤 둘째에 마우스를 올리면 툴팁은 둘째 하나만 남고, Esc 한 번에 모두 닫힌다', async () => {
+      const user = userEvent.setup();
+      const [first, second] = renderTwo();
+      fakeOverflow(first, true);
+      fakeOverflow(second, true);
+      await user.tab();
+      expect(await screen.findByRole('tooltip')).toHaveTextContent(FIRST);
+      await user.hover(second);
+      await waitFor(() => expect(screen.getByRole('tooltip')).toHaveTextContent(SECOND));
+      expect(screen.getAllByRole('tooltip')).toHaveLength(1);
+      await user.keyboard('{Escape}');
+      await waitFor(() => expect(screen.queryByRole('tooltip')).not.toBeInTheDocument());
+      await user.unhover(second);
       await user.tab();
     });
 

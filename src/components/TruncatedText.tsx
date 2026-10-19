@@ -71,6 +71,12 @@ const clampSx = (lines: number) =>
 /** 키보드 포커스를 받는 가장 가까운 조작 요소(행·칩 단추, 링크). */
 const FOCUS_HOST = 'button, a[href], [tabindex]:not([tabindex="-1"])';
 
+/**
+ * 지금 열린 툴팁을 닫는 함수. 화면에 툴팁은 늘 하나만 둔다: 어떤 말줄임 글자가 툴팁을 열면 이전 것을 닫는다.
+ * 같은 조작 요소 안의 포커스 툴팁과 마우스 오버 툴팁, 다른 행끼리의 툴팁이 겹치지 않는다.
+ */
+let closeOpenTip: (() => void) | null = null;
+
 /** 말줄임 글자 요소 표시. 값은 줄 수다. 한 조작 요소 안의 여러 글자 중 툴팁을 띄울 하나를 고를 때 쓴다. */
 const TEXT_ATTR = 'data-truncated-text';
 
@@ -177,12 +183,15 @@ export function TruncatedText({
   // `preventDefault`는 처리했다는 표시로 함께 둔다. 고정 위치가 글자와 어긋나지
   // 않게 스크롤로 글자가 움직이거나 창 크기가 바뀌면 닫는다. 포커스가 끌어온 스크롤처럼 글자가 그 자리면 둔다.
   // 툴팁이 화면에 붙는 커밋과 함께 달도록 레이아웃 효과로 둔다(일반 효과면 그 사이에 온 스크롤·Esc를 놓친다).
+  // 열 때 이전에 열린 다른 툴팁을 닫고 이 툴팁을 지금 열린 것으로 둔다.
   useLayoutEffect(() => {
     if (!open) return;
     const shut = () => {
       clearTimeout(timer.current);
       setOpen(false);
     };
+    closeOpenTip?.();
+    closeOpenTip = shut;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing) return;
       event.preventDefault();
@@ -201,6 +210,7 @@ export function TruncatedText({
       document.removeEventListener('keydown', onKeyDown, true);
       window.removeEventListener('scroll', onScroll, true);
       window.removeEventListener('resize', shut);
+      if (closeOpenTip === shut) closeOpenTip = null;
     };
   }, [open]);
 
