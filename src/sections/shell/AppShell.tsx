@@ -2,7 +2,7 @@ import Box from '@mui/material/Box';
 import IconButton from '@mui/material/IconButton';
 import type { SxProps, Theme } from '@mui/material/styles';
 import { visuallyHidden } from '@mui/utils';
-import { useAtom, useAtomValue, useSetAtom } from 'jotai';
+import { useAtomValue, useSetAtom } from 'jotai';
 import { useLayoutEffect, type ReactNode } from 'react';
 import { matchPath, Outlet, useLocation, useNavigate } from 'react-router';
 import { XIcon } from 'src/components/icons';
@@ -80,6 +80,7 @@ function DetailPane({
   onClose: () => void;
 }) {
   const overlay = mode === 'overlay';
+  // 넓은 화면 칸도 장소가 열려 있으면 닫기를 둔다(스펙 A1 §3.2). 안내만 보일 때는 없다.
   const closable = overlay || placeId !== null;
   return (
     <Box
@@ -191,18 +192,23 @@ export function AppShell() {
   // 중간 폭에서는 핀 모드가 상세 오버레이를 내린다(아래 `body`의 분기와 같다).
   const detailShown = layout === 'compact' || (!adding && (layout === 'wide' || !pinning));
 
-  const [, setOrigin] = useAtom(detailOriginAtom);
+  // 장소를 열기 전에 보던 화면(목록/지도). 넓은·중간 폭에서 상세를 닫을 때 돌아갈 곳이다(스펙 A1 §3.1).
+  const setOrigin = useSetAtom(detailOriginAtom);
   const viewOrigin = isMap ? 'map' : 'list';
   useLayoutEffect(() => {
     if (placeId === null && isLibraryView) setOrigin(viewOrigin);
   }, [placeId, isLibraryView, viewOrigin, setOrigin]);
+  // 휴대폰 상세 시트의 뒤 화면·단계(스펙 A2 §4.4). 기록 상태가 유일한 출처다(새로고침에도 남는다).
   const sheet = placeId === null ? null : sheetStateOf(location.state);
   const sheetOnMap = sheet?.from === 'map';
+  // 좁은 화면은 지도 탭에서만 추가 흐름의 지도를 쓴다(장소 시트 뒤의 지도는 시트가 다 펼치면 가려진다).
   useAddFlowRoute(layout === 'compact' ? isMap : isLibraryView);
   // `/import`로 들어오면 주소를 `/`로 바꾸고 공유 파일 가져오기 흐름을 연다.
   useImportEntry();
 
+  // 닫기(선택 해제). 휴대폰은 시트를 연 기록을 되감는다(`useCloseDetail` → `useCloseSheet`, 하단 탭과 같은 규칙).
   const closeDetail = useCloseDetail();
+  // Esc로 닫기. 추가 칸·핀 모드는 자기 Esc가 있다. 시트 안의 Esc는 시트가 먼저 받아 막으므로 두 번 닫지 않는다.
   useEscapeClose(isLibraryView && placeId !== null && !adding && !pinning, () => closeDetail());
   useFocusReturnOnClose(placeId);
 

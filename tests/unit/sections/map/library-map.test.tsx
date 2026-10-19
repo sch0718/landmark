@@ -562,6 +562,52 @@ describe('library map on a compact screen', () => {
     expect(router.state.historyAction).toBe('REPLACE');
     expect(fakeAdapter().getCamera()).toEqual(panned);
   });
+
+  // A1(선택 해제)과 A2(시트)가 만나는 곳: 휴대폰의 해제는 시트 닫기와 같아서 시트를 연 기록을 되감는다.
+  it('휴대폰: 다른 마커로 바꾼 뒤 그 마커를 다시 누르면 시트가 닫히고 뒤로 한 번에 지도로 돌아간다', async () => {
+    const user = userEvent.setup();
+    const { router } = await renderLibrary(sampleLibrary(), { width: 390, path: '/map' });
+    await ready();
+    await user.click(marker(2)!);
+    await screen.findByRole('button', { name: '펼치기' });
+    await user.click(marker(1)!);
+    await waitFor(() => expect(marker(1)).toHaveAttribute('aria-pressed', 'true'));
+
+    await user.click(marker(1)!);
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/map'));
+    expect(router.state.historyAction).toBe('POP');
+    await waitFor(() =>
+      expect(screen.queryByRole('region', { name: '장소 상세' })).not.toBeInTheDocument(),
+    );
+  });
+
+  it('휴대폰: 시트가 열린 채 지도 빈 곳을 누르면 시트가 닫히고 지도로 돌아간다', async () => {
+    const user = userEvent.setup();
+    const { router } = await renderLibrary(sampleLibrary(), { width: 390, path: '/map' });
+    await ready();
+    await user.click(marker(2)!);
+    await screen.findByRole('button', { name: '펼치기' });
+
+    fireEvent.click(fakeMap());
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/map'));
+    expect(router.state.historyAction).toBe('POP');
+  });
+
+  it('휴대폰: 링크로 바로 들어온 시트도 빈 곳을 누르면 앱을 벗어나지 않고 지도로 바꿔치기한다', async () => {
+    const { router } = await renderLibrary(sampleLibrary(), {
+      width: 390,
+      path: `/place/${id(2)}`,
+    });
+    await ready();
+    await screen.findByRole('button', { name: '펼치기' });
+
+    fireEvent.click(fakeMap());
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/map'));
+    expect(router.state.historyAction).toBe('REPLACE');
+  });
 });
 
 // 내 위치(스펙 §4.3). 기준점은 장소 좌표와 겹치지 않는 자릿수다.
