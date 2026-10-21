@@ -152,6 +152,7 @@ export function importControl(
     set(link) {
       if (link.kind === 'direct') {
         anchor.href = link.href;
+        if (link.sameTab) anchor.removeAttribute('target');
       } else if (link.kind === 'too-big') {
         slot.replaceChildren(
           el(d, 'p', tooBigNote, 'import-note'),
@@ -289,4 +290,20 @@ export function renderViewer(
 /** 데이터를 읽지 못했을 때: 아무것도 그리지 않고 안내만 보인다. */
 export function renderBroken(root: HTMLElement): void {
   root.replaceChildren(el(root.ownerDocument, 'p', '파일 내용을 읽지 못했어요', 'broken'));
+}
+
+/** 링크가 없거나 깨졌을 때 파일로 다시 받는 방법을 안내한다. */
+export function renderBrokenLink(root: HTMLElement): void {
+  const d = root.ownerDocument;
+  const link = el(d, 'a', 'Landmark 열기');
+  link.href = '/';
+  root.replaceChildren(
+    el(
+      d,
+      'p',
+      '링크가 손상됐거나 너무 길어요. 보낸 사람에게 파일로 보내 달라고 해 주세요',
+      'broken',
+    ),
+    link,
+  );
 }

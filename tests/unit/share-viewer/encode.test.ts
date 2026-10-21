@@ -8,6 +8,7 @@ import {
   hashDoc,
   importLink,
   MAX_HASH_CHARS,
+  viewLink,
 } from 'src/share-viewer/encode';
 import { makeShareV2Doc } from '../helpers/share-v2-doc';
 
@@ -150,4 +151,87 @@ describe('importLink v2', () => {
       true,
     );
   });
+});
+
+describe('viewLink', () => {
+  it('v1 원본을 /view 링크에 담는다', async () => {
+    const doc = makeDoc([place(1)]);
+    const link = await viewLink(doc, 'https://x.test');
+    expect(link.kind).toBe('direct');
+    if (link.kind !== 'direct') return;
+    expect(link.href).toBe(`https://x.test/view#d=${await encodeShareHash(doc)}`);
+  });
+
+  it('v2 경로선이 한도 안이면 보존한다', async () => {
+    const doc = makeShareV2Doc();
+    const link = await viewLink(doc, 'https://x.test');
+    expect(link).toEqual({
+      kind: 'direct',
+      href: `https://x.test/view#d=${await encodeShareHash(doc)}`,
+    });
+  });
+
+  it('v2 경로선 때문에 넘으면 경로선 없는 값으로 재시도한다', async () => {
+    const doc = makeShareV2Doc();
+    const next = seeded(8);
+    doc.trips[0]!.days[0]!.legs[0]!.path = Array.from({ length: 7000 }, () => [
+      124 + next() * 8,
+      33 + next() * 6,
+    ]);
+    expect((await encodeShareHash(doc)).length).toBeGreaterThan(MAX_HASH_CHARS);
+    expect(await viewLink(doc, 'https://x.test')).toEqual({
+      kind: 'direct',
+      href: `https://x.test/view#d=${await encodeShareHash(hashDoc(doc))}`,
+    });
+    expect(doc.trips[0]!.days[0]!.legs[0]!.path).toHaveLength(7000);
+  });
+
+  it.each([1, 2])('v%s는 경로선 없이도 너무 크면 too-big', async (version) => {
+    const doc = version === 1 ? makeDoc([place(1)]) : makeShareV2Doc();
+    doc.places[0]!.memo = randomText(seeded(7), 100_000);
+    expect(await viewLink(doc, 'https://x.test')).toEqual({
+      kind: 'too-big',
+      href: 'https://x.test/view',
+    });
+  });
+
+  it('압축 기능이 없으면 unsupported', async () => {
+    vi.stubGlobal('CompressionStream', undefined);
+    expect(await viewLink(makeDoc([place(1)]), 'https://x.test')).toEqual({ kind: 'unsupported' });
+  });
+});
+
+it('링크는 잘 압축돼도 풀린 데이터·장소 수 한도를 지킨다', async () => {
+  const doc = makeDoc([place(1, { memo: '가'.repeat(1_747_627) })]);
+  expect((await encodeShareHash(doc)).length).toBeLessThan(MAX_HASH_CHARS);
+  expect(await viewLink(doc, 'https://x.test')).toEqual({
+    kind: 'too-big',
+    href: 'https://x.test/view',
+  });
+  expect(
+    await viewLink(makeDoc(Array.from({ length: 1001 }, (_, i) => place(i))), 'https://x.test'),
+  ).toEqual({ kind: 'too-big', href: 'https://x.test/view' });
+});
+
+it.each([
+  [24_000, 'direct'],
+  [24_001, 'too-big'],
+] as const)('해시 경계: 압축 %i바이트 → %s', async (bytes, kind) => {
+  vi.stubGlobal(
+    'CompressionStream',
+    class extends TransformStream<Uint8Array, Uint8Array> {
+      constructor() {
+        super({
+          transform() {},
+          flush(controller) {
+            controller.enqueue(new Uint8Array(bytes));
+          },
+        });
+      }
+    },
+  );
+  const result = await viewLink(makeDoc([place(1)]), 'https://x.test');
+  expect(result.kind).toBe(kind);
+  if (result.kind === 'direct')
+    expect(new URL(result.href).hash.slice(3)).toHaveLength(MAX_HASH_CHARS);
 });
