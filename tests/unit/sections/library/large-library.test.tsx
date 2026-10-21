@@ -91,12 +91,14 @@ describe('많은 라벨 찾기', () => {
 
 describe('넘칠 때만 칩 스크롤 버튼', () => {
   it('크기·스크롤 변경을 관찰하고 끝 방향을 비활성화한다', async () => {
-    let resize = () => {};
+    // 양끝 단추가 저마다 관찰자를 둔다(단추 코드는 나중에 받는다).
+    const callbacks: Array<() => void> = [];
+    const resize = () => callbacks.forEach((cb) => cb());
     vi.stubGlobal(
       'ResizeObserver',
       class {
         constructor(cb: () => void) {
-          resize = cb;
+          callbacks.push(cb);
         }
         observe() {}
         disconnect() {}
@@ -107,6 +109,7 @@ describe('넘칠 때만 칩 스크롤 버튼', () => {
         <span>내용</span>
       </ChipScrollRow>,
     );
+    await waitFor(() => expect(callbacks).toHaveLength(2));
     expect(
       screen.queryByRole('button', { name: '시험 줄 오른쪽으로 스크롤' }),
     ).not.toBeInTheDocument();

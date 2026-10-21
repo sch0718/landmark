@@ -1,76 +1,35 @@
 import Box from '@mui/material/Box';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useRef, type ReactNode } from 'react';
 import { useLayout } from 'src/sections/shell/use-layout';
 
 type Props = { label: string; children: ReactNode };
 
-/** 넘치는 칩 줄에만 스크롤 단추를 더한다. 휴대폰은 손가락으로 넘긴다. */
+// 넓은·중간 화면의 스크롤 단추는 첫 로딩 예산(`initialJsGzipMax`)을 아끼려고 나중에 받는다. 받지 못하면 단추 없이 둔다.
+// 칩 줄 자체는 늘 여기서 그려, 단추를 받아도 칩이 다시 그려지지(포커스를 잃지) 않는다.
+const ChipScrollButton = lazy(() =>
+  import('src/sections/library/ChipScrollButton').then(
+    (m) => ({ default: m.ChipScrollButton }),
+    () => ({ default: () => null }),
+  ),
+);
+
+/** 가로로 넘기는 칩 줄. 넓은·중간 화면은 넘칠 때만 양끝에 스크롤 단추가 붙는다. 휴대폰은 손가락으로 넘긴다. */
 export function ChipScrollRow({ label, children }: Props) {
-  const ref = useRef<HTMLDivElement>(null);
-  const frameRef = useRef<HTMLDivElement>(null);
+  const rowRef = useRef<HTMLDivElement>(null);
   const compact = useLayout() === 'compact';
-  const [edges, setEdges] = useState({ overflow: false, left: false, right: false });
-  const measure = () => {
-    const row = ref.current;
-    if (!row) return;
-    const next = {
-      overflow: row.scrollWidth > (frameRef.current?.clientWidth || row.clientWidth) + 1,
-      left: row.scrollLeft > 1,
-      right: row.scrollLeft + row.clientWidth < row.scrollWidth - 1,
-    };
-    setEdges((old) =>
-      old.overflow === next.overflow && old.left === next.left && old.right === next.right
-        ? old
-        : next,
+  const button = (side: -1 | 1) =>
+    !compact && (
+      <Suspense fallback={null}>
+        <ChipScrollButton side={side} rowRef={rowRef} label={label} watch={children} />
+      </Suspense>
     );
-  };
-  useEffect(() => {
-    measure();
-    const row = ref.current;
-    if (!row) return;
-    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
-    observer?.observe(row);
-    if (frameRef.current) observer?.observe(frameRef.current);
-    for (const child of row.children) observer?.observe(child);
-    window.addEventListener('resize', measure);
-    return () => {
-      observer?.disconnect();
-      window.removeEventListener('resize', measure);
-    };
-  }, [children, compact]);
-  const scroll = (direction: number) => {
-    const row = ref.current;
-    row?.scrollBy({ left: direction * Math.max(120, row.clientWidth * 0.75), behavior: 'smooth' });
-  };
-  const button = (direction: -1 | 1) => (
-    <Box
-      component="button"
-      type="button"
-      aria-label={`${label} ${direction === -1 ? '왼쪽' : '오른쪽'}으로 스크롤`}
-      disabled={direction === -1 ? !edges.left : !edges.right}
-      onClick={() => scroll(direction)}
-      sx={{
-        flex: 'none',
-        width: 44,
-        minHeight: 44,
-        border: 0,
-        background: 'transparent',
-        color: 'var(--tm-text-secondary)',
-        cursor: 'pointer',
-        '&:disabled': { opacity: 0.35 },
-      }}
-    >
-      {direction === -1 ? '◀' : '▶'}
-    </Box>
-  );
   return (
-    <Box ref={frameRef} sx={{ display: 'flex', minWidth: 0 }}>
-      {!compact && edges.overflow && button(-1)}
+    <Box sx={{ display: 'flex', minWidth: 0 }}>
+      {button(-1)}
       <Box
-        ref={ref}
+        ref={rowRef}
         role="group"
         aria-label={label}
-        onScroll={measure}
         sx={{
           display: 'flex',
           flex: 1,
@@ -83,7 +42,7 @@ export function ChipScrollRow({ label, children }: Props) {
       >
         {children}
       </Box>
-      {!compact && edges.overflow && button(1)}
+      {button(1)}
     </Box>
   );
 }
