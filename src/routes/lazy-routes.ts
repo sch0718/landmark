@@ -52,9 +52,15 @@ export const loadRestoreDialog = lazyChunk(() => import('src/sections/backup/Res
 export const loadTripShareDialog = lazyChunk(
   () => import('src/sections/share-export/TripShareDialog'),
 );
+export const loadLabelFilterDialog = lazyChunk(
+  () => import('src/sections/library/LabelFilterDialog'),
+);
 export const loadLabelPickerDialog = lazyChunk(
   () => import('src/sections/place/LabelPickerDialog'),
 );
+// 보관함의 `여행에 넣기`·`새 여행`(이 지역으로 여행 만들기) 창. 첫 로딩 예산을 아끼려고 열 때 받는다.
+export const loadTripPickerDialog = lazyChunk(() => import('src/sections/trips/TripPickerDialog'));
+export const loadTripFormDialog = lazyChunk(() => import('src/sections/trips/TripFormDialog'));
 
 export const LinkInputPanel = lazy(() =>
   loadLinkInputPanel().then((m) => ({ default: m.LinkInputPanel })),
@@ -84,6 +90,12 @@ export const TripShareDialog = lazy(() =>
 export const LabelPickerDialog = lazy(() =>
   loadLabelPickerDialog().then((m) => ({ default: m.LabelPickerDialog })),
 );
+export const TripPickerDialog = lazy(() =>
+  loadTripPickerDialog().then((m) => ({ default: m.TripPickerDialog })),
+);
+export const TripFormDialog = lazy(() =>
+  loadTripFormDialog().then((m) => ({ default: m.TripFormDialog })),
+);
 
 /** 첫 화면을 그린 뒤 한가할 때 미리 받는 화면 단위들. */
 export const ROUTE_CHUNKS: readonly (() => Promise<unknown>)[] = [
@@ -95,7 +107,7 @@ export const ROUTE_CHUNKS: readonly (() => Promise<unknown>)[] = [
   loadLegacyImportPage,
 ];
 
-/** 같은 때 미리 받는 추가 칸 단계와 내보내기·되살리기·일정 공유·라벨 고르기 대화상자 단위들. */
+/** 같은 때 미리 받는 추가 칸 단계와 내보내기·되살리기·일정 공유·라벨 고르기·여행 고르기·새 여행 대화상자 단위들. */
 export const PANEL_CHUNKS: readonly (() => Promise<unknown>)[] = [
   loadLinkInputPanel,
   loadCandidateCard,
@@ -107,4 +119,10 @@ export const PANEL_CHUNKS: readonly (() => Promise<unknown>)[] = [
   loadRestoreDialog,
   loadTripShareDialog,
   loadLabelPickerDialog,
+  loadTripPickerDialog,
+  loadTripFormDialog,
 ];
+
+export const LabelFilterDialog = lazy(() =>
+  loadLabelFilterDialog().then((m) => ({ default: m.LabelFilterDialog })),
+);

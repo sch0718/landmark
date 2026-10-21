@@ -1,5 +1,5 @@
 import type { Label, Library, Place } from 'src/schema/library';
-import { regionsByPlace } from 'src/domain/library/region';
+import { regionsByPlace, regionPathsByPlace, matchesRegionValue } from 'src/domain/library/region';
 import { isVisited, reviewOf, visitedOnOf } from 'src/domain/library/visit';
 
 /** 방문 필터: 전체 / 안 가 본 곳 / 가 본 곳. */
@@ -29,8 +29,17 @@ export const DEFAULT_QUERY: LibraryQuery = {
 const OTHER_REGION = '기타';
 const compareKo = (a: string, b: string): number => a.localeCompare(b, 'ko');
 
+const livePlacesCache = new WeakMap<Library['places'], Place[]>();
+
 export function livePlaces(lib: Library): Place[] {
-  return Object.values(lib.places).filter((p) => p.deletedAt === null && p.saved.value === true);
+  let result = livePlacesCache.get(lib.places);
+  if (!result) {
+    result = Object.values(lib.places).filter(
+      (p) => p.deletedAt === null && p.saved.value === true,
+    );
+    livePlacesCache.set(lib.places, result);
+  }
+  return result;
 }
 
 export function liveLabels(lib: Library): Label[] {
@@ -78,6 +87,7 @@ type Context = {
   regions: ReadonlySet<string>;
   /** 장소 id → 지역(주소가 없으면 가까운 장소에서 빌린 지역). */
   regionOf: ReadonlyMap<string, string>;
+  regionPath: ReadonlyMap<string, string>;
 };
 
 function contextOf(lib: Library, q: LibraryQuery): Context {
@@ -86,6 +96,7 @@ function contextOf(lib: Library, q: LibraryQuery): Context {
     needle: foldText(q.text.trim()),
     regions: new Set(q.regions),
     regionOf: regionsByPlace(livePlaces(lib)),
+    regionPath: regionPathsByPlace(livePlaces(lib)),
   };
 }
 
@@ -107,7 +118,16 @@ function matchesVisit(place: Place, q: LibraryQuery): boolean {
 }
 
 function matchesRegion(place: Place, ctx: Context): boolean {
-  return ctx.regions.size === 0 || ctx.regions.has(ctx.regionOf.get(place.id) ?? OTHER_REGION);
+  return (
+    ctx.regions.size === 0 ||
+    [...ctx.regions].some((region) =>
+      matchesRegionValue(
+        region,
+        ctx.regionPath.get(place.id) ?? OTHER_REGION,
+        ctx.regionOf.get(place.id) ?? OTHER_REGION,
+      ),
+    )
+  );
 }
 
 function matchesLabels(labels: readonly Label[], q: LibraryQuery): boolean {
@@ -257,5 +277,47 @@ export function regionCounts(
 export function placeIdsInRegion(lib: Library, region: string): string[] {
   const places = livePlaces(lib);
   const regionOf = regionsByPlace(places);
-  return places.filter((p) => regionOf.get(p.id) === region).map((p) => p.id);
+  const paths = regionPathsByPlace(places);
+  return places
+    .filter((p) =>
+      matchesRegionValue(
+        region,
+        paths.get(p.id) ?? OTHER_REGION,
+        regionOf.get(p.id) ?? OTHER_REGION,
+      ),
+    )
+    .map((p) => p.id);
+}
+
+export type RegionCount = { region: string; count: number };
+export type RegionTreeCount = RegionCount & { children: RegionCount[] };
+
+/** 지역 이외 조건으로 세고, 시·도별로 시·군 내역을 붙인다. */
+export function regionTreeCounts(lib: Library, q: LibraryQuery): RegionTreeCount[] {
+  const ctx = contextOf(lib, q);
+  const parents = new Map<string, RegionTreeCount>();
+  for (const p of livePlaces(lib)) {
+    const labels = labelsOf(p, ctx.byId);
+    if (!matchesText(p, labels, ctx.needle) || !matchesLabels(labels, q) || !matchesVisit(p, q))
+      continue;
+    const path = ctx.regionPath.get(p.id) ?? OTHER_REGION;
+    const province = path.split('/')[0]!;
+    const parent = parents.get(province) ?? { region: province, count: 0, children: [] };
+    parent.count += 1;
+    if (path !== province) {
+      const child = parent.children.find((r) => r.region === path);
+      if (child) child.count += 1;
+      else parent.children.push({ region: path, count: 1 });
+    }
+    parents.set(province, parent);
+  }
+  const compare = (a: RegionCount, b: RegionCount) =>
+    a.region === OTHER_REGION
+      ? 1
+      : b.region === OTHER_REGION
+        ? -1
+        : b.count - a.count || compareKo(a.region, b.region);
+  const result = [...parents.values()].sort(compare);
+  for (const parent of result) parent.children.sort(compare);
+  return result;
 }

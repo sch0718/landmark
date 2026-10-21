@@ -11,7 +11,7 @@ import {
   livePlaces,
   placeIdsInRegion,
   queryPlaces,
-  regionCounts,
+  regionTreeCounts,
   sortByVisited,
   visitCounts,
   type LibraryQuery,
@@ -28,6 +28,7 @@ import { isVisited, localDateOf, visitedOnOf } from 'src/domain/library/visit';
 import { nextRadius, radiusLabel } from 'src/domain/nearby';
 import type { Library } from 'src/schema/library';
 import { addCandidates } from 'src/domain/trips/ops';
+import { TripFormDialog, TripPickerDialog } from 'src/routes/lazy-routes';
 import { paths } from 'src/routes/paths';
 import { useOpenPlace } from 'src/sections/library/use-open-place';
 import { BulkBar } from 'src/sections/library/BulkBar';
@@ -42,13 +43,12 @@ import { ListView } from 'src/sections/library/views/ListView';
 import { TilesView } from 'src/sections/library/views/TilesView';
 import type { LibraryView } from 'src/sections/library/ViewSwitcher';
 import { candidatesNotice } from 'src/sections/trips/candidate-notice';
-import { TripFormDialog } from 'src/sections/trips/TripFormDialog';
-import { TripPickerDialog } from 'src/sections/trips/TripPickerDialog';
 import type { Trip } from 'src/schema/trip';
 import { NearbyBar, type NearbyBarHandle } from 'src/sections/nearby/NearbyBar';
 import { useNearby, useStartNearby } from 'src/sections/nearby/use-nearby';
 import { ExportHtmlDialogHost } from 'src/sections/share-export/ExportHtmlDialogHost';
 import { exportTargets } from 'src/sections/share-export/export-targets';
+import { LazyDialogHost } from 'src/sections/share-export/LazyDialogHost';
 import { useCloseDetail } from 'src/sections/shell/use-close-detail';
 import { useLayout } from 'src/sections/shell/use-layout';
 import { libraryAtom, useLibraryAction } from 'src/stores/library-state';
@@ -150,7 +150,7 @@ export function LibraryPage() {
   );
   const visits = useMemo(() => visitCounts(library, query), [library, query]);
   const counts = useMemo(() => labelCounts(library, query), [library, query]);
-  const regions = useMemo(() => regionCounts(library, query), [library, query]);
+  const regions = useMemo(() => regionTreeCounts(library, query), [library, query]);
 
   // 화면에 보이는 장소만 선택으로 센다. 필터가 바뀌어 목록에서 빠진 선택은 버린다(렌더 중 상태 갱신).
   const visible = new Set(places.map((p) => p.id));
@@ -291,7 +291,10 @@ export function LibraryPage() {
   };
   // 지역 칩 하나 → 그 지역의 보관함 장소 전부(다른 필터와 상관없이)를 후보로 새 여행.
   const createRegionTrip = (region: string) =>
-    setNewTrip({ title: `${region} 여행`, candidates: placeIdsInRegion(library, region) });
+    setNewTrip({
+      title: `${region.endsWith('/전체') ? region.split('/')[0] : region.split('/').at(-1)} 여행`,
+      candidates: placeIdsInRegion(library, region),
+    });
 
   const listProps = {
     places,
@@ -387,23 +390,31 @@ export function LibraryPage() {
           onClear={() => setSelected(new Set())}
         />
       )}
-      <TripPickerDialog
+      <LazyDialogHost
         open={pickingTrip}
-        onPick={(tripId) => void addToTrip(tripId)}
-        onCreateNew={() => {
-          setPickingTrip(false);
-          setNewTrip({ candidates: selectedIds });
-        }}
         onClose={() => setPickingTrip(false)}
-      />
-      <TripFormDialog
-        open={newTrip !== null}
-        mode="create"
-        initial={{ title: newTrip?.title ?? '' }}
-        candidates={newTrip?.candidates ?? []}
-        onClose={() => setNewTrip(null)}
-        onDone={(id) => void navigate(paths.trip(id))}
-      />
+        heading="여행에 넣기"
+      >
+        <TripPickerDialog
+          open={pickingTrip}
+          onPick={(tripId) => void addToTrip(tripId)}
+          onCreateNew={() => {
+            setPickingTrip(false);
+            setNewTrip({ candidates: selectedIds });
+          }}
+          onClose={() => setPickingTrip(false)}
+        />
+      </LazyDialogHost>
+      <LazyDialogHost open={newTrip !== null} onClose={() => setNewTrip(null)} heading="새 여행">
+        <TripFormDialog
+          open={newTrip !== null}
+          mode="create"
+          initial={{ title: newTrip?.title ?? '' }}
+          candidates={newTrip?.candidates ?? []}
+          onClose={() => setNewTrip(null)}
+          onDone={(id) => void navigate(paths.trip(id))}
+        />
+      </LazyDialogHost>
       <ExportHtmlDialogHost
         open={exporting}
         onClose={() => setExporting(false)}

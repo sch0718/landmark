@@ -1156,3 +1156,41 @@ describe('library map 좁은 화면의 근처 칩', () => {
     expect(screen.queryByRole('button', { name: '가까운 순 끄기' })).not.toBeInTheDocument();
   });
 });
+
+it('장소만 고르면 기본 마커 목록은 다시 전달하지 않는다', async () => {
+  const { router } = await renderLibrary(sampleLibrary(), { width: 1280 });
+  await ready();
+  const adapter = fakeAdapter();
+  const setMarkers = vi.spyOn(adapter, 'setMarkers');
+  await router.navigate(`/place/${id(2)}`);
+  await waitFor(() => expect(marker(2)).toHaveAttribute('aria-pressed', 'true'));
+  await router.navigate(`/place/${id(3)}`);
+  await waitFor(() => expect(marker(3)).toHaveAttribute('aria-pressed', 'true'));
+  expect(setMarkers).not.toHaveBeenCalled();
+});
+
+it('라벨 찾기의 검색·다중 선택·모두 포함이 실제 목록과 마커를 함께 거른다', async () => {
+  const user = userEvent.setup();
+  const sample = sampleLibrary();
+  const extra = Array.from({ length: 10 }, (_, i) =>
+    makeLabel(`extra${String(i).padStart(3, '0')}`, `추가 라벨 ${i}`, 'blue', 'star', 10 + i),
+  );
+  await renderLibrary(
+    { ...sample, labels: { ...sample.labels, ...Object.fromEntries(extra.map((l) => [l.id, l])) } },
+    { width: 1280, prefs: { libraryView: 'list' } },
+  );
+  await ready();
+  await user.click(screen.getByRole('button', { name: '라벨 찾기' }));
+  const search = await screen.findByRole('searchbox', { name: '라벨 이름 검색' });
+  await user.type(search, '맛집');
+  const dialog = screen.getByRole('dialog', { name: '라벨 찾기' });
+  await user.click(within(dialog).getByRole('checkbox', { name: '맛집 2곳' }));
+  await user.clear(search);
+  await user.click(within(dialog).getByRole('checkbox', { name: '바다뷰 1곳' }));
+  await user.selectOptions(within(dialog).getByRole('combobox', { name: '라벨 포함 조건' }), 'all');
+  await user.click(within(dialog).getByRole('button', { name: '완료' }));
+  await waitFor(() => expect(shownMarkers()).toEqual([id(3)]));
+  expect(
+    within(await screen.findByRole('list', { name: '장소 목록' })).getAllByRole('listitem'),
+  ).toHaveLength(1);
+});

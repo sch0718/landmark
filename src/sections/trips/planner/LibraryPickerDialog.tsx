@@ -15,7 +15,7 @@ import {
   labelCounts,
   liveLabels,
   queryPlaces,
-  regionCounts,
+  regionTreeCounts,
   type LibraryQuery,
 } from 'src/domain/library/query';
 import { addCandidates } from 'src/domain/trips/ops';
@@ -119,7 +119,7 @@ export function LibraryPickerDialog({ open, tripId, onClose }: Props) {
     () => ({
       places: queryPlaces(library, query),
       counts: labelCounts(library, query),
-      regions: regionCounts(library, query),
+      regions: regionTreeCounts(library, query),
     }),
     [library, query],
   );

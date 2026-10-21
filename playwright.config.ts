@@ -39,6 +39,7 @@ export default defineConfig({
       grepInvert: /@mobile/,
       testMatch: [
         'library.spec.ts',
+        'large-library.spec.ts',
         'first-load.spec.ts',
         'legacy-import.spec.ts',
         'themes.spec.ts',
@@ -63,6 +64,7 @@ export default defineConfig({
       grepInvert: /@desktop/,
       testMatch: [
         'library.spec.ts',
+        'large-library.spec.ts',
         'first-load.spec.ts',
         'themes.spec.ts',
         'share-export.spec.ts',
@@ -86,6 +88,7 @@ export default defineConfig({
       grepInvert: /@desktop/,
       testMatch: [
         'library.spec.ts',
+        'large-library.spec.ts',
         'first-load.spec.ts',
         'share-link.spec.ts',
         'place-adding.spec.ts',

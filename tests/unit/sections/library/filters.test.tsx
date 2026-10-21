@@ -98,7 +98,9 @@ describe('library filters', () => {
     const order = within(screen.getByRole('group', { name: '지역' }))
       .getAllByRole('button')
       .map((b) => b.textContent);
-    expect(order).toEqual(['강릉 3', '서울 1', '속초 1']);
+    expect(order).toEqual(['강원 4', '서울 1']);
+    await user.click(regionChip('강원 4'));
+    expect(shown()).toHaveLength(4);
 
     await user.click(regionChip('속초 1'));
     expect(shownMatching('속초 횟집')).toBe(true);

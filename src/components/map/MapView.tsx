@@ -29,6 +29,7 @@ type Props = {
   padding?: MapPadding;
   onReadyChange?(ready: boolean): void;
   markers: MapMarker[];
+  selectedMarker?: MapMarker | null;
   polylines: MapPolyline[];
   /** 클러스터 마커의 색. 없으면 어댑터 기본색. */
   clusterStyle?: ClusterStyle;
@@ -179,6 +180,9 @@ export function MapView(props: Props) {
   useEffect(() => {
     if (ready) adapterRef.current?.setMarkers(props.markers);
   }, [ready, props.markers]);
+  useEffect(() => {
+    if (ready) adapterRef.current?.setSelectedMarker(props.selectedMarker ?? null);
+  }, [ready, props.selectedMarker]);
   useEffect(() => {
     if (ready) adapterRef.current?.setPolylines(props.polylines);
   }, [ready, props.polylines]);

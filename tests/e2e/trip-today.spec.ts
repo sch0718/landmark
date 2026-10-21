@@ -64,6 +64,10 @@ test.describe('여행 당일 모드', () => {
 
     // 1. 보관함 지역 칩 `강릉` → 여행 만들기 → 초당순두부·경포대를 Day 1에.
     await page.goto('/');
+    await page
+      .getByRole('group', { name: '지역' })
+      .getByRole('button', { name: /^강원 \d/ })
+      .click();
     await page.getByRole('group', { name: '지역' }).getByRole('button', { name: /^강릉/ }).click();
     await page.getByRole('button', { name: '이 지역으로 여행 만들기' }).click();
     const dialog = page.getByRole('dialog', { name: '새 여행' });
