@@ -181,8 +181,9 @@ test.describe('모바일', { tag: '@mobile' }, () => {
     await expect(page).toHaveURL(/\/$/);
 
     // 카드를 누르면 다 펼친 시트로 상세가 열린다(하단 탭은 그대로 보인다).
+    // 주소는 바로 `/`가 되지만 화면 전환은 transition이라 지도가 잠깐 남는다. 마커가 아닌 카드를 누르도록 목록으로 좁힌다.
     const id = placeIdByName('칠성조선소');
-    await page.getByRole('button', { name: /칠성조선소/ }).click();
+    await placeButton(page, /칠성조선소/).click();
     await expect(page).toHaveURL(new RegExp(`/place/${id}$`));
     const sheet = page.getByRole('region', { name: '장소 상세' });
     await expect(sheet.getByRole('button', { name: '접기' })).toBeVisible();
@@ -211,13 +212,13 @@ test.describe('모바일', { tag: '@mobile' }, () => {
     // 뒤로 가면 카드에 메모와 새 라벨이 보인다.
     await sheet.getByRole('button', { name: '닫기' }).click();
     await expect(page).toHaveURL(/\/$/);
-    const card = page.getByRole('button', { name: /칠성조선소/ });
+    const card = placeButton(page, /칠성조선소/);
     await expect(card).toContainText('두 번째 방문: 💛 팥빙수');
     await expect(card).toContainText('재방문');
 
     // 새로고침해도 그대로다.
     await page.reload();
-    const reloaded = page.getByRole('button', { name: /칠성조선소/ });
+    const reloaded = placeButton(page, /칠성조선소/);
     await expect(reloaded).toContainText('두 번째 방문: 💛 팥빙수');
     await expect(reloaded).toContainText('재방문');
 
