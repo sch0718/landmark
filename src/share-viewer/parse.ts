@@ -282,3 +282,55 @@ export function readShareDoc(doc: Document): ShareDoc | null {
     return null;
   }
 }
+
+/** 링크는 앱의 엄격한 필드 검사와 같은 규칙을 쓴다. 파일 보기의 관대한 검사는 유지한다. */
+export function parseLinkDoc(value: unknown): ShareDoc | null {
+  const keys = (x: unknown, allowed: string): x is Rec =>
+    isRecord(x) && Object.keys(x).every((key) => allowed.split(' ').includes(key));
+  if (!keys(value, 'format version title createdAt labels places trips')) return null;
+  const v2 = value.version === 2;
+  if (!v2 && 'trips' in value) return null;
+  if (!isIsoDateTime(value.createdAt)) return null;
+  if (!Array.isArray(value.places) || value.places.length < 1 || value.places.length > 1000)
+    return null;
+  if (!Array.isArray(value.labels)) return null;
+  const unique = (items: Rec[]) => new Set(items.map((x) => x.id)).size === items.length;
+  for (const p of value.places) {
+    if (
+      !keys(
+        p,
+        `id name address lng lat labelIds memo naverSid kakaoId googleId${v2 ? ' review' : ''}`,
+      )
+    )
+      return null;
+    if (!isFiniteNumber(p.lng) || !isFiniteNumber(p.lat) || !inKorea(p.lng, p.lat)) return null;
+  }
+  if (!value.labels.every((l) => keys(l, 'id name color order'))) return null;
+  if (!unique(value.places as Rec[]) || !unique(value.labels as Rec[])) return null;
+  if (v2) {
+    if (!Array.isArray(value.trips)) return null;
+    for (const t of value.trips) {
+      if (
+        !keys(t, 'title startDate endDate originId candidateIds days legModes') ||
+        !Array.isArray(t.days)
+      )
+        return null;
+      for (const d of t.days) {
+        if (
+          !keys(d, 'startTime lodgingId stops legs') ||
+          !Array.isArray(d.stops) ||
+          !Array.isArray(d.legs)
+        )
+          return null;
+        if (!d.stops.every((x) => keys(x, 'placeId stayMin fixedTime note'))) return null;
+        if (
+          !d.legs.every((x) =>
+            keys(x, 'from to mode durationS distanceM tollFare status queriedAt path'),
+          )
+        )
+          return null;
+      }
+    }
+  }
+  return parseShareDoc(value);
+}

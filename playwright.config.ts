@@ -43,6 +43,7 @@ export default defineConfig({
         'legacy-import.spec.ts',
         'themes.spec.ts',
         'share-export.spec.ts',
+        'share-link.spec.ts',
         'share-import.spec.ts',
         'place-adding.spec.ts',
         'folder-resync.spec.ts',
@@ -65,6 +66,7 @@ export default defineConfig({
         'first-load.spec.ts',
         'themes.spec.ts',
         'share-export.spec.ts',
+        'share-link.spec.ts',
         'share-import.spec.ts',
         'place-adding.spec.ts',
         'folder-resync.spec.ts',
@@ -85,6 +87,7 @@ export default defineConfig({
       testMatch: [
         'library.spec.ts',
         'first-load.spec.ts',
+        'share-link.spec.ts',
         'place-adding.spec.ts',
         'folder-resync.spec.ts',
         'trip-planning.spec.ts',

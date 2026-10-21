@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { encodeShareHash } from 'src/share-viewer/encode';
 import type { ShareDoc } from 'src/schema/share';
 import { makeShareV2Doc } from '../helpers/share-v2-doc';
 
@@ -35,6 +36,8 @@ beforeEach(() => {
   unhandled.length = 0;
   process.on('unhandledRejection', onUnhandled);
   document.head.innerHTML = '';
+  window.onhashchange = null;
+  window.history.replaceState(null, '', '/');
   setData(DOC);
   portMock.focus.mockReset();
   portMock.filter.mockReset();
@@ -51,6 +54,8 @@ beforeEach(() => {
 afterEach(() => {
   process.off('unhandledRejection', onUnhandled);
   importLinkMock.mockReset();
+  window.onhashchange = null;
+  vi.unstubAllGlobals();
 });
 
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -185,4 +190,54 @@ describe('보기 화면 진입점', () => {
     );
     expect(portMock.draw).toHaveBeenCalledTimes(1);
   });
+});
+
+describe('도메인 링크 보기', () => {
+  it('빈 블록이면 해시를 풀고 같은 값으로 같은 탭 가져오기 링크를 만든다', async () => {
+    const value = await encodeShareHash(DOC);
+    window.history.replaceState(null, '', `/view#d=${value}`);
+    document.getElementById('tripmap-share')!.textContent = '';
+    await import('src/share-viewer/main');
+    await vi.waitFor(() => expect(document.querySelector('h1')?.textContent).toBe(DOC.title));
+    const a = document.querySelector<HTMLAnchorElement>('header a.import-link')!;
+    expect(a.getAttribute('href')).toBe(`/import#d=${value}`);
+    expect(a.target).toBe('');
+    expect(importLinkMock).not.toHaveBeenCalled();
+    expect(document.title).toBe(DOC.title);
+  });
+
+  it.each(['', '#d=!!', `#d=${'A'.repeat(32_001)}`])(
+    '잘못된 링크는 안내와 앱 열기를 표시한다',
+    async (hash) => {
+      window.history.replaceState(null, '', `/view${hash}`);
+      document.getElementById('tripmap-share')!.textContent = '';
+      await import('src/share-viewer/main');
+      await vi.waitFor(() =>
+        expect(document.body.textContent).toContain(
+          '링크가 손상됐거나 너무 길어요. 보낸 사람에게 파일로 보내 달라고 해 주세요',
+        ),
+      );
+      const a = document.querySelector<HTMLAnchorElement>('a')!;
+      expect(a.textContent).toBe('Landmark 열기');
+      expect(a.getAttribute('href')).toBe('/');
+    },
+  );
+
+  it('데이터 블록이 있는 파일은 기존처럼 새 탭으로 가져온다', async () => {
+    importLinkMock.mockResolvedValue({ kind: 'direct', href: 'https://x.test/import#d=abc' });
+    await import('src/share-viewer/main');
+    await flush();
+    expect(document.querySelector<HTMLAnchorElement>('header a.import-link')!.target).toBe(
+      '_blank',
+    );
+  });
+});
+
+it('다른 링크 해시로 이동하면 새 문서를 읽도록 같은 탭을 다시 연다', async () => {
+  const reload = vi.fn();
+  vi.stubGlobal('location', { hash: '', reload });
+  document.getElementById('tripmap-share')!.textContent = '';
+  await import('src/share-viewer/main');
+  window.dispatchEvent(new HashChangeEvent('hashchange'));
+  expect(reload).toHaveBeenCalledTimes(1);
 });

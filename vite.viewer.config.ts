@@ -1,3 +1,4 @@
+import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import { inlineAssets } from './build/inline-assets.ts';
@@ -14,7 +15,17 @@ export default defineConfig({
   base: './',
   // 결과 폴더가 앱의 public이라, 이 빌드의 public 복사는 끈다.
   publicDir: false,
-  plugins: [inlineAssets({ fileName: 'share-viewer.html' })],
+  plugins: [
+    inlineAssets({ fileName: 'share-viewer.html' }),
+    {
+      name: 'tripmap:link-viewer',
+      writeBundle() {
+        // Pages는 view.html을 /view로 제공한다. 파일용 틀에는 데이터 자리를 그대로 남긴다.
+        const template = readFileSync(here('./public/share-viewer.html'), 'utf8');
+        writeFileSync(here('./public/view.html'), template.replace('__TRIPMAP_DATA__', ''));
+      },
+    },
+  ],
   resolve: {
     alias: {
       src: here('./src'),
