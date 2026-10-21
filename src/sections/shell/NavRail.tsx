@@ -1,6 +1,8 @@
 import Box from '@mui/material/Box';
 import { Link, useLocation } from 'react-router';
+import { AppLogo } from 'src/components/brand/AppLogo';
 import { PlusIcon } from 'src/components/icons';
+import { paths } from 'src/routes/paths';
 import { ADD_LABEL, isNavActive, NAV_ITEMS } from 'src/sections/shell/nav-items';
 
 const ITEM_SX = {
@@ -41,6 +43,15 @@ export function NavRail({ onAdd }: { onAdd: (opener: HTMLElement) => void }) {
         borderRight: '1px solid var(--tm-border)',
       }}
     >
+      <Box
+        component={Link}
+        to={paths.library}
+        aria-label="랜드마크"
+        title="랜드마크"
+        sx={{ ...ITEM_SX, mb: 0.5, '& svg': { width: 32, height: 32 } }}
+      >
+        <AppLogo />
+      </Box>
       {NAV_ITEMS.map((item) => {
         if (item === 'add') {
           return (

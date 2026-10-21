@@ -1,8 +1,10 @@
 import './styles.css';
+import type { ShareDoc } from 'src/schema/share';
+import { decodeShareHash } from './decode';
 import { appUrl, importLink } from './encode';
 import { connectMapFrame, shareMapUrl, toMapPlaces, type MapPort } from './map-frame';
 import { readShareDoc } from './parse';
-import { applyTheme, renderBroken, renderViewer } from './render';
+import { applyTheme, renderBroken, renderBrokenLink, renderViewer } from './render';
 import { renderTripViewer } from './render-trip';
 
 /**
@@ -18,10 +20,22 @@ root.id = 'root';
 document.body.append(root);
 applyTheme(document);
 
-const doc = readShareDoc(document);
-if (doc === null) {
-  renderBroken(root);
+const block = document.getElementById('tripmap-share')?.textContent?.trim();
+if (block) {
+  const doc = readShareDoc(document);
+  if (doc === null) renderBroken(root);
+  else show(doc);
 } else {
+  // 같은 탭에 다른 공유 링크를 붙여 넣으면 해시만 바뀐다. 지도 연결도 새로 시작한다.
+  window.onhashchange = () => location.reload();
+  const value = location.hash.startsWith('#d=') ? location.hash.slice(3) : '';
+  void decodeShareHash(value).then((doc) => {
+    if (doc === null) renderBrokenLink(root);
+    else show(doc, value);
+  });
+}
+
+function show(doc: ShareDoc, value?: string): void {
   // 연결 전에 그린 지도 그림(일정 모드의 첫 `draw`)은 기억했다가 연결한 뒤 보낸다.
   const early: { layers: Parameters<MapPort['draw']>[0] | null } = { layers: null };
   let map: MapPort = {
@@ -52,9 +66,13 @@ if (doc === null) {
     handle = renderViewer(root, doc, port, { app });
   }
   // 압축은 비동기라 링크는 먼저 해시 없이 그려 두고, 끝나면 바꾼다. 실패하면 해시 없는 기본 링크(`/import`)를 둔다.
-  void importLink(doc, app)
-    .then(handle.setImportLink)
-    .catch(() => undefined);
+  if (value !== undefined) {
+    handle.setImportLink({ kind: 'direct', href: `/import#d=${value}`, sameTab: true });
+  } else {
+    void importLink(doc, app)
+      .then(handle.setImportLink)
+      .catch(() => undefined);
+  }
   const slot = root.querySelector<HTMLElement>('#map');
   if (slot !== null) {
     map = connectMapFrame(slot, {

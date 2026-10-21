@@ -7,6 +7,18 @@ import { compileReactIcon } from './build/compile-react-svg-icon.ts';
 
 export default defineConfig(({ command }) => ({
   plugins: [
+    {
+      name: 'tripmap:view-route',
+      configureServer(server) {
+        // 정적 파일을 먼저 찾는 Pages와 개발 서버의 /view 동작을 맞춘다.
+        server.middlewares.use((request, _response, next) => {
+          if (request.url?.split('?')[0] === '/view' || request.url?.split('?')[0] === '/view/') {
+            request.url = request.url.replace(/^\/view\/?/, '/view.html');
+          }
+          next();
+        });
+      },
+    },
     react(),
     // React Compiler는 프로덕션 빌드에만 적용한다.
     ...(command === 'build' ? [babel({ presets: [reactCompilerPreset()] })] : []),

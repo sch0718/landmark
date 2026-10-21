@@ -11,6 +11,7 @@ import Typography from '@mui/material/Typography';
 import { Effect, Result } from 'effect';
 import { useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { toast } from 'sonner';
+import type { ShareDoc } from 'src/schema/share';
 import { downloadText } from 'src/lib/download-text';
 import { SHARE_IMPORT_LIMITS } from 'src/domain/share/read-share';
 import { startEffect } from 'src/lib/effect/runtime';
@@ -25,6 +26,7 @@ import {
   type ShareDocInvalid,
 } from 'src/services/errors';
 import { ShareTemplate } from 'src/services/share-template';
+import { useShareLink } from './use-share-link';
 
 const TITLE_MAX = 60;
 const TITLE_HELP = '제목은 1~60자로 써 주세요';
@@ -50,6 +52,8 @@ type Props = {
   children?: ReactNode;
   /** 받은 틀로 파일을 만든다. 공유 창 제약 때문에 동기여야 한다. */
   make(template: string, opts: ShareFileOptions): Result.Result<ShareHtml, ShareDocInvalid>;
+  /** 링크에 담을 문서. 파일용 HTML 틀을 기다리지 않고 만든다. */
+  linkDoc?(opts: ShareFileOptions): ShareDoc | null;
   /** 있으면 크기 검사를 켠다. 한도를 넘을 때 문구 끝에 붙일 줄이는 방법. */
   tooBigHint?(opts: ShareFileOptions): string;
   /** 있으면 장소 수 검사를 켠다. 가져오기 한도(1,000곳)를 넘을 때 문구 끝에 붙일 줄이는 방법. */
@@ -118,6 +122,7 @@ export function ShareFileDialog({
   emptyMessage,
   children,
   make,
+  linkDoc,
   tooBigHint,
   tooManyHint,
 }: Props) {
@@ -165,6 +170,44 @@ export function ShareFileDialog({
   const titleValid = titleLength >= 1 && titleLength <= TITLE_MAX;
   const disabled = busy || emptyMessage !== null || !titleValid;
   const shareDisabled = disabled || template === null;
+
+  const linksSupported = typeof CompressionStream !== 'undefined' && linkDoc !== undefined;
+  const link = useShareLink(
+    open && linksSupported && emptyMessage === null && titleValid,
+    trimmed,
+    includeMemo,
+    linkDoc,
+  );
+  const linkDisabled = disabled || link?.kind !== 'direct';
+  const runLink = async (kind: 'copy' | 'share') => {
+    if (busyRef.current || linkDisabled || link?.kind !== 'direct') return;
+    const runId = runIdRef.current;
+    const stale = () => runIdRef.current !== runId;
+    busyRef.current = true;
+    setBusy(true);
+    setError(null);
+    try {
+      if (kind === 'copy') {
+        await navigator.clipboard.writeText(link.href);
+        if (!stale()) toast('링크를 복사했어요');
+      } else {
+        await navigator.share({ title: trimmed, url: link.href });
+      }
+    } catch (e) {
+      if (!stale() && !isAbort(e)) {
+        setError(
+          kind === 'copy'
+            ? '링크를 복사하지 못했어요. 다시 시도해 주세요'
+            : '링크를 공유하지 못했어요. 링크 복사를 이용해 주세요',
+        );
+      }
+    } finally {
+      if (!stale()) {
+        busyRef.current = false;
+        setBusy(false);
+      }
+    }
+  };
 
   const run = async (kind: 'save' | 'share') => {
     if (busyRef.current || (kind === 'share' ? shareDisabled : disabled)) return;
@@ -260,6 +303,53 @@ export function ShareFileDialog({
             sx={{ minHeight: 44 }}
           />
           {children}
+          {linksSupported && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                <Button
+                  variant="outlined"
+                  disabled={linkDisabled}
+                  onClick={() => void runLink('copy')}
+                  sx={{ minHeight: 44 }}
+                >
+                  링크 복사
+                </Button>
+                {typeof navigator.share === 'function' && (
+                  <Button
+                    variant="outlined"
+                    disabled={linkDisabled}
+                    onClick={() => void runLink('share')}
+                    sx={{ minHeight: 44 }}
+                  >
+                    링크 공유
+                  </Button>
+                )}
+              </Box>
+              {includeMemo && (
+                <Typography variant="body2" sx={{ color: 'var(--tm-text-secondary)' }}>
+                  링크를 받은 사람은 누구나 메모를 볼 수 있어요
+                </Typography>
+              )}
+              {link?.kind === 'too-big' && (
+                <Typography
+                  role="status"
+                  variant="body2"
+                  sx={{ color: 'var(--tm-text-secondary)' }}
+                >
+                  링크가 너무 길어요. 파일로 보내 주세요
+                </Typography>
+              )}
+              {link?.kind === 'unsupported' && (
+                <Typography
+                  role="status"
+                  variant="body2"
+                  sx={{ color: 'var(--tm-text-secondary)' }}
+                >
+                  링크를 만들지 못했어요. 파일로 보내 주세요
+                </Typography>
+              )}
+            </Box>
+          )}
           {emptyMessage !== null && (
             <Typography variant="body2" sx={{ color: 'var(--tm-text-secondary)' }}>
               {emptyMessage}

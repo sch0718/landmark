@@ -1,4 +1,5 @@
 import { useAtomValue } from 'jotai';
+import { buildShareDoc } from 'src/domain/share/build-share';
 import type { ExportTargets } from 'src/sections/share-export/export-targets';
 import { renderShareHtml } from 'src/sections/share-export/make-share-html';
 import { ShareFileDialog, type ShareFileOptions } from 'src/sections/share-export/ShareFileDialog';
@@ -28,6 +29,7 @@ export function ExportHtmlDialog({ open, onClose, targets }: Props) {
       summary={targets.summary}
       defaultTitle={targets.defaultTitle}
       emptyMessage={targets.ids.length === 0 ? NOTHING_TO_EXPORT : null}
+      linkDoc={(opts) => buildShareDoc(library, targets.ids, opts)}
       make={(template, opts) => renderShareHtml(template, library, targets.ids, opts)}
       tooBigHint={tooBigHint}
     />

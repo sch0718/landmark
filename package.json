@@ -11,6 +11,7 @@
     "dev": "yarn build:viewer && vite",
     "dev:full": "yarn build:viewer && wrangler pages dev --proxy 5173 -- vite --port 5173 --strictPort",
     "build": "yarn build:viewer && tsc -b && vite build",
+    "build:icons": "node scripts/build-icons.mjs",
     "build:viewer": "vite build --config vite.viewer.config.ts",
     "build:map": "vite build --config vite.map.config.ts",
     "build:map:e2e": "VITE_MAP_ADAPTER=fake vite build --config vite.map.config.ts",

@@ -69,7 +69,9 @@ export function hashDoc(doc: ShareDoc): ShareDoc {
 }
 
 export type ImportLink =
-  { kind: 'direct'; href: string } | { kind: 'too-big'; href: string } | { kind: 'unsupported' };
+  | { kind: 'direct'; href: string; sameTab?: boolean }
+  | { kind: 'too-big'; href: string }
+  | { kind: 'unsupported' };
 
 /**
  * 문서를 담은 가져오기 링크(v2는 경로선을 뺀 사본 — `hashDoc`). 값이 `MAX_HASH_CHARS`를 넘으면 해시 없는 앱 주소만 돌려주고(`too-big`),
@@ -85,4 +87,25 @@ export async function importLink(doc: ShareDoc, app: string): Promise<ImportLink
   }
   if (value.length > MAX_HASH_CHARS) return { kind: 'too-big', href: `${app}/import` };
   return { kind: 'direct', href: `${app}/import#d=${value}` };
+}
+
+/** 보기 링크는 경로선을 먼저 담고, 한도를 넘은 v2만 경로선 없이 다시 만든다. */
+export async function viewLink(doc: ShareDoc, app: string): Promise<ImportLink> {
+  if (typeof CompressionStream === 'undefined') return { kind: 'unsupported' };
+  try {
+    const tooBig = { kind: 'too-big', href: `${app}/view` } as const;
+    if (doc.places.length > 1000) return tooBig;
+    let candidate = doc;
+    let value = await encodeShareHash(candidate);
+    const decodedTooBig = (data: ShareDoc) =>
+      new TextEncoder().encode(JSON.stringify(data)).byteLength > 5_242_880;
+    if ((value.length > MAX_HASH_CHARS || decodedTooBig(candidate)) && doc.version === 2) {
+      candidate = hashDoc(doc);
+      value = await encodeShareHash(candidate);
+    }
+    if (value.length > MAX_HASH_CHARS || decodedTooBig(candidate)) return tooBig;
+    return { kind: 'direct', href: `${app}/view#d=${value}` };
+  } catch {
+    return { kind: 'unsupported' };
+  }
 }

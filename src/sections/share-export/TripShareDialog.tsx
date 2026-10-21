@@ -4,6 +4,7 @@ import FormControlLabel from '@mui/material/FormControlLabel';
 import Typography from '@mui/material/Typography';
 import { useAtomValue } from 'jotai';
 import { useState } from 'react';
+import { buildTripShareDoc } from 'src/domain/share/build-trip-share';
 import { visibleCandidates, visibleStops } from 'src/domain/trips/query';
 import { renderTripShareHtml } from 'src/sections/share-export/make-share-html';
 import { ShareFileDialog, type ShareFileOptions } from 'src/sections/share-export/ShareFileDialog';
@@ -95,6 +96,12 @@ export function TripShareDialog({ open, onClose, tripId }: Props) {
       summary={summary}
       defaultTitle={title}
       emptyMessage={stopCount === 0 && !withCandidates ? NOTHING_TO_SHARE : null}
+      linkDoc={(opts) =>
+        buildTripShareDoc(library, tripId, legs.routeOf, {
+          ...opts,
+          includeCandidates: withCandidates,
+        })
+      }
       make={(template, opts: ShareFileOptions) =>
         renderTripShareHtml(template, library, tripId, legs.routeOf, {
           ...opts,
