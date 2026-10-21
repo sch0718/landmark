@@ -560,3 +560,20 @@ describe('NaverMapAdapter 마커 감싸개 클릭 통과', () => {
     expect(getComputedStyle(pill).pointerEvents).toBe('auto');
   });
 });
+
+it('선택 마커 전달은 클러스터 색인을 다시 만들지 않는다', async () => {
+  const sdk = installSdk();
+  const adapter = new NaverMapAdapter('id');
+  const mounted = adapter.mount(document.createElement('div'));
+  release();
+  await mounted;
+  const base = { id: 'a', lng: 128, lat: 37.5, color: '#000', label: '가', clusterable: true };
+  adapter.setMarkers([base, { ...base, id: 'b' }]);
+  const cluster = (adapter as unknown as { cluster: unknown }).cluster;
+  adapter.setSelectedMarker({ ...base, selected: true, clusterable: false });
+  expect((adapter as unknown as { cluster: unknown }).cluster).toBe(cluster);
+  expect(sdk.markerOptions.some((o) => o.zIndex === 1000)).toBe(true);
+  adapter.setSelectedMarker(null);
+  expect((adapter as unknown as { cluster: unknown }).cluster).toBe(cluster);
+  adapter.destroy();
+});

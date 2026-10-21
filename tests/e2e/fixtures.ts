@@ -190,6 +190,10 @@ export const addButton = (page: Page, name: string): Locator =>
 export async function createGangneungTrip(page: Page): Promise<void> {
   await seedStorage(page, { prefs: { libraryView: 'list' } });
   await page.goto('/');
+  await page
+    .getByRole('group', { name: '지역' })
+    .getByRole('button', { name: /^강원 \d/ })
+    .click();
   await page.getByRole('group', { name: '지역' }).getByRole('button', { name: /^강릉/ }).click();
   await page.getByRole('button', { name: '이 지역으로 여행 만들기' }).click();
   const dialog = page.getByRole('dialog', { name: '새 여행' });

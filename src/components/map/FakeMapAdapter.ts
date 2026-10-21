@@ -25,6 +25,7 @@ export class FakeMapAdapter implements MapAdapter {
   private boundsCb: ((b: Bounds) => void) | null = null;
   private mapCb: (() => void) | null = null;
   private markers: MapMarker[] = [];
+  private selectedMarker: MapMarker | null = null;
   private lines: MapPolyline[] = [];
   private markerNodes = new Map<
     string,
@@ -62,6 +63,12 @@ export class FakeMapAdapter implements MapAdapter {
 
   setMarkers(markers: MapMarker[]): void {
     this.markers = markers;
+    this.renderMarkers();
+  }
+
+  setSelectedMarker(marker: MapMarker | null): void {
+    if (marker === this.selectedMarker) return;
+    this.selectedMarker = marker;
     this.renderMarkers();
   }
 
@@ -146,7 +153,13 @@ export class FakeMapAdapter implements MapAdapter {
   private renderMarkers(): void {
     const root = this.markerRoot;
     if (!root) return;
-    const wanted = new Set(this.markers.map((marker) => marker.id));
+    const selected = this.selectedMarker;
+    const markers =
+      selected === null
+        ? this.markers
+        : this.markers.map((m) => (m.id === selected.id ? selected : m));
+    if (selected !== null && !markers.some((m) => m.id === selected.id)) markers.push(selected);
+    const wanted = new Set(markers.map((marker) => marker.id));
     for (const [id, entry] of this.markerNodes) {
       if (!wanted.has(id)) {
         entry.cleanup();
@@ -154,7 +167,7 @@ export class FakeMapAdapter implements MapAdapter {
         this.markerNodes.delete(id);
       }
     }
-    this.markers.forEach((marker, index) => {
+    markers.forEach((marker, index) => {
       let entry = this.markerNodes.get(marker.id);
       if (!entry) {
         const button = document.createElement('button');

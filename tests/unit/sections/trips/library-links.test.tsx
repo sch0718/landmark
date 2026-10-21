@@ -120,6 +120,7 @@ describe('이 지역으로 여행 만들기', () => {
 
     // 다른 필터(라벨)를 걸어 목록이 한 곳만 보여도 후보는 그 지역 전부다.
     await user.click(labelChip('맛집 2'));
+    await user.click(regionChip('강원 2'));
     await user.click(regionChip('강릉 1'));
     await user.click(screen.getByRole('button', { name: '이 지역으로 여행 만들기' }));
 
@@ -136,6 +137,7 @@ describe('이 지역으로 여행 만들기', () => {
   it('지역 칩을 두 개 고르면 버튼이 없다', async () => {
     const user = userEvent.setup();
     await renderLibrary(regionLibrary(), { prefs: LIST });
+    await user.click(regionChip('강원 5'));
     await user.click(regionChip('강릉 4'));
     expect(screen.getByRole('button', { name: '이 지역으로 여행 만들기' })).toBeInTheDocument();
     await user.click(regionChip('속초 1'));
@@ -395,6 +397,7 @@ describe('보관함에서 더하기', () => {
     expect(within(dialog).getByText('이미 후보에 있어요')).toBeInTheDocument();
 
     // 지역·라벨·검색으로 거른다.
+    await user.click(within(dialog).getByRole('button', { name: '강원 4' }));
     await user.click(within(dialog).getByRole('button', { name: '속초 1' }));
     expect(within(dialog).queryByRole('checkbox', { name: /창가 자리/ })).toBeNull();
     await user.click(within(dialog).getByRole('button', { name: '속초 1' }));

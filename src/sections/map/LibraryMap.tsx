@@ -100,17 +100,22 @@ export function LibraryMap() {
   const nearby = useNearby(filtered);
   const places = nearby.places;
   const { fix, locating } = useAtomValue(myLocationAtom);
-  const markers = useMemo(() => {
-    const shown = toMarkers(places, library.labels, tokens, placeId);
-    // 필터에 가려진 장소를 열어 두었다면 그 장소만은 개별 마커로 항상 보인다.
-    const open = placeId === null ? undefined : library.places[placeId];
-    if (open === undefined || open.deletedAt !== null || places.some((p) => p.id === open.id)) {
-      return shown;
-    }
+  const markers = useMemo(
+    () => toMarkers(places, library.labels, tokens, null),
+    [places, library.labels, tokens],
+  );
+  const markersById = useMemo(() => new Map(markers.map((m) => [m.id, m])), [markers]);
+  const selectedMarker = useMemo(() => {
+    if (placeId === null) return null;
+    const base = markersById.get(placeId);
+    if (base)
+      return { ...base, selected: true, clusterable: false, borderColor: tokens.accent.main };
+    const open = library.places[placeId];
+    if (!open || open.deletedAt !== null) return null;
+    // 필터 밖에서 연 장소도 보이지만 결과 전체 맞추기에는 넣지 않는다.
     const [hidden] = toMarkers([open], library.labels, tokens, placeId);
-    // 맞추기에서는 뺀다: 지도는 거르기 결과에 맞춘다(스펙 A1 §4). 마커는 보인다.
-    return [...shown, { ...hidden!, fit: false as const }];
-  }, [places, library.places, library.labels, tokens, placeId]);
+    return hidden ? { ...hidden, fit: false as const } : null;
+  }, [markersById, placeId, library.places, library.labels, tokens]);
 
   // 임시 마커: 선택된 장소처럼 강조색 테두리로 그리고 클러스터에 넣지 않는다.
   const shownMarkers = useMemo(
@@ -306,6 +311,7 @@ export function LibraryMap() {
       <Box sx={{ position: 'relative', flex: 1, minHeight: 0, bgcolor: 'var(--tm-bg-raised)' }}>
         <MapView
           markers={shownMarkers}
+          selectedMarker={selectedMarker}
           polylines={[]}
           clusterStyle={clusterStyle}
           padding={padding}

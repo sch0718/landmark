@@ -109,6 +109,7 @@ const maps = (): NaverMaps => (window as unknown as { naver: { maps: NaverMaps }
 export class NaverMapAdapter implements MapAdapter {
   private map: NaverMap | null = null;
   private markers: MapMarker[] = [];
+  private selectedMarker: MapMarker | null = null;
   private cluster: ClusterIndex = buildClusterIndex([]);
   private clusterStyle: ClusterStyle = DEFAULT_CLUSTER_STYLE;
   private markerOverlays: Overlay[] = [];
@@ -165,6 +166,12 @@ export class NaverMapAdapter implements MapAdapter {
   setMarkers(markers: MapMarker[]): void {
     this.markers = markers;
     this.cluster = buildClusterIndex(markers);
+    this.drawMarkers();
+  }
+
+  setSelectedMarker(marker: MapMarker | null): void {
+    if (marker === this.selectedMarker) return;
+    this.selectedMarker = marker;
     this.drawMarkers();
   }
 
@@ -294,6 +301,7 @@ export class NaverMapAdapter implements MapAdapter {
     this.recentMarkerClick = false;
     this.boundsCb = null;
     this.markers = [];
+    this.selectedMarker = null;
     this.lines = [];
     this.myLocation = null;
     this.cluster = buildClusterIndex([]);
@@ -392,7 +400,10 @@ export class NaverMapAdapter implements MapAdapter {
         });
       }
     }
-    for (const mk of singles) {
+    const selected = this.selectedMarker;
+    const shown =
+      selected === null ? singles : [...singles.filter((m) => m.id !== selected.id), selected];
+    for (const mk of shown) {
       add(
         mk.lng,
         mk.lat,

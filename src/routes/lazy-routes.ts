@@ -52,6 +52,9 @@ export const loadRestoreDialog = lazyChunk(() => import('src/sections/backup/Res
 export const loadTripShareDialog = lazyChunk(
   () => import('src/sections/share-export/TripShareDialog'),
 );
+export const loadLabelFilterDialog = lazyChunk(
+  () => import('src/sections/library/LabelFilterDialog'),
+);
 export const loadLabelPickerDialog = lazyChunk(
   () => import('src/sections/place/LabelPickerDialog'),
 );
@@ -108,3 +111,7 @@ export const PANEL_CHUNKS: readonly (() => Promise<unknown>)[] = [
   loadTripShareDialog,
   loadLabelPickerDialog,
 ];
+
+export const LabelFilterDialog = lazy(() =>
+  loadLabelFilterDialog().then((m) => ({ default: m.LabelFilterDialog })),
+);

@@ -49,6 +49,8 @@ export const MY_LOCATION_Z_INDEX = -1;
 export interface MapAdapter {
   mount(el: HTMLElement): Promise<void>;
   setMarkers(markers: MapMarker[]): void;
+  /** 기본 마커와 색인을 유지하고 그 위에 선택된 장소만 개별 표시한다. */
+  setSelectedMarker(marker: MapMarker | null): void;
   setClusterStyle(style: ClusterStyle): void;
   setPolylines(lines: MapPolyline[]): void;
   /** 내 위치 점과 정확도 원을 그린다. `null`이면 지운다. 마운트 전에 불러도 마운트 때 그린다. */

@@ -1,5 +1,8 @@
 import Box from '@mui/material/Box';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
+import { LabelFilterDialog } from 'src/routes/lazy-routes';
+import { LazyDialogHost } from 'src/sections/share-export/LazyDialogHost';
+import { ChipScrollRow } from 'src/sections/library/ChipScrollRow';
 import { Link } from 'react-router';
 import { LabelGlyph, TagsIcon } from 'src/components/icons';
 import type { LibraryQuery } from 'src/domain/library/query';
@@ -68,6 +71,11 @@ export function LabelChips({
   leading,
   background = 'var(--tm-bg-base)',
 }: Props) {
+  const [finding, setFinding] = useState(false);
+  const ordered = [
+    ...labels.filter((l) => query.labelIds.includes(l.id)),
+    ...labels.filter((l) => !query.labelIds.includes(l.id)),
+  ];
   const toggleLabel = (id: string) =>
     onChange({
       unlabeled: false,
@@ -80,55 +88,90 @@ export function LabelChips({
     onChange(query.unlabeled ? { unlabeled: false } : { unlabeled: true, labelIds: [] });
 
   return (
-    <Box sx={{ display: 'flex', gap: 0.5, overflowX: 'auto', px: 2, scrollbarWidth: 'none' }}>
-      {manageLink && <ManageLink background={background} />}
-      {leading}
-      {leading !== undefined && (
-        <Box
-          aria-hidden="true"
-          sx={{
-            flex: 'none',
-            width: 1,
-            height: 24,
-            alignSelf: 'center',
-            bgcolor: 'var(--tm-border)',
-          }}
-        />
-      )}
-      <Box role="group" aria-label="라벨" sx={{ display: 'flex', gap: 0.5, flex: 'none' }}>
-        <ChipButton
-          selected={query.mode === 'all'}
-          disabled={query.unlabeled}
-          onClick={() => onChange({ mode: query.mode === 'all' ? 'any' : 'all' })}
-        >
-          모두 포함
-        </ChipButton>
-        <ChipButton selected={query.unlabeled} onClick={toggleUnlabeled}>
-          미분류{' '}
-          <Box component="span" sx={{ fontWeight: 500 }}>
-            {counts.get('unlabeled') ?? 0}
-          </Box>
-        </ChipButton>
-        {labels.map((label) => (
-          <ChipButton
-            key={label.id}
-            selected={query.labelIds.includes(label.id)}
-            tone={labelColors(label.color.value)}
-            onClick={() => toggleLabel(label.id)}
+    <>
+      <ChipScrollRow label="라벨 스크롤">
+        {manageLink && <ManageLink background={background} />}
+        {labels.length > 12 && (
+          <Box
+            component="button"
+            type="button"
+            aria-haspopup="dialog"
+            onClick={() => setFinding(true)}
+            sx={{
+              flex: 'none',
+              minHeight: 44,
+              px: 1.5,
+              border: 0,
+              background: 'transparent',
+              color: 'var(--tm-accent-text)',
+              font: 'inherit',
+              fontSize: 14,
+              fontWeight: 700,
+              whiteSpace: 'nowrap',
+              cursor: 'pointer',
+            }}
           >
-            <Box
-              component="span"
-              sx={{ display: 'inline-flex', color: labelColors(label.color.value).marker }}
-            >
-              <LabelGlyph name={label.icon.value} size={14} />
-            </Box>
-            {label.name.value}{' '}
+            라벨 찾기
+          </Box>
+        )}
+        {leading}
+        {leading !== undefined && (
+          <Box
+            aria-hidden="true"
+            sx={{
+              flex: 'none',
+              width: 1,
+              height: 24,
+              alignSelf: 'center',
+              bgcolor: 'var(--tm-border)',
+            }}
+          />
+        )}
+        <Box role="group" aria-label="라벨" sx={{ display: 'flex', gap: 0.5, flex: 'none' }}>
+          <ChipButton
+            selected={query.mode === 'all'}
+            disabled={query.unlabeled}
+            onClick={() => onChange({ mode: query.mode === 'all' ? 'any' : 'all' })}
+          >
+            모두 포함
+          </ChipButton>
+          <ChipButton selected={query.unlabeled} onClick={toggleUnlabeled}>
+            미분류{' '}
             <Box component="span" sx={{ fontWeight: 500 }}>
-              {counts.get(label.id) ?? 0}
+              {counts.get('unlabeled') ?? 0}
             </Box>
           </ChipButton>
-        ))}
-      </Box>
-    </Box>
+          {ordered.map((label) => (
+            <ChipButton
+              key={label.id}
+              selected={query.labelIds.includes(label.id)}
+              tone={labelColors(label.color.value)}
+              onClick={() => toggleLabel(label.id)}
+            >
+              <Box
+                component="span"
+                sx={{ display: 'inline-flex', color: labelColors(label.color.value).marker }}
+              >
+                <LabelGlyph name={label.icon.value} size={14} />
+              </Box>
+              {label.name.value}{' '}
+              <Box component="span" sx={{ fontWeight: 500 }}>
+                {counts.get(label.id) ?? 0}
+              </Box>
+            </ChipButton>
+          ))}
+        </Box>
+      </ChipScrollRow>
+      <LazyDialogHost open={finding} onClose={() => setFinding(false)} heading="라벨 찾기">
+        <LabelFilterDialog
+          open={finding}
+          onClose={() => setFinding(false)}
+          query={query}
+          onChange={onChange}
+          labels={labels}
+          counts={counts}
+        />
+      </LazyDialogHost>
+    </>
   );
 }

@@ -11,7 +11,7 @@ import {
   livePlaces,
   placeIdsInRegion,
   queryPlaces,
-  regionCounts,
+  regionTreeCounts,
   sortByVisited,
   visitCounts,
   type LibraryQuery,
@@ -150,7 +150,7 @@ export function LibraryPage() {
   );
   const visits = useMemo(() => visitCounts(library, query), [library, query]);
   const counts = useMemo(() => labelCounts(library, query), [library, query]);
-  const regions = useMemo(() => regionCounts(library, query), [library, query]);
+  const regions = useMemo(() => regionTreeCounts(library, query), [library, query]);
 
   // 화면에 보이는 장소만 선택으로 센다. 필터가 바뀌어 목록에서 빠진 선택은 버린다(렌더 중 상태 갱신).
   const visible = new Set(places.map((p) => p.id));
@@ -291,7 +291,10 @@ export function LibraryPage() {
   };
   // 지역 칩 하나 → 그 지역의 보관함 장소 전부(다른 필터와 상관없이)를 후보로 새 여행.
   const createRegionTrip = (region: string) =>
-    setNewTrip({ title: `${region} 여행`, candidates: placeIdsInRegion(library, region) });
+    setNewTrip({
+      title: `${region.endsWith('/전체') ? region.split('/')[0] : region.split('/').at(-1)} 여행`,
+      candidates: placeIdsInRegion(library, region),
+    });
 
   const listProps = {
     places,

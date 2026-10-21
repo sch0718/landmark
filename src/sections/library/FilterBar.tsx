@@ -21,7 +21,11 @@ type Props = {
   /** `labelCounts` 결과. 라벨 없음은 `'unlabeled'` 키. */
   counts: ReadonlyMap<string, number>;
   /** `regionCounts` 결과. */
-  regions: ReadonlyArray<{ region: string; count: number }>;
+  regions: ReadonlyArray<{
+    region: string;
+    count: number;
+    children?: Array<{ region: string; count: number }>;
+  }>;
   /** `visitCounts` 결과. 없으면 `방문` 칩 묶음을 그리지 않는다(다녀온 곳이 없고 필터도 꺼진 보관함). */
   visitCounts?: { visited: number; unvisited: number };
   /** `다녀온 날순`이 켜져 있는가(저장하지 않는 정렬). */
