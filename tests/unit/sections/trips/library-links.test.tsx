@@ -124,7 +124,8 @@ describe('이 지역으로 여행 만들기', () => {
     await user.click(regionChip('강릉 1'));
     await user.click(screen.getByRole('button', { name: '이 지역으로 여행 만들기' }));
 
-    const dialog = screen.getByRole('dialog', { name: '새 여행' });
+    // 창은 열 때 받으므로(받는 동안은 같은 제목의 기다림 창) 실제 창이 올 때까지 기다린다.
+    const dialog = await openedDialog('새 여행', () => screen.getByLabelText('여행 이름'));
     expect(within(dialog).getByLabelText('여행 이름')).toHaveValue('강릉 여행');
     await user.click(within(dialog).getByRole('button', { name: '만들기' }));
 
@@ -147,6 +148,12 @@ describe('이 지역으로 여행 만들기', () => {
 
 // ---------- 일괄 편집 바 → 여행에 넣기 ----------
 
+/** 나눠 받는 창이 기다림 창에서 실제 창으로 바뀐 뒤의 창. `ready`가 실제 창의 요소를 찾을 때까지 기다린다. */
+async function openedDialog(name: string, ready: () => HTMLElement): Promise<HTMLElement> {
+  await waitFor(ready);
+  return screen.getByRole('dialog', { name });
+}
+
 async function selectRows(user: ReturnType<typeof userEvent.setup>, ...names: RegExp[]) {
   await user.keyboard('{Shift>}');
   for (const name of names) await user.click(row(name));
@@ -161,7 +168,9 @@ describe('여행에 넣기', () => {
 
     await selectRows(user, /중앙시장 닭강정/, /안목 카페거리/, /속초 횟집/);
     await user.click(within(toolbar()).getByRole('button', { name: '여행에 넣기' }));
-    const dialog = screen.getByRole('dialog', { name: '여행에 넣기' });
+    const dialog = await openedDialog('여행에 넣기', () =>
+      screen.getByRole('button', { name: /강릉 여행/ }),
+    );
     await user.click(within(dialog).getByRole('button', { name: /강릉 여행/ }));
 
     // 목록 순서(최근 저장순)대로 붙는다.
@@ -177,9 +186,12 @@ describe('여행에 넣기', () => {
 
     await selectRows(user, /중앙시장 닭강정/);
     await user.click(within(toolbar()).getByRole('button', { name: '여행에 넣기' }));
-    const pick = within(screen.getByRole('dialog', { name: '여행에 넣기' })).getByRole('button', {
-      name: /강릉 여행/,
-    });
+    const pick = await within(screen.getByRole('dialog', { name: '여행에 넣기' })).findByRole(
+      'button',
+      {
+        name: /강릉 여행/,
+      },
+    );
     // 저장이 끝나기 전에 두 번(동기로 연달아) 누른다.
     act(() => {
       pick.click();
@@ -201,7 +213,7 @@ describe('여행에 넣기', () => {
     await selectRows(user, /중앙시장 닭강정/, /안목 카페거리/);
     await user.click(within(toolbar()).getByRole('button', { name: '여행에 넣기' }));
     await user.click(
-      within(screen.getByRole('dialog', { name: '여행에 넣기' })).getByRole('button', {
+      await within(screen.getByRole('dialog', { name: '여행에 넣기' })).findByRole('button', {
         name: /강릉 여행/,
       }),
     );
@@ -218,12 +230,12 @@ describe('여행에 넣기', () => {
     await selectRows(user, /중앙시장 닭강정/, /속초 횟집/);
     await user.click(within(toolbar()).getByRole('button', { name: '여행에 넣기' }));
     await user.click(
-      within(screen.getByRole('dialog', { name: '여행에 넣기' })).getByRole('button', {
+      await within(screen.getByRole('dialog', { name: '여행에 넣기' })).findByRole('button', {
         name: '새 여행',
       }),
     );
     const form = screen.getByRole('dialog', { name: '새 여행' });
-    await user.type(within(form).getByLabelText('여행 이름'), '동해 여행');
+    await user.type(await within(form).findByLabelText('여행 이름'), '동해 여행');
     await user.click(within(form).getByRole('button', { name: '만들기' }));
 
     await waitFor(() => expect(router.state.location.pathname).toBe(`/trips/${NEW_TRIP}`));
