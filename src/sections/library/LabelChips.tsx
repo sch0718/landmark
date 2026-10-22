@@ -152,7 +152,7 @@ export function LabelChips({
                 component="span"
                 sx={{ display: 'inline-flex', color: labelColors(label.color.value).marker }}
               >
-                <LabelGlyph name={label.icon.value} size={14} />
+                <LabelGlyph emoji={label.emoji?.value} name={label.icon.value} size={14} />
               </Box>
               {label.name.value}{' '}
               <Box component="span" sx={{ fontWeight: 500 }}>

@@ -262,3 +262,21 @@ describe('LabelPickerDialog', () => {
     ).not.toHaveFocus();
   });
 });
+
+it('생성 모듈을 받지 못하면 입력을 보존하고 다시 시도할 수 있다', async () => {
+  const user = userEvent.setup();
+  const onCreate = vi
+    .fn<(name: string) => Promise<LibraryActionResult>>()
+    .mockRejectedValueOnce(new Error('화면 파일 없음'))
+    .mockResolvedValue({ ok: true });
+  setup({ onCreate });
+  const search = within(dialog()).getByRole('searchbox');
+  await user.type(search, '빵집{Enter}');
+  expect(await within(dialog()).findByRole('alert')).toHaveTextContent(
+    '라벨을 만들지 못했어요. 다시 시도해 주세요',
+  );
+  expect(search).toHaveValue('빵집');
+  await user.keyboard('{Enter}');
+  await waitFor(() => expect(search).toHaveValue(''));
+  expect(onCreate).toHaveBeenCalledTimes(2);
+});

@@ -576,3 +576,15 @@ describe('planLegacyImport / applyImportPlan', () => {
     expect(s).toEqual(srcCopy);
   });
 });
+
+it('옛 폴더의 새 라벨도 이름으로 이모지를 추천한다', () => {
+  const trip = makeTrip({ days: {}, places: ['A'] });
+  const choices: ImportChoices = {
+    labels: { 'folder:f1': { kind: 'use', name: '서울 카페' } },
+    memos: {},
+  };
+  const imported = apply(emptyLibrary(), src(trip), choices);
+  expect(liveLabels(imported).find((label) => label.name.value === '서울 카페')?.emoji?.value).toBe(
+    '☕',
+  );
+});

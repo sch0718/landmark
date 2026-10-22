@@ -1,4 +1,5 @@
-import { addLabels, createLabel, type OpCtx } from 'src/domain/library/ops';
+import { createLabel } from 'src/domain/library/label-create';
+import { addLabels, type OpCtx } from 'src/domain/library/ops';
 import { liveLabels } from 'src/domain/library/query';
 import { effectiveCategory } from 'src/domain/place-category';
 import {

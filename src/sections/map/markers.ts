@@ -33,6 +33,23 @@ export function placeMarker(
   };
 }
 
+/** 지도 이름표와 색이 함께 쓰는 첫 번째 살아 있는 라벨. */
+export function firstPlaceLabel(
+  place: Pick<Place, 'labelIds'>,
+  labels: Record<string, Label>,
+): Label | undefined {
+  for (const id of place.labelIds.value) {
+    const label = labels[id];
+    if (label !== undefined && label.deletedAt === null) return label;
+  }
+  return undefined;
+}
+
+/** 보관함·계획·당일 지도에서 같은 규칙으로 이름 앞에 이모지를 붙인다. */
+export function placeMarkerName(place: Pick<Place, 'name'>, label: Label | undefined): string {
+  return label?.emoji?.value ? `${label.emoji.value} ${place.name.value}` : place.name.value;
+}
+
 /** 장소를 지도 마커로 바꾼다. 색은 첫 번째 살아 있는 라벨의 팔레트다(`placeMarker`). */
 export function toMarkers(
   places: Place[],
@@ -41,16 +58,14 @@ export function toMarkers(
   selectedId: string | null,
 ): MapMarker[] {
   return places.map((place) => {
-    const first = place.labelIds.value
-      .map((id) => labels[id])
-      .find((label): label is Label => label !== undefined && label.deletedAt === null);
+    const first = firstPlaceLabel(place, labels);
     const palette = first === undefined ? undefined : tokens.label[first.color.value];
     return placeMarker(
       {
         id: place.id,
         lng: place.lng,
         lat: place.lat,
-        name: place.name.value,
+        name: placeMarkerName(place, first),
         visited: isVisited(place),
       },
       palette,

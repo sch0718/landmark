@@ -107,7 +107,7 @@ async function openFrom(user: ReturnType<typeof userEvent.setup>, item: string) 
 
 /** 입력에 붙여 넣고 `확인`. */
 async function submitLink(user: ReturnType<typeof userEvent.setup>, text = SHARE_TEXT) {
-  const input = within(panel()).getByRole('textbox', { name: '링크' });
+  const input = await within(panel()).findByRole('textbox', { name: '링크' });
   await user.click(input);
   await user.paste(text);
   await user.click(within(panel()).getByRole('button', { name: '확인' }));

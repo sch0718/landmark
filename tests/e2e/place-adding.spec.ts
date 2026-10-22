@@ -246,7 +246,8 @@ test.describe('키보드·포커스', () => {
       // 포커스 전에는 1px로 숨어 있다가 포커스를 받으면 글자가 보이는 크기로 나타난다.
       expect((await skip.boundingBox())!.width).toBeGreaterThan(40);
 
-      // 레일: 보관함 → 지도 → ＋ 순서다.
+      // 레일: 로고(랜드마크) → 보관함 → 지도 → ＋ 순서다.
+      await page.keyboard.press('Tab');
       await page.keyboard.press('Tab');
       await page.keyboard.press('Tab');
       await page.keyboard.press('Tab');

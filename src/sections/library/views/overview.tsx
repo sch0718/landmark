@@ -104,7 +104,7 @@ export function LabelBlock({
             fontSize: 18,
           }}
         >
-          <LabelGlyph name={label.icon.value} size={18} />
+          <LabelGlyph emoji={label.emoji?.value} name={label.icon.value} size={18} />
         </Box>
       )}
     </Box>

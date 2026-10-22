@@ -148,8 +148,36 @@ const LABEL_GLYPHS: Record<LabelIcon, IconComponent> = {
   flag: FlagGlyph,
 };
 
-/** 라벨 아이콘. 글자 크기(1em)를 따르고 `size`(px)로 바꿀 수 있다. 장식이라 스크린리더는 건너뛴다. */
-export function LabelGlyph({ name, size }: { name: LabelIcon; size?: number }) {
+/** 라벨 이모지·아이콘. 글자 크기(1em)를 따르고 `size`(px)로 바꿀 수 있다. 장식이라 스크린리더는 건너뛴다. */
+export function LabelGlyph({
+  name,
+  emoji,
+  size,
+}: {
+  name: LabelIcon;
+  emoji?: string | null;
+  size?: number;
+}) {
+  if (emoji) {
+    return (
+      <span
+        aria-hidden="true"
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexShrink: 0,
+          fontSize: size === undefined ? '1em' : size,
+          lineHeight: 1,
+          width: '1em',
+          height: '1em',
+          fontFamily: '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif',
+        }}
+      >
+        {emoji}
+      </span>
+    );
+  }
   const Glyph = LABEL_GLYPHS[name];
   return (
     <Glyph aria-hidden="true" {...(size === undefined ? {} : { width: size, height: size })} />

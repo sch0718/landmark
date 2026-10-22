@@ -102,6 +102,18 @@ export const PlaceSchema = Schema.Struct({
   deletedAt: Schema.NullOr(IsoDateTime),
 });
 
+/** 이모지 하나: 그래핌 하나·최대 16 UTF-16 단위·그림 문자 포함. */
+const emojiSegments = new Intl.Segmenter('ko', { granularity: 'grapheme' });
+export const LabelEmoji = Schema.String.check(
+  Schema.makeFilter(
+    (value) =>
+      value.length <= 16 &&
+      /\p{Extended_Pictographic}/u.test(value) &&
+      [...emojiSegments.segment(value)].length === 1,
+    { message: '이모지 하나를 입력하세요 (최대 16자)' },
+  ),
+);
+
 export const LabelSchema = Schema.Struct({
   id: LabelId,
   name: FieldSchema(
@@ -109,6 +121,8 @@ export const LabelSchema = Schema.Struct({
   ),
   color: FieldSchema(LabelColor),
   icon: FieldSchema(LabelIcon),
+  // 선택 필드. null은 이모지 지움을 다른 탭에 전하는 LWW 값이다.
+  emoji: Schema.optional(FieldSchema(Schema.NullOr(LabelEmoji))),
   order: FieldSchema(Schema.Finite),
   createdAt: IsoDateTime,
   deletedAt: Schema.NullOr(IsoDateTime),

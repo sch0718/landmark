@@ -1,8 +1,7 @@
+import { createLabel, createAndAttachLabel } from 'src/domain/library/label-create';
 import { describe, expect, it } from 'vitest';
 import {
   addLabels,
-  createAndAttachLabel,
-  createLabel,
   deleteLabel,
   deletePlaces,
   mergeLabels,

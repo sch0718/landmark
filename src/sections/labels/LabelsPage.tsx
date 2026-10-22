@@ -1,3 +1,4 @@
+import { createLabel } from 'src/domain/library/label-create';
 import {
   closestCenter,
   DndContext,
@@ -18,6 +19,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
 import { TruncatedText } from 'src/components/TruncatedText';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
@@ -26,11 +28,12 @@ import { fieldSx } from 'src/components/field-style';
 import { GripIcon, LabelGlyph } from 'src/components/icons';
 import { useDocumentTitle } from 'src/lib/use-document-title';
 import { folderLinksOfLabel, unlinkFolder } from 'src/domain/library/folder-links';
-import { createLabel, deleteLabel, mergeLabels, reorderLabels } from 'src/domain/library/ops';
+import { deleteLabel, mergeLabels, reorderLabels } from 'src/domain/library/ops';
 import { liveLabels, livePlaces } from 'src/domain/library/query';
 import { LIBRARY_LIMITS, type FolderLink, type Label } from 'src/schema/library';
 import { DeleteLabelDialog } from 'src/sections/labels/DeleteLabelDialog';
 import { LabelEditor } from 'src/sections/labels/LabelEditor';
+import { SuggestEmojiDialog } from 'src/sections/labels/SuggestEmojiDialog';
 import { MergeDialog } from 'src/sections/labels/MergeDialog';
 import { labelRejectionMessage } from 'src/sections/labels/rejection-message';
 import { labelColors } from 'src/sections/library/label-style';
@@ -157,7 +160,7 @@ function LabelRow({ label, count, linked, onOpen, openerRef }: RowProps) {
             '& svg': { width: 18, height: 18 },
           }}
         >
-          <LabelGlyph name={label.icon.value} />
+          <LabelGlyph emoji={label.emoji?.value} name={label.icon.value} />
         </Box>
         <TruncatedText sx={{ flex: 1, minWidth: 0, fontWeight: 700 }}>{name}</TruncatedText>
         <Box
@@ -200,6 +203,7 @@ export function LabelsPage() {
   // 줄마다 편집기를 여는 단추. 다시 가져오기 칸을 닫으면 그 라벨 줄로 포커스를 돌려준다(스펙 §4.1).
   const openers = useRef(new Map<string, HTMLButtonElement>());
 
+  const [suggestOpen, setSuggestOpen] = useState(false);
   const [newName, setNewName] = useState('');
   const [createError, setCreateError] = useState<string | null>(null);
   const [dialog, setDialog] = useState<Open | null>(null);
@@ -312,6 +316,13 @@ export function LabelsPage() {
           </Box>
         )}
       </Box>
+
+      <Button onClick={() => setSuggestOpen(true)} sx={{ minHeight: 44, mt: 1 }}>
+        이름으로 이모지 정하기
+      </Button>
+      {suggestOpen && (
+        <SuggestEmojiDialog library={library} onClose={() => setSuggestOpen(false)} />
+      )}
 
       {labels.length === 0 ? (
         <Box sx={{ py: 6, textAlign: 'center', color: 'var(--tm-text-secondary)' }}>

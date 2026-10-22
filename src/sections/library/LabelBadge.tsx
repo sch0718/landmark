@@ -10,6 +10,7 @@ export function LabelBadge({ label, touch }: { label: Label; touch?: boolean }) 
     <ColorBadge
       color={label.color.value}
       icon={label.icon.value}
+      emoji={label.emoji?.value}
       name={label.name.value}
       touch={touch}
     />
@@ -20,11 +21,13 @@ export function LabelBadge({ label, touch }: { label: Label; touch?: boolean }) 
 export function ColorBadge({
   color,
   icon,
+  emoji,
   name,
   touch,
 }: {
   color: LabelColor;
   icon?: LabelIcon;
+  emoji?: string | null;
   name: string;
   /** `false`면 길게 누르기로 툴팁을 열지 않는다(카드 안: 길게 누르기 = 선택). */
   touch?: boolean;
@@ -50,7 +53,7 @@ export function ColorBadge({
         '& svg': { flex: 'none', width: 12, height: 12 },
       }}
     >
-      {icon !== undefined && <LabelGlyph name={icon} size={12} />}
+      {icon !== undefined && <LabelGlyph emoji={emoji} name={icon} size={12} />}
       <TruncatedText touch={touch} sx={{ minWidth: 0 }}>
         {name}
       </TruncatedText>

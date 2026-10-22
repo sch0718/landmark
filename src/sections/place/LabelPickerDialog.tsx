@@ -152,6 +152,9 @@ export function LabelPickerDialog({
       } else {
         setError(rejectionMessage(result.error));
       }
+    } catch {
+      // 생성 모듈을 받지 못해도 입력을 남겨 다시 시도할 수 있게 한다.
+      if (opened === session.current) setError('라벨을 만들지 못했어요. 다시 시도해 주세요');
     } finally {
       creating.current = false;
     }
@@ -257,7 +260,7 @@ export function LabelPickerDialog({
                         aria-hidden="true"
                         sx={{ flex: 'none', display: 'inline-flex', color: tone.marker }}
                       >
-                        <LabelGlyph name={label.icon.value} size={16} />
+                        <LabelGlyph emoji={label.emoji?.value} name={label.icon.value} size={16} />
                       </Box>
                       <Box
                         component="span"
