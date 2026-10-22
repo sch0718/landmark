@@ -26,14 +26,14 @@ export const pickerSearch = (dialog: HTMLElement): HTMLElement =>
 export const pickerBox = (dialog: HTMLElement, name: string): HTMLElement =>
   within(dialog).getByRole('checkbox', { name: new RegExp(`^${name} \\d+곳$`) });
 
-/** 라벨 칸에 붙은 라벨 이름들. */
+/** 라벨 칸에 붙은 라벨 이름들. 장식 이모지 글자는 제외한다. */
 export const attachedNames = (scope: HTMLElement): string[] => {
   const list = within(scope).queryByRole('list', { name: '붙은 라벨' });
   return list === null
     ? []
     : within(list)
         .getAllByRole('listitem')
-        .map((item) => item.textContent ?? '');
+        .map((item) => item.querySelector('[data-truncated-text]')?.textContent ?? '');
 };
 
 /** 창을 열어 이름이 `name`으로 시작하는 라벨 하나를 켜거나 끄고 창을 닫는다. */

@@ -1,12 +1,7 @@
+import { createLabel } from 'src/domain/library/label-create';
 import { truncateMemo } from 'src/domain/library/legacy-import';
 import { setField } from 'src/domain/library/lww';
-import {
-  createLabel,
-  type OpCtx,
-  type OpError,
-  type OpResult,
-  type OpSummary,
-} from 'src/domain/library/ops';
+import { type OpCtx, type OpError, type OpResult, type OpSummary } from 'src/domain/library/ops';
 import { liveLabels } from 'src/domain/library/query';
 import {
   LABEL_COLORS,

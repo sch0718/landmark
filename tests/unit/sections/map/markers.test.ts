@@ -99,3 +99,25 @@ describe('toMarkers visited', () => {
     expect(markers.map((m) => m.visited)).toEqual([true, undefined, undefined]);
   });
 });
+
+describe('라벨 이모지 마커', () => {
+  it('첫 살아 있는 라벨만 보고 없으면 뒤 라벨 이모지를 쓰지 않는다', () => {
+    const emojiBlue = { ...blue, emoji: { value: '🌊', updatedAt: blue.createdAt } };
+    const gone = { ...red, deletedAt: red.createdAt };
+    const places = [
+      makePlace(1, { name: '<카페>', labelIds: [blue.id, red.id], visitedOn: '2026-10-23' }),
+      makePlace(2, { labelIds: [red.id, blue.id] }),
+      makePlace(3, { labelIds: ['unknown1', red.id, blue.id] }),
+    ];
+    expect(
+      toMarkers(places, labelsOf(red, emojiBlue), TOKENS.pastel.light, null).map((m) => m.label),
+    ).toEqual(['🌊 <카페>', '장소 2', '장소 3']);
+    expect(
+      toMarkers([places[2]!], labelsOf(gone, emojiBlue), TOKENS.pastel.light, null)[0]!.label,
+    ).toBe('🌊 장소 3');
+    const cleared = { ...emojiBlue, emoji: { value: null, updatedAt: blue.createdAt } };
+    expect(toMarkers([places[0]!], labelsOf(cleared), TOKENS.pastel.light, null)[0]!.label).toBe(
+      '<카페>',
+    );
+  });
+});

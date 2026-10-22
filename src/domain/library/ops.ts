@@ -2,7 +2,6 @@ import { setField, setOptionalField } from 'src/domain/library/lww';
 import { liveLabels } from 'src/domain/library/query';
 import { localDateOf, normalizeReview, visitedOnOf } from 'src/domain/library/visit';
 import {
-  LABEL_COLORS,
   LIBRARY_LIMITS,
   normalizeLabelName,
   type FolderLink,
@@ -17,7 +16,8 @@ import { is } from 'src/schema/parse';
 import type { IdKind } from 'src/services/id-gen';
 import type { TripOpError } from 'src/domain/trips/ops';
 
-// 보관함 문서를 바꾸는 유일한 경로(스펙 §6.1). 모두 입력을 바꾸지 않는 순수 함수이며,
+// 보관함의 기본 변경 연산(스펙 §6.1). 라벨 생성은 나눠 받는 label-create.ts에 둔다.
+// 모두 입력을 바꾸지 않는 순수 함수이며,
 // 바뀐 필드만 `updatedAt = ctx.now`로 갱신하고 나머지는 같은 참조로 둔다.
 
 export type OpCtx = { now: string; newId: (kind: IdKind) => string };
@@ -272,29 +272,6 @@ export function setPlaceReview(
 
 // ---------- 라벨 ----------
 
-export function createLabel(lib: Library, name: string, ctx: OpCtx): OpResult {
-  const trimmed = validName(name);
-  if (trimmed === null) return fail({ _tag: 'LabelNameInvalid', name });
-  if (findLiveLabelByName(lib, trimmed) !== undefined) {
-    return fail({ _tag: 'LabelNameTaken', name: trimmed });
-  }
-  const live = liveLabels(lib);
-  const id = ctx.newId('label');
-  const label: Label = {
-    id,
-    name: { value: trimmed, updatedAt: ctx.now },
-    color: { value: LABEL_COLORS[live.length % LABEL_COLORS.length]!, updatedAt: ctx.now },
-    icon: { value: 'star', updatedAt: ctx.now },
-    order: {
-      value: live.reduce((max, l) => Math.max(max, l.order.value), -1) + 1,
-      updatedAt: ctx.now,
-    },
-    createdAt: ctx.now,
-    deletedAt: null,
-  };
-  return { ok: true, lib: withLabels(lib, { [id]: label }), createdId: id };
-}
-
 export function renameLabel(lib: Library, labelId: string, name: string, ctx: OpCtx): OpResult {
   const label = lib.labels[labelId];
   if (label === undefined || label.deletedAt !== null) {
@@ -413,30 +390,4 @@ export function mergeLabels(lib: Library, fromId: string, intoId: string, ctx: O
   if (into === undefined || into.deletedAt !== null) return lib;
   const relinked = relinkFolders(lib, fromId, intoId, ctx);
   return tombstoneLabel(rewritePlaceLabels(relinked, fromId, intoId, ctx), fromId, ctx);
-}
-
-/**
- * 이름이 같은(정규화) 살아 있는 라벨이 있으면 그 라벨을, 없으면 새로 만들어 장소에 붙인다.
- * `createdId`는 새로 만든 경우에만 있다.
- */
-export function createAndAttachLabel(
-  lib: Library,
-  placeId: string,
-  name: string,
-  ctx: OpCtx,
-): OpResult {
-  if (lib.places[placeId] === undefined) return fail({ _tag: 'NotFound', id: placeId });
-  const trimmed = validName(name);
-  if (trimmed === null) return fail({ _tag: 'LabelNameInvalid', name });
-  const existing = findLiveLabelByName(lib, trimmed);
-  if (existing !== undefined) {
-    return { ok: true, lib: addLabels(lib, [placeId], [existing.id], ctx) };
-  }
-  const created = createLabel(lib, trimmed, ctx);
-  if (!created.ok) return created;
-  return {
-    ok: true,
-    lib: addLabels(created.lib, [placeId], [created.createdId!], ctx),
-    createdId: created.createdId,
-  };
 }

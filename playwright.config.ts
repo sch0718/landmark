@@ -39,6 +39,7 @@ export default defineConfig({
       grepInvert: /@mobile/,
       testMatch: [
         'library.spec.ts',
+        'labels-emoji.spec.ts',
         'large-library.spec.ts',
         'first-load.spec.ts',
         'legacy-import.spec.ts',
@@ -64,6 +65,7 @@ export default defineConfig({
       grepInvert: /@desktop/,
       testMatch: [
         'library.spec.ts',
+        'labels-emoji.spec.ts',
         'large-library.spec.ts',
         'first-load.spec.ts',
         'themes.spec.ts',
@@ -88,6 +90,7 @@ export default defineConfig({
       grepInvert: /@desktop/,
       testMatch: [
         'library.spec.ts',
+        'labels-emoji.spec.ts',
         'large-library.spec.ts',
         'first-load.spec.ts',
         'share-link.spec.ts',

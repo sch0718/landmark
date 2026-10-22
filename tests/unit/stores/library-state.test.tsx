@@ -1,3 +1,4 @@
+import { createLabel } from 'src/domain/library/label-create';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { Effect, Layer, ManagedRuntime } from 'effect';
 import { TestClock } from 'effect/testing';
@@ -5,7 +6,7 @@ import { createStore, Provider } from 'jotai';
 import { StrictMode, Suspense, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { importFolder } from 'src/domain/library/add-place';
-import { createLabel, setPlaceMemo, type OpCtx } from 'src/domain/library/ops';
+import { setPlaceMemo, type OpCtx } from 'src/domain/library/ops';
 import { forkEffect, setAppRuntimeForTest, type AppRuntime } from 'src/lib/effect/runtime';
 import { createMemoryStorage } from 'src/repositories/edit-layer-repo';
 import { emptyLibrary, type Library, type Place } from 'src/schema/library';

@@ -523,3 +523,190 @@ describe('LabelsPage — 네이버 폴더', () => {
     expect(stored(storage).folders![SHARE_ID]!.deletedAt).not.toBeNull();
   });
 });
+
+describe('LabelsPage — 이모지', () => {
+  it('고르기·지우기를 즉시 저장하고 화살표/Home/End로 고른다', async () => {
+    const user = userEvent.setup();
+    const { storage } = await open();
+    await openEditor(user, /^카페/);
+    const group = within(editor()).getByRole('radiogroup', { name: '이모지' });
+    const none = within(group).getByRole('radio', { name: '이모지 없음' });
+    expect(none).toBeChecked();
+    await user.click(within(group).getByRole('radio', { name: '빵' }));
+    await waitFor(() => expect(stored(storage).labels[L_CAFE]!.emoji?.value).toBe('🥐'));
+    expect(within(group).getByRole('radio', { name: '빵' })).toBeChecked();
+    await user.keyboard('{Home}');
+    await waitFor(() => expect(stored(storage).labels[L_CAFE]!.emoji?.value).toBeNull());
+    expect(none).toHaveFocus();
+    await user.keyboard('{ArrowRight}');
+    await waitFor(() => expect(stored(storage).labels[L_CAFE]!.emoji?.value).toBe('☕'));
+    expect(within(group).getByRole('radio', { name: '카페' })).toHaveFocus();
+    await user.keyboard('{End}');
+    expect(within(group).getByRole('radio', { name: '데이트' })).toHaveFocus();
+    await user.keyboard('{Home}{ArrowDown} ');
+    await waitFor(() => expect(stored(storage).labels[L_CAFE]!.emoji?.value).toBe('☕'));
+    await user.click(none);
+    await waitFor(() => expect(stored(storage).labels[L_CAFE]!.emoji?.value).toBeNull());
+    expect(stored(storage).labels[L_CAFE]!.icon.value).toBe('coffee');
+    for (const radio of within(group).getAllByRole('radio')) {
+      expect(parseFloat(getComputedStyle(radio).minHeight)).toBeGreaterThanOrEqual(44);
+      expect(parseFloat(getComputedStyle(radio).minWidth)).toBeGreaterThanOrEqual(44);
+    }
+  });
+
+  it('미리보기에서 이모지 있음·추천 없음을 빼고 체크한 것만 적용·되돌린다', async () => {
+    const user = userEvent.setup();
+    const base = sampleLibrary();
+    const lib = {
+      ...base,
+      labels: {
+        ...base.labels,
+        [L_SEA]: { ...base.labels[L_SEA]!, name: { ...base.labels[L_SEA]!.name, value: '센픽' } },
+      },
+    };
+    const { storage } = await renderLibrary(lib, { path: '/labels' });
+    await user.click(screen.getByRole('button', { name: '이름으로 이모지 정하기' }));
+    const preview = screen.getByRole('dialog', { name: '이름으로 이모지 정하기' });
+    expect(within(preview).getAllByRole('checkbox')).toHaveLength(2);
+    expect(within(preview).queryByText('센픽')).not.toBeInTheDocument();
+    const food = within(preview).getByRole('checkbox', { name: /맛집.*식당/ });
+    expect(food).toBeChecked();
+    await user.click(food);
+    await user.click(within(preview).getByRole('button', { name: '적용' }));
+    await waitFor(() => expect(stored(storage).labels[L_CAFE]!.emoji?.value).toBe('☕'));
+    expect(stored(storage).labels[L_FOOD]!.emoji).toBeUndefined();
+    expect(toastMock).toHaveBeenCalledWith(
+      '라벨 1개의 이모지를 정했어요',
+      expect.objectContaining({
+        duration: 8000,
+        action: expect.objectContaining({ label: '되돌리기' }),
+      }),
+    );
+    const options = toastMock.mock.calls.find(
+      (call) => call[0] === '라벨 1개의 이모지를 정했어요',
+    )![1];
+    await act(async () => {
+      await options.action.onClick();
+    });
+    await waitFor(() => expect(stored(storage).labels[L_CAFE]!.emoji?.value).toBeNull());
+  });
+
+  it('기존 이모지를 건너뛰고 빈 미리보기·취소는 저장하지 않는다', async () => {
+    const user = userEvent.setup();
+    const base = sampleLibrary();
+    const labels = Object.fromEntries(
+      Object.entries(base.labels).map(([id, label]) => [
+        id,
+        { ...label, emoji: { value: '❤️', updatedAt: label.createdAt } },
+      ]),
+    );
+    const { storage } = await renderLibrary({ ...base, labels }, { path: '/labels' });
+    const before = storage.getItem(LIBRARY_KEY);
+    await user.click(screen.getByRole('button', { name: '이름으로 이모지 정하기' }));
+    const preview = screen.getByRole('dialog', { name: '이름으로 이모지 정하기' });
+    expect(within(preview).queryByRole('checkbox')).not.toBeInTheDocument();
+    expect(within(preview).getByText('추천할 라벨이 없어요')).toBeVisible();
+    expect(within(preview).getByRole('button', { name: '적용' })).toBeDisabled();
+    await user.click(within(preview).getByRole('button', { name: '취소' }));
+    expect(storage.getItem(LIBRARY_KEY)).toBe(before);
+  });
+
+  it('미리보기 후 다른 탭이 이모지를 바꾸면 적용하지 않는다', async () => {
+    const user = userEvent.setup();
+    const { storage, store } = await open();
+    await user.click(screen.getByRole('button', { name: '이름으로 이모지 정하기' }));
+    const lib = stored(storage);
+    const latest = {
+      ...lib,
+      labels: {
+        ...lib.labels,
+        [L_CAFE]: {
+          ...lib.labels[L_CAFE]!,
+          emoji: { value: '❤️', updatedAt: '2026-10-23T03:00:00.000Z' },
+        },
+      },
+    };
+    storage.setItem(LIBRARY_KEY, JSON.stringify(latest));
+    act(() => store.set(libraryAtom, latest));
+    const preview = screen.getByRole('dialog', { name: '이름으로 이모지 정하기' });
+    await user.click(within(preview).getByRole('button', { name: '적용' }));
+    await waitFor(() => expect(stored(storage).labels[L_FOOD]!.emoji?.value).toBe('🍽️'));
+    expect(stored(storage).labels[L_CAFE]!.emoji?.value).toBe('❤️');
+    expect(toastMock).toHaveBeenCalledWith('다른 곳에서 바뀐 부분은 그대로 두었어요');
+  });
+});
+
+it('일괄 추천 저장이 실패하면 미리보기와 체크를 남기고 되돌리기 토스트를 띄우지 않는다', async () => {
+  const user = userEvent.setup();
+  const { storage } = await open();
+  const before = storage.getItem(LIBRARY_KEY);
+  await user.click(screen.getByRole('button', { name: '이름으로 이모지 정하기' }));
+  const preview = screen.getByRole('dialog', { name: '이름으로 이모지 정하기' });
+  const write = vi.spyOn(storage, 'setItem').mockImplementation(() => {
+    throw new DOMException('저장 공간 부족', 'QuotaExceededError');
+  });
+  await user.click(within(preview).getByRole('button', { name: '적용' }));
+  await waitFor(() => expect(within(preview).getByRole('button', { name: '적용' })).toBeEnabled());
+  expect(storage.getItem(LIBRARY_KEY)).toBe(before);
+  expect(
+    within(preview)
+      .getAllByRole('checkbox')
+      .every((box) => (box as HTMLInputElement).checked),
+  ).toBe(true);
+  expect(toastMock.mock.calls.some((call) => call[1]?.action?.label === '되돌리기')).toBe(false);
+  write.mockRestore();
+  await user.click(within(preview).getByRole('button', { name: '적용' }));
+  await waitFor(() => expect(stored(storage).labels[L_CAFE]!.emoji?.value).toBe('☕'));
+});
+
+it('목록에 없는 유효한 현재 이모지도 선택으로 보이고 지울 수 있다', async () => {
+  const user = userEvent.setup();
+  const base = sampleLibrary();
+  const lib = {
+    ...base,
+    labels: {
+      ...base.labels,
+      [L_CAFE]: {
+        ...base.labels[L_CAFE]!,
+        emoji: { value: '🧑🏾‍🚀', updatedAt: base.labels[L_CAFE]!.createdAt },
+      },
+    },
+  };
+  const { storage } = await renderLibrary(lib, { path: '/labels' });
+  await openEditor(user, /^카페/);
+  const group = within(editor()).getByRole('radiogroup', { name: '이모지' });
+  expect(within(group).getByRole('radio', { name: '현재 이모지' })).toBeChecked();
+  expect(within(group).getByText('🧑🏾‍🚀')).toHaveAttribute('aria-hidden', 'true');
+  await user.click(within(group).getByRole('radio', { name: '이모지 없음' }));
+  await waitFor(() => expect(stored(storage).labels[L_CAFE]!.emoji?.value).toBeNull());
+});
+
+it('토스트 되돌리기도 다른 탭의 새 이모지를 유지한다', async () => {
+  const user = userEvent.setup();
+  const { storage } = await open();
+  await user.click(screen.getByRole('button', { name: '이름으로 이모지 정하기' }));
+  const preview = screen.getByRole('dialog', { name: '이름으로 이모지 정하기' });
+  await user.click(within(preview).getByRole('button', { name: '적용' }));
+  await waitFor(() => expect(stored(storage).labels[L_CAFE]!.emoji?.value).toBe('☕'));
+  const lib = stored(storage);
+  storage.setItem(
+    LIBRARY_KEY,
+    JSON.stringify({
+      ...lib,
+      labels: {
+        ...lib.labels,
+        [L_CAFE]: {
+          ...lib.labels[L_CAFE]!,
+          emoji: { value: '❤️', updatedAt: '2026-10-24T03:00:00.000Z' },
+        },
+      },
+    }),
+  );
+  const options = toastMock.mock.calls.find((call) => call[1]?.action?.label === '되돌리기')![1];
+  await act(async () => {
+    await options.action.onClick();
+  });
+  expect(stored(storage).labels[L_CAFE]!.emoji?.value).toBe('❤️');
+  expect(stored(storage).labels[L_FOOD]!.emoji?.value).toBeNull();
+  expect(toastMock).toHaveBeenCalledWith('다른 곳에서 바뀐 부분은 그대로 두었어요');
+});

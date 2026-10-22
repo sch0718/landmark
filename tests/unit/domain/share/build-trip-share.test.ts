@@ -397,3 +397,20 @@ describe('thinPaths', () => {
     expect(out[0]!.legs.map((l) => l.path.length)).toEqual([0, 1, 99]);
   });
 });
+
+it('이모지는 장소 공유 v1과 여행 공유 v2에 넣지 않는다', () => {
+  const lib = makeLib({}, { 2: { labelIds: [L_FOOD] } });
+  const label = lib.labels[L_FOOD]!;
+  const withEmoji = {
+    ...lib,
+    labels: { ...lib.labels, [L_FOOD]: { ...label, emoji: { value: '🍽️', updatedAt: T0 } } },
+  };
+  const v1 = buildShareDoc(withEmoji, [A], { title: '맛집', includeMemo: true, now: NOW });
+  const v2 = build(withEmoji);
+  for (const doc of [v1, v2]) {
+    expect(doc.labels).toHaveLength(1);
+    expect(doc.labels[0]).toEqual({ id: L_FOOD, name: '맛집', color: 'red', order: 0 });
+    expect(JSON.stringify(doc)).not.toContain('emoji');
+    expect(JSON.stringify(doc)).not.toContain('🍽️');
+  }
+});

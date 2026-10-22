@@ -10,6 +10,8 @@ import { renameLabel, setLabelColor, setLabelIcon } from 'src/domain/library/ops
 import { localDate } from 'src/lib/local-date';
 import { LIBRARY_LIMITS, type FolderLink, type Label } from 'src/schema/library';
 import { ColorPicker } from 'src/sections/labels/ColorPicker';
+import { setLabelEmoji } from 'src/domain/library/label-emoji-ops';
+import { EmojiPicker } from 'src/sections/labels/EmojiPicker';
 import { IconPicker } from 'src/sections/labels/IconPicker';
 import { labelRejectionMessage } from 'src/sections/labels/rejection-message';
 import { useLibraryAction } from 'src/stores/library-state';
@@ -191,6 +193,11 @@ export function LabelEditor({
         <ColorPicker
           value={label.color.value}
           onChange={(color) => void run((lib, ctx) => setLabelColor(lib, label.id, color, ctx))}
+        />
+        <EmojiPicker
+          value={label.emoji?.value ?? null}
+          color={label.color.value}
+          onChange={(emoji) => void run((lib, ctx) => setLabelEmoji(lib, label.id, emoji, ctx))}
         />
         <IconPicker
           value={label.icon.value}

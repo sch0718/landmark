@@ -1,7 +1,8 @@
+import { createLabel } from 'src/domain/library/label-create';
 import Box from '@mui/material/Box';
 import { useAtomValue, useStore } from 'jotai';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { createLabel } from 'src/domain/library/ops';
+
 import { liveLabels } from 'src/domain/library/query';
 import { normalizeLabelName } from 'src/schema/library';
 import { libraryAtom, useLibraryAction, type LibraryActionResult } from 'src/stores/library-state';

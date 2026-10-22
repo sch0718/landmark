@@ -891,3 +891,11 @@ describe('MapView 목록 전용 모드', () => {
     });
   });
 });
+
+it('이모지 마커는 방문 체크와 HTML 문자를 모두 텍스트로 보존한다', () => {
+  const label = '☕ <img src=x onerror=alert(1)>';
+  const el = createMarkerLabelElement(label, '#123456', { visited: true });
+  expect(el.textContent).toBe(`✓ ${label}`);
+  expect(el.title).toBe(`${label} · 다녀옴`);
+  expect(el.children).toHaveLength(0);
+});

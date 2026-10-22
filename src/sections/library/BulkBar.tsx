@@ -87,7 +87,7 @@ function LabelMenu({
             component="span"
             sx={{ display: 'inline-flex', color: labelColors(label.color.value).marker }}
           >
-            <LabelGlyph name={label.icon.value} size={16} />
+            <LabelGlyph emoji={label.emoji?.value} name={label.icon.value} size={16} />
           </Box>
           {label.name.value}
         </MenuItem>

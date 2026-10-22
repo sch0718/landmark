@@ -6,7 +6,6 @@ import { toast } from 'sonner';
 import { ExternalLinkIcon, TrashIcon } from 'src/components/icons';
 import { naverPlaceUrlOf } from 'src/domain/library/links';
 import {
-  createAndAttachLabel,
   deletePlaces,
   markVisitedToday,
   restorePlaces,
@@ -201,7 +200,10 @@ function PlaceBody({ place, level }: { place: Place; level: HeadingLevel }) {
           labels={labels}
           attachedIds={place.labelIds.value}
           onToggle={(labelId) => run((lib, ctx) => toggleLabel(lib, id, labelId, ctx))}
-          onCreate={(name) => run((lib, ctx) => createAndAttachLabel(lib, id, name, ctx))}
+          onCreate={async (name) => {
+            const { createAndAttachLabel } = await import('src/domain/library/label-create');
+            return run((lib, ctx) => createAndAttachLabel(lib, id, name, ctx));
+          }}
         />
       </Section>
       <Section title="메모" level={level}>

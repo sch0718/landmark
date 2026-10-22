@@ -3,6 +3,7 @@ import { dayColor, NO_CATEGORY_COLOR } from 'src/components/map/map-colors';
 import { dayEndpoints, visibleCandidates, visibleStops } from 'src/domain/trips/query';
 import type { Library, Place } from 'src/schema/library';
 import type { Trip } from 'src/schema/trip';
+import { firstPlaceLabel, placeMarkerName } from 'src/sections/map/markers';
 import { isSamePointLeg, type PlannedLeg } from 'src/sections/trips/planner/use-day-plan';
 
 /** 출발점·숙소 마커 id의 머리. 같은 장소가 Day의 Stop이기도 하면 마커가 따로 있어야 해서 구분한다. */
@@ -39,6 +40,7 @@ export function tripMapLayers(
   selectedPlaceId: string | null,
   splitPlan: string[][] | null = null,
 ): { markers: MapMarker[]; polylines: MapPolyline[] } {
+  const nameOf = (place: Place) => placeMarkerName(place, firstPlaceLabel(place, lib.labels));
   const color = dayColor(dayIndex);
   const markers: MapMarker[] = [];
   const used = new Set<string>();
@@ -67,7 +69,7 @@ export function tripMapLayers(
       push({
         id: place.id,
         ...point(place),
-        label: `${n} ${place.name.value}`,
+        label: `${n} ${nameOf(place)}`,
         color,
         textColor: MARKER_TEXT,
         selected: selected(place.id),
@@ -81,7 +83,7 @@ export function tripMapLayers(
       push({
         id: `${prefix}${place.id}`,
         ...point(place),
-        label: `${icon} ${place.name.value}`,
+        label: `${icon} ${nameOf(place)}`,
         color,
         textColor: MARKER_TEXT,
         borderColor: ENDPOINT_BORDER,
@@ -101,7 +103,7 @@ export function tripMapLayers(
     push({
       id: place.id,
       ...point(place),
-      label: place.name.value,
+      label: nameOf(place),
       color: target === undefined ? NO_CATEGORY_COLOR : dayColor(target),
       textColor: MARKER_TEXT,
       selected: selected(place.id),
