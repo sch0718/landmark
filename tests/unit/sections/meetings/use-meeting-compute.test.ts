@@ -256,6 +256,127 @@ it('조회 중 실패 칸을 다시 시도해도 다른 칸의 늦은 응답을 
   await runtime.dispose();
 });
 
+it('조회 중 조건을 바꾸고 완료 후 되돌리면 결과가 유효하고 대기가 풀린다', async () => {
+  let finish!: () => void;
+  const runtime = ManagedRuntime.make(
+    Layer.mergeAll(
+      AppLayer,
+      Layer.succeed(
+        RouteLookup,
+        RouteLookup.of({
+          leg: (mode) =>
+            Effect.promise(
+              () =>
+                new Promise<void>((resolve) => {
+                  finish = resolve;
+                }),
+            ).pipe(
+              Effect.as({
+                mode,
+                durationS: 600,
+                distanceM: 1000,
+                tollFare: null,
+                path: [],
+                queriedAt: '2026-10-24T00:00:00Z',
+                seq: 1,
+                fresh: false,
+              }),
+            ),
+        }),
+      ),
+    ),
+  );
+  setAppRuntimeForTest(runtime);
+  const { result, rerender, unmount } = renderHook(
+    ({ mode }) => useMeetingCompute({ participants, targets, mode, at: null }),
+    { initialProps: { mode: 'car' as 'car' | 'straight' } },
+  );
+  try {
+    let computing!: Promise<void>;
+    act(() => {
+      computing = result.current.compute();
+    });
+    await waitFor(() => expect(finish).toBeTypeOf('function'));
+    expect(result.current.pending).toBe(true);
+    rerender({ mode: 'straight' });
+    await act(async () => {
+      finish();
+      await computing;
+    });
+    expect(result.current.stale).toBe(true);
+    expect(result.current.times.choice01?.person01).toBeNull();
+    rerender({ mode: 'car' });
+    expect(result.current.pending).toBe(false);
+    expect(result.current.stale).toBe(false);
+    expect(result.current.times.choice01?.person01).toBe(10);
+    expect(result.current.progress).toEqual({ done: 1, total: 1 });
+    expect(result.current.queriedAt).toBe('2026-10-24T00:00:00Z');
+  } finally {
+    unmount();
+    await runtime.dispose();
+  }
+});
+
+it('다른 조건으로 새 계산을 시작하면 이전 계산의 늦은 응답을 버린다', async () => {
+  let finish!: () => void;
+  const runtime = ManagedRuntime.make(
+    Layer.mergeAll(
+      AppLayer,
+      Layer.succeed(
+        RouteLookup,
+        RouteLookup.of({
+          leg: (mode) =>
+            Effect.promise(
+              () =>
+                new Promise<void>((resolve) => {
+                  finish = resolve;
+                }),
+            ).pipe(
+              Effect.as({
+                mode,
+                durationS: 600,
+                distanceM: 1000,
+                tollFare: null,
+                path: [],
+                queriedAt: '2026-10-24T00:00:00Z',
+                seq: 1,
+                fresh: false,
+              }),
+            ),
+        }),
+      ),
+    ),
+  );
+  setAppRuntimeForTest(runtime);
+  const { result, rerender, unmount } = renderHook(
+    ({ mode }) => useMeetingCompute({ participants, targets, mode, at: null }),
+    { initialProps: { mode: 'car' as 'car' | 'straight' } },
+  );
+  try {
+    let computing!: Promise<void>;
+    act(() => {
+      computing = result.current.compute();
+    });
+    await waitFor(() => expect(finish).toBeTypeOf('function'));
+    rerender({ mode: 'straight' });
+    await act(() => result.current.compute());
+    const distance = result.current.times.choice01?.person01;
+    expect(distance).toBeGreaterThan(1000);
+    await act(async () => {
+      finish();
+      await computing;
+    });
+    expect(result.current.times.choice01?.person01).toBe(distance);
+    expect(result.current.progress).toEqual({ done: 1, total: 1 });
+    expect(result.current.pending).toBe(false);
+    expect(result.current.stale).toBe(false);
+    expect(result.current.queriedAt).toBeNull();
+  } finally {
+    unmount();
+    await runtime.dispose();
+  }
+});
+
 it('StrictMode에서 마운트 직후 한 번 시작한 계산이 완료되고 대기를 푼다', async () => {
   const runtime = ManagedRuntime.make(
     Layer.mergeAll(

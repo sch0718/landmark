@@ -106,8 +106,9 @@ export function useMeetingCompute(input: Input) {
             queriedAt = result.success.queriedAt;
           } else error = result.failure.code;
         }
-        if (generation.current !== token || latest.current.key !== startedKey) return;
+        if (generation.current !== token) return;
         setState((prev) => {
+          if (prev.key !== startedKey) return prev;
           const done = prev.progress.done + 1;
           if (requests.current.get(requestKey) !== requestToken)
             return {
@@ -132,8 +133,8 @@ export function useMeetingCompute(input: Input) {
         });
       }),
     );
-    if (cells.length === 0 && generation.current === token && latest.current.key === startedKey)
-      setState((prev) => ({ ...prev, pending: false }));
+    if (cells.length === 0 && generation.current === token)
+      setState((prev) => (prev.key !== startedKey ? prev : { ...prev, pending: false }));
   }, []);
   const stale = state.key !== '' && state.key !== key;
   const times = stale
