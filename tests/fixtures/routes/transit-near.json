@@ -1,0 +1,10 @@
+{
+  "status": "POINTS_ARE_TOO_CLOSE",
+  "message": null,
+  "context": {
+    "start": "127.0276,37.4979,,,",
+    "goal": "127.0281,37.4985,,,",
+    "departureTime": "2026-10-31T18:00:00"
+  },
+  "paths": []
+}

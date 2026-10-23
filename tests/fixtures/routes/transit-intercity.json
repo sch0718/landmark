@@ -1,0 +1,43 @@
+{
+  "status": "INTERCITY",
+  "message": null,
+  "context": {
+    "start": "127.0276,37.4979,,,",
+    "goal": "128.8961,37.764,,,",
+    "departureTime": "2026-10-31T10:00:00"
+  },
+  "paths": [
+    {
+      "idx": 1,
+      "mode": "TIME",
+      "type": "INTERCITY",
+      "departureTime": "2026-10-31T10:53:01",
+      "arrivalTime": "2026-10-31T13:53:53",
+      "duration": 180,
+      "intercityDuration": 92,
+      "walkingDuration": 31,
+      "waitingDuration": 8,
+      "distance": 192321,
+      "fare": 27500,
+      "transferCount": 1,
+      "status": null,
+      "message": null
+    },
+    {
+      "idx": 2,
+      "mode": "TIME",
+      "type": "INTERCITY",
+      "departureTime": "2026-10-31T10:30:30",
+      "arrivalTime": "2026-10-31T13:50:53",
+      "duration": 200,
+      "intercityDuration": 139,
+      "walkingDuration": 19,
+      "waitingDuration": 16,
+      "distance": 171880,
+      "fare": null,
+      "transferCount": 3,
+      "status": null,
+      "message": null
+    }
+  ]
+}

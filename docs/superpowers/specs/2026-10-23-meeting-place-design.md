@@ -126,8 +126,8 @@ Candidate = { id: 8자, kind: 'hub' | 'place', name: 1~60자, address?: ≤120�
 
 - 전국 주요 역·번화가 약 150곳(수도권 약 80, 광역시·도청 소재지·KTX 주요 역·강원 중심지 약 70)을
   `src/domain/meeting/hubs-data.ts`에 `{ id, name, region, lng, lat }`로 둔다. 지연 로딩 덩어리에만 들어간다.
-- 좌표는 `scripts/build-hubs.mjs`가 이름 목록(`scripts/hubs-list.json`)을 `/api/search`와 같은 네이버 자동완성으로 조회해
-  지하철·기차역 분류의 첫 결과로 만든다. 사람이 결과를 확인해 커밋한다. 앱 실행 중에는 이 스크립트를 쓰지 않는다.
+- 좌표는 `scripts/build-hubs.mjs`가 이름 목록(`scripts/hubs-list.json`, 150곳)을 `/api/search`와 같은 네이버 자동완성으로 조회해
+  역·터미널·공항 분류(출구·주차장·방면 제외)의 첫 결과로 만든다. 2026-10-24에 만들어 결과를 확인하고 커밋했다. 앱 실행 중에는 이 스크립트를 쓰지 않는다.
 
 ### 중간 지점 찾기
 
@@ -150,11 +150,13 @@ Candidate = { id: 8자, kind: 'hub' | 'place', name: 1~60자, address?: ≤120�
 
 ### 대중교통 경로: `/api/route` 확장
 
-- `mode=transit&from=경도,위도&to=경도,위도&at=YYYY-MM-DDTHH:mm`(`at` 없으면 지금, 한국 시각).
+- `mode=transit&from=경도,위도&to=경도,위도&at=YYYY-MM-DDTHH:mm`(한국 시각, transit에는 필수 — 클라이언트가 일시 또는 지금 시각으로 채운다).
 - 네이버 `https://map.naver.com/p/api/directions/pubtrans?start=…&goal=…&crs=EPSG:4326&mode=TIME&lang=ko&departureTime=…`를 기존과 같은 헤더(브라우저 UA, Referer)로 부른다.
   응답이 400~700KB라서 첫 경로(`paths[0]`, 추천순)의 요약만 돌려준다:
   `{ mode:'transit', distanceM, durationS, fare|null, transfers, walkS, path: [], queriedAt }`.
-  `paths`가 비면 `NO_ROUTE`. 출발·도착이 10m 안이면 기존 클라이언트 처리대로 서버를 부르지 않고 0으로 본다.
+  `status`가 `POINTS_ARE_TOO_CLOSE`(약 100m 안, 2026-10-24 확인)면 같은 두 점의 도보 경로를 불러 그 시간·거리를 `transfers: 0, fare: 0`으로 돌려준다.
+  그 밖에 `paths`가 비면 `NO_ROUTE`. 출발·도착이 10m 안이면 기존 클라이언트 처리대로 서버를 부르지 않고 0으로 본다.
+  네이버의 `duration`·`walkingDuration`은 분 단위라 초로 바꾼다.
 - 캐시 키에 `at`을 10분 단위로 내린 값을 넣고 max-age 1시간. 입력 키 형식 `transit:<at>:lng,lat>lng,lat`.
 - 여행 계획의 구간 수단(`car|walk`)과 여행 저장 형식은 바꾸지 않는다.
 - 위험: 큰 응답의 `JSON.parse`가 Cloudflare 함수 CPU 한도에 걸릴 수 있다. 미리보기 배포에서 서울 시내·장거리 두 경우를 실제로 불러 확인한다.
@@ -175,7 +177,8 @@ Candidate = { id: 8자, kind: 'hub' | 'place', name: 1~60자, address?: ≤120�
 ## 길찾기 연결
 
 `naverDirectionsUrl`의 `mode`에 `'transit'`을 더한다. 앱은 `nmap://route/public?…`, 웹은 `…/-/transit`.
-웹 주소의 수단 이름은 구현 때 map.naver.com 웹 번들에서 확인해 근거를 남긴다(기존 task-14 방식). 확인하지 못하면 웹은 수단 없이 도착지만 연다.
+웹 주소의 수단 이름 `transit`은 map.naver.com 웹 번들(`pcweb_navermap_v5/261014-5059ff3/index-5059ff3.js`)의
+길찾기 수단 상수 `{CAR:"car",TRANSIT:"transit",WALK:"walk",BIKE:"bike"}`로 확인했다(2026-10-24).
 
 ## 화면
 
