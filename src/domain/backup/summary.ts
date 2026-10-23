@@ -25,7 +25,8 @@ export function libraryCounts(lib: Library): LibraryCounts {
 }
 
 export function countsText(counts: LibraryCounts): string {
-  return `장소 ${counts.places}곳 · 라벨 ${counts.labels}개 · 여행 ${counts.trips}개 · 약속 ${counts.meetings}개`;
+  const meetingsText = counts.meetings > 0 ? ` · 약속 ${counts.meetings}개` : '';
+  return `장소 ${counts.places}곳 · 라벨 ${counts.labels}개 · 여행 ${counts.trips}개${meetingsText}`;
 }
 
 /** 묘비를 포함해 항목이 하나라도 있는가. */

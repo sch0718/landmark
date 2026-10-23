@@ -55,8 +55,8 @@ afterEach(() => {
 });
 
 const EXPORTED_AT = '2026-10-15T01:00:00.000Z';
-const FILE_COUNTS = '장소 30곳 · 라벨 6개 · 여행 2개 · 약속 0개';
-const SAMPLE_COUNTS = '장소 5곳 · 라벨 3개 · 여행 0개 · 약속 0개';
+const FILE_COUNTS = '장소 30곳 · 라벨 6개 · 여행 2개';
+const SAMPLE_COUNTS = '장소 5곳 · 라벨 3개 · 여행 0개';
 const FILE_PREFS: Prefs = {
   ...structuredClone(DEFAULT_PREFS),
   theme: 'night',

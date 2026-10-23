@@ -13,7 +13,6 @@ const run = <A, E>(
   Effect.gen(function* () {
     return yield* use(yield* PlaceSearch);
   }).pipe(Effect.provide(PlaceSearch.layerWith({ fetch, base: 'https://example.test' })));
-const settle = Effect.promise(() => new Promise<void>((r) => setTimeout(r, 0)));
 afterEach(() => vi.restoreAllMocks());
 
 describe('PlaceSearch', () => {
@@ -50,12 +49,13 @@ describe('PlaceSearch', () => {
           const first = yield* s.search('역').pipe(Effect.forkChild);
           const second = yield* s.search('역').pipe(Effect.forkChild);
           const third = yield* s.search('역', [128, 37]).pipe(Effect.forkChild);
-          yield* settle;
+          yield* Effect.promise(() => vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2)));
           expect(fetcher).toHaveBeenCalledTimes(2);
           finish();
           expect(yield* Fiber.join(first)).toEqual(results);
           expect(yield* Fiber.join(second)).toEqual(results);
           yield* Fiber.join(third);
+          expect(fetcher).toHaveBeenCalledTimes(2);
         }),
       );
     }),
@@ -152,14 +152,15 @@ describe('PlaceSearch', () => {
   it.effect('8초 시한은 본문 읽기까지 포함하고 중단 뒤 재시도된다', () =>
     Effect.gen(function* () {
       let signal: AbortSignal | null | undefined;
+      const readBody = vi.fn(() => new Promise<string>(() => {}));
       const fetcher = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
         signal = init?.signal;
-        return { status: 200, ok: true, text: () => new Promise<string>(() => {}) } as Response;
+        return { status: 200, ok: true, text: () => readBody() } as Response;
       });
       yield* run(fetcher, (s) =>
         Effect.gen(function* () {
           const fiber = yield* Effect.flip(s.search('역')).pipe(Effect.forkChild);
-          yield* settle;
+          yield* Effect.promise(() => vi.waitFor(() => expect(readBody).toHaveBeenCalledTimes(1)));
           yield* TestClock.adjust(`${PLACE_SEARCH_TIMEOUT_MS} millis`);
           const error = yield* Fiber.join(fiber);
           expect(error.code).toBe('TIMEOUT');

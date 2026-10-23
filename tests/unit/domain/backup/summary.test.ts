@@ -57,12 +57,18 @@ describe('libraryCounts', () => {
 });
 
 describe('countsText', () => {
-  it('수 문구', () => {
+  it('약속이 0개면 기존 수 문구를 유지한다', () => {
     expect(countsText({ places: 30, labels: 6, trips: 2, meetings: 0 })).toBe(
-      '장소 30곳 · 라벨 6개 · 여행 2개 · 약속 0개',
+      '장소 30곳 · 라벨 6개 · 여행 2개',
     );
     expect(countsText({ places: 0, labels: 0, trips: 0, meetings: 0 })).toBe(
-      '장소 0곳 · 라벨 0개 · 여행 0개 · 약속 0개',
+      '장소 0곳 · 라벨 0개 · 여행 0개',
+    );
+  });
+
+  it.each([1, 3])('약속이 %i개면 수 문구에 덧붙인다', (meetings) => {
+    expect(countsText({ places: 30, labels: 6, trips: 2, meetings })).toBe(
+      `장소 30곳 · 라벨 6개 · 여행 2개 · 약속 ${meetings}개`,
     );
   });
 });
