@@ -28,13 +28,17 @@ export function parseSearchInputKey(input: string): SearchQuery {
 const record = (v: unknown): Record<string, unknown> | null =>
   typeof v === 'object' && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
 const badResponse = () => new ApiError('UPSTREAM_ERROR', '네이버 검색 응답을 읽지 못함');
+const DEFAULT_NEAR: [number, number] = [126.9784, 37.5666];
 export async function resolveSearch(
   query: SearchQuery,
   deps: Deps,
 ): Promise<{ results: SearchResult[] }> {
-  const params = new URLSearchParams({ query: query.q });
-  if (query.near !== undefined)
-    params.set('coords', [query.near[1], query.near[0]].map((n) => n.toFixed(5)).join(','));
+  // 네이버는 `coords`가 없으면 HTTP 500을 준다(2026-10-24 확인). 주변 좌표가 없으면 서울시청 근처로 묻는다.
+  const near = query.near ?? DEFAULT_NEAR;
+  const params = new URLSearchParams({
+    query: query.q,
+    coords: [near[1], near[0]].map((n) => n.toFixed(5)).join(','),
+  });
   const response = await makeRequester(deps)(
     `https://map.naver.com/p/api/search/instant-search?${params}`,
     { headers: { 'User-Agent': BROWSER_USER_AGENT, Referer: 'https://map.naver.com/' } },

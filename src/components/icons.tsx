@@ -2,6 +2,7 @@ import type { ComponentType, SVGProps } from 'react';
 import HomeIcon from '~icons/lucide/house';
 import MapIcon from '~icons/lucide/map';
 import RouteIcon from '~icons/lucide/route';
+import MeetingIcon from '~icons/lucide/users-round';
 import PlusIcon from '~icons/lucide/plus';
 import MinusIcon from '~icons/lucide/minus';
 import LocateFixedIcon from '~icons/lucide/locate-fixed';
@@ -76,6 +77,7 @@ export {
   HomeIcon,
   MapIcon,
   RouteIcon,
+  MeetingIcon,
   PlusIcon,
   MinusIcon,
   LocateFixedIcon,

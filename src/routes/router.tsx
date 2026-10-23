@@ -5,6 +5,9 @@ import { LoadingNotice } from 'src/components/LoadingNotice';
 import { RouteErrorScreen } from 'src/components/RouteErrorScreen';
 import {
   LabelsPage,
+  MeetingsPage,
+  MeetingEditorPage,
+  MeetLinkPage,
   LegacyImportPage,
   SettingsPage,
   TripPlannerPage,
@@ -44,6 +47,9 @@ export const routes: RouteObject[] = [
         path: paths.legacyTrip(':publicId'),
         element: lazyElement(<LegacyImportPage />, 'legacy-trip'),
       },
+      { path: paths.meetings, element: lazyElement(<MeetingsPage />, 'meetings') },
+      { path: paths.meeting(':id'), element: lazyElement(<MeetingEditorPage />, 'meeting') },
+      { path: paths.meet, element: lazyElement(<MeetLinkPage />, 'meet') },
       { path: paths.trips, element: lazyElement(<TripsPage />, 'trips') },
       { path: paths.trip(':id'), element: lazyElement(<TripPlannerPage />, 'trip') },
       { path: paths.tripToday(':id'), element: lazyElement(<TripTodayPage />, 'trip-today') },

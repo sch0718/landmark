@@ -32,7 +32,7 @@ describe('사이드 메뉴 브랜딩', () => {
     );
 
     const nav = screen.getByRole('navigation', { name: '사이드 메뉴' });
-    for (const name of ['랜드마크', '보관함', '지도', '장소 추가', '여행', '설정']) {
+    for (const name of ['랜드마크', '보관함', '지도', '장소 추가', '여행', '약속', '설정']) {
       await user.tab();
       expect(document.activeElement).toHaveAccessibleName(name);
       if (name === '장소 추가') {

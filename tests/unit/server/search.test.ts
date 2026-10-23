@@ -51,6 +51,12 @@ describe('장소 이름 검색', () => {
     expect(request.searchParams.get('coords')).toBe('37.00000,127.00000');
     expect(request.searchParams.get('query')).toBe('강남역');
   });
+  it('주변 좌표가 없으면 서울시청 근처 coords를 보낸다', async () => {
+    const fetcher = vi.fn<typeof fetch>(async () => Response.json(fixture));
+    await resolveSearch({ q: '강남역' }, { fetch: fetcher });
+    const request = new URL(String(fetcher.mock.calls[0]![0]));
+    expect(request.searchParams.get('coords')).toBe('37.56660,126.97840');
+  });
   it('잘못된 좌표를 버린 뒤 10개까지 남긴다', async () => {
     const item = fixture.place[0];
     const result = await resolveSearch(

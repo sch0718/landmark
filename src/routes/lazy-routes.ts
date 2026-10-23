@@ -6,6 +6,21 @@ import { lazyChunk } from 'src/lib/lazy-chunk';
  * `ChunkLoadError`가 렌더 중 던져져 셸 라우트의 `errorElement`가 새 버전 안내를 보인다.
  * react-router의 라우트 `lazy`는 쓰지 않는다: 직접 진입하면 셸까지 늦게 그려져 빈 화면이 된다.
  */
+export const loadMeetingsPage = lazyChunk(() => import('src/sections/meetings/MeetingsPage'));
+export const loadMeetingEditorPage = lazyChunk(
+  () => import('src/sections/meetings/MeetingEditorPage'),
+);
+export const loadMeetLinkPage = lazyChunk(() => import('src/sections/meetings/MeetLinkPage'));
+export const MeetingsPage = lazy(() =>
+  loadMeetingsPage().then((m) => ({ default: m.MeetingsPage })),
+);
+export const MeetingEditorPage = lazy(() =>
+  loadMeetingEditorPage().then((m) => ({ default: m.MeetingEditorPage })),
+);
+export const MeetLinkPage = lazy(() =>
+  loadMeetLinkPage().then((m) => ({ default: m.MeetLinkPage })),
+);
+
 export const loadTripsPage = lazyChunk(() => import('src/sections/trips/TripsPage'));
 export const loadTripPlannerPage = lazyChunk(
   () => import('src/sections/trips/planner/TripPlannerPage'),
@@ -99,6 +114,9 @@ export const TripFormDialog = lazy(() =>
 
 /** 첫 화면을 그린 뒤 한가할 때 미리 받는 화면 단위들. */
 export const ROUTE_CHUNKS: readonly (() => Promise<unknown>)[] = [
+  loadMeetingsPage,
+  loadMeetingEditorPage,
+  loadMeetLinkPage,
   loadTripsPage,
   loadTripPlannerPage,
   loadTripTodayPage,
