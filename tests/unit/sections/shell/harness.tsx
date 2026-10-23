@@ -1,3 +1,4 @@
+import { PlaceSearch } from 'src/services/place-search';
 import { act, render } from '@testing-library/react';
 import { Effect, Layer, ManagedRuntime } from 'effect';
 import { createStore, Provider } from 'jotai';
@@ -136,6 +137,7 @@ export async function renderApp(
   setAppRuntimeForTest(
     ManagedRuntime.make(
       Layer.mergeAll(
+        PlaceSearch.layer,
         LibraryStore.layerWith({ storage, events: new EventTarget(), locks: libraryLocks }),
         PrefsStore.layerWith({ storage }),
         BackupMetaStore.layerWith({ storage }),

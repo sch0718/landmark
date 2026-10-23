@@ -8,6 +8,9 @@ export const paths = {
   settingsImport: '/settings?import=1',
   /** 받은 공유 파일 가져오기 진입. 들어오면 곧바로 `/`로 바꾸고 추가 흐름을 연다. */
   importShare: '/import',
+  meetings: '/meetings',
+  meeting: (id: string) => `/meetings/${id}`,
+  meet: '/meet',
   trips: '/trips',
   trip: (id: string) => `/trips/${id}`,
   /** 여행 당일 모드: 오늘 Day의 다음 장소·남은 일정. */

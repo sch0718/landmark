@@ -1,0 +1,43 @@
+{
+  "status": "CITY",
+  "message": null,
+  "context": {
+    "start": "127.0276,37.4979,,,",
+    "goal": "126.9236,37.5568,,,",
+    "departureTime": "2026-10-31T18:00:00"
+  },
+  "paths": [
+    {
+      "idx": 1,
+      "mode": "TIME",
+      "type": "SUBWAY",
+      "departureTime": "2026-10-31T18:00:00",
+      "arrivalTime": "2026-10-31T18:40:26",
+      "duration": 40,
+      "intercityDuration": 0,
+      "walkingDuration": 2,
+      "waitingDuration": 1,
+      "distance": 22228,
+      "fare": 1650,
+      "transferCount": 0,
+      "status": null,
+      "message": null
+    },
+    {
+      "idx": 2,
+      "mode": "TIME",
+      "type": "SUBWAY",
+      "departureTime": "2026-10-31T18:01:30",
+      "arrivalTime": "2026-10-31T18:54:56",
+      "duration": 53,
+      "intercityDuration": 0,
+      "walkingDuration": 2,
+      "waitingDuration": 1,
+      "distance": 26828,
+      "fare": 1650,
+      "transferCount": 0,
+      "status": null,
+      "message": null
+    }
+  ]
+}

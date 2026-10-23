@@ -28,6 +28,7 @@ import {
 import { HOURS_CACHE_KEY } from 'src/services/hours-lookup';
 import { ROUTE_CACHE_KEY } from 'src/services/route-lookup';
 import { createHeldLocks } from '../../fixtures/fake-locks';
+import { buildMeeting } from '../../fixtures/builders';
 
 const T0 = '2026-10-08T01:00:00.000Z';
 const NOW = '2026-10-08T02:00:00.000Z';
@@ -776,6 +777,20 @@ describe('LibraryStore.snapshot', () => {
 });
 
 describe('LibraryStore.replace', () => {
+  it.effect.each([[null], [NOW]] as const)(
+    '약속만 있는 보관함도 복원 전 사본을 남긴다 (%s)',
+    ([deletedAt]) =>
+      Effect.gen(function* () {
+        const storage = createMemoryStorage();
+        const meeting = buildMeeting({ deletedAt });
+        const before = seed(storage, { ...emptyLibrary(), meetings: { [meeting.id]: meeting } });
+        const result = yield* withStore({ storage }, (s) =>
+          s.replace(NEXT, { requirePrevious: true }),
+        );
+        expect(result.previousKept).toBe(true);
+        expect(storedEnvelope(storage)).toMatchObject({ library: JSON.parse(before) });
+      }),
+  );
   it.effect('writes the new library and keeps the raw previous document in the envelope', () =>
     Effect.gen(function* () {
       yield* TestClock.setTime(Date.parse(NOW));

@@ -2,7 +2,7 @@
 export type DirectionsLeg = {
   from: { name: string; lng: number; lat: number };
   to: { name: string; lng: number; lat: number };
-  mode: 'car' | 'walk';
+  mode: 'car' | 'walk' | 'transit';
 };
 
 /** 네이버 지도 URL Scheme의 `appname`: 배포 도메인. */
@@ -16,7 +16,7 @@ const valid = (p: { lng: number; lat: number }): boolean =>
 
 /**
  * 네이버 지도 길찾기 주소.
- * - `app`(좁은 화면): 네이버 지도 앱 URL Scheme `nmap://route/<car|walk>?…`(위도·경도 따로, 이름은 percent 인코딩).
+ * - `app`(좁은 화면): 네이버 지도 앱 URL Scheme `nmap://route/<car|walk|public>?…`(위도·경도 따로, 이름은 percent 인코딩).
  * - `web`(넓은 화면): `https://map.naver.com/p/directions/<출발>/<도착>/<경유>/<수단>`.
  *   각 지점은 `경도,위도,이름,,SIMPLE_POI`(id 없이 좌표로 지점을 찾는 형식), 경유는 없음(`-`).
  *   map.naver.com 웹 번들 분석으로 확인한 형식이다(근거: task-14-report.md).
@@ -35,7 +35,7 @@ export function naverDirectionsUrl(leg: DirectionsLeg, platform: 'app' | 'web'):
       `dname=${encodeURIComponent(to.name)}`,
       `appname=${APP_NAME}`,
     ].join('&');
-    return `nmap://route/${mode}?${query}`;
+    return `nmap://route/${mode === 'transit' ? 'public' : mode}?${query}`;
   }
   const point = (p: DirectionsLeg['from']) =>
     `${p.lng},${p.lat},${encodeURIComponent(p.name)},,SIMPLE_POI`;

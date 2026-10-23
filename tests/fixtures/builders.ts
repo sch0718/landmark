@@ -105,3 +105,24 @@ export function makeEdit(overrides: Partial<EditLayer> = {}): EditLayer {
     ...overrides,
   };
 }
+
+/** 약속 시험의 기본값. */
+export function buildMeeting(
+  overrides: Partial<import('src/schema/meeting').Meeting> = {},
+): import('src/schema/meeting').Meeting {
+  const f = <T>(value: T) => ({ value, updatedAt: FIXED_NOW });
+  return {
+    id: 'meeting001',
+    title: f('친구 모임'),
+    at: f(null),
+    mode: f('transit'),
+    rank: f('max'),
+    participants: f([{ id: 'person01', name: '나', origin: null }]),
+    candidates: f([{ id: 'choice01', kind: 'hub', name: '강남역', lng: 127, lat: 37.5 }]),
+    replies: f({}),
+    decided: f(null),
+    createdAt: FIXED_NOW,
+    deletedAt: null,
+    ...overrides,
+  };
+}

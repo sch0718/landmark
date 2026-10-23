@@ -1,10 +1,15 @@
 import { Schema } from 'effect';
 import { IsoDateTime } from 'src/schema/common';
 
-// library.ts와 trip.ts가 함께 쓰는 기초 정의. 둘이 서로를 import하면 순환이라 따로 둔다.
+// 보관함·여행·약속 스키마가 함께 쓰는 기초 정의. 순환 import를 피하려고 따로 둔다.
 // 바깥에서는 계속 `src/schema/library`에서 가져다 쓴다(거기서 다시 내보낸다).
 
 export const LIBRARY_LIMITS = {
+  meetingsMax: 200,
+  meetingParticipantsMax: 10,
+  meetingCandidatesMax: 8,
+  meetingTitleChars: 60,
+  meetingNameChars: 20,
   memoChars: 10_000,
   /** 한 줄 평의 `String.length` 상한(이모지는 2로 센다). */
   reviewChars: 140,

@@ -265,7 +265,7 @@ describe('AppShell layout', () => {
     await renderApp();
     const nav = screen.getByRole('navigation', { name: '하단 메뉴' });
     const targets = [...within(nav).getAllByRole('link'), within(nav).getByRole('button')];
-    expect(targets).toHaveLength(5);
+    expect(targets).toHaveLength(6);
     for (const target of targets) {
       const style = getComputedStyle(target);
       expect(parseFloat(style.minWidth), target.textContent ?? '＋').toBeGreaterThanOrEqual(44);

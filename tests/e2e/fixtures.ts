@@ -131,9 +131,20 @@ export async function exportSeaPlaces(page: Page, testInfo: TestInfo): Promise<s
 const routeFixture = (name: string): string =>
   readFileSync(fileURLToPath(new URL(`../fixtures/routes/api/${name}`, import.meta.url)), 'utf8');
 
-const ROUTE_REPLY: Record<'car' | 'walk', string> = {
+const ROUTE_REPLY: Record<'car' | 'walk' | 'transit', string> = {
   car: routeFixture('car.json'),
   walk: routeFixture('walk.json'),
+  transit: JSON.stringify({
+    mode: 'transit',
+    distanceM: 12000,
+    durationS: 1800,
+    tollFare: null,
+    fare: 1450,
+    transfers: 1,
+    walkS: 300,
+    path: [],
+    queriedAt: '2026-10-24T00:00:00.000Z',
+  }),
 };
 
 /** 앱이 `/api/route`로 보낸 질의를 요청 순서대로 모은 것. */
@@ -144,7 +155,8 @@ export async function mockRoutes(page: Page): Promise<RouteCall[]> {
   const calls: RouteCall[] = [];
   await page.route('**/api/route?**', (route) => {
     const params = new URL(route.request().url()).searchParams;
-    const mode = params.get('mode') === 'walk' ? 'walk' : 'car';
+    const requested = params.get('mode');
+    const mode = requested === 'transit' ? 'transit' : requested === 'walk' ? 'walk' : 'car';
     calls.push({ mode, from: params.get('from') ?? '', to: params.get('to') ?? '' });
     return route.fulfill({
       status: 200,
@@ -246,4 +258,26 @@ export async function pickFromSheet(page: Page, file: string): Promise<void> {
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByRole('button', { name: '파일 고르기' })).toBeVisible();
   await page.locator('input[type="file"]').setInputFiles(file);
+}
+
+/** 약속 출발지 이름 검색을 작은 고정 응답으로 대신한다. */
+export async function mockSearch(
+  page: Page,
+  results = [
+    {
+      name: '원주 출발',
+      address: '강원특별자치도 원주시',
+      category: '역',
+      lng: 127.921887,
+      lat: 37.315942,
+    },
+  ],
+): Promise<void> {
+  await page.route('**/api/search?**', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json; charset=utf-8',
+      body: JSON.stringify({ results }),
+    }),
+  );
 }

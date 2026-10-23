@@ -1,16 +1,25 @@
-// 네이버 자동차·도보 길찾기를 앱이 쓰기 좋은 모양으로 정리한다(스펙 §4.1).
+// 네이버 자동차·도보·대중교통 길찾기를 앱이 쓰기 좋은 모양으로 정리한다(스펙 §4.1).
 // Cloudflare 서버 함수에서도 쓰므로 상대 경로 import만 쓰고 브라우저·React 코드를 끌어오지 않는다.
+import { haversineM } from '../domain/trips/geo';
 import { ApiError } from './http';
 import { BROWSER_USER_AGENT, makeRequester, type Deps } from './request';
 import { simplifyPath } from './simplify';
 
-export type RouteMode = 'car' | 'walk';
-export type RouteQuery = { mode: RouteMode; from: [number, number]; to: [number, number] };
+export type RouteMode = 'car' | 'walk' | 'transit';
+export type RouteQuery = {
+  mode: RouteMode;
+  from: [number, number];
+  to: [number, number];
+  at?: string;
+};
 export type RouteResult = {
   mode: RouteMode;
   distanceM: number;
   durationS: number;
   tollFare: number | null;
+  fare?: number | null;
+  transfers?: number;
+  walkS?: number;
   path: [number, number][];
   /** 조회한 시각(ISO 8601). 자동차 시간은 이 시점의 교통 기준이다. */
   queriedAt: string;
@@ -18,17 +27,17 @@ export type RouteResult = {
 
 const MAX_PATH_POINTS = 200;
 const WALK_MAX_STRAIGHT_M = 50_000;
-const EARTH_RADIUS_M = 6_371_000;
 const LNG_RANGE = [124, 132] as const;
 const LAT_RANGE = [33, 39] as const;
 const COORDINATE = /^-?\d+(?:\.\d+)?$/;
-const INPUT_KEY = /^(car|walk):(-?\d+\.\d{5}),(-?\d+\.\d{5})>(-?\d+\.\d{5}),(-?\d+\.\d{5})$/;
+const INPUT_KEY =
+  /^(car|walk|transit):(?:(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}):)?(-?\d+\.\d{5}),(-?\d+\.\d{5})>(-?\d+\.\d{5}),(-?\d+\.\d{5})$/;
 
 const badRequest = (message: string) => new ApiError('BAD_REQUEST', message);
 const noRoute = () => new ApiError('NO_ROUTE', '경로를 찾지 못함');
 const badResponse = () => new ApiError('UPSTREAM_ERROR', '네이버 경로 응답을 읽지 못함');
 
-function parseCoordinate(raw: string | null, name: string): [number, number] {
+export function parseCoordinate(raw: string | null, name: string): [number, number] {
   const parts = (raw ?? '').split(',');
   if (parts.length !== 2 || !parts.every((part) => COORDINATE.test(part))) {
     throw badRequest(`${name} 좌표 형식이 틀림`);
@@ -41,12 +50,17 @@ function parseCoordinate(raw: string | null, name: string): [number, number] {
   return [lng, lat];
 }
 
-/** `mode=car|walk&from=경도,위도&to=경도,위도`를 읽는다. 형식이 틀리거나 한국 범위 밖이면 BAD_REQUEST. */
+/** `mode=car|walk|transit&from=경도,위도&to=경도,위도`를 읽는다. 대중교통만 출발 시각 `at`을 받는다. 형식이 틀리거나 한국 범위 밖이면 BAD_REQUEST. */
 export function parseRouteQuery(url: URL): RouteQuery {
   const mode = url.searchParams.get('mode');
-  if (mode !== 'car' && mode !== 'walk') throw badRequest('mode는 car 또는 walk');
+  if (mode !== 'car' && mode !== 'walk' && mode !== 'transit')
+    throw badRequest('mode는 car, walk 또는 transit');
+  const at = url.searchParams.get('at');
+  if (mode === 'transit') floorTransitAt(at ?? '');
+  else if (at !== null) throw badRequest('대중교통만 출발 시각을 씁니다');
   return {
     mode,
+    ...(mode === 'transit' ? { at: at! } : {}),
     from: parseCoordinate(url.searchParams.get('from'), 'from'),
     to: parseCoordinate(url.searchParams.get('to'), 'to'),
   };
@@ -56,28 +70,32 @@ const fixed = ([lng, lat]: [number, number]) => `${lng.toFixed(5)},${lat.toFixed
 
 /** 질의를 정규화한 입력 키. 캐시 키와 `resolve` 입력으로 쓴다. 좌표는 소수 5자리(약 1m)로 맞춘다. */
 export function routeInputKey(q: RouteQuery): string {
-  return `${q.mode}:${fixed(q.from)}>${fixed(q.to)}`;
+  const prefix = q.mode === 'transit' ? `transit:${floorTransitAt(q.at ?? '')}` : q.mode;
+  return `${prefix}:${fixed(q.from)}>${fixed(q.to)}`;
 }
 
 /** `routeInputKey`가 만든 키를 다시 질의로 푼다. */
 export function parseRouteInputKey(input: string): RouteQuery {
   const m = INPUT_KEY.exec(input);
   if (m === null) throw badRequest('경로 입력 키 형식이 틀림');
-  return {
-    mode: m[1] as RouteMode,
-    from: [Number(m[2]), Number(m[3])],
-    to: [Number(m[4]), Number(m[5])],
-  };
+  const params = new URLSearchParams({
+    mode: m[1]!,
+    from: `${m[3]},${m[4]}`,
+    to: `${m[5]},${m[6]}`,
+  });
+  if (m[2] !== undefined) params.set('at', m[2]);
+  return parseRouteQuery(new URL(`https://cache.landmark/?${params}`));
 }
 
-/** 두 좌표의 직선거리(m, 하버사인). */
-function straightDistanceM(a: [number, number], b: [number, number]): number {
-  const rad = Math.PI / 180;
-  const dLat = (b[1] - a[1]) * rad;
-  const dLng = (b[0] - a[0]) * rad;
-  const h =
-    Math.sin(dLat / 2) ** 2 + Math.cos(a[1] * rad) * Math.cos(b[1] * rad) * Math.sin(dLng / 2) ** 2;
-  return 2 * EARTH_RADIUS_M * Math.asin(Math.min(1, Math.sqrt(h)));
+/** 한국 시각의 실제 날짜·시각을 확인하고 10분 단위로 내린다. */
+export function floorTransitAt(at: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}T([01]\d|2[0-3]):[0-5]\d$/.test(at))
+    throw badRequest('출발 시각 형식이 틀림');
+  const date = at.slice(0, 10);
+  const instant = new Date(`${date}T00:00:00Z`);
+  if (Number.isNaN(instant.getTime()) || instant.toISOString().slice(0, 10) !== date)
+    throw badRequest('실제 달력 날짜가 아님');
+  return at.slice(0, 15) + '0';
 }
 
 type Raw = Record<string, unknown>;
@@ -162,9 +180,45 @@ function parseWalk(body: Raw): Omit<RouteResult, 'mode' | 'queriedAt'> {
   };
 }
 
+function parseTransit(body: Raw): Omit<RouteResult, 'mode' | 'queriedAt'> {
+  if (!Array.isArray(body.paths)) throw badResponse();
+  if (body.paths.length === 0) throw noRoute();
+  const path = asRecord(body.paths[0]);
+  if (!path) throw badResponse();
+  const { distance, duration, walkingDuration, transferCount, fare } = path;
+  if (
+    ![distance, duration, walkingDuration, transferCount].every(
+      (v) => isFiniteNumber(v) && v >= 0,
+    ) ||
+    !Number.isInteger(transferCount) ||
+    (fare !== null && fare !== undefined && (!isFiniteNumber(fare) || fare < 0))
+  )
+    throw badResponse();
+  return {
+    distanceM: distance as number,
+    durationS: (duration as number) * 60,
+    tollFare: null,
+    fare: isFiniteNumber(fare) ? fare : null,
+    transfers: transferCount as number,
+    walkS: (walkingDuration as number) * 60,
+    path: [],
+  };
+}
+
 function naverUrl(q: RouteQuery): string {
   const from = fixed(q.from);
   const to = fixed(q.to);
+  if (q.mode === 'transit') {
+    const params = new URLSearchParams({
+      start: from,
+      goal: to,
+      crs: 'EPSG:4326',
+      mode: 'TIME',
+      lang: 'ko',
+      departureTime: floorTransitAt(q.at ?? ''),
+    });
+    return `https://map.naver.com/p/api/directions/pubtrans?${params}`;
+  }
   return q.mode === 'car'
     ? `https://map.naver.com/p/api/directions/car?start=${from}&goal=${to}`
     : `https://map.naver.com/p/api/directions/walk?o=all&l=${from};${to}&lang=ko`;
@@ -175,7 +229,7 @@ export async function resolveRoute(
   deps: Deps & { now?: () => Date },
 ): Promise<RouteResult> {
   // 직선 50km를 넘는 도보는 네이버가 `code: 4`를 주니 묻지 않는다.
-  if (q.mode === 'walk' && straightDistanceM(q.from, q.to) > WALK_MAX_STRAIGHT_M) {
+  if (q.mode === 'walk' && haversineM(q.from, q.to) > WALK_MAX_STRAIGHT_M) {
     throw noRoute();
   }
   const request = makeRequester(deps);
@@ -199,6 +253,11 @@ export async function resolveRoute(
     if (!isFiniteNumber(body.code)) throw badResponse();
     if (body.code !== 0) throw noRoute();
   }
-  const result = q.mode === 'car' ? parseCar(body) : parseWalk(body);
+  if (q.mode === 'transit' && body.status === 'POINTS_ARE_TOO_CLOSE') {
+    const walk = await resolveRoute({ mode: 'walk', from: q.from, to: q.to }, deps);
+    return { ...walk, mode: 'transit', fare: 0, transfers: 0, walkS: walk.durationS, path: [] };
+  }
+  const result =
+    q.mode === 'car' ? parseCar(body) : q.mode === 'walk' ? parseWalk(body) : parseTransit(body);
   return { mode: q.mode, ...result, queriedAt: (deps.now?.() ?? new Date()).toISOString() };
 }

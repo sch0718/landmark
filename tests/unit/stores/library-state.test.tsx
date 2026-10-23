@@ -1,3 +1,4 @@
+import { PlaceSearch } from 'src/services/place-search';
 import { createLabel } from 'src/domain/library/label-create';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { Effect, Layer, ManagedRuntime } from 'effect';
@@ -111,6 +112,7 @@ function setup(
     LegacyTripSource.layerWith({ storage, fetch: (...args) => globalThis.fetch(...args) }),
     ShareTemplate.layer,
     PlaceLookup.layer,
+    PlaceSearch.layer,
     ReverseGeocoder.layer,
     RouteLookup.layer,
     PENDING_HOURS_LOOKUP,

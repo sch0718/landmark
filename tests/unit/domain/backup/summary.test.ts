@@ -11,6 +11,7 @@ import {
 } from 'src/domain/backup/summary';
 import { emptyLibrary, type FolderLink } from 'src/schema/library';
 import { f, label, makeLibrary, place, T0, trip } from './fixtures';
+import { buildMeeting } from '../../../fixtures/builders';
 
 const DEL = '2026-10-09T00:00:00.000Z';
 
@@ -39,18 +40,49 @@ describe('libraryCounts', () => {
       labels: [label(1), label(2, { deletedAt: DEL })],
       trips: [trip(1, 1), trip(2, 2, { deletedAt: DEL })],
     });
-    expect(libraryCounts(lib)).toEqual({ places: 2, labels: 1, trips: 1 });
+    expect(libraryCounts(lib)).toEqual({ places: 2, labels: 1, trips: 1, meetings: 0 });
+  });
+  it('약속도 살아 있는 항목만 세고 요약에 넣는다', () => {
+    const meeting = buildMeeting();
+    const lib = {
+      ...emptyLibrary(),
+      meetings: {
+        [meeting.id]: meeting,
+        deleted001: { ...meeting, id: 'deleted001', deletedAt: DEL },
+      },
+    };
+    expect(libraryCounts(lib)).toEqual({ places: 0, labels: 0, trips: 0, meetings: 1 });
+    expect(countsText(libraryCounts(lib))).toBe('장소 0곳 · 라벨 0개 · 여행 0개 · 약속 1개');
   });
 });
 
 describe('countsText', () => {
-  it('수 문구', () => {
-    expect(countsText({ places: 30, labels: 6, trips: 2 })).toBe('장소 30곳 · 라벨 6개 · 여행 2개');
-    expect(countsText({ places: 0, labels: 0, trips: 0 })).toBe('장소 0곳 · 라벨 0개 · 여행 0개');
+  it('약속이 0개면 기존 수 문구를 유지한다', () => {
+    expect(countsText({ places: 30, labels: 6, trips: 2, meetings: 0 })).toBe(
+      '장소 30곳 · 라벨 6개 · 여행 2개',
+    );
+    expect(countsText({ places: 0, labels: 0, trips: 0, meetings: 0 })).toBe(
+      '장소 0곳 · 라벨 0개 · 여행 0개',
+    );
+  });
+
+  it.each([1, 3])('약속이 %i개면 수 문구에 덧붙인다', (meetings) => {
+    expect(countsText({ places: 30, labels: 6, trips: 2, meetings })).toBe(
+      `장소 30곳 · 라벨 6개 · 여행 2개 · 약속 ${meetings}개`,
+    );
   });
 });
 
 describe('hasAnyEntry / hasLiveContent', () => {
+  it.each([null, DEL])(
+    '약속만 있어도 항목이며 삭제 여부(%s)로 살아 있는 내용을 가린다',
+    (deletedAt) => {
+      const meeting = buildMeeting({ deletedAt });
+      const lib = { ...emptyLibrary(), meetings: { [meeting.id]: meeting } };
+      expect(hasAnyEntry(lib)).toBe(true);
+      expect(hasLiveContent(lib)).toBe(deletedAt === null);
+    },
+  );
   it('빈 보관함은 둘 다 거짓', () => {
     expect(hasAnyEntry(emptyLibrary())).toBe(false);
     expect(hasLiveContent(emptyLibrary())).toBe(false);
@@ -70,6 +102,12 @@ describe('hasAnyEntry / hasLiveContent', () => {
 });
 
 describe('latestChangeAt', () => {
+  it('약속의 생성·삭제 시각도 요약에 반영한다', () => {
+    const meeting = buildMeeting({ createdAt: '2026-09-01T00:00:00.000Z', deletedAt: DEL });
+    const lib = { ...emptyLibrary(), meetings: { [meeting.id]: meeting } };
+    expect(earliestCreatedAt(lib)).toBe(meeting.createdAt);
+    expect(latestChangeAt(lib)).toBe(DEL);
+  });
   it('빈 보관함은 null', () => {
     expect(latestChangeAt(emptyLibrary())).toBeNull();
   });

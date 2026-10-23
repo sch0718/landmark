@@ -3,7 +3,7 @@ import { Deferred, Effect, Exit, Layer } from 'effect';
 import type { Library, Place } from 'src/schema/library';
 import type { Trip } from 'src/schema/trip';
 import type { PlaceHours } from 'src/server/hours';
-import type { RouteResult } from 'src/server/route';
+import type { RouteMode, RouteResult } from 'src/server/route';
 import {
   HoursLookupError,
   RouteLookupError,
@@ -105,7 +105,7 @@ export const withTrip = (lib: Library, trip: Trip): Library => ({
 
 // ---------- 가짜 경로 조회 ----------
 
-export type Call = { mode: 'car' | 'walk'; from: string; to: string; refresh: boolean };
+export type Call = { mode: RouteMode; from: string; to: string; refresh: boolean };
 export type Answer = RouteResult | RouteLookupErrorCode;
 
 export const nameAt = ([lng, lat]: [number, number]) => NAMES[`${lng},${lat}`] ?? `${lng},${lat}`;

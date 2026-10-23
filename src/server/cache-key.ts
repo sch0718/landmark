@@ -29,3 +29,8 @@ export function routeCacheKey(input: string): string {
 export function hoursCacheKey(sid: string): string {
   return `${CACHE_ORIGIN}/hours/naver/${sid}`;
 }
+
+/** 정규화한 검색어·주변 좌표를 함께 넣는다. */
+export function searchCacheKey(input: string): string {
+  return `${CACHE_ORIGIN}/search/${encodeURIComponent(input)}`;
+}

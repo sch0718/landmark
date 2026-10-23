@@ -273,3 +273,25 @@ export class HoursLookupError extends Schema.TaggedError<HoursLookupError>()('Ho
     }
   }
 }
+
+export const PLACE_SEARCH_ERROR_CODES = [
+  'BAD_REQUEST',
+  'UPSTREAM_ERROR',
+  'TIMEOUT',
+  'OFFLINE',
+  'FORBIDDEN_ORIGIN',
+] as const;
+export type PlaceSearchErrorCode = (typeof PLACE_SEARCH_ERROR_CODES)[number];
+
+/** 이름 검색은 실패해도 지도 핀·보관함 장소로 출발지를 고를 수 있다. */
+export class PlaceSearchError extends Schema.TaggedError<PlaceSearchError>()('PlaceSearchError', {
+  code: Schema.Literals(PLACE_SEARCH_ERROR_CODES),
+}) {
+  get userMessage(): string {
+    return this.code === 'OFFLINE'
+      ? '오프라인이에요'
+      : this.code === 'BAD_REQUEST'
+        ? '검색어를 1~40자로 입력해 주세요'
+        : '검색이 안 돼요 — 지도 핀이나 보관함 장소를 써 주세요';
+  }
+}

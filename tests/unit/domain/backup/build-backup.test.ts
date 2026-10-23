@@ -1,3 +1,5 @@
+import { buildMeeting } from '../../../fixtures/builders';
+import { readBackupText } from 'src/domain/backup/read-backup';
 import { describe, expect, it } from 'vitest';
 import { backupFileName, BACKUP_MIME, buildBackupText } from 'src/domain/backup/build-backup';
 import { BACKUP_FORMAT, BACKUP_VERSION } from 'src/schema/backup';
@@ -7,6 +9,16 @@ import { f, label, makeLibrary, place, T0, trip } from './fixtures';
 const NOW = new Date('2026-10-16T05:30:00.000Z');
 
 describe('buildBackupText', () => {
+  it('약속이 든 원본을 백업하고 읽어도 그대로 보존한다', () => {
+    const meeting = buildMeeting();
+    const raw = { ...makeLibrary(), meetings: { [meeting.id]: meeting } };
+    const read = readBackupText(buildBackupText({ rawLibrary: raw, prefs: null, now: NOW }));
+    expect(read.ok).toBe(true);
+    if (read.ok) {
+      expect(read.backup.library.meetings).toEqual(raw.meetings);
+      expect(read.backup.droppedUnknown).toBe(false);
+    }
+  });
   it('저장소 원문을 봉투에 그대로 담는다', () => {
     const raw = makeLibrary({ places: [place(1)], labels: [label(1)], trips: [trip(1, 1)] });
     const text = buildBackupText({ rawLibrary: raw, prefs: DEFAULT_PREFS, now: NOW });
