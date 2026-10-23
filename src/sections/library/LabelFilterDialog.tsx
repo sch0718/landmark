@@ -145,9 +145,15 @@ export function LabelFilterDialog({ open, onClose, query, onChange, labels, coun
             />
             <Box
               component="span"
-              sx={{ display: 'inline-flex', color: labelColors(label.color.value).marker }}
+              sx={{
+                display: 'inline-flex',
+                flexShrink: 0,
+                width: 18,
+                height: 18,
+                color: labelColors(label.color.value).marker,
+              }}
             >
-              <LabelGlyph emoji={label.emoji?.value} name={label.icon.value} size={18} />
+              <LabelGlyph emoji={label.emoji?.value} size={18} />
             </Box>
             <Box component="span" sx={{ flex: 1, overflowWrap: 'anywhere' }}>
               {label.name.value}

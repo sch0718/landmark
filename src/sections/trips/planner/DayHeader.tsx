@@ -2,7 +2,7 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import { useState } from 'react';
 import { fieldSx } from 'src/components/field-style';
-import { HomeIcon, LabelGlyph } from 'src/components/icons';
+import { BedIcon, HomeIcon } from 'src/components/icons';
 import { TruncatedText } from 'src/components/TruncatedText';
 import type { Place } from 'src/schema/library';
 
@@ -86,7 +86,11 @@ export function DayHeader({
         }}
       >
         {start !== null &&
-          (dayIndex === 0 ? <HomeIcon aria-hidden="true" /> : <LabelGlyph name="bed" size={16} />)}
+          (dayIndex === 0 ? (
+            <HomeIcon aria-hidden="true" />
+          ) : (
+            <BedIcon aria-hidden="true" width={16} height={16} />
+          ))}
         <TruncatedText>{start === null ? '첫 장소에서 출발' : start.name.value}</TruncatedText>
       </Box>
       <Button size="small" disabled={!canOptimize} onClick={onOptimize} sx={{ minHeight: 44 }}>

@@ -149,7 +149,7 @@ describe('LabelsPage', () => {
     expect(stored(storage).labels[L_CAFE]!.name.value).toBe('커피집');
   });
 
-  it('recolor and change icon save immediately', async () => {
+  it('아이콘 선택기 없이 색을 즉시 저장한다', async () => {
     const user = userEvent.setup();
     const { storage } = await open();
     await openEditor(user, /^카페/);
@@ -161,12 +161,7 @@ describe('LabelsPage', () => {
     await waitFor(() => expect(stored(storage).labels[L_CAFE]!.color.value).toBe('purple'));
     expect(within(colors).getByRole('radio', { name: '보라' })).toBeChecked();
 
-    const icons = within(editor()).getByRole('radiogroup', { name: '아이콘' });
-    expect(within(icons).getAllByRole('radio')).toHaveLength(32);
-    expect(within(icons).getByRole('radio', { name: '커피' })).toBeChecked();
-    await user.click(within(icons).getByRole('radio', { name: '빵' }));
-    await waitFor(() => expect(stored(storage).labels[L_CAFE]!.icon.value).toBe('croissant'));
-    expect(within(icons).getByRole('radio', { name: '빵' })).toBeChecked();
+    expect(within(editor()).queryByRole('radiogroup', { name: '아이콘' })).not.toBeInTheDocument();
   });
 
   it('delete dialog shows affected place count; places remain', async () => {

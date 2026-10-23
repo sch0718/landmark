@@ -3,7 +3,7 @@ import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import { useState } from 'react';
-import { LabelGlyph } from 'src/components/icons';
+import { BedIcon } from 'src/components/icons';
 import { formatClock, type DaySchedule } from 'src/domain/trips/schedule';
 import type { Place } from 'src/schema/library';
 import { formatTotals, queriedLabel } from 'src/sections/trips/planner/format';
@@ -54,7 +54,7 @@ export function DayTail({
       ) : (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minHeight: 44 }}>
           <Box sx={{ flex: 'none', display: 'flex', color: 'var(--tm-text-secondary)' }}>
-            <LabelGlyph name="bed" size={18} />
+            <BedIcon aria-hidden="true" width={18} height={18} />
           </Box>
           {lodgingArriveMin !== null && (
             <Box
