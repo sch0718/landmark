@@ -74,8 +74,8 @@ export function MeetingResults({
   }, [targetKey, meeting.candidates.value.length, computeCandidates]);
   useEffect(() => {
     if (findSeq === 0) return;
-    void computeHubs();
-    void computeCandidates();
+    void computeHubs({ refresh: true });
+    void computeCandidates({ refresh: true });
   }, [findSeq, computeHubs, computeCandidates]);
   const stale = (condition !== null && condition !== conditionKey) || candidateCompute.stale;
   const eligible = meeting.participants.value.filter((p) => p.origin !== null);
@@ -103,7 +103,10 @@ export function MeetingResults({
   };
   const host = meeting.participants.value[0];
   const pending = hubCompute.pending || candidateCompute.pending;
-  const queried = hubCompute.queriedAt ?? candidateCompute.queriedAt;
+  const queried =
+    [hubCompute.queriedAt, candidateCompute.queriedAt]
+      .filter((at) => at !== null)
+      .sort((a, b) => Date.parse(a) - Date.parse(b))[0] ?? null;
   const departure = hubCompute.departure ?? candidateCompute.departure;
   return (
     <Box sx={{ mt: 2 }}>
@@ -128,7 +131,9 @@ export function MeetingResults({
           대중교통: {departure.slice(5).replace('T', ' ')} 출발 기준, 조회 {localDate(queried)}
         </p>
       )}
-      {queried && meeting.mode.value === 'car' && <p>자동차: 조회 시점 실시간 교통 기준</p>}
+      {queried && meeting.mode.value === 'car' && (
+        <p>자동차: 조회 시점 실시간 교통 기준, 조회 {localDate(queried)}</p>
+      )}
       {hubs.length > 0 && (
         <HubResults
           hubs={hubs}

@@ -14,8 +14,11 @@ export type ReplyPreview =
       droppedLikes: number;
       originChanged: boolean;
     }
-  | { kind: 'stale' | 'full' | 'other-meeting' };
-export type ReplyRejected = { _tag: 'ReplyRejected'; reason: 'stale' | 'full' | 'other-meeting' };
+  | { kind: 'stale' | 'full' | 'other-meeting' | 'host' };
+export type ReplyRejected = {
+  _tag: 'ReplyRejected';
+  reason: 'stale' | 'full' | 'other-meeting' | 'host';
+};
 const normalizeName = (name: string) => name.normalize('NFC').trim().replace(/\s+/g, ' ');
 
 export function previewReply(meeting: Meeting, doc: ReplyDoc): ReplyPreview {
@@ -28,6 +31,8 @@ export function previewReply(meeting: Meeting, doc: ReplyDoc): ReplyPreview {
         );
   if (doc.participantId !== undefined && participant === undefined)
     return { kind: 'other-meeting' };
+  if (participant !== undefined && participant.id === meeting.participants.value[0]?.id)
+    return { kind: 'host' };
   if (
     participant === undefined &&
     meeting.participants.value.length >= LIBRARY_LIMITS.meetingParticipantsMax

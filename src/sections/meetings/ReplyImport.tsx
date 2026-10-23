@@ -52,11 +52,13 @@ export function ReplyImport({ doc }: { doc: ReplyDoc }) {
         </>
       ) : (
         <p>
-          {preview.kind === 'stale'
-            ? '더 오래된 답장이에요'
-            : preview.kind === 'full'
-              ? '참석자가 10명으로 차 있어요'
-              : '이 약속의 참석자를 찾지 못했어요'}
+          {preview.kind === 'host'
+            ? '주최자 본인의 답장은 반영할 수 없어요'
+            : preview.kind === 'stale'
+              ? '더 오래된 답장이에요'
+              : preview.kind === 'full'
+                ? '참석자가 10명으로 차 있어요'
+                : '이 약속의 참석자를 찾지 못했어요'}
         </p>
       )}
       <Button

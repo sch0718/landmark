@@ -22,7 +22,7 @@ type State = {
   errors: Errors;
   progress: { done: number; total: number };
   pending: boolean;
-  queriedAt: string | null;
+  queriedAts: Record<string, Record<string, string>>;
   departure: string | null;
 };
 const empty = (): State => ({
@@ -31,7 +31,7 @@ const empty = (): State => ({
   errors: {},
   progress: { done: 0, total: 0 },
   pending: false,
-  queriedAt: null,
+  queriedAts: {},
   departure: null,
 });
 
@@ -52,7 +52,7 @@ export function useMeetingCompute(input: Input) {
   const requestSeq = useRef(0);
   const [state, setState] = useState<State>(empty);
 
-  const execute = useCallback(async (only?: { cid: string; pid: string }) => {
+  const execute = useCallback(async (only?: { cid: string; pid: string }, refresh = false) => {
     const { input: args, key: startedKey } = latest.current;
     const token = only === undefined ? ++generation.current : generation.current;
     const now = new Date();
@@ -74,7 +74,6 @@ export function useMeetingCompute(input: Input) {
         only !== undefined && prev.key === startedKey
           ? { done: prev.progress.done, total: prev.progress.total + cells.length }
           : { done: 0, total: cells.length },
-      queriedAt: now.toISOString(),
       departure,
     }));
     await Promise.all(
@@ -87,6 +86,7 @@ export function useMeetingCompute(input: Input) {
         const to: [number, number] = [t.lng, t.lat];
         let value: number | null = null;
         let error: RouteLookupErrorCode | null = null;
+        let queriedAt: string | null = null;
         if (args.mode === 'straight') value = Math.round(haversineM(from, to));
         else {
           const mode = args.mode;
@@ -96,13 +96,15 @@ export function useMeetingCompute(input: Input) {
               return yield* Effect.result(
                 routes.leg(mode, from, to, {
                   ...(departure === null ? {} : { at: departure }),
-                  refresh: only !== undefined,
+                  refresh: only !== undefined || (refresh && mode === 'car'),
                 }),
               );
             }),
           );
-          if (Result.isSuccess(result)) value = Math.round(result.success.durationS / 60);
-          else error = result.failure.code;
+          if (Result.isSuccess(result)) {
+            value = Math.round(result.success.durationS / 60);
+            queriedAt = result.success.queriedAt;
+          } else error = result.failure.code;
         }
         if (generation.current !== token || latest.current.key !== startedKey) return;
         setState((prev) => {
@@ -116,10 +118,14 @@ export function useMeetingCompute(input: Input) {
           const errors = { ...prev.errors, [t.id]: { ...prev.errors[t.id] } };
           if (error === null) delete errors[t.id]![p.id];
           else errors[t.id]![p.id] = error;
+          const queriedAts = { ...prev.queriedAts, [t.id]: { ...prev.queriedAts[t.id] } };
+          if (queriedAt === null) delete queriedAts[t.id]![p.id];
+          else queriedAts[t.id]![p.id] = queriedAt;
           return {
             ...prev,
             times: { ...prev.times, [t.id]: { ...prev.times[t.id], [p.id]: value } },
             errors,
+            queriedAts,
             progress: { ...prev.progress, done },
             pending: done < prev.progress.total,
           };
@@ -142,9 +148,17 @@ export function useMeetingCompute(input: Input) {
     ...state,
     times,
     errors: stale ? ({} as Errors) : state.errors,
+    queriedAt: stale
+      ? null
+      : (Object.values(state.queriedAts)
+          .flatMap((times) => Object.values(times))
+          .sort((a, b) => Date.parse(a) - Date.parse(b))[0] ?? null),
     pending: !stale && state.pending,
     stale,
-    compute: useCallback(() => execute(), [execute]),
+    compute: useCallback(
+      (options?: { refresh?: boolean }) => execute(undefined, options?.refresh),
+      [execute],
+    ),
     retry: useCallback((cid: string, pid: string) => execute({ cid, pid }), [execute]),
     unit: input.mode === 'straight' ? ('m' as const) : ('min' as const),
   };

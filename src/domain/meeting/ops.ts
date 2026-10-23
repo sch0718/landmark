@@ -17,6 +17,7 @@ export type MeetingOpError =
   | 'candidates-full'
   | 'candidate-exists'
   | 'meetings-full'
+  | 'host'
   | 'invalid';
 export type MeetingError = { _tag: 'MeetingOpError'; reason: MeetingOpError };
 export const meetingFailure = (reason: MeetingOpError): OpResult => ({
@@ -157,6 +158,7 @@ export function updateParticipant(
 }
 export function removeParticipant(lib: Library, id: string, pid: string, ctx: OpCtx): OpResult {
   return change(lib, id, (m) => {
+    if (m.participants.value[0]?.id === pid) return 'host';
     if (!m.participants.value.some((p) => p.id === pid)) return 'not-found';
     const next = meetingField(
       m,

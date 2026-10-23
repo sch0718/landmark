@@ -80,8 +80,13 @@ describe('약속 편집과 참석자', () => {
       origin: null,
     });
   });
-  it('참석자 이름을 수정하고 삭제는 확인 뒤 반영한다', async () => {
-    const { store } = await renderMeeting();
+  it('주최자 이름은 수정할 수 있고 친구 삭제는 확인 뒤 반영한다', async () => {
+    const { store } = await renderMeeting(
+      seed([
+        { id: 'person01', name: '나', origin: null },
+        { id: 'person02', name: '친구', origin: null },
+      ]),
+    );
     await userEvent.click(screen.getByRole('button', { name: '나 이름 고치기' }));
     const rename = screen.getByRole('dialog', { name: '참석자 이름 고치기' });
     fireEvent.change(within(rename).getByRole('textbox', { name: '참석자 이름' }), {
@@ -93,23 +98,28 @@ describe('약속 편집과 참석자', () => {
         '주최자',
       ),
     );
-    await userEvent.click(await screen.findByRole('button', { name: '주최자 삭제' }));
-    expect(store.get(libraryAtom).meetings?.meeting001?.participants.value).toHaveLength(1);
+    expect(screen.queryByRole('button', { name: '주최자 삭제' })).not.toBeInTheDocument();
+    await userEvent.click(await screen.findByRole('button', { name: '친구 삭제' }));
+    expect(store.get(libraryAtom).meetings?.meeting001?.participants.value).toHaveLength(2);
     await userEvent.click(
       within(screen.getByRole('dialog', { name: '참석자 지우기' })).getByRole('button', {
         name: '취소',
       }),
     );
-    expect(store.get(libraryAtom).meetings?.meeting001?.participants.value).toHaveLength(1);
-    await userEvent.click(await screen.findByRole('button', { name: '주최자 삭제' }));
+    expect(store.get(libraryAtom).meetings?.meeting001?.participants.value).toHaveLength(2);
+    await userEvent.click(await screen.findByRole('button', { name: '친구 삭제' }));
     await userEvent.click(
       within(screen.getByRole('dialog', { name: '참석자 지우기' })).getByRole('button', {
         name: '삭제',
       }),
     );
     await waitFor(() =>
-      expect(store.get(libraryAtom).meetings?.meeting001?.participants.value).toHaveLength(0),
+      expect(store.get(libraryAtom).meetings?.meeting001?.participants.value).toHaveLength(1),
     );
+    expect(store.get(libraryAtom).meetings?.meeting001?.participants.value[0]).toMatchObject({
+      id: 'person01',
+      name: '주최자',
+    });
   });
   it('10명이면 참석자 추가를 막는다', async () => {
     await renderMeeting(

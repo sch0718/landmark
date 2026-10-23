@@ -19,6 +19,7 @@ import { label, makeLibrary, place, trip } from '../../domain/backup/fixtures';
 import { myLocationAtom, nearbyAtom } from 'src/stores/my-location';
 import { nearbyHarness, turnNearbyOn } from '../../helpers/nearby-on';
 import { renderLibrary, sampleLibrary } from '../library/fixtures';
+import { buildMeeting } from '../../../fixtures/builders';
 
 const toastMock = vi.hoisted(() => {
   const error = vi.fn();
@@ -54,8 +55,8 @@ afterEach(() => {
 });
 
 const EXPORTED_AT = '2026-10-15T01:00:00.000Z';
-const FILE_COUNTS = '장소 30곳 · 라벨 6개 · 여행 2개';
-const SAMPLE_COUNTS = '장소 5곳 · 라벨 3개 · 여행 0개';
+const FILE_COUNTS = '장소 30곳 · 라벨 6개 · 여행 2개 · 약속 0개';
+const SAMPLE_COUNTS = '장소 5곳 · 라벨 3개 · 여행 0개 · 약속 0개';
 const FILE_PREFS: Prefs = {
   ...structuredClone(DEFAULT_PREFS),
   theme: 'night',
@@ -202,6 +203,18 @@ describe('RestoreDialog (설정)', () => {
     expect(within(d).queryByText(UNKNOWN_WARNING)).not.toBeInTheDocument();
     expect(within(d).getByRole('button', { name: '지금 보관함 먼저 받기' })).toBeEnabled();
     await waitFor(() => expect(replaceButton()).toHaveFocus());
+  });
+
+  it('약속만 있는 보관함도 복원 요약과 현재 보관함 먼저 받기를 보인다', async () => {
+    const u = user();
+    const meeting = buildMeeting();
+    await openSettings({ ...emptyLibrary(), meetings: { [meeting.id]: meeting } });
+    await openDialog(u);
+    await pick(u, backupFile());
+    expect(
+      await within(dialog()).findByText('지금 보관함: 장소 0곳 · 라벨 0개 · 여행 0개 · 약속 1개'),
+    ).toBeInTheDocument();
+    expect(downloadFirstButton()).toBeEnabled();
   });
 
   it('a legacy raw library file has no date and no prefs note', async () => {

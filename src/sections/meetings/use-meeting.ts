@@ -13,9 +13,11 @@ export function useMeeting(id: string) {
       if (!result.ok) {
         const reason = (result.error as { reason?: string } | null)?.reason;
         toast.error(
-          reason === 'participants-full'
-            ? '참석자는 10명까지예요'
-            : '저장하지 못했어요. 다시 시도해 주세요',
+          reason === 'host'
+            ? '나는 지울 수 없어요'
+            : reason === 'participants-full'
+              ? '참석자는 10명까지예요'
+              : '저장하지 못했어요. 다시 시도해 주세요',
         );
       }
       return result;

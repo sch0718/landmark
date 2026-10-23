@@ -23,6 +23,23 @@ const error = (r: OpResult, reason: string) =>
 const read = (l: Library) => l.meetings![m.id]!;
 
 describe('약속 연산', () => {
+  it('첫 참석자는 이름을 바꿔도 지울 수 없고 친구 답장도 보존한다', () => {
+    const added = good(ops.addParticipant(lib(), m.id, { name: '친구', origin: null }, ctx()));
+    const friendId = read(added).participants.value[1]!.id;
+    const before = good(
+      ops.toggleLike(added, m.id, friendId, 'choice01', { ...ctx(), now: m.createdAt }),
+    );
+    const renamed = good(
+      ops.updateParticipant(before, m.id, 'person01', { name: '주최자' }, ctx()),
+    );
+    const original = JSON.stringify(renamed);
+    error(ops.removeParticipant(renamed, m.id, 'person01', ctx()), 'host');
+    expect(JSON.stringify(renamed)).toBe(original);
+    expect(read(renamed).participants.value[0]!.id).toBe('person01');
+    const liked = good(ops.toggleLike(renamed, m.id, 'person01', 'choice01', ctx()));
+    expect(read(liked).replies.value[friendId]).toEqual(read(before).replies.value[friendId]);
+    expect(read(liked).replies.value[friendId]!.sentAt).toBe(m.createdAt);
+  });
   it('새 약속은 주최자 한 명과 기본값을 만들고 입력은 바꾸지 않는다', () => {
     const before = emptyLibrary();
     const r = ops.createMeeting(before, { title: ' 모임 ', at: null, mode: 'transit' }, ctx());

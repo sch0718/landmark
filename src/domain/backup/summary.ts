@@ -1,6 +1,6 @@
 import type { Library } from 'src/schema/library';
 
-export type LibraryCounts = { places: number; labels: number; trips: number };
+export type LibraryCounts = { places: number; labels: number; trips: number; meetings: number };
 
 type Entry = { createdAt: string; deletedAt: string | null };
 
@@ -8,22 +8,24 @@ const entries = (lib: Library): Entry[] => [
   ...Object.values(lib.places),
   ...Object.values(lib.labels),
   ...Object.values(lib.trips),
+  ...Object.values(lib.meetings ?? {}),
 ];
 
 const liveCount = (items: Record<string, Entry>): number =>
   Object.values(items).filter((item) => item.deletedAt === null).length;
 
-/** 살아 있는(`deletedAt === null`) 장소·라벨·여행의 수. */
+/** 살아 있는(`deletedAt === null`) 장소·라벨·여행·약속의 수. */
 export function libraryCounts(lib: Library): LibraryCounts {
   return {
     places: liveCount(lib.places),
     labels: liveCount(lib.labels),
     trips: liveCount(lib.trips),
+    meetings: liveCount(lib.meetings ?? {}),
   };
 }
 
 export function countsText(counts: LibraryCounts): string {
-  return `장소 ${counts.places}곳 · 라벨 ${counts.labels}개 · 여행 ${counts.trips}개`;
+  return `장소 ${counts.places}곳 · 라벨 ${counts.labels}개 · 여행 ${counts.trips}개 · 약속 ${counts.meetings}개`;
 }
 
 /** 묘비를 포함해 항목이 하나라도 있는가. */
@@ -31,10 +33,10 @@ export function hasAnyEntry(lib: Library): boolean {
   return entries(lib).length > 0;
 }
 
-/** 살아 있는 장소·라벨·여행이 하나라도 있는가. */
+/** 살아 있는 장소·라벨·여행·약속이 하나라도 있는가. */
 export function hasLiveContent(lib: Library): boolean {
-  const { places, labels, trips } = libraryCounts(lib);
-  return places + labels + trips > 0;
+  const { places, labels, trips, meetings } = libraryCounts(lib);
+  return places + labels + trips + meetings > 0;
 }
 
 /** `{ value, updatedAt: string }` 모양의 객체를 재귀로 돌며 `updatedAt`을 모은다. */
@@ -54,7 +56,7 @@ const maxOf = (values: string[]): string | null =>
   values.length === 0 ? null : values.reduce((a, b) => (a >= b ? a : b));
 
 /**
- * 가장 늦은 변경 시각(스펙 §3.4): 장소·라벨·여행의 `createdAt`·`deletedAt`과 모든 필드의 `updatedAt`,
+ * 가장 늦은 변경 시각(스펙 §3.4): 장소·라벨·여행·약속의 `createdAt`·`deletedAt`과 모든 필드의 `updatedAt`,
  * 네이버 폴더 연결의 `createdAt`·`checkedAt`·`deletedAt`.
  * 필드 이름 목록을 두지 않으므로 뒤 묶음이 더하는 필드도 센다.
  */

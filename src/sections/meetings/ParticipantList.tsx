@@ -82,7 +82,7 @@ export function ParticipantList({ meeting }: { meeting: Meeting }) {
         <Box sx={{ color: 'var(--tm-text-secondary)', fontSize: 13 }}>참석자는 10명까지예요</Box>
       )}
       <Box component="ul" aria-label="참석자 목록" sx={{ p: 0, m: 0, listStyle: 'none' }}>
-        {meeting.participants.value.map((participant) => {
+        {meeting.participants.value.map((participant, index) => {
           const reply = meeting.replies.value[participant.id];
           return (
             <Box
@@ -103,13 +103,15 @@ export function ParticipantList({ meeting }: { meeting: Meeting }) {
                 >
                   이름 고치기
                 </Button>
-                <Button
-                  aria-label={`${participant.name} 삭제`}
-                  onClick={() => setDeleting(participant)}
-                  sx={{ minWidth: 44, minHeight: 44 }}
-                >
-                  삭제
-                </Button>
+                {index > 0 && (
+                  <Button
+                    aria-label={`${participant.name} 삭제`}
+                    onClick={() => setDeleting(participant)}
+                    sx={{ minWidth: 44, minHeight: 44 }}
+                  >
+                    삭제
+                  </Button>
+                )}
               </Box>
               <Box sx={{ color: 'var(--tm-text-secondary)', overflowWrap: 'anywhere' }}>
                 {participant.origin?.name ?? '출발지 없음'}

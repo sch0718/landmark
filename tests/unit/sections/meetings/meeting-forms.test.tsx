@@ -3,10 +3,55 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MeetingFormDialog } from 'src/sections/meetings/MeetingFormDialog';
 import { ParticipantList } from 'src/sections/meetings/ParticipantList';
 import { buildMeeting } from '../../../fixtures/builders';
+import { createStore, Provider } from 'jotai';
+import { MemoryRouter } from 'react-router';
+import { replyFromDraft } from 'src/domain/meeting/link';
+import { emptyLibrary } from 'src/schema/library';
+import { ReplyImport } from 'src/sections/meetings/ReplyImport';
+import { libraryAtom } from 'src/stores/library-state';
 
 afterEach(() => vi.useRealTimers());
 
+it('주최자 본인의 답장을 미리보기에서 안내하고 반영 단추를 숨긴다', () => {
+  const meeting = buildMeeting();
+  const store = createStore();
+  store.set(libraryAtom, { ...emptyLibrary(), meetings: { [meeting.id]: meeting } });
+  const doc = replyFromDraft({
+    meetingId: meeting.id,
+    participantId: 'person01',
+    likes: [],
+    sentAt: meeting.createdAt,
+  });
+  render(
+    <Provider store={store}>
+      <MemoryRouter>
+        <ReplyImport doc={doc} />
+      </MemoryRouter>
+    </Provider>,
+  );
+  expect(screen.getByText('주최자 본인의 답장은 반영할 수 없어요')).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: '반영' })).not.toBeInTheDocument();
+});
+
 describe('약속 이름 오류 표시', () => {
+  it('주최자는 삭제 단추만 숨기고 이름과 출발지는 계속 고칠 수 있다', () => {
+    const base = buildMeeting();
+    const meeting = {
+      ...base,
+      participants: {
+        ...base.participants,
+        value: [
+          { ...base.participants.value[0]!, name: '주최자' },
+          { id: 'friend01', name: '친구', origin: null },
+        ],
+      },
+    };
+    render(<ParticipantList meeting={meeting} />);
+    expect(screen.queryByRole('button', { name: '주최자 삭제' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '친구 삭제' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '주최자 이름 고치기' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '주최자 출발지 고르기' })).toBeInTheDocument();
+  });
   it('새 약속은 입력을 지운 뒤에만 필수 오류를 보이고 다시 열면 초기화한다', () => {
     const props = { mode: 'create' as const, onClose: vi.fn() };
     const { rerender } = render(<MeetingFormDialog {...props} open />);

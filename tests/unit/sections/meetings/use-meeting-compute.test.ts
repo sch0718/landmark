@@ -15,6 +15,91 @@ const targets = [{ id: 'choice01', name: '도착', lng: 127.01, lat: 37.51 }];
 afterEach(() => setAppRuntimeForTest(null));
 
 describe('약속 소요시간 계산', () => {
+  it('자동차를 직접 다시 찾으면 캐시를 새로 조회하고 결과의 가장 오래된 조회 시각을 쓴다', async () => {
+    const calls: (boolean | undefined)[] = [];
+    const old = '2026-10-20T00:00:00.000Z';
+    const newer = '2026-10-22T00:00:00.000Z';
+    const runtime = ManagedRuntime.make(
+      Layer.mergeAll(
+        AppLayer,
+        Layer.succeed(
+          RouteLookup,
+          RouteLookup.of({
+            leg: (mode, _from, _to, options) => {
+              calls.push(options?.refresh);
+              return Effect.succeed({
+                mode,
+                durationS: 600,
+                distanceM: 1000,
+                tollFare: null,
+                path: [],
+                queriedAt: calls.length % 2 === 0 ? old : newer,
+                seq: calls.length,
+                fresh: options?.refresh === true,
+              });
+            },
+          }),
+        ),
+      ),
+    );
+    setAppRuntimeForTest(runtime);
+    const { result, unmount } = renderHook(() =>
+      useMeetingCompute({
+        participants,
+        targets: [...targets, { ...targets[0]!, id: 'choice02' }],
+        mode: 'car',
+        at: null,
+      }),
+    );
+    try {
+      await act(() => result.current.compute());
+      expect(calls).toEqual([false, false]);
+      await act(() => result.current.compute({ refresh: true }));
+      expect(calls).toEqual([false, false, true, true]);
+      expect(result.current.queriedAt).toBe(old);
+      await act(() => result.current.retry('choice02', 'person01'));
+      expect(result.current.queriedAt).toBe(newer);
+    } finally {
+      unmount();
+      await runtime.dispose();
+    }
+  });
+
+  it('자동 계산도 캐시 결과의 조회 시각을 표시한다', async () => {
+    const queriedAt = '2026-10-19T00:00:00.000Z';
+    const runtime = ManagedRuntime.make(
+      Layer.mergeAll(
+        AppLayer,
+        Layer.succeed(
+          RouteLookup,
+          RouteLookup.of({
+            leg: (mode) =>
+              Effect.succeed({
+                mode,
+                durationS: 600,
+                distanceM: 1000,
+                tollFare: null,
+                path: [],
+                queriedAt,
+                seq: 0,
+                fresh: false,
+              }),
+          }),
+        ),
+      ),
+    );
+    setAppRuntimeForTest(runtime);
+    const { result, unmount } = renderHook(() =>
+      useMeetingCompute({ participants, targets, mode: 'car', at: null }),
+    );
+    try {
+      await act(() => result.current.compute());
+      expect(result.current.queriedAt).toBe(queriedAt);
+    } finally {
+      unmount();
+      await runtime.dispose();
+    }
+  });
   it('직선거리를 미터로 계산하고 조건 변경은 재조회 없이 오래됨으로 표시한다', async () => {
     const { result, rerender } = renderHook(
       ({ mode }) => useMeetingCompute({ participants, targets, mode, at: null }),
@@ -24,6 +109,7 @@ describe('약속 소요시간 계산', () => {
     expect(result.current.times.choice01?.person01).toBeGreaterThan(1000);
     expect(result.current.progress).toEqual({ done: 1, total: 1 });
     expect(result.current.stale).toBe(false);
+    expect(result.current.queriedAt).toBeNull();
     rerender({ mode: 'car' });
     expect(result.current.stale).toBe(true);
     expect(result.current.times.choice01?.person01).toBeNull();
