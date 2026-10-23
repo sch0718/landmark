@@ -7,7 +7,6 @@ import {
   type FolderLink,
   type Label,
   LabelColor,
-  LabelIcon,
   type Library,
   type Place,
 } from 'src/schema/library';
@@ -304,18 +303,6 @@ export function setLabelColor(
   return updateLabel(lib, labelId, (l) => {
     const field = setField(l.color, color, ctx.now);
     return field === l.color ? l : { ...l, color: field };
-  });
-}
-
-export function setLabelIcon(
-  lib: Library,
-  labelId: string,
-  icon: typeof LabelIcon.Type,
-  ctx: OpCtx,
-): Library {
-  return updateLabel(lib, labelId, (l) => {
-    const field = setField(l.icon, icon, ctx.now);
-    return field === l.icon ? l : { ...l, icon: field };
   });
 }
 

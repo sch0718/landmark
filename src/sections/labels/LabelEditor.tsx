@@ -6,13 +6,12 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { fieldSx } from 'src/components/field-style';
-import { renameLabel, setLabelColor, setLabelIcon } from 'src/domain/library/ops';
+import { renameLabel, setLabelColor } from 'src/domain/library/ops';
 import { localDate } from 'src/lib/local-date';
 import { LIBRARY_LIMITS, type FolderLink, type Label } from 'src/schema/library';
 import { ColorPicker } from 'src/sections/labels/ColorPicker';
 import { setLabelEmoji } from 'src/domain/library/label-emoji-ops';
 import { EmojiPicker } from 'src/sections/labels/EmojiPicker';
-import { IconPicker } from 'src/sections/labels/IconPicker';
 import { labelRejectionMessage } from 'src/sections/labels/rejection-message';
 import { useLibraryAction } from 'src/stores/library-state';
 
@@ -84,9 +83,9 @@ function FolderSection({
 }
 
 /**
- * 라벨 하나를 고치는 대화상자: 이름·색·아이콘. 색과 아이콘은 누르는 즉시 저장하고, 이름은
+ * 라벨 하나를 고치는 대화상자: 이름·색·이모지. 색과 이모지는 누르는 즉시 저장하고, 이름은
  * 엔터·포커스 이동·닫을 때 저장한다. 이름이 거절되면(빈 이름·중복) 입력란 아래에 이유를 보이고 열어 둔다.
- * 연결된 네이버 폴더가 있으면 아이콘 아래에 `네이버 폴더` 구역을 둔다.
+ * 연결된 네이버 폴더가 있으면 이모지 아래에 `네이버 폴더` 구역을 둔다.
  */
 export function LabelEditor({
   label,
@@ -198,11 +197,6 @@ export function LabelEditor({
           value={label.emoji?.value ?? null}
           color={label.color.value}
           onChange={(emoji) => void run((lib, ctx) => setLabelEmoji(lib, label.id, emoji, ctx))}
-        />
-        <IconPicker
-          value={label.icon.value}
-          color={label.color.value}
-          onChange={(icon) => void run((lib, ctx) => setLabelIcon(lib, label.id, icon, ctx))}
         />
         {folders.length > 0 && (
           <FolderSection

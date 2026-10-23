@@ -70,7 +70,7 @@ type RowProps = {
   openerRef(node: HTMLButtonElement | null): void;
 };
 
-/** 라벨 한 줄: 드래그 손잡이 · 아이콘 · 이름 · 장소 수 · 색 점. 손잡이 말고 줄을 누르면 편집기가 열린다. */
+/** 라벨 한 줄: 드래그 손잡이 · 이모지 · 이름 · 장소 수 · 색 점. 손잡이 말고 줄을 누르면 편집기가 열린다. */
 function LabelRow({ label, count, linked, onOpen, openerRef }: RowProps) {
   const {
     attributes,
@@ -157,10 +157,9 @@ function LabelRow({ label, count, linked, onOpen, openerRef }: RowProps) {
             borderRadius: 'var(--tm-radius-md)',
             bgcolor: tone.fill,
             color: tone.text,
-            '& svg': { width: 18, height: 18 },
           }}
         >
-          <LabelGlyph emoji={label.emoji?.value} name={label.icon.value} />
+          <LabelGlyph emoji={label.emoji?.value} />
         </Box>
         <TruncatedText sx={{ flex: 1, minWidth: 0, fontWeight: 700 }}>{name}</TruncatedText>
         <Box
@@ -181,7 +180,7 @@ function LabelRow({ label, count, linked, onOpen, openerRef }: RowProps) {
 
 type Open = { kind: 'edit' | 'merge' | 'delete'; id: string };
 
-/** `/labels`: 라벨을 만들고, 순서를 바꾸고(드래그·키보드), 이름·색·아이콘을 고치고, 합치거나 지운다. */
+/** `/labels`: 라벨을 만들고, 순서를 바꾸고(드래그·키보드), 이름·색·이모지를 고치고, 합치거나 지운다. */
 export function LabelsPage() {
   useDocumentTitle('라벨 관리');
   const library = useAtomValue(libraryAtom);

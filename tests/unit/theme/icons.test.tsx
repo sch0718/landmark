@@ -1,36 +1,43 @@
 import { render } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { HomeIcon, LabelGlyph, TrashIcon } from 'src/components/icons';
-import { LABEL_ICONS } from 'src/schema/library';
+import { BedIcon, CarIcon, FootprintsIcon, HomeIcon, TrashIcon } from 'src/components/icons';
 
 describe('icons', () => {
-  it('renders a distinct svg for each of the 32 label icons', () => {
-    expect(LABEL_ICONS).toHaveLength(32);
+  it('숙소·차·도보 아이콘은 서로 다른 SVG이다', () => {
     const bodies = new Set<string>();
-    for (const name of LABEL_ICONS) {
-      const { container, unmount } = render(<LabelGlyph name={name} />);
+    for (const Icon of [BedIcon, CarIcon, FootprintsIcon]) {
+      const { container, unmount } = render(<Icon aria-hidden="true" />);
       const svg = container.querySelector('svg');
-      expect(svg, name).not.toBeNull();
-      expect(svg?.innerHTML, name).not.toBe('');
+      expect(svg).not.toBeNull();
+      expect(svg?.innerHTML).not.toBe('');
       bodies.add(svg?.innerHTML ?? '');
       unmount();
     }
-    expect(bodies.size).toBe(32);
+    expect(bodies.size).toBe(3);
   });
 
-  it('label glyph follows font size by default and takes a pixel size', () => {
-    const { container } = render(
-      <>
-        <LabelGlyph name="star" />
-        <LabelGlyph name="star" size={20} />
-      </>,
-    );
-    const [auto, sized] = Array.from(container.querySelectorAll('svg'));
-    expect(auto?.getAttribute('width')).toBe('1em');
-    expect(auto).toHaveAttribute('aria-hidden', 'true');
-    expect(sized?.getAttribute('width')).toBe('20');
-    expect(sized?.getAttribute('height')).toBe('20');
-  });
+  it.each([BedIcon, CarIcon, FootprintsIcon])(
+    '플래너 아이콘은 글자 크기와 지정한 크기를 따른다',
+    (Icon) => {
+      const { container, unmount } = render(
+        <>
+          <Icon aria-hidden="true" />
+          <Icon aria-hidden="true" width={16} height={16} />
+          <Icon aria-hidden="true" width={18} height={18} />
+        </>,
+      );
+      const [auto, small, large] = Array.from(container.querySelectorAll('svg'));
+      expect(auto).toHaveAttribute('width', '1em');
+      expect(auto).toHaveAttribute('aria-hidden', 'true');
+      expect(small).toHaveAttribute('width', '16');
+      expect(small).toHaveAttribute('height', '16');
+      expect(large).toHaveAttribute('width', '18');
+      expect(large).toHaveAttribute('height', '18');
+      expect(small).toHaveAttribute('aria-hidden', 'true');
+      expect(large).toHaveAttribute('aria-hidden', 'true');
+      unmount();
+    },
+  );
 
   it('exports named UI icons', () => {
     const { container } = render(

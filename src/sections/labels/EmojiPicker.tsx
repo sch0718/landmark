@@ -86,7 +86,7 @@ export function EmojiPicker({ value, color, onChange }: Props) {
                 '&:focus-visible': FOCUS_RING,
               }}
             >
-              {emoji === null ? name : <LabelGlyph name="star" emoji={emoji} size={24} />}
+              {emoji === null ? name : <LabelGlyph emoji={emoji} size={24} />}
             </Box>
           );
         })}
