@@ -15,6 +15,7 @@ type Input = {
   targets: readonly ComputeTarget[];
   mode: Meeting['mode']['value'];
   at: Meeting['at']['value'];
+  departure?: string | null;
 };
 type State = {
   key: string;
@@ -42,6 +43,7 @@ export function useMeetingCompute(input: Input) {
     targets: input.targets,
     mode: input.mode,
     at: input.at,
+    departure: input.departure,
   });
   const [state, setState] = useState<State>(empty);
   const latest = useRef({ input, key, state });
@@ -69,7 +71,7 @@ export function useMeetingCompute(input: Input) {
         only !== undefined && previous.key === startedKey
           ? previous.departure
           : args.mode === 'transit'
-            ? transitDeparture(args.at, new Date())
+            ? (args.departure ?? transitDeparture(args.at, new Date()))
             : null;
       const cells = args.targets.flatMap((t) =>
         args.participants

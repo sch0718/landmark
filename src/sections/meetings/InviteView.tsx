@@ -210,6 +210,9 @@ export function InviteView({ doc }: { doc: InviteDoc }) {
             </Button>
           )}
           {compute.pending && <Box role="status">내 소요시간을 다시 찾는 중이에요</Box>}
+          {originChanged && doc.mode === 'transit' && doc.at === null && compute.queriedAt && (
+            <p>내 줄은 지금 기준으로 다시 조회했어요</p>
+          )}
         </Box>
       )}
       <Box component="ul" aria-label="약속 후보" sx={{ p: 0, listStyle: 'none' }}>

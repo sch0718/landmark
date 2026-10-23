@@ -14,6 +14,52 @@ const participants: Participant[] = [
 const targets = [{ id: 'choice01', name: '도착', lng: 127.01, lat: 37.51 }];
 afterEach(() => setAppRuntimeForTest(null));
 
+it('지정한 출발 시각을 전체 계산과 재시도에 쓰고 변경하면 이전 값을 무효화한다', async () => {
+  const calls: (string | undefined)[] = [];
+  const runtime = ManagedRuntime.make(
+    Layer.mergeAll(
+      AppLayer,
+      Layer.succeed(
+        RouteLookup,
+        RouteLookup.of({
+          leg: (mode, _from, _to, options) => {
+            calls.push(options?.at);
+            return Effect.succeed({
+              mode,
+              durationS: 600,
+              distanceM: 1000,
+              tollFare: null,
+              path: [],
+              queriedAt: '2026-10-24T00:20:00Z',
+              seq: calls.length,
+              fresh: false,
+            });
+          },
+        }),
+      ),
+    ),
+  );
+  setAppRuntimeForTest(runtime);
+  const { result, rerender, unmount } = renderHook(
+    ({ departure }) =>
+      useMeetingCompute({ participants, targets, mode: 'transit', at: null, departure }),
+    { initialProps: { departure: '2026-10-24T09:00' } },
+  );
+  try {
+    await act(() => result.current.compute());
+    await act(() => result.current.retry('choice01', 'person01'));
+    expect(calls).toEqual(['2026-10-24T09:00', '2026-10-24T09:00']);
+    rerender({ departure: '2026-10-24T09:20' });
+    expect(result.current.stale).toBe(true);
+    await act(() => result.current.retry('choice01', 'person01'));
+    expect(calls.at(-1)).toBe('2026-10-24T09:20');
+    expect(result.current.departure).toBe('2026-10-24T09:20');
+  } finally {
+    unmount();
+    await runtime.dispose();
+  }
+});
+
 function gatedRoutes() {
   const calls: number[] = [];
   let finish!: () => void;

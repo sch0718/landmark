@@ -76,6 +76,54 @@ const reply = (patch: Partial<ReplyDoc> = {}): ReplyDoc => ({
 });
 
 describe('친구 후보 화면', () => {
+  it.each([
+    [null, '2026-10-24T09:20', '내 줄은 지금 기준으로 다시 조회했어요'],
+    [{ date: '2026-10-31', time: '18:19' }, '2026-10-31T17:10', null],
+  ] as const)(
+    '출발지 변경 시 약속 일시 %j에 맞춰 조회하고 기준을 안내한다',
+    async (at, departure, notice) => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-10-24T09:20:00+09:00'));
+      const calls: (string | undefined)[] = [];
+      const routeLookup = Layer.succeed(
+        RouteLookup,
+        RouteLookup.of({
+          leg: (mode, _from, _to, options) => {
+            calls.push(options?.at);
+            return Effect.succeed({
+              mode,
+              durationS: 4200,
+              distanceM: 1000,
+              tollFare: null,
+              path: [],
+              queriedAt: now,
+              seq: 1,
+              fresh: false,
+            });
+          },
+        }),
+      );
+      try {
+        await renderLinked(sampleLibrary(), { path: await link({ ...invite(), at }), routeLookup });
+        expect(screen.queryByText('내 줄은 지금 기준으로 다시 조회했어요')).not.toBeInTheDocument();
+        await userEvent.click(screen.getByRole('radio', { name: '친구' }));
+        await userEvent.click(screen.getByRole('button', { name: '내 출발지 고르기' }));
+        const picker = screen.getByRole('dialog', { name: '출발지 고르기' });
+        await userEvent.click(within(picker).getByRole('tab', { name: '보관함에서' }));
+        await userEvent.click(within(picker).getByRole('button', { name: /강남 한 곳/ }));
+        await waitFor(() => expect(screen.getAllByText('1시간 10분')).toHaveLength(2));
+        expect(calls).toEqual([departure, departure]);
+        expect(screen.getByText('10분')).toBeInTheDocument();
+        if (notice) expect(screen.getByText(notice)).toBeInTheDocument();
+        else
+          expect(
+            screen.queryByText('내 줄은 지금 기준으로 다시 조회했어요'),
+          ).not.toBeInTheDocument();
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
   it('신원 선택·여러 좋아요를 답장으로 보내며 보관함은 바꾸지 않는다', async () => {
     const { store } = await renderLinked(sampleLibrary(), { path: await link(invite()) });
     const before = store.get(libraryAtom);

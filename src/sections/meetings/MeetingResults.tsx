@@ -1,9 +1,9 @@
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { HUBS, type Hub } from 'src/domain/meeting/hubs';
-import { preselectHubs, rankRows } from 'src/domain/meeting/rank';
+import { preselectHubs, rankRows, transitDeparture } from 'src/domain/meeting/rank';
 import {
   addCandidate,
   decide,
@@ -41,10 +41,30 @@ export function MeetingResults({
     mode: meeting.mode.value,
     at: meeting.at.value,
   });
+  const departureCondition = JSON.stringify([meeting.mode.value, meeting.at.value]);
+  const [departureSnapshot, setDepartureSnapshot] = useState<{
+    condition: string;
+    value: string | null;
+  }>({ condition: departureCondition, value: null });
+  // 조건 변경은 이전 스냅숏을 버리고, 첫 후보 자동 계산 전에 두 훅의 입력을 맞춘다.
+  if (departureSnapshot.condition !== departureCondition) {
+    setDepartureSnapshot({ condition: departureCondition, value: null });
+  } else if (
+    departureSnapshot.value === null &&
+    meeting.mode.value === 'transit' &&
+    (meeting.at.value !== null || meeting.candidates.value.length > 0)
+  ) {
+    setDepartureSnapshot({
+      condition: departureCondition,
+      value: transitDeparture(meeting.at.value, new Date()),
+    });
+  }
+  const departure = departureSnapshot.value;
   const args = {
     participants: meeting.participants.value,
     mode: meeting.mode.value,
     at: meeting.at.value,
+    departure,
   };
   const hubCompute = useMeetingCompute({ ...args, targets: hubs });
   const candidateCompute = useMeetingCompute({ ...args, targets: meeting.candidates.value });
@@ -65,18 +85,20 @@ export function MeetingResults({
   }, [rankedHubIds, onHubsChange]);
   const computeCandidates = candidateCompute.compute;
   const computeHubs = hubCompute.compute;
+  const candidateFindSeq = useRef(0);
   const targetKey = JSON.stringify(meeting.candidates.value);
   useEffect(() => {
+    const refresh = candidateFindSeq.current !== findSeq;
+    candidateFindSeq.current = findSeq;
     if (meeting.candidates.value.length === 0) return;
     const controller = new AbortController();
-    void computeCandidates({ signal: controller.signal });
+    void computeCandidates({ refresh, signal: controller.signal });
     return () => controller.abort();
-  }, [targetKey, meeting.candidates.value.length, computeCandidates]);
+  }, [targetKey, meeting.candidates.value.length, computeCandidates, findSeq, departure]);
   useEffect(() => {
     if (findSeq === 0) return;
     void computeHubs({ refresh: true });
-    void computeCandidates({ refresh: true });
-  }, [findSeq, computeHubs, computeCandidates]);
+  }, [findSeq, computeHubs]);
   const stale = (condition !== null && condition !== conditionKey) || candidateCompute.stale;
   const eligible = meeting.participants.value.filter((p) => p.origin !== null);
   const find = () => {
@@ -85,6 +107,11 @@ export function MeetingResults({
       HUBS,
     );
     setHubs(next);
+    setDepartureSnapshot({
+      condition: departureCondition,
+      value:
+        meeting.mode.value === 'transit' ? transitDeparture(meeting.at.value, new Date()) : null,
+    });
     setCondition(conditionKey);
     setFindSeq((seq) => seq + 1);
   };
@@ -107,7 +134,6 @@ export function MeetingResults({
     [hubCompute.queriedAt, candidateCompute.queriedAt]
       .filter((at) => at !== null)
       .sort((a, b) => Date.parse(a) - Date.parse(b))[0] ?? null;
-  const departure = hubCompute.departure ?? candidateCompute.departure;
   return (
     <Box sx={{ mt: 2 }}>
       <Button
