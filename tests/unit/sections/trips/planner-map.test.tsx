@@ -101,7 +101,8 @@ describe('지도 마커와 경로선', () => {
       await mapReady();
       const controls = screen.getByTestId('map-controls');
       const toggle = within(controls).getByRole('button', { name: '다른 Day 장소' });
-      expect(toggle).toHaveStyle({ minHeight: '44px', minWidth: '44px' });
+      // 오프라인 안내(위쪽 가운데)가 양옆에 비워 둔 60px 안에 들어가도록 다른 지도 단추와 같은 44px 정사각형이다.
+      expect(toggle).toHaveStyle({ width: '44px', height: '44px' });
       expect(Number.parseFloat(getComputedStyle(controls).right)).toBe(width === 900 ? 368 : 8);
       await userEvent.setup().click(toggle);
       expect(marker(P1)).toBeInTheDocument();

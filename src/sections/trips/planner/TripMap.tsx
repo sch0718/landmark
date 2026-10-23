@@ -3,6 +3,7 @@ import Button from '@mui/material/Button';
 import { useAtomValue } from 'jotai';
 import { useCallback, useMemo, useState } from 'react';
 import type { MapPadding } from 'src/components/map/MapAdapter';
+import { LayersIcon } from 'src/components/icons';
 import { MapView } from 'src/components/map/MapView';
 import type { Trip } from 'src/schema/trip';
 import { placeIdOfMarker, tripMapLayers } from 'src/sections/trips/planner/trip-map-layers';
@@ -89,28 +90,28 @@ export function TripMap({
           <Button
             aria-label="다른 Day 장소"
             aria-pressed={showOtherDays}
-            title="다른 Day 장소의 점 색은 해당 Day를 뜻해요"
+            title={
+              showOtherDays ? '다른 Day 장소 보이는 중(점 색은 해당 Day)' : '다른 Day 장소 숨김'
+            }
             onClick={() => setShowOtherDays((shown) => !shown)}
             sx={{
+              // 다른 지도 단추(확대·축소·내 위치)와 같은 44px 정사각형이라, 위쪽 가운데 오프라인 안내가 비워 둔
+              // 양옆 자리 안에 들어간다.
               minWidth: 44,
-              minHeight: 44,
-              px: 1,
-              gap: 0.5,
-              bgcolor: 'var(--tm-bg-surface)',
-              color: 'var(--tm-text-primary)',
+              width: 44,
+              height: 44,
+              p: 0,
+              bgcolor: showOtherDays ? 'var(--tm-accent-main)' : 'var(--tm-bg-surface)',
+              color: showOtherDays ? 'var(--tm-accent-contrast)' : 'var(--tm-text-primary)',
               border: '1px solid var(--tm-border-strong, var(--tm-border))',
               borderRadius: 'var(--tm-radius-md)',
               boxShadow: 'var(--tm-shadow-1)',
-              fontWeight: 700,
-              // MUI 버튼 기본값(대문자)이 `Day`를 `DAY`로 바꾸지 않게 한다.
-              textTransform: 'none',
-              '&:hover': { bgcolor: 'var(--tm-bg-raised)' },
+              '&:hover': {
+                bgcolor: showOtherDays ? 'var(--tm-accent-main)' : 'var(--tm-bg-raised)',
+              },
             }}
           >
-            다른 Day 장소
-            <Box component="span" aria-hidden="true">
-              {showOtherDays ? '켬' : '끔'}
-            </Box>
+            <LayersIcon aria-hidden="true" width={20} height={20} />
           </Button>
         }
       />
