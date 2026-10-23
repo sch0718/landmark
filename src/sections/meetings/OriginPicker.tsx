@@ -12,7 +12,9 @@ import { useAtomValue } from 'jotai';
 import { useEffect, useId, useState } from 'react';
 import { MapView } from 'src/components/map/MapView';
 import { searchPlaces } from 'src/domain/library/query';
+import { fitMeetingText } from 'src/domain/meeting/limits';
 import { startEffect } from 'src/lib/effect/runtime';
+import { LIBRARY_LIMITS } from 'src/schema/library';
 import { OriginSchema, type Origin } from 'src/schema/meeting';
 import { safeParse } from 'src/schema/parse';
 import { MapPickOverlay } from 'src/sections/meetings/MapPickOverlay';
@@ -26,6 +28,10 @@ type Props = {
   onClose(): void;
 };
 const validOrigin = (origin: Origin) => safeParse(OriginSchema, origin).success;
+const fitOrigin = (origin: Origin): Origin => ({
+  ...origin,
+  name: fitMeetingText(origin.name, LIBRARY_LIMITS.meetingTitleChars),
+});
 const searchError = (error: unknown) =>
   typeof error === 'object' && error !== null && 'code' in error && error.code === 'OFFLINE'
     ? '오프라인이에요'
@@ -55,7 +61,7 @@ function PickerContent({ origin, onPick, onClose, id }: Omit<Props, 'open'> & { 
           if (!active) return;
           setResults(
             found.filter((place) =>
-              validOrigin({ name: place.name, lng: place.lng, lat: place.lat }),
+              validOrigin(fitOrigin({ name: place.name, lng: place.lng, lat: place.lat })),
             ),
           );
           setLoading(false);
@@ -73,10 +79,13 @@ function PickerContent({ origin, onPick, onClose, id }: Omit<Props, 'open'> & { 
     };
   }, [query, tab]);
   const pick = (value: Origin) => {
-    if (validOrigin(value)) onPick(value);
+    const fitted = fitOrigin(value);
+    if (validOrigin(fitted)) onPick(fitted);
   };
   const places = searchPlaces(library, mineQuery).filter((place) =>
-    validOrigin({ name: place.name.value, lng: place.lng, lat: place.lat, placeId: place.id }),
+    validOrigin(
+      fitOrigin({ name: place.name.value, lng: place.lng, lat: place.lat, placeId: place.id }),
+    ),
   );
   return (
     <>
@@ -171,8 +180,8 @@ function PickerContent({ origin, onPick, onClose, id }: Omit<Props, 'open'> & { 
               value={name}
               onChange={(event) => setName(event.target.value)}
               fullWidth
-              error={name.trim().length === 0 || name.trim().length > 60}
-              helperText="이름은 1~60자로 넣어 주세요"
+              error={name.trim().length === 0}
+              helperText="이름을 넣어 주세요. 60자가 넘으면 줄여 저장해요"
             />
             <Box sx={{ mt: 1, height: 320, position: 'relative', bgcolor: 'var(--tm-bg-raised)' }}>
               <MapView
@@ -205,7 +214,7 @@ function PickerContent({ origin, onPick, onClose, id }: Omit<Props, 'open'> & { 
                 </Box>
               )}
               <MapPickOverlay
-                center={ready && name.trim().length > 0 && name.trim().length <= 60 ? center : null}
+                center={ready && name.trim().length > 0 ? center : null}
                 onCancel={onClose}
                 onPick={([lng, lat]) => pick({ name: name.trim(), lng, lat })}
               />

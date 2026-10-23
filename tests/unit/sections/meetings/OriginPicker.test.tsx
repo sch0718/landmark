@@ -1,6 +1,10 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { createStore, Provider } from 'jotai';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { updateParticipant } from 'src/domain/meeting/ops';
+import { LibrarySchema } from 'src/schema/library';
+import { safeParse } from 'src/schema/parse';
+import { buildMeeting } from '../../../fixtures/builders';
 import { OriginPicker } from 'src/sections/meetings/OriginPicker';
 import { libraryAtom } from 'src/stores/library-state';
 import { sampleLibrary } from '../library/fixtures';
@@ -227,4 +231,73 @@ it('탭과 결과 높이가 바뀌어도 창은 위쪽에 고정하고 지도 �
   await act(() => vi.advanceTimersByTimeAsync(300));
   expect(screen.getAllByRole('button', { name: /^장소 / })).toHaveLength(10);
   expect(getComputedStyle(container).alignItems).toBe('flex-start');
+});
+
+const longName = '가'.repeat(61);
+const fittedName = '가'.repeat(59) + '…';
+
+it.each(['검색', '보관함에서', '지도에서 고르기'])(
+  '%s에서 긴 이름을 골라도 출발지를 저장한다',
+  async (method) => {
+    vi.useFakeTimers();
+    search.mockResolvedValue([result(longName)]);
+    const { onPick, store } = setup();
+    const library = store.get(libraryAtom);
+    const place = library.places.place00004!;
+    act(() =>
+      store.set(libraryAtom, {
+        ...library,
+        places: {
+          ...library.places,
+          [place.id]: { ...place, name: { ...place.name, value: longName } },
+        },
+      }),
+    );
+    fireEvent.click(screen.getByRole('tab', { name: method }));
+    if (method === '검색') {
+      fireEvent.change(screen.getByRole('searchbox', { name: '출발지 검색' }), {
+        target: { value: '장소' },
+      });
+      await act(() => vi.advanceTimersByTimeAsync(300));
+    } else if (method === '지도에서 고르기') {
+      fireEvent.click(screen.getByRole('button', { name: '지도 중심 변경' }));
+      fireEvent.change(screen.getByRole('textbox', { name: '출발지 이름' }), {
+        target: { value: longName },
+      });
+    }
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: method === '지도에서 고르기' ? '여기로 정하기' : new RegExp(longName),
+      }),
+    );
+    expect(onPick).toHaveBeenCalledOnce();
+    const origin = onPick.mock.calls[0]![0];
+    expect(origin.name).toBe(fittedName);
+    expect(origin.name.length).toBeLessThanOrEqual(60);
+    if (method === '보관함에서') expect(origin.placeId).toBe(place.id);
+    const meeting = buildMeeting();
+    const saved = updateParticipant(
+      { ...library, meetings: { [meeting.id]: meeting } },
+      meeting.id,
+      'person01',
+      { origin },
+      { now: meeting.createdAt, newId: () => 'unused01' },
+    );
+    expect(saved.ok).toBe(true);
+    if (saved.ok) {
+      expect(safeParse(LibrarySchema, saved.lib).success).toBe(true);
+      expect(saved.lib.meetings![meeting.id]!.participants.value[0]!.origin).toEqual(origin);
+    }
+  },
+);
+
+it('지도에서 공백 이름은 계속 선택할 수 없다', () => {
+  const { onPick } = setup();
+  fireEvent.click(screen.getByRole('tab', { name: '지도에서 고르기' }));
+  fireEvent.click(screen.getByRole('button', { name: '지도 중심 변경' }));
+  fireEvent.change(screen.getByRole('textbox', { name: '출발지 이름' }), {
+    target: { value: '   ' },
+  });
+  expect(screen.getByRole('button', { name: '여기로 정하기' })).toBeDisabled();
+  expect(onPick).not.toHaveBeenCalled();
 });

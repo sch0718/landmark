@@ -16,9 +16,9 @@ import {
 import { setAppRuntimeForTest } from 'src/lib/effect/runtime';
 import { libraryAtom } from 'src/stores/library-state';
 import { RouteLookup } from 'src/services/route-lookup';
-import { saveMeetDraft } from 'src/sections/meetings/meet-drafts';
+import { loadMeetDraft, saveMeetDraft } from 'src/sections/meetings/meet-drafts';
 import { buildMeeting } from '../../../fixtures/builders';
-import { renderLibrary, sampleLibrary } from '../library/fixtures';
+import { makePlace, renderLibrary, sampleLibrary } from '../library/fixtures';
 
 const shared = vi.hoisted(() => vi.fn());
 vi.mock('src/sections/meetings/share-link', () => ({ shareMeetingDoc: shared }));
@@ -350,4 +350,30 @@ it('StrictMode에서도 복원한 친구 출발지의 계산이 끝나 답장을
   expect(screen.getByText('10분')).toBeInTheDocument();
   expect(screen.queryByText('내 소요시간을 다시 찾는 중이에요')).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: '답장 링크 보내기' })).toBeEnabled();
+});
+
+it('친구가 긴 이름의 출발지로 고쳐도 초안과 답장에 저장한다', async () => {
+  const name = '가'.repeat(58) + '👨‍👩‍👧‍👦';
+  const place = makePlace(6, { name });
+  const base = sampleLibrary();
+  const library = { ...base, places: { ...base.places, [place.id]: place } };
+  const doc = { ...invite(), mode: 'straight' as const, unit: 'm' as const };
+  const { storage, store } = await renderLinked(library, { path: await link(doc) });
+  vi.stubGlobal('localStorage', storage);
+  const before = store.get(libraryAtom);
+  await userEvent.click(screen.getByRole('radio', { name: '친구' }));
+  await userEvent.click(screen.getByRole('button', { name: '내 출발지 고르기' }));
+  const picker = screen.getByRole('dialog', { name: '출발지 고르기' });
+  await userEvent.click(within(picker).getByRole('tab', { name: '보관함에서' }));
+  await userEvent.click(within(picker).getByRole('button', { name: new RegExp(name) }));
+  const expected = {
+    name: '가'.repeat(58) + '…',
+    lng: place.lng,
+    lat: place.lat,
+    placeId: place.id,
+  };
+  await waitFor(() => expect(loadMeetDraft(doc.meetingId)?.origin).toEqual(expected));
+  await userEvent.click(await screen.findByRole('button', { name: '답장 링크 보내기' }));
+  expect(shared).toHaveBeenCalledWith(expect.objectContaining({ origin: expected }), doc.title);
+  expect(store.get(libraryAtom)).toBe(before);
 });

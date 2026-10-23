@@ -3,8 +3,9 @@ import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
 import { useState } from 'react';
 import type { Hub } from 'src/domain/meeting/hubs';
+import { fitMeetingText } from 'src/domain/meeting/limits';
 import { formatDistanceM, nearbyPlaces } from 'src/domain/nearby';
-import type { Library } from 'src/schema/library';
+import { LIBRARY_LIMITS, type Library } from 'src/schema/library';
 import type { Candidate } from 'src/schema/meeting';
 
 export function NearbyPlaces({
@@ -64,8 +65,8 @@ export function NearbyPlaces({
               onClick={() =>
                 onAdd({
                   kind: 'place',
-                  name: p.name.value,
-                  address: p.address,
+                  name: fitMeetingText(p.name.value, LIBRARY_LIMITS.meetingTitleChars),
+                  address: fitMeetingText(p.address, 120),
                   lng: p.lng,
                   lat: p.lat,
                   placeId: p.id,

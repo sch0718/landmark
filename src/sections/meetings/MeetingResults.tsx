@@ -3,6 +3,7 @@ import Button from '@mui/material/Button';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { HUBS, type Hub } from 'src/domain/meeting/hubs';
+import { fitMeetingText } from 'src/domain/meeting/limits';
 import { preselectHubs, rankRows, transitDeparture } from 'src/domain/meeting/rank';
 import {
   addCandidate,
@@ -13,7 +14,7 @@ import {
 } from 'src/domain/meeting/ops';
 import { finalFromMeeting, inviteFromMeeting } from 'src/domain/meeting/link';
 import { localDate } from 'src/lib/local-date';
-import type { Library } from 'src/schema/library';
+import { LIBRARY_LIMITS, type Library } from 'src/schema/library';
 import type { Candidate, Meeting } from 'src/schema/meeting';
 import { useLibraryAction } from 'src/stores/library-state';
 import { HubResults } from './HubResults';
@@ -171,7 +172,13 @@ export function MeetingResults({
           onRank={(rank) => void run((lib, ctx) => updateMeeting(lib, meeting.id, { rank }, ctx))}
           onRetry={(cid, pid) => void hubCompute.retry(cid, pid)}
           onAdd={(hub) =>
-            void add({ kind: 'hub', name: hub.name, lng: hub.lng, lat: hub.lat, hubId: hub.id })
+            void add({
+              kind: 'hub',
+              name: fitMeetingText(hub.name, LIBRARY_LIMITS.meetingTitleChars),
+              lng: hub.lng,
+              lat: hub.lat,
+              hubId: hub.id,
+            })
           }
           renderNearby={(hub) => (
             <NearbyPlaces hub={hub} library={library} onAdd={(candidate) => void add(candidate)} />
