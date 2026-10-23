@@ -25,14 +25,14 @@ function library(): Library {
 }
 
 describe('계획·당일 지도 이모지', () => {
-  it('번호·출발지·숙소·후보 이름 앞에 첫 라벨 이모지를 붙이고 다른 Day 점은 이름이 없다', () => {
+  it('번호·출발지·숙소·후보 이름 앞에 첫 라벨 이모지를 붙이고 다른 Day 점은 Day·이름을 설명한다', () => {
     const { markers } = tripMapLayers(library(), trip, 0, [], null);
     const names = new Map(markers.map((marker) => [marker.id, marker.label]));
     expect(names.get(P1)).toBe('1 🍽️ 중앙시장 닭강정');
     expect(names.get(`start:${HOUSE}`)).toBe('🏠 ☕ 바다 숙소');
     expect(names.get(`end:${P2}`)).toBe('🛏 ☕ 안목 카페거리');
     expect(names.get(P3)).toBe('🍽️ 속초 횟집');
-    expect(names.get(P5)).toBe('');
+    expect(names.get(P5)).toBe('Day 2 · 창가 자리');
   });
 
   it('첫 라벨을 지우면 뒤 라벨 이모지를 대신 쓰지 않는다', () => {

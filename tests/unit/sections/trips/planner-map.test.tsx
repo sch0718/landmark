@@ -94,6 +94,54 @@ function walkingPath(): RouteResult {
 }
 
 describe('지도 마커와 경로선', () => {
+  it.each([375, 900, 1280])(
+    '폭 %d에서도 지도 기둥에 44px 토글을 두고 시간표를 피한다',
+    async (width) => {
+      await open(withTrip(mapLibrary(), makeTrip({ stops: [[P1], [P2]] })), { width });
+      await mapReady();
+      const controls = screen.getByTestId('map-controls');
+      const toggle = within(controls).getByRole('button', { name: '다른 Day 장소' });
+      // 오프라인 안내(위쪽 가운데)가 양옆에 비워 둔 60px 안에 들어가도록 다른 지도 단추와 같은 44px 정사각형이다.
+      expect(toggle).toHaveStyle({ width: '44px', height: '44px' });
+      expect(Number.parseFloat(getComputedStyle(controls).right)).toBe(width === 900 ? 368 : 8);
+      await userEvent.setup().click(toggle);
+      expect(marker(P1)).toBeInTheDocument();
+      expect(screen.queryByTestId(`marker-${P2}`)).not.toBeInTheDocument();
+    },
+  );
+
+  it('다른 Day 점은 카드를 열어 Day를 알리고 버튼으로 숨겼다가 다시 보인다', async () => {
+    await open(
+      withTrip(
+        mapLibrary(),
+        makeTrip({
+          origin: HOUSE,
+          stops: [[P1], [P2]],
+          candidates: [P3],
+          lodging: [HOTEL],
+        }),
+      ),
+    );
+    await mapReady();
+    const user = userEvent.setup();
+    const toggle = screen.getByRole('button', { name: '다른 Day 장소' });
+    expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    const dot = screen.getByRole('button', { name: 'Day 2 · 안목 카페거리' });
+    expect(dot).toHaveAttribute('data-shape', 'dot');
+    await user.click(dot);
+    expect(within(card('안목 카페거리')).getByText('Day 2 · 1번째')).toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.queryByTestId(`marker-${P2}`)).not.toBeInTheDocument();
+    for (const id of [P1, P3, `start:${HOUSE}`, `end:${HOTEL}`]) {
+      expect(marker(id)).toBeInTheDocument();
+    }
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Day 2 · 안목 카페거리' })).toBeInTheDocument();
+  });
+
   it('고른 Day는 번호·Day 색, 출발지·숙소는 집·침대, 후보는 회색, 다른 Day는 흐리게', async () => {
     const lib = withTrip(
       mapLibrary(),

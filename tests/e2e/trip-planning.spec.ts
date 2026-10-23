@@ -11,6 +11,46 @@ import {
 } from './fixtures';
 
 test.describe('여행 계획', () => {
+  test('Day 1에서 다른 Day 점의 설명을 읽고 표시를 켜고 끈다', async ({ page }) => {
+    await mockRoutes(page);
+    await createGangneungTrip(page);
+    await openSheetTab(page, 'candidates');
+    await candidatePanel(page).getByRole('button', { name: 'Day 자동 나누기' }).click();
+    await candidatePanel(page).getByRole('button', { name: '적용', exact: true }).click();
+    await expect(candidatePanel(page).getByRole('heading', { name: '후보 0' })).toBeVisible();
+    await openSheetTab(page, 'Day 1');
+    if (isCompact(page)) {
+      // 시트 높이: 반쯤 → 거의 전체 → 접힘. 지도 마커를 가리지 않게 한다.
+      const handle = page.getByRole('button', { name: '시트 높이 바꾸기' });
+      await handle.click();
+      await handle.click();
+      await expect(page.getByRole('region', { name: '일정 시트' })).toHaveAttribute(
+        'data-snap',
+        'collapsed',
+      );
+    }
+    const map = page.getByRole('region', { name: '지도', exact: true });
+    const dots = map.getByRole('button', { name: /^Day 2 · .+/ });
+    await expect(dots.first()).toBeVisible();
+    await expect(dots.first()).toHaveAttribute('data-shape', 'dot');
+    const label = (await dots.first().getAttribute('aria-label'))!;
+    await expect(dots.first()).toHaveAttribute('title', label);
+    await expect(dots.first()).toHaveText('');
+    const count = await dots.count();
+    const toggle = map.getByRole('button', { name: '다른 Day 장소', exact: true });
+    await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    const bounds = await toggle.boundingBox();
+    expect(bounds!.width).toBeGreaterThanOrEqual(44);
+    expect(bounds!.height).toBeGreaterThanOrEqual(44);
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    await expect(dots).toHaveCount(0);
+    await expect(map.locator('[data-testid^="marker-"]').first()).toBeVisible();
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    await expect(dots).toHaveCount(count);
+  });
+
   test('@smoke 지역 칩으로 여행을 만들고 Day에 넣으면 시간표가 나온다', async ({ page }) => {
     const calls = await mockRoutes(page);
     await createGangneungTrip(page);

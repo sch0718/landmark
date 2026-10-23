@@ -8,6 +8,8 @@ export type MapMarker = {
   lng: number;
   lat: number;
   label?: string;
+  /** `dot`이면 글자 대신 작은 원을 그린다. label은 title·접근 이름으로 쓴다. */
+  shape?: 'dot';
   /** 마커 바탕색. */
   color: string;
   /** 이름 글자색. 기본은 흰색. */

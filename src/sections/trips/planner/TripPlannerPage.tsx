@@ -309,6 +309,7 @@ function Planner({ trip, library }: { trip: Trip; library: Library }) {
         cardPlaceId={cardPlaceId}
         onOpenCard={openCard}
         splitPlan={splitPlan}
+        controlsRight={medium ? DETAIL_WIDTH : 0}
       />
       {plan.offline && (
         <OfflineNotice rightInset={medium ? DETAIL_WIDTH : 0} belowButtons={during} />

@@ -1,7 +1,9 @@
 import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
 import { useAtomValue } from 'jotai';
 import { useCallback, useMemo, useState } from 'react';
 import type { MapPadding } from 'src/components/map/MapAdapter';
+import { LayersIcon } from 'src/components/icons';
 import { MapView } from 'src/components/map/MapView';
 import type { Trip } from 'src/schema/trip';
 import { placeIdOfMarker, tripMapLayers } from 'src/sections/trips/planner/trip-map-layers';
@@ -24,6 +26,8 @@ type Props = {
    * 새 순서로 매기며 경로선은 숨긴다.
    */
   splitPlan?: string[][] | null;
+  /** 중간 폭에서 지도를 덮는 시간표 너비. 단추 기둥도 그만큼 옮긴다. */
+  controlsRight?: number;
 };
 
 /**
@@ -38,11 +42,13 @@ export function TripMap({
   cardPlaceId,
   onOpenCard,
   splitPlan = null,
+  controlsRight = 0,
 }: Props) {
   const library = useAtomValue(libraryAtom);
+  const [showOtherDays, setShowOtherDays] = useState(true);
   const { markers, polylines } = useMemo(
-    () => tripMapLayers(library, trip, dayIndex, legs, cardPlaceId, splitPlan),
-    [library, trip, dayIndex, legs, cardPlaceId, splitPlan],
+    () => tripMapLayers(library, trip, dayIndex, legs, cardPlaceId, splitPlan, showOtherDays),
+    [library, trip, dayIndex, legs, cardPlaceId, splitPlan, showOtherDays],
   );
 
   // 카드가 새 장소로 열리면 그 장소로 옮긴다(렌더 중 상태 갱신). 방금 핀을 눌러 연 장소는 이미 보이므로 그대로 둔다.
@@ -79,6 +85,35 @@ export function TripMap({
         focus={focus}
         fitKey={`${trip.id}:${dayIndex}`}
         onUnavailable={setUnavailable}
+        controlsRight={controlsRight}
+        controls={
+          <Button
+            aria-label="다른 Day 장소"
+            aria-pressed={showOtherDays}
+            title={
+              showOtherDays ? '다른 Day 장소 보이는 중(점 색은 해당 Day)' : '다른 Day 장소 숨김'
+            }
+            onClick={() => setShowOtherDays((shown) => !shown)}
+            sx={{
+              // 다른 지도 단추(확대·축소·내 위치)와 같은 44px 정사각형이라, 위쪽 가운데 오프라인 안내가 비워 둔
+              // 양옆 자리 안에 들어간다.
+              minWidth: 44,
+              width: 44,
+              height: 44,
+              p: 0,
+              bgcolor: showOtherDays ? 'var(--tm-accent-main)' : 'var(--tm-bg-surface)',
+              color: showOtherDays ? 'var(--tm-accent-contrast)' : 'var(--tm-text-primary)',
+              border: '1px solid var(--tm-border-strong, var(--tm-border))',
+              borderRadius: 'var(--tm-radius-md)',
+              boxShadow: 'var(--tm-shadow-1)',
+              '&:hover': {
+                bgcolor: showOtherDays ? 'var(--tm-accent-main)' : 'var(--tm-bg-raised)',
+              },
+            }}
+          >
+            <LayersIcon aria-hidden="true" width={20} height={20} />
+          </Button>
+        }
       />
       {unavailable !== null && (
         <Box

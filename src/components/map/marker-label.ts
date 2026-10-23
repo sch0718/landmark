@@ -1,4 +1,5 @@
 export type MarkerLabelOptions = {
+  shape?: 'dot';
   dimmed?: boolean;
   selected?: boolean;
   /** 다녀온 곳: 글자 앞에 `✓`, title 뒤에 ` · 다녀옴`. 색만으로 알리지 않는다. */
@@ -16,6 +17,37 @@ export function createMarkerLabelElement(
   opts: MarkerLabelOptions = {},
 ): HTMLElement {
   const el = document.createElement('span');
+  if (opts.shape === 'dot') {
+    el.setAttribute('data-shape', 'dot');
+    el.title = label;
+    el.setAttribute('aria-label', label);
+    // 보이는 점은 12px, 누름 영역은 32px. 이름표보다 아래에 쌓아 이웃 이름표를 가리지 않는다.
+    el.style.cssText = [
+      'display:inline-flex',
+      'align-items:center',
+      'justify-content:center',
+      'width:32px',
+      'height:32px',
+      'border-radius:50%',
+      'vertical-align:top',
+      'transform:translate(-50%, -50%)',
+    ].join(';');
+    const dot = document.createElement('span');
+    dot.setAttribute('aria-hidden', 'true');
+    dot.style.cssText = [
+      'box-sizing:border-box',
+      'width:12px',
+      'height:12px',
+      'border-radius:50%',
+      `background:${color}`,
+      'border:2px solid #fff',
+      'box-shadow:0 1px 3px rgba(0,0,0,.4)',
+      `opacity:${opts.dimmed ? 0.5 : 1}`,
+      ...(opts.selected ? ['outline:2px solid #000', 'outline-offset:2px'] : []),
+    ].join(';');
+    el.appendChild(dot);
+    return el;
+  }
   const visited = opts.visited === true && label !== '';
   el.textContent = visited ? `✓ ${label}` : label;
   if (label !== '') el.title = visited ? `${label} · 다녀옴` : label;

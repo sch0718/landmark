@@ -655,7 +655,7 @@ describe('createShareMap draw(일정 지도)', () => {
     lat: 37.35,
     role: 'endpoint',
   });
-  const DIM = pin({ id: 'd1', label: '', lng: 128.5, lat: 35.1, day: 1, role: 'dim' });
+  const DIM = pin({ id: 'd1', label: '바다 카페', lng: 128.5, lat: 35.1, day: 1, role: 'dim' });
   const CAND = pin({ id: 'c1', label: '후보', lng: 129.1, lat: 35.2, day: null });
   const LINE1: MapLine = {
     id: 'leg1',
@@ -825,11 +825,16 @@ describe('createShareMap draw(일정 지도)', () => {
     expect(post).not.toHaveBeenCalled();
   });
 
-  it('후보 핀은 회색, 흐린 점은 이름이 없고 흐리다', async () => {
+  it('후보 핀은 회색, 흐린 점은 Day·이름 설명이 있고 흐리다', async () => {
     const { handle, markerData } = await setup();
     handle.draw([CAND, DIM], []);
     expect(markerData('c1').color).toBe(NO_CATEGORY_COLOR);
-    expect(markerData('d1')).toMatchObject({ label: '', dimmed: true, color: dayColor(1) });
+    expect(markerData('d1')).toMatchObject({
+      shape: 'dot',
+      label: 'Day 2 · 바다 카페',
+      dimmed: true,
+      color: dayColor(1),
+    });
   });
 
   it('흐린 핀뿐이면 흐린 점 전부에 맞춘다', async () => {

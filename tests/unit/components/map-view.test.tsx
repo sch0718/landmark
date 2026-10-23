@@ -255,6 +255,8 @@ describe('MapView 내 위치·단추 기둥', () => {
     expect(zoomOut.compareDocumentPosition(extra) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(getComputedStyle(column).top).toBe('8px');
     expect(getComputedStyle(column).right).toBe('8px');
+    // 글자 토글이 넓어져도 확대·축소 묶음은 44px 폭으로 오른쪽에 붙는다.
+    expect(getComputedStyle(column).alignItems).toBe('flex-end');
   });
 
   it('마우스 기기에서도 controls는 보이고 ＋/−는 없다', async () => {
