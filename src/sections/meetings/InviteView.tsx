@@ -75,7 +75,10 @@ export function InviteView({ doc }: { doc: InviteDoc }) {
   const changedKey = JSON.stringify(changed.map((p) => [p.id, p.origin]));
   const computeTimes = compute.compute;
   useEffect(() => {
-    if (changedKey !== '[]') void computeTimes();
+    if (changedKey === '[]') return;
+    const controller = new AbortController();
+    void computeTimes({ signal: controller.signal });
+    return () => controller.abort();
   }, [changedKey, computeTimes]);
   useEffect(() => {
     if (!valid) return;

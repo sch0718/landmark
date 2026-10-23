@@ -1,6 +1,6 @@
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { HUBS, type Hub } from 'src/domain/meeting/hubs';
 import { preselectHubs, rankRows } from 'src/domain/meeting/rank';
@@ -65,12 +65,12 @@ export function MeetingResults({
   }, [rankedHubIds, onHubsChange]);
   const computeCandidates = candidateCompute.compute;
   const computeHubs = hubCompute.compute;
-  const previousTargets = useRef<string | null>(null);
   const targetKey = JSON.stringify(meeting.candidates.value);
   useEffect(() => {
-    if (previousTargets.current === targetKey) return;
-    previousTargets.current = targetKey;
-    if (meeting.candidates.value.length > 0) void computeCandidates();
+    if (meeting.candidates.value.length === 0) return;
+    const controller = new AbortController();
+    void computeCandidates({ signal: controller.signal });
+    return () => controller.abort();
   }, [targetKey, meeting.candidates.value.length, computeCandidates]);
   useEffect(() => {
     if (findSeq === 0) return;

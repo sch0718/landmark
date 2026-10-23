@@ -1,4 +1,4 @@
-import { createElement, StrictMode, useEffect, useRef } from 'react';
+import { createElement, StrictMode, useEffect } from 'react';
 import { act, render, renderHook, screen, waitFor } from '@testing-library/react';
 import { Effect, Layer, ManagedRuntime } from 'effect';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -13,6 +13,215 @@ const participants: Participant[] = [
 ];
 const targets = [{ id: 'choice01', name: '도착', lng: 127.01, lat: 37.51 }];
 afterEach(() => setAppRuntimeForTest(null));
+
+function gatedRoutes() {
+  const calls: number[] = [];
+  let finish!: () => void;
+  const response = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  const runtime = ManagedRuntime.make(
+    Layer.mergeAll(
+      AppLayer,
+      Layer.succeed(
+        RouteLookup,
+        RouteLookup.of({
+          leg: (mode, _from, to) => {
+            calls.push(to[0]);
+            return Effect.promise(() => response).pipe(
+              Effect.as({
+                mode,
+                durationS: 600,
+                distanceM: 1000,
+                tollFare: null,
+                path: [],
+                queriedAt: '2026-10-24T00:00:00Z',
+                seq: calls.length,
+                fresh: false,
+              }),
+            );
+          },
+        }),
+      ),
+    ),
+  );
+  setAppRuntimeForTest(runtime);
+  return { calls, finish, runtime };
+}
+
+const manyParticipants = Array.from({ length: 10 }, (_, i) => ({
+  ...participants[0]!,
+  id: `person${i}`,
+}));
+const manyTargets = Array.from({ length: 8 }, (_, i) => ({
+  ...targets[0]!,
+  id: `choice${i}`,
+  lng: 128 + i / 100,
+}));
+
+it('80칸 계산 중 언마운트하면 처음 4칸 뒤로는 경로를 요청하지 않는다', async () => {
+  const { calls, finish, runtime } = gatedRoutes();
+  const { result, unmount } = renderHook(() =>
+    useMeetingCompute({
+      participants: manyParticipants,
+      targets: manyTargets,
+      mode: 'car',
+      at: null,
+    }),
+  );
+  let computing!: Promise<void>;
+  try {
+    act(() => {
+      computing = result.current.compute();
+    });
+    await waitFor(() => expect(calls.length).toBeGreaterThanOrEqual(4));
+    unmount();
+    const callsAtUnmount = calls.length;
+    await act(async () => {
+      finish();
+      await computing;
+    });
+    expect(callsAtUnmount).toBe(4);
+    expect(calls).toHaveLength(callsAtUnmount);
+  } finally {
+    finish();
+    unmount();
+    await runtime.dispose();
+  }
+});
+
+it('새 계산을 시작하면 이전 계산의 아직 보내지 않은 칸을 요청하지 않는다', async () => {
+  const { calls, finish, runtime } = gatedRoutes();
+  const { result, rerender, unmount } = renderHook(
+    ({ destinations }) =>
+      useMeetingCompute({ participants, targets: destinations, mode: 'car', at: null }),
+    { initialProps: { destinations: manyTargets } },
+  );
+  let previous!: Promise<void>;
+  let current!: Promise<void>;
+  try {
+    act(() => {
+      previous = result.current.compute();
+    });
+    await waitFor(() => expect(calls.length).toBeGreaterThanOrEqual(4));
+    rerender({ destinations: targets });
+    act(() => {
+      current = result.current.compute();
+    });
+    await waitFor(() => expect(calls).toContain(targets[0]!.lng));
+    await act(async () => {
+      finish();
+      await Promise.all([previous, current]);
+    });
+    expect(calls.filter((lng) => lng >= 128)).toHaveLength(4);
+    expect(calls.filter((lng) => lng < 128)).toHaveLength(1);
+    expect(result.current.times).toEqual({ choice01: { person01: 10 } });
+    expect(result.current.progress).toEqual({ done: 1, total: 1 });
+    expect(result.current.pending).toBe(false);
+  } finally {
+    finish();
+    unmount();
+    await runtime.dispose();
+  }
+});
+
+it('effect가 시작한 계산을 취소하면 대기를 풀고 늦은 결과를 쓰지 않는다', async () => {
+  const { calls, finish, runtime } = gatedRoutes();
+  const { result, unmount } = renderHook(() =>
+    useMeetingCompute({ participants, targets: manyTargets, mode: 'car', at: null }),
+  );
+  const controller = new AbortController();
+  let computing!: Promise<void>;
+  try {
+    act(() => {
+      computing = result.current.compute({ signal: controller.signal });
+    });
+    await waitFor(() => expect(calls.length).toBeGreaterThanOrEqual(4));
+    await act(async () => controller.abort());
+    expect(result.current.pending).toBe(false);
+    await act(async () => finish());
+    expect(result.current.times).toEqual({});
+    expect(result.current.errors).toEqual({});
+    expect(calls).toHaveLength(4);
+    await computing;
+  } finally {
+    finish();
+    await computing;
+    unmount();
+    await runtime.dispose();
+  }
+});
+
+it('취소하지 않은 80칸은 동시에 4칸씩 끝까지 계산한다', async () => {
+  const { calls, finish, runtime } = gatedRoutes();
+  const { result, unmount } = renderHook(() =>
+    useMeetingCompute({
+      participants: manyParticipants,
+      targets: manyTargets,
+      mode: 'car',
+      at: null,
+    }),
+  );
+  let computing!: Promise<void>;
+  try {
+    act(() => {
+      computing = result.current.compute();
+    });
+    await waitFor(() => expect(calls.length).toBeGreaterThanOrEqual(4));
+    expect(calls).toHaveLength(4);
+    await act(async () => {
+      finish();
+      await computing;
+    });
+    expect(calls).toHaveLength(80);
+    expect(result.current.progress).toEqual({ done: 80, total: 80 });
+    expect(result.current.pending).toBe(false);
+    for (const target of manyTargets) {
+      expect(Object.values(result.current.times[target.id]!)).toEqual(Array(10).fill(10));
+    }
+  } finally {
+    finish();
+    await computing;
+    unmount();
+    await runtime.dispose();
+  }
+});
+
+it('이전 effect의 cleanup은 나중에 수동으로 시작한 계산을 취소하지 않는다', async () => {
+  const { calls, finish, runtime } = gatedRoutes();
+  const { result, unmount } = renderHook(() =>
+    useMeetingCompute({ participants, targets, mode: 'car', at: null }),
+  );
+  const controller = new AbortController();
+  let previous!: Promise<void>;
+  let current!: Promise<void>;
+  try {
+    act(() => {
+      previous = result.current.compute({ signal: controller.signal });
+    });
+    await waitFor(() => expect(calls).toHaveLength(1));
+    act(() => {
+      current = result.current.compute({ refresh: true });
+    });
+    await waitFor(() => expect(calls).toHaveLength(2));
+    await act(async () => {
+      controller.abort();
+      await previous;
+    });
+    expect(result.current.pending).toBe(true);
+    await act(async () => {
+      finish();
+      await current;
+    });
+    expect(result.current.times).toEqual({ choice01: { person01: 10 } });
+    expect(result.current.progress).toEqual({ done: 1, total: 1 });
+    expect(result.current.pending).toBe(false);
+  } finally {
+    finish();
+    unmount();
+    await runtime.dispose();
+  }
+});
 
 describe('약속 소요시간 계산', () => {
   it('자동차를 직접 다시 찾으면 캐시를 새로 조회하고 결과의 가장 오래된 조회 시각을 쓴다', async () => {
@@ -377,7 +586,7 @@ it('다른 조건으로 새 계산을 시작하면 이전 계산의 늦은 응�
   }
 });
 
-it('StrictMode에서 마운트 직후 한 번 시작한 계산이 완료되고 대기를 푼다', async () => {
+it('StrictMode에서 마운트 effect가 다시 시작한 계산이 완료되고 대기를 푼다', async () => {
   const runtime = ManagedRuntime.make(
     Layer.mergeAll(
       AppLayer,
@@ -402,12 +611,11 @@ it('StrictMode에서 마운트 직후 한 번 시작한 계산이 완료되고 �
   setAppRuntimeForTest(runtime);
   function OnMount() {
     const result = useMeetingCompute({ participants, targets, mode: 'car', at: null });
-    const started = useRef(false);
     const compute = result.compute;
     useEffect(() => {
-      if (started.current) return;
-      started.current = true;
-      void compute();
+      const controller = new AbortController();
+      void compute({ signal: controller.signal });
+      return () => controller.abort();
     }, [compute]);
     return createElement(
       'output',
