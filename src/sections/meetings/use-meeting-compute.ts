@@ -1,5 +1,5 @@
 import { Effect, Result } from 'effect';
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { haversineM } from 'src/domain/trips/geo';
 import { transitDeparture } from 'src/domain/meeting/rank';
 import { startEffect } from 'src/lib/effect/runtime';
@@ -50,12 +50,6 @@ export function useMeetingCompute(input: Input) {
   const generation = useRef(0);
   const requests = useRef(new Map<string, number>());
   const requestSeq = useRef(0);
-  useEffect(
-    () => () => {
-      generation.current += 1;
-    },
-    [],
-  );
   const [state, setState] = useState<State>(empty);
 
   const execute = useCallback(async (only?: { cid: string; pid: string }) => {

@@ -1,4 +1,5 @@
-import { act, renderHook, waitFor } from '@testing-library/react';
+import { createElement, StrictMode, useEffect, useRef } from 'react';
+import { act, render, renderHook, screen, waitFor } from '@testing-library/react';
 import { Effect, Layer, ManagedRuntime } from 'effect';
 import { afterEach, describe, expect, it } from 'vitest';
 import { AppLayer, setAppRuntimeForTest } from 'src/lib/effect/runtime';
@@ -167,4 +168,51 @@ it('조회 중 실패 칸을 다시 시도해도 다른 칸의 늦은 응답을 
   expect(result.current.pending).toBe(false);
   unmount();
   await runtime.dispose();
+});
+
+it('StrictMode에서 마운트 직후 한 번 시작한 계산이 완료되고 대기를 푼다', async () => {
+  const runtime = ManagedRuntime.make(
+    Layer.mergeAll(
+      AppLayer,
+      Layer.succeed(
+        RouteLookup,
+        RouteLookup.of({
+          leg: (mode) =>
+            Effect.succeed({
+              mode,
+              durationS: 3900,
+              distanceM: 10000,
+              tollFare: null,
+              path: [],
+              queriedAt: '2026-10-23T00:00:00Z',
+              seq: 1,
+              fresh: false,
+            }),
+        }),
+      ),
+    ),
+  );
+  setAppRuntimeForTest(runtime);
+  function OnMount() {
+    const result = useMeetingCompute({ participants, targets, mode: 'car', at: null });
+    const started = useRef(false);
+    const compute = result.compute;
+    useEffect(() => {
+      if (started.current) return;
+      started.current = true;
+      void compute();
+    }, [compute]);
+    return createElement(
+      'output',
+      null,
+      `${result.times.choice01?.person01}:${result.pending}:${result.progress.done}/${result.progress.total}`,
+    );
+  }
+  const { unmount } = render(createElement(OnMount), { wrapper: StrictMode });
+  try {
+    expect(await screen.findByText('65:false:1/1')).toBeInTheDocument();
+  } finally {
+    unmount();
+    await runtime.dispose();
+  }
 });

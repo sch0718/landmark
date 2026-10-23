@@ -1,11 +1,11 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { HubResults } from 'src/sections/meetings/HubResults';
 import { NearbyPlaces } from 'src/sections/meetings/NearbyPlaces';
 import { CandidateTally } from 'src/sections/meetings/CandidateTally';
 import { buildMeeting } from '../../../fixtures/builders';
-import { makePlace, sampleLibrary } from '../library/fixtures';
+import { makeLabel, makePlace, sampleLibrary } from '../library/fixtures';
 
 const hub = { id: 'hub1', name: '강남역', region: '서울', lng: 127, lat: 37.5 };
 const f = <T,>(value: T) => ({ value, updatedAt: '2026-10-23T00:00:00Z' });
@@ -98,4 +98,91 @@ describe('약속 결과', () => {
     await userEvent.click(screen.getByRole('button', { name: '강남역 확정' }));
     expect(onDecide).toHaveBeenCalledWith('choice01');
   });
+});
+
+it.each(['max', 'avg', 'spread'] as const)(
+  '%s 순위 기준을 선택하면 눈에 보이는 칩 색도 바뀐다',
+  (rank) => {
+    render(
+      <HubResults
+        hubs={[]}
+        participants={[]}
+        times={{}}
+        errors={{}}
+        unit="min"
+        rank={rank}
+        onRank={vi.fn()}
+        onRetry={vi.fn()}
+        onAdd={vi.fn()}
+        renderNearby={() => null}
+      />,
+    );
+    const group = screen.getByRole('group', { name: '순위 기준' });
+    const labels = { max: '가장 먼 사람', avg: '평균', spread: '편차' };
+    const selected = within(group).getByText(labels[rank]);
+    const other = within(group).getByText(rank === 'max' ? '평균' : '가장 먼 사람');
+    expect(within(group).getByRole('button', { name: labels[rank] })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(getComputedStyle(selected).backgroundColor).not.toBe(
+      getComputedStyle(other).backgroundColor,
+    );
+  },
+);
+
+it('근처 장소에 붙은 라벨만 남기고 역에서 가까운 순서와 직선거리를 보인다', async () => {
+  const base = sampleLibrary();
+  const labels = Array.from({ length: 25 }, (_, i) =>
+    makeLabel(`label${100 + i}`, `라벨 ${i}`, 'red', 'utensils', i),
+  );
+  const near = {
+    ...makePlace(10, { name: '가까운 곳', labelIds: ['label100'] }),
+    lng: 127,
+    lat: 37.50288,
+  };
+  const far = {
+    ...makePlace(11, { name: '먼 곳', labelIds: ['label101'] }),
+    lng: 127,
+    lat: 37.50895,
+  };
+  const outside = {
+    ...makePlace(12, { name: '반경 밖', labelIds: ['label102'] }),
+    lng: 127,
+    lat: 37.51,
+  };
+  const unsaved = {
+    ...makePlace(13, { name: '보관 안 함', labelIds: ['label103'], saved: false }),
+    lng: 127,
+    lat: 37.5,
+  };
+  const deleted = {
+    ...makePlace(14, { name: '삭제됨', labelIds: ['label104'], deletedAt: '2026-10-24T00:00:00Z' }),
+    lng: 127,
+    lat: 37.5,
+  };
+  const lib = {
+    ...base,
+    labels: Object.fromEntries(labels.map((label) => [label.id, label])),
+    places: Object.fromEntries(
+      [far, outside, near, unsaved, deleted].map((place) => [place.id, place]),
+    ),
+  };
+  render(<NearbyPlaces hub={hub} library={lib} onAdd={vi.fn()} />);
+  const group = screen.getByRole('group', { name: '근처 장소 라벨' });
+  expect(
+    within(group)
+      .getAllByRole('button')
+      .map((button) => button.textContent),
+  ).toEqual(['전체', '라벨 0', '라벨 1']);
+  expect(group.querySelector('svg')).toBeNull();
+  const rows = screen.getAllByRole('listitem');
+  expect(rows).toHaveLength(2);
+  expect(rows[0]).toHaveTextContent('가까운 곳');
+  expect(within(rows[0]!).getByText('320m')).toBeInTheDocument();
+  expect(rows[1]).toHaveTextContent('먼 곳');
+  expect(within(rows[1]!).getByText('1.0km')).toBeInTheDocument();
+  await userEvent.click(within(group).getByRole('button', { name: '라벨 0' }));
+  expect(screen.queryByText('먼 곳')).not.toBeInTheDocument();
+  expect(within(group).getByRole('button', { name: '라벨 1' })).toBeInTheDocument();
 });

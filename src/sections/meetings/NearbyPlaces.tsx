@@ -3,7 +3,7 @@ import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
 import { useState } from 'react';
 import type { Hub } from 'src/domain/meeting/hubs';
-import { nearbyPlaces } from 'src/domain/nearby';
+import { formatDistanceM, nearbyPlaces } from 'src/domain/nearby';
 import type { Library } from 'src/schema/library';
 import type { Candidate } from 'src/schema/meeting';
 
@@ -17,11 +17,11 @@ export function NearbyPlaces({
   onAdd(candidate: Omit<Candidate, 'id'>): void;
 }) {
   const [label, setLabel] = useState<string | null>(null);
-  const nearby = nearbyPlaces(
+  const { places: nearby, distances } = nearbyPlaces(
     Object.values(library.places).filter((p) => p.deletedAt === null && p.saved.value),
     [hub.lng, hub.lat],
     1000,
-  ).places;
+  );
   const labels = Object.values(library.labels).filter(
     (l) => l.deletedAt === null && nearby.some((p) => p.labelIds.value.includes(l.id)),
   );
@@ -54,7 +54,10 @@ export function NearbyPlaces({
       <Box component="ul" sx={{ p: 0, listStyle: 'none' }}>
         {places.map((p) => (
           <Box component="li" key={p.id}>
-            <span>{p.name.value}</span>
+            <span>{p.name.value}</span>{' '}
+            <Box component="span" sx={{ color: 'var(--tm-text-secondary)', fontSize: 13 }}>
+              {formatDistanceM(distances.get(p.id)!)}
+            </Box>
             <Button
               sx={{ minHeight: 44, minWidth: 44 }}
               aria-label={`${p.name.value} 후보에 담기`}

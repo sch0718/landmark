@@ -1,6 +1,7 @@
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import { useState, type ReactNode } from 'react';
+import { ChipButton } from 'src/sections/library/ChipButton';
 import type { Hub } from 'src/domain/meeting/hubs';
 import { rankRows } from 'src/domain/meeting/rank';
 import type { MeetingRank, Participant } from 'src/schema/meeting';
@@ -47,14 +48,9 @@ export function HubResults({
             ['spread', '편차'],
           ] as const
         ).map(([r, label]) => (
-          <Button
-            key={r}
-            sx={{ minHeight: 44 }}
-            aria-pressed={rank === r}
-            onClick={() => onRank(r)}
-          >
+          <ChipButton key={r} selected={rank === r} onClick={() => onRank(r)}>
             {label}
-          </Button>
+          </ChipButton>
         ))}
       </Box>
       <Box component="ol" sx={{ p: 0, listStyle: 'none' }}>

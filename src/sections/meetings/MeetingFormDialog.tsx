@@ -36,6 +36,7 @@ export function MeetingFormDialog({ open, mode, meetingId, initial, onClose, onD
     mode: initial?.mode ?? ('transit' as MeetingMode),
   });
   const [form, setForm] = useState(fresh);
+  const [touched, setTouched] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
   const [wasOpen, setWasOpen] = useState(open);
@@ -43,6 +44,7 @@ export function MeetingFormDialog({ open, mode, meetingId, initial, onClose, onD
     setWasOpen(open);
     if (open) {
       setForm(fresh());
+      setTouched(false);
       setFailure(null);
       setSubmitting(false);
     }
@@ -58,6 +60,7 @@ export function MeetingFormDialog({ open, mode, meetingId, initial, onClose, onD
   const valid = titleError === null && atError === null;
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    setTouched(true);
     if (!valid || submitting) return;
     setSubmitting(true);
     const input = { title: form.title, at, mode: form.mode };
@@ -75,6 +78,7 @@ export function MeetingFormDialog({ open, mode, meetingId, initial, onClose, onD
     const id = mode === 'create' ? result.createdId : meetingId;
     if (id !== undefined) onDone?.(id);
   };
+  const showTitleError = titleError !== null && (touched || form.title.trim().length > 0);
   const change = (patch: Partial<typeof form>) => {
     setForm((current) => ({ ...current, ...patch }));
     setFailure(null);
@@ -90,9 +94,12 @@ export function MeetingFormDialog({ open, mode, meetingId, initial, onClose, onD
             autoFocus
             label="약속 이름"
             value={form.title}
-            onChange={(event) => change({ title: event.target.value })}
-            error={titleError !== null}
-            helperText={titleError}
+            onChange={(event) => {
+              setTouched(true);
+              change({ title: event.target.value });
+            }}
+            error={showTitleError}
+            helperText={showTitleError ? titleError : null}
             fullWidth
           />
           <TextField

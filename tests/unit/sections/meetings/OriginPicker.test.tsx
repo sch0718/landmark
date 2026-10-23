@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { createStore, Provider } from 'jotai';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { OriginPicker } from 'src/sections/meetings/OriginPicker';
@@ -188,4 +188,43 @@ describe('출발지 고르기', () => {
     fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
     expect(onClose).toHaveBeenCalledOnce();
   });
+});
+
+it('열거나 탭을 바꾸면 검색·보관함 검색 상자로 포커스를 옮긴다', async () => {
+  const { rerender, store, onPick, onClose } = setup();
+  await waitFor(() => expect(screen.getByRole('searchbox', { name: '출발지 검색' })).toHaveFocus());
+  fireEvent.click(screen.getByRole('tab', { name: '보관함에서' }));
+  expect(screen.getByRole('searchbox', { name: '보관함 장소 검색' })).toHaveFocus();
+  fireEvent.click(screen.getByRole('tab', { name: '검색' }));
+  expect(screen.getByRole('searchbox', { name: '출발지 검색' })).toHaveFocus();
+  rerender(
+    <Provider store={store}>
+      <OriginPicker open={false} onPick={onPick} onClose={onClose} />
+    </Provider>,
+  );
+  rerender(
+    <Provider store={store}>
+      <OriginPicker open onPick={onPick} onClose={onClose} />
+    </Provider>,
+  );
+  await waitFor(() => expect(screen.getByRole('searchbox', { name: '출발지 검색' })).toHaveFocus());
+});
+
+it('탭과 결과 높이가 바뀌어도 창은 위쪽에 고정하고 지도 탭 이름은 짧게 보인다', async () => {
+  vi.useFakeTimers();
+  search.mockResolvedValue(Array.from({ length: 10 }, (_, i) => result(`장소 ${i}`)));
+  setup();
+  const container = screen.getByRole('dialog').parentElement!;
+  expect(getComputedStyle(container).alignItems).toBe('flex-start');
+  const mapTab = screen.getByRole('tab', { name: '지도에서 고르기' });
+  expect(mapTab).toHaveTextContent(/^지도에서$/);
+  fireEvent.click(mapTab);
+  expect(getComputedStyle(container).alignItems).toBe('flex-start');
+  fireEvent.click(screen.getByRole('tab', { name: '검색' }));
+  fireEvent.change(screen.getByRole('searchbox', { name: '출발지 검색' }), {
+    target: { value: '장소' },
+  });
+  await act(() => vi.advanceTimersByTimeAsync(300));
+  expect(screen.getAllByRole('button', { name: /^장소 / })).toHaveLength(10);
+  expect(getComputedStyle(container).alignItems).toBe('flex-start');
 });

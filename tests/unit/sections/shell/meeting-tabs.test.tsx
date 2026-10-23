@@ -1,3 +1,4 @@
+import { isNavActive, NAV_ITEMS } from 'src/sections/shell/nav-items';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -36,3 +37,27 @@ describe('약속 내비게이션', () => {
     expect(screen.getByRole('link', { name: '약속' })).toHaveAttribute('aria-current', 'page');
   });
 });
+
+it.each(['/meet', '/meet#d=후보', '/meet#r=답장', '/meet#f=확정'])(
+  '%s 링크 화면에서도 하단과 사이드의 약속 항목을 켠다',
+  (path) => {
+    render(
+      <MemoryRouter initialEntries={[path]}>
+        <BottomTabs onAdd={vi.fn()} />
+        <NavRail onAdd={vi.fn()} />
+      </MemoryRouter>,
+    );
+    for (const link of screen.getAllByRole('link', { name: '약속' })) {
+      expect(link).toHaveAttribute('aria-current', 'page');
+    }
+  },
+);
+
+it.each(['/meet/other', '/meeting', '/meetup', '/meetings-other'])(
+  '%s는 약속 경로로 오인하지 않는다',
+  (path) => {
+    const item = NAV_ITEMS.find((item) => item !== 'add' && item.key === 'meetings');
+    if (item === undefined || item === 'add') throw new Error('약속 항목 없음');
+    expect(isNavActive(item, path)).toBe(false);
+  },
+);

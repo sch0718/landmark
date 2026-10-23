@@ -142,6 +142,12 @@ test('@smoke 약속 만들기부터 친구 답장 반영·집계·확정 길찾�
     await expect(page.getByText(/지도 친구님 답장: 좋아요 1곳, 출발지 바뀜/)).toBeVisible();
     await page.getByRole('button', { name: '반영', exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`${editorPath}$`));
+    const candidateTimes = page.getByRole('region', { name: '후보와 집계' }).locator('dd');
+    await expect(candidateTimes).toHaveCount(6);
+    for (const cell of await candidateTimes.all()) {
+      await expect(cell).toHaveText(/분/);
+    }
+    await expect(page.getByRole('button', { name: '중간 지점 찾기', exact: true })).toBeEnabled();
     await expect(page.getByText('좋아요 1명 · 지도 친구', { exact: true })).toBeVisible();
     await expect(page.getByText('친구 새 출발지', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: '원주역 확정', exact: true }).click();

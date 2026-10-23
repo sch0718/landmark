@@ -12,7 +12,26 @@ import type { Meeting, Participant } from 'src/schema/meeting';
 import { OriginPicker } from 'src/sections/meetings/OriginPicker';
 import { useMeeting } from 'src/sections/meetings/use-meeting';
 
-type Editing = { participant: Participant | null; name: string };
+const replyTimeFormat = new Intl.DateTimeFormat('ko-KR', {
+  timeZone: 'Asia/Seoul',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+});
+
+/** 올해 여부도 한국 시각으로 비교하고 초는 생략한다. */
+function formatReplyTime(iso: string): string {
+  const parts = (date: Date) =>
+    Object.fromEntries(replyTimeFormat.formatToParts(date).map(({ type, value }) => [type, value]));
+  const received = parts(new Date(iso));
+  const prefix = received.year === parts(new Date()).year ? '' : `${received.year}.`;
+  return `${prefix}${received.month}.${received.day} ${received.hour}:${received.minute}`;
+}
+
+type Editing = { participant: Participant | null; name: string; touched: boolean };
 
 /** 참석자와 출발지. 이름과 삭제는 대화상자에서 확인한 뒤 저장한다. */
 export function ParticipantList({ meeting }: { meeting: Meeting }) {
@@ -27,6 +46,7 @@ export function ParticipantList({ meeting }: { meeting: Meeting }) {
   const valid = length > 0 && length <= 20;
   const saveName = async (event: FormEvent) => {
     event.preventDefault();
+    setEditing((current) => (current === null ? null : { ...current, touched: true }));
     if (!editing || !valid || busy) return;
     setBusy(true);
     const result = await run((lib, ctx) =>
@@ -52,7 +72,7 @@ export function ParticipantList({ meeting }: { meeting: Meeting }) {
         </Box>
         <Button
           disabled={meeting.participants.value.length >= 10}
-          onClick={() => setEditing({ participant: null, name: '' })}
+          onClick={() => setEditing({ participant: null, name: '', touched: false })}
           sx={{ minHeight: 44 }}
         >
           참석자 추가
@@ -76,7 +96,9 @@ export function ParticipantList({ meeting }: { meeting: Meeting }) {
                 </Box>
                 <Button
                   aria-label={`${participant.name} 이름 고치기`}
-                  onClick={() => setEditing({ participant, name: participant.name })}
+                  onClick={() =>
+                    setEditing({ participant, name: participant.name, touched: false })
+                  }
                   sx={{ minWidth: 44, minHeight: 44 }}
                 >
                   이름 고치기
@@ -95,9 +117,7 @@ export function ParticipantList({ meeting }: { meeting: Meeting }) {
               {reply !== undefined && (
                 <Box sx={{ fontSize: 12, mt: 0.5 }}>
                   답장 받음{' '}
-                  <time dateTime={reply.receivedAt}>
-                    {new Date(reply.receivedAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}
-                  </time>
+                  <time dateTime={reply.receivedAt}>{formatReplyTime(reply.receivedAt)}</time>
                 </Box>
               )}
               <Button
@@ -144,13 +164,19 @@ export function ParticipantList({ meeting }: { meeting: Meeting }) {
               value={editing?.name ?? ''}
               onChange={(event) =>
                 setEditing((current) =>
-                  current === null ? null : { ...current, name: event.target.value },
+                  current === null ? null : { ...current, name: event.target.value, touched: true },
                 )
               }
               fullWidth
-              error={!valid}
+              error={editing?.touched === true && !valid}
               helperText={
-                length > 20 ? '이름은 20자까지예요' : length === 0 ? '이름을 넣어 주세요' : null
+                editing?.touched !== true
+                  ? null
+                  : length > 20
+                    ? '이름은 20자까지예요'
+                    : length === 0
+                      ? '이름을 넣어 주세요'
+                      : null
               }
             />
           </DialogContent>

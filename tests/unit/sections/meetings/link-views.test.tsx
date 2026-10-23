@@ -1,5 +1,9 @@
-import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { StrictMode } from 'react';
+import { Provider } from 'jotai';
+import { MemoryRouter } from 'react-router';
+import { InviteView } from 'src/sections/meetings/InviteView';
 import { Effect, Layer } from 'effect';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -252,4 +256,50 @@ describe('확정 장소 화면', () => {
       expect(screen.getByText('출발지 없는 친구')).toBeInTheDocument();
     },
   );
+});
+
+it('StrictMode에서도 복원한 친구 출발지의 계산이 끝나 답장을 보낼 수 있다', async () => {
+  const routeLookup = Layer.succeed(
+    RouteLookup,
+    RouteLookup.of({
+      leg: (mode) =>
+        Effect.succeed({
+          mode,
+          durationS: 4200,
+          distanceM: 1000,
+          tollFare: null,
+          path: [],
+          queriedAt: now,
+          seq: 1,
+          fresh: false,
+        }),
+    }),
+  );
+  const { store, storage } = await renderLinked(sampleLibrary(), {
+    path: '/meetings',
+    routeLookup,
+  });
+  cleanup();
+  vi.stubGlobal('localStorage', storage);
+  saveMeetDraft(
+    'meeting001',
+    {
+      participantId: 'person02',
+      likes: [],
+      origin: { name: '새 집', lng: 127.2, lat: 37.5 },
+    },
+    storage,
+  );
+  render(
+    <Provider store={store}>
+      <MemoryRouter>
+        <InviteView doc={invite()} />
+      </MemoryRouter>
+    </Provider>,
+    { wrapper: StrictMode },
+  );
+  await waitFor(() => expect(screen.getAllByText('1시간 10분')).toHaveLength(2));
+  expect(screen.getByText('10분')).toBeInTheDocument();
+  expect(screen.queryByText('내 소요시간을 다시 찾는 중이에요')).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '답장 링크 보내기' })).toBeEnabled();
 });

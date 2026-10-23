@@ -1,3 +1,7 @@
+import { StrictMode } from 'react';
+import { Effect, Layer, ManagedRuntime } from 'effect';
+import { AppLayer, setAppRuntimeForTest } from 'src/lib/effect/runtime';
+import { RouteLookup } from 'src/services/route-lookup';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { expect, it, vi } from 'vitest';
@@ -51,4 +55,49 @@ it('출발지가 한 명이면 찾기를 막는다', () => {
   expect(
     (screen.getByRole('button', { name: '중간 지점 찾기' }) as HTMLButtonElement).disabled,
   ).toBe(true);
+});
+
+it('StrictMode로 편집 화면을 열면 후보 시간이 채워지고 찾기·공유를 다시 누를 수 있다', async () => {
+  const runtime = ManagedRuntime.make(
+    Layer.mergeAll(
+      AppLayer,
+      Layer.succeed(
+        RouteLookup,
+        RouteLookup.of({
+          leg: (mode) =>
+            Effect.succeed({
+              mode,
+              durationS: 600,
+              distanceM: 1000,
+              tollFare: null,
+              path: [],
+              queriedAt: '2026-10-24T00:00:00Z',
+              seq: 1,
+              fresh: false,
+            }),
+        }),
+      ),
+    ),
+  );
+  setAppRuntimeForTest(runtime);
+  const meeting = buildMeeting({
+    mode: f('car'),
+    participants: f([
+      { id: 'person01', name: '나', origin: { name: '집', lng: 127, lat: 37.5 } },
+      { id: 'person02', name: '친구', origin: { name: '회사', lng: 127.1, lat: 37.6 } },
+    ]),
+  });
+  const { unmount } = render(<MeetingResults meeting={meeting} library={emptyLibrary()} />, {
+    wrapper: StrictMode,
+  });
+  try {
+    await waitFor(() => expect(screen.getAllByText('10분')).toHaveLength(2));
+    expect(screen.queryByText(/조회 중/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '중간 지점 찾기' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: '후보 링크 보내기' })).toBeEnabled();
+  } finally {
+    unmount();
+    setAppRuntimeForTest(null);
+    await runtime.dispose();
+  }
 });

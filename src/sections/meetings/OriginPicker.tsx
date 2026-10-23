@@ -96,7 +96,8 @@ function PickerContent({ origin, onPick, onClose, id }: Omit<Props, 'open'> & { 
             key={label}
             id={`${id}-tab-${index}`}
             aria-controls={`${id}-panel-${index}`}
-            label={label}
+            label={index === 1 ? '지도에서' : label}
+            aria-label={label}
             sx={{ minHeight: 44, minWidth: 0, px: 0.5 }}
           />
         ))}
@@ -110,6 +111,7 @@ function PickerContent({ origin, onPick, onClose, id }: Omit<Props, 'open'> & { 
         {tab === 0 && (
           <>
             <TextField
+              autoFocus
               type="search"
               label="출발지 검색"
               value={query}
@@ -213,6 +215,7 @@ function PickerContent({ origin, onPick, onClose, id }: Omit<Props, 'open'> & { 
         {tab === 2 && (
           <>
             <TextField
+              autoFocus
               type="search"
               label="보관함 장소 검색"
               value={mineQuery}
@@ -265,7 +268,14 @@ function PickerContent({ origin, onPick, onClose, id }: Omit<Props, 'open'> & { 
 export function OriginPicker({ open, origin, onPick, onClose }: Props) {
   const id = useId();
   return (
-    <Dialog open={open} onClose={onClose} aria-labelledby={id} fullWidth maxWidth="sm">
+    <Dialog
+      open={open}
+      onClose={onClose}
+      aria-labelledby={id}
+      fullWidth
+      maxWidth="sm"
+      sx={{ '& .MuiDialog-container': { alignItems: 'flex-start' } }}
+    >
       <DialogTitle id={id}>출발지 고르기</DialogTitle>
       <DialogContent>
         {open && <PickerContent origin={origin} onPick={onPick} onClose={onClose} id={id} />}
