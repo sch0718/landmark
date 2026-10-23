@@ -8,6 +8,12 @@ const leg = {
 };
 
 describe('naverDirectionsUrl', () => {
+  it('대중교통 앱은 public, 웹은 transit', () => {
+    expect(naverDirectionsUrl({ ...leg, mode: 'transit' }, 'app')).toMatch(
+      /^nmap:\/\/route\/public\?/,
+    );
+    expect(naverDirectionsUrl({ ...leg, mode: 'transit' }, 'web')).toMatch(/\/-\/transit$/);
+  });
   it('app: 네이버 지도 URL Scheme(nmap://route/car)에 위도·경도·이름·appname을 넣는다', () => {
     const url = naverDirectionsUrl(leg, 'app')!;
     expect(url.startsWith('nmap://route/car?')).toBe(true);

@@ -14,6 +14,8 @@ import {
 import { CalendarDate } from 'src/schema/common';
 import { is } from 'src/schema/parse';
 import type { IdKind } from 'src/services/id-gen';
+import type { ReplyRejected } from 'src/domain/meeting/apply-reply';
+import type { MeetingError } from 'src/domain/meeting/ops';
 import type { TripOpError } from 'src/domain/trips/ops';
 
 // 보관함의 기본 변경 연산(스펙 §6.1). 라벨 생성은 나눠 받는 label-create.ts에 둔다.
@@ -28,7 +30,9 @@ export type OpError =
   | { _tag: 'NotFound'; id: string }
   | { _tag: 'VisitDateInvalid'; date: string }
   | { _tag: 'ReviewTooLong'; length: number }
-  | TripOpError;
+  | TripOpError
+  | MeetingError
+  | ReplyRejected;
 
 /** 여러 장소를 한 번에 넣는 연산(폴더 가져오기)이 직접 센 결과. */
 export type OpSummary = { created: number; merged: number; restored: number };

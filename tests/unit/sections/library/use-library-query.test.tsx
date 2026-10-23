@@ -1,3 +1,4 @@
+import { PlaceSearch } from 'src/services/place-search';
 import { act, renderHook } from '@testing-library/react';
 import { Layer, ManagedRuntime } from 'effect';
 import { createStore, Provider } from 'jotai';
@@ -35,6 +36,7 @@ function setup() {
       LegacyTripSource.layerWith({ storage, fetch: (...args) => globalThis.fetch(...args) }),
       ShareTemplate.layer,
       PlaceLookup.layer,
+      PlaceSearch.layer,
       ReverseGeocoder.layer,
       RouteLookup.layer,
       PENDING_HOURS_LOOKUP,

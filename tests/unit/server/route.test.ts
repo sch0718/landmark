@@ -357,3 +357,97 @@ describe('resolveRoute 오류', () => {
     await assertion;
   });
 });
+
+describe('대중교통 경로', () => {
+  const q: RouteQuery = { mode: 'transit', from: FROM, to: TO, at: '2026-10-31T18:09' };
+  it('시각을 10분 단위로 내려 키를 왕복한다', () => {
+    const key = routeInputKey(q);
+    expect(key).toBe('transit:2026-10-31T18:00:128.89610,37.79530>128.90060,37.79300');
+    expect(parseRouteInputKey(key)).toEqual({ ...q, at: '2026-10-31T18:00' });
+  });
+  it.each([
+    '',
+    '2026-02-30T18:00',
+    '2026-10-31T24:00',
+    '2026-10-31T18:00Z',
+    '2026-10-31',
+    '2026-10-31T18:0',
+  ])('잘못된 시각 %s는 BAD_REQUEST', (at) => {
+    expect(() =>
+      parseRouteQuery(
+        new URL(`https://example.test/api/route?mode=transit&from=127,37&to=128,38&at=${at}`),
+      ),
+    ).toThrow(ApiError);
+  });
+  it('transit은 시각 필수, car·walk는 시각 금지', () => {
+    expect(() =>
+      parseRouteQuery(new URL('https://example.test/api/route?mode=transit&from=127,37&to=128,38')),
+    ).toThrow(ApiError);
+    for (const mode of ['car', 'walk'])
+      expect(() =>
+        parseRouteQuery(
+          new URL(
+            `https://example.test/api/route?mode=${mode}&from=127,37&to=128,38&at=2026-10-31T18:00`,
+          ),
+        ),
+      ).toThrow(ApiError);
+  });
+  it.each([
+    ['transit-city.json', 22228, 2400, 1650, 0, 120],
+    ['transit-intercity.json', 192321, 10800, 27500, 1, 1860],
+  ] as const)(
+    '%s의 첫 추천 경로 요약과 단위',
+    async (name, distanceM, durationS, fare, transfers, walkS) => {
+      const { deps, calls } = makeDeps(() => new Response(fixtureText(name)));
+      expect(await resolveRoute(q, deps)).toMatchObject({
+        mode: 'transit',
+        distanceM,
+        durationS,
+        fare,
+        transfers,
+        walkS,
+        path: [],
+        queriedAt: NOW.toISOString(),
+      });
+      const url = new URL(calls[0]!.url);
+      expect(url.pathname).toBe('/p/api/directions/pubtrans');
+      expect(url.searchParams.get('start')).toBe('128.89610,37.79530');
+      expect(url.searchParams.get('goal')).toBe('128.90060,37.79300');
+      expect(url.searchParams.get('crs')).toBe('EPSG:4326');
+      expect(url.searchParams.get('mode')).toBe('TIME');
+      expect(url.searchParams.get('departureTime')).toBe('2026-10-31T18:00');
+      expect(calls[0]!.headers.referer).toBe('https://map.naver.com/');
+    },
+  );
+  it('가까운 두 점은 도보를 받아 대중교통 요약으로 돌려준다', async () => {
+    const { deps, calls } = makeDeps(
+      (url) =>
+        new Response(
+          fixtureText(url.includes('/pubtrans?') ? 'transit-near.json' : 'walk-gangneung.json'),
+        ),
+    );
+    expect(await resolveRoute(q, deps)).toMatchObject({
+      mode: 'transit',
+      distanceM: 1074,
+      durationS: 958,
+      fare: 0,
+      transfers: 0,
+      walkS: 958,
+      path: [],
+    });
+    expect(calls).toHaveLength(2);
+  });
+  it('그 밖의 빈 paths는 NO_ROUTE', async () => {
+    const { deps } = makeDeps(() => Response.json({ status: 'NO_ROUTE', paths: [] }));
+    expect((await apiError(resolveRoute(q, deps))).code).toBe('NO_ROUTE');
+  });
+  it.each([
+    {},
+    { paths: {} },
+    { paths: [{ distance: '1', duration: 3, walkingDuration: 1, transferCount: 0 }] },
+    { paths: [{ distance: 1, duration: -3, walkingDuration: 1, transferCount: 0 }] },
+  ])('깨진 대중교통 요약은 UPSTREAM_ERROR %#', async (body) => {
+    const { deps } = makeDeps(() => Response.json(body));
+    expect((await apiError(resolveRoute(q, deps))).code).toBe('UPSTREAM_ERROR');
+  });
+});

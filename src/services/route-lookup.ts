@@ -1,7 +1,8 @@
 import { Context, Deferred, Effect, Layer, Semaphore } from 'effect';
 import { haversineM, SAME_POINT_M } from 'src/domain/trips/geo';
 import type { ApiErrorCode } from 'src/server/http';
-import { routeInputKey, type RouteMode, type RouteResult } from 'src/server/route';
+import { floorTransitAt, routeInputKey, type RouteMode, type RouteResult } from 'src/server/route';
+import { readApiErrorCode } from 'src/services/api-response';
 import { browserStorage } from 'src/services/browser-storage';
 import { RouteLookupError, type RouteLookupErrorCode } from 'src/services/errors';
 
@@ -52,13 +53,22 @@ const isLngLat = (value: unknown): value is LngLat =>
 function toRouteResult(value: unknown): RouteResult | null {
   if (!isObject(value)) return null;
   const { mode, distanceM, durationS, tollFare, path, queriedAt } = value;
-  if (mode !== 'car' && mode !== 'walk') return null;
+  if (mode !== 'car' && mode !== 'walk' && mode !== 'transit') return null;
   if (typeof distanceM !== 'number' || !Number.isFinite(distanceM)) return null;
   if (typeof durationS !== 'number' || !Number.isFinite(durationS)) return null;
   if (tollFare !== null && (typeof tollFare !== 'number' || !Number.isFinite(tollFare)))
     return null;
   if (!Array.isArray(path) || !path.every(isLngLat)) return null;
   if (typeof queriedAt !== 'string') return null;
+  if (mode === 'transit') {
+    const { fare, transfers, walkS } = value;
+    if (fare !== null && (typeof fare !== 'number' || !Number.isFinite(fare) || fare < 0))
+      return null;
+    if (typeof transfers !== 'number' || !Number.isInteger(transfers) || transfers < 0) return null;
+    if (typeof walkS !== 'number' || !Number.isFinite(walkS) || walkS < 0 || path.length !== 0)
+      return null;
+    return { mode, distanceM, durationS, tollFare, path, queriedAt, fare, transfers, walkS };
+  }
   return { mode, distanceM, durationS, tollFare, path, queriedAt };
 }
 
@@ -67,12 +77,6 @@ const toAnswer = (cached: CachedRoute): RouteAnswer => {
   void usedAt;
   return answer;
 };
-
-/** 서버가 준 오류 본문(`{ error: { code, … } }`)에서 코드를 뽑는다. 알아볼 수 없으면 null. */
-function readApiErrorCode(body: unknown): string | null {
-  if (!isObject(body) || !isObject(body.error) || typeof body.error.code !== 'string') return null;
-  return body.error.code;
-}
 
 const ROUTE_ERROR_CODES: readonly string[] = [
   'NO_ROUTE',
@@ -153,7 +157,7 @@ export class RouteLookup extends Context.Service<
       mode: RouteMode,
       from: LngLat,
       to: LngLat,
-      options?: { refresh?: boolean },
+      options?: { refresh?: boolean; at?: string },
     ): Effect.Effect<RouteAnswer, RouteLookupError>;
   }
 >()('tripmap/RouteLookup') {
@@ -321,10 +325,11 @@ export class RouteLookup extends Context.Service<
           from: LngLat,
           to: LngLat,
           fresh: boolean,
+          at?: string,
         ) {
           const upstream = () => new RouteLookupError({ code: 'UPSTREAM_ERROR', seq, fresh });
           // `다시 계산`(fresh)은 서버의 엣지 캐시도 건너뛰게 한다(스펙 §4.2). 보통 요청은 엣지 캐시를 함께 쓴다.
-          const path = `/api/route?mode=${mode}&from=${coordinate(from)}&to=${coordinate(to)}${fresh ? '&fresh=1' : ''}`;
+          const path = `/api/route?mode=${mode}&from=${coordinate(from)}&to=${coordinate(to)}${fresh ? '&fresh=1' : ''}${at === undefined ? '' : `&at=${encodeURIComponent(at)}`}`;
           // 서버 시한(8초)보다 조금 길게 기다리고, 그래도 안 오면 중단한다. 중단하면 대기 칸과 진행 중 표가 풀린다.
           // 요청과 본문 읽기를 한 효과로 묶어 같은 signal을 쓴다: 머리만 오고 본문을 받는 중에 시한이 지나도 그
           // 전송을 끊어, 칸이 풀린 뒤 실제로 받는 중인 전송이 동시 요청 수를 넘지 않게 한다.
@@ -376,10 +381,11 @@ export class RouteLookup extends Context.Service<
           from: LngLat,
           to: LngLat,
           fresh: boolean,
+          at?: string,
         ) => {
           const seq = ++requestSeq;
           return slots
-            .withPermits(1)(request(seq, mode, from, to, fresh))
+            .withPermits(1)(request(seq, mode, from, to, fresh, at))
             .pipe(Effect.map((route) => remember(key, route, seq, fresh)));
         };
 
@@ -387,9 +393,19 @@ export class RouteLookup extends Context.Service<
           mode: RouteMode,
           from: LngLat,
           to: LngLat,
-          legOptions?: { refresh?: boolean },
+          legOptions?: { refresh?: boolean; at?: string },
         ): Effect.Effect<RouteAnswer, RouteLookupError> =>
           Effect.suspend(() => {
+            let at: string | undefined;
+            if (mode === 'transit') {
+              try {
+                at = floorTransitAt(legOptions?.at ?? '');
+              } catch {
+                return Effect.fail(
+                  new RouteLookupError({ code: 'BAD_REQUEST', seq: 0, fresh: false }),
+                );
+              }
+            }
             // NaN 좌표도 여기서 거리 0으로 답해, 서버로 보내거나 계산에 NaN이 번지지 않게 한다.
             // 서버 요청이 없으니 번호는 0(이 구간은 늘 같은 답이라 순서를 가릴 일이 없다).
             if (!(haversineM(from, to) >= SAME_POINT_M)) {
@@ -398,13 +414,14 @@ export class RouteLookup extends Context.Service<
                 distanceM: 0,
                 durationS: 0,
                 tollFare: mode === 'car' ? 0 : null,
-                path: [from, to],
+                path: mode === 'transit' ? [] : [from, to],
+                ...(mode === 'transit' ? { fare: 0, transfers: 0, walkS: 0 } : {}),
                 queriedAt: now().toISOString(),
                 seq: 0,
                 fresh: false,
               });
             }
-            const key = routeInputKey({ mode, from, to });
+            const key = routeInputKey({ mode, from, to, at });
             if (legOptions?.refresh !== true) {
               const cached = entries.get(key);
               if (cached !== undefined) {
@@ -430,7 +447,7 @@ export class RouteLookup extends Context.Service<
             inflight.set(flightKey, pending);
             // 기다리는 쪽이 중단돼도 같은 키를 기다리는 다른 호출이 있을 수 있으니 요청은 따로 돌린다.
             return Effect.forkDetach(
-              fetchLeg(key, mode, from, to, fresh).pipe(
+              fetchLeg(key, mode, from, to, fresh, at).pipe(
                 Effect.onExit((exit) =>
                   Effect.suspend(() => {
                     inflight.delete(flightKey);

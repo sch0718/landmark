@@ -229,6 +229,11 @@ describe('constants', () => {
     expect(LABEL_ICONS[0]).toBe('utensils');
     expect(LABEL_ICONS[31]).toBe('flag');
     expect(LIBRARY_LIMITS).toEqual({
+      meetingsMax: 200,
+      meetingParticipantsMax: 10,
+      meetingCandidatesMax: 8,
+      meetingTitleChars: 60,
+      meetingNameChars: 20,
       memoChars: 10_000,
       reviewChars: 140,
       labelNameChars: 30,

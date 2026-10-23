@@ -54,9 +54,9 @@ type RunOptions = {
   maxChars?: number;
 };
 
-const run = <A>(
+const run = <A, E>(
   options: RunOptions,
-  use: (lookup: (typeof RouteLookup)['Service']) => Effect.Effect<A, RouteLookupError>,
+  use: (lookup: (typeof RouteLookup)['Service']) => Effect.Effect<A, E>,
 ) =>
   Effect.gen(function* () {
     const out = yield* use(yield* RouteLookup);
@@ -1152,5 +1152,77 @@ describe('RouteLookup 순서 번호(seq)', () => {
           near: [0, false],
         });
       }),
+  );
+});
+
+describe('RouteLookup 대중교통', () => {
+  it.effect('10분 내 같은 출발 시각은 합치고 다른 구간은 나누며 요약을 저장한다', () =>
+    Effect.gen(function* () {
+      const storage = createMemoryStorage();
+      const transit = result({
+        mode: 'transit',
+        tollFare: null,
+        fare: 1650,
+        transfers: 1,
+        walkS: 120,
+        path: [],
+      });
+      const fetchFn = vi.fn<typeof fetch>(async () => json(transit));
+      yield* run({ fetch: fetchFn, storage }, (l) =>
+        Effect.gen(function* () {
+          const first = yield* l.leg('transit', A, B, { at: '2026-10-31T18:01' });
+          expect(first.fare).toBe(1650);
+          expect(first.transfers).toBe(1);
+          yield* l.leg('transit', A, B, { at: '2026-10-31T18:09' });
+          yield* l.leg('transit', A, B, { at: '2026-10-31T18:10' });
+        }),
+      );
+      expect(fetchFn).toHaveBeenCalledTimes(2);
+      const url = new URL(String(fetchFn.mock.calls[0]![0]), 'https://example.test');
+      expect(url.searchParams.get('at')).toBe('2026-10-31T18:00');
+      expect(Object.keys(readDoc(storage).entries)).toHaveLength(2);
+      const cachedFetch = vi.fn(async () => json(transit));
+      const cached = yield* run({ fetch: cachedFetch, storage }, (l) =>
+        l.leg('transit', A, B, { at: '2026-10-31T18:05' }),
+      );
+      expect(cachedFetch).not.toHaveBeenCalled();
+      expect(cached).toMatchObject({ fare: 1650, transfers: 1, walkS: 120, path: [] });
+    }),
+  );
+  it.effect('출발 시각 누락·오류는 요청 전에 BAD_REQUEST', () =>
+    Effect.gen(function* () {
+      const fetchFn = vi.fn(async () => json(result()));
+      for (const at of [undefined, '2026-02-30T12:00', 'bad']) {
+        const error = yield* run({ fetch: fetchFn, storage: null }, (l) =>
+          Effect.flip(l.leg('transit', A, B, { at })),
+        );
+        expect(error.code).toBe('BAD_REQUEST');
+      }
+      expect(fetchFn).not.toHaveBeenCalled();
+    }),
+  );
+  it.effect('10m 안은 요청 없이 대중교통 0 요약이다', () =>
+    Effect.gen(function* () {
+      const fetchFn = vi.fn(async () => json(result()));
+      const got = yield* run({ fetch: fetchFn, storage: null }, (l) =>
+        l.leg('transit', A, A, { at: '2026-10-31T18:00' }),
+      );
+      expect(got).toMatchObject({
+        mode: 'transit',
+        durationS: 0,
+        fare: 0,
+        transfers: 0,
+        walkS: 0,
+        path: [],
+      });
+      expect(fetchFn).not.toHaveBeenCalled();
+    }),
+  );
+  it.effect('car·walk 호출의 at 옵션은 보내지 않는다', () =>
+    Effect.gen(function* () {
+      const fetchFn = vi.fn<typeof fetch>(async () => json(result()));
+      yield* run({ fetch: fetchFn, storage: null }, (l) => l.leg('car', A, B, { at: '무시' }));
+      expect(String(fetchFn.mock.calls[0]![0])).not.toContain('at=');
+    }),
   );
 });

@@ -6,6 +6,7 @@ import { HoursLookup } from 'src/services/hours-lookup';
 import { IdGen } from 'src/services/id-gen';
 import { LegacyTripSource } from 'src/services/legacy-trip-source';
 import { LibraryStore } from 'src/services/library-store';
+import { PlaceSearch } from 'src/services/place-search';
 import { PlaceLookup } from 'src/services/place-lookup';
 import { PrefsStore } from 'src/services/prefs-store';
 import { ReverseGeocoder } from 'src/services/reverse-geocoder';
@@ -21,6 +22,7 @@ export const AppLayer = Layer.mergeAll(
   LegacyTripSource.layer,
   ShareTemplate.layer,
   PlaceLookup.layer,
+  PlaceSearch.layer,
   ReverseGeocoder.layer,
   RouteLookup.layer,
   HoursLookup.layer,

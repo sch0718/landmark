@@ -1,4 +1,7 @@
 // @vitest-environment node
+import { onRequestGet as onSearchGet } from '../../../functions/api/search';
+import { parseSearchQuery, searchInputKey } from 'src/server/search';
+import { searchCacheKey } from 'src/server/cache-key';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { Effect, Fiber } from 'effect';
@@ -683,4 +686,64 @@ describe('GET /api/hours', () => {
     expect(cache.match).not.toHaveBeenCalled();
     expect(calls).toHaveLength(0);
   });
+});
+
+describe('약속 API 진입점', () => {
+  it('transit은 10분 캐시 키와 1시간 TTL을 쓴다', async () => {
+    const cache = stubCaches();
+    const fetcher = vi.fn(async () => new Response(routeFixture('transit-city.json')));
+    vi.stubGlobal('fetch', fetcher);
+    const { ctx, pending } = makeContext(`/api/route?mode=transit&${ROUTE_QS}&at=2026-10-31T18:09`);
+    expect((await onRouteGet(ctx)).status).toBe(200);
+    await Promise.all(pending);
+    const key = routeCacheKey('transit:2026-10-31T18:00:128.89610,37.79530>128.90060,37.79300');
+    expect(cache.store.get(key)?.headers.get('Cache-Control')).toBe('max-age=3600');
+    expect(
+      (await onRouteGet(makeContext(`/api/route?mode=transit&${ROUTE_QS}&at=2026-10-31T18:01`).ctx))
+        .status,
+    ).toBe(200);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+  it.each([onSearchGet, onRouteGet])(
+    '허용하지 않은 출처는 캐시·네트워크 전에 거부한다 %#',
+    async (handler) => {
+      const cache = stubCaches();
+      const calls = stubFetch({});
+      expect(
+        (await handler(makeContext('/api/search?q=역', { Origin: 'https://evil.test' }).ctx))
+          .status,
+      ).toBe(403);
+      expect(cache.match).not.toHaveBeenCalled();
+      expect(calls).toHaveLength(0);
+    },
+  );
+  it('검색은 정규화한 입력 캐시와 7일 TTL을 쓴다', async () => {
+    const cache = stubCaches();
+    const fetcher = vi.fn(
+      async () =>
+        new Response(readFileSync('tests/fixtures/naver/instant-search-gangnam.json', 'utf8')),
+    );
+    vi.stubGlobal('fetch', fetcher);
+    const path = '/api/search?q=' + encodeURIComponent(' 강남역 ');
+    const { ctx, pending } = makeContext(path);
+    const res = await onSearchGet(ctx);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+    await Promise.all(pending);
+    const key = searchCacheKey(searchInputKey(parseSearchQuery(new URL(ctx.request.url))));
+    expect(cache.store.get(key)?.headers.get('Cache-Control')).toBe('max-age=604800');
+    expect(
+      (await onSearchGet(makeContext('/api/search?q=' + encodeURIComponent('강남역')).ctx)).status,
+    ).toBe(200);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+  it.each(['/api/search', '/api/search?q=', '/api/search?q=a&near=0,0'])(
+    '검색 입력 오류 %s는 캐시에 넣지 않는다',
+    async (path) => {
+      const cache = stubCaches();
+      expect((await onSearchGet(makeContext(path).ctx)).status).toBe(400);
+      expect(cache.match).not.toHaveBeenCalled();
+      expect(cache.put).not.toHaveBeenCalled();
+    },
+  );
 });

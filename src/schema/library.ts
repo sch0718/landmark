@@ -2,6 +2,7 @@ import { Schema } from 'effect';
 import { CalendarDate, IsoDateTime, Lat, Lng, PlaceKey, PublicId } from 'src/schema/common';
 import { LABEL_COLORS } from 'src/schema/label-colors';
 import { FieldSchema, LIBRARY_LIMITS, PlaceId } from 'src/schema/library-base';
+import { checkMeeting, MeetingSchema } from 'src/schema/meeting';
 import { checkTrip, TripSchema } from 'src/schema/trip';
 
 // 기존 import 경로가 그대로 동작하도록 다시 내보낸다.
@@ -167,6 +168,7 @@ export const LibrarySchema = Schema.Struct({
   labels: Schema.Record(Schema.String, LabelSchema),
   trips: Schema.Record(Schema.String, TripSchema),
   // 선택 컬렉션: 옛 문서에는 키가 없다. 옛 버전은 모르는 키를 떼어 내고 읽는다(스펙 §5.3).
+  meetings: Schema.optionalKey(Schema.Record(Schema.String, MeetingSchema)),
   folders: Schema.optionalKey(Schema.Record(Schema.String, FolderLinkSchema)),
 }).check(
   Schema.makeFilter((library) => {
@@ -187,6 +189,14 @@ export const LibrarySchema = Schema.Struct({
       }
       // 묘비인 장소도 참조할 수 있어 `library.places` 전체를 넘긴다.
       issues.push(...checkTrip(trip, library.places, ['trips', key]));
+    }
+    const meetings = Object.entries(library.meetings ?? {});
+    if (meetings.length > LIBRARY_LIMITS.meetingsMax)
+      issues.push({ path: ['meetings'], issue: '약속은 200개까지입니다' });
+    for (const [key, meeting] of meetings) {
+      if (key !== meeting.id)
+        issues.push({ path: ['meetings', key], issue: `키와 id가 다릅니다: ${key}` });
+      issues.push(...checkMeeting(meeting, ['meetings', key]));
     }
     const livePlaces = Object.entries(library.places).filter(([, p]) => p.deletedAt === null);
     const liveLabels = Object.entries(library.labels).filter(([, l]) => l.deletedAt === null);
