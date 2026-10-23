@@ -1,7 +1,7 @@
 import { createElement, StrictMode, useEffect } from 'react';
 import { act, render, renderHook, screen, waitFor } from '@testing-library/react';
 import { Effect, Layer, ManagedRuntime } from 'effect';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AppLayer, setAppRuntimeForTest } from 'src/lib/effect/runtime';
 import { RouteLookup } from 'src/services/route-lookup';
 import { RouteLookupError } from 'src/services/errors';
@@ -323,7 +323,7 @@ describe('약속 소요시간 계산', () => {
     expect(result.current.stale).toBe(true);
     expect(result.current.times.choice01?.person01).toBeNull();
   });
-  it('대중교통에 약속 한 시간 전을 보내고 초를 분으로 바꾼다', async () => {
+  it('대중교통에 약속 한 시간 전을 10분 단위로 내려 보내고 표시한다', async () => {
     const calls: string[] = [];
     const runtime = ManagedRuntime.make(
       Layer.mergeAll(
@@ -354,14 +354,91 @@ describe('약속 소요시간 계산', () => {
         participants,
         targets,
         mode: 'transit',
-        at: { date: '2026-10-31', time: '18:00' },
+        at: { date: '2026-10-31', time: '18:19' },
       }),
     );
     await act(() => result.current.compute());
     await waitFor(() => expect(result.current.times.choice01?.person01).toBe(65));
-    expect(calls).toEqual(['transit:2026-10-31T17:00']);
+    expect(calls).toEqual(['transit:2026-10-31T17:10']);
+    expect(result.current.departure).toBe('2026-10-31T17:10');
     unmount();
     await runtime.dispose();
+  });
+  it.each([
+    ['같은 조건의 칸 재시도는 기존 출발 시각을 쓴다', 'retry', '2026-10-24T09:00'],
+    ['조건이 바뀐 칸 재시도는 출발 시각을 새로 정한다', 'changed', '2026-10-24T09:10'],
+    ['전체 재계산은 같은 조건이어도 출발 시각을 새로 정한다', 'compute', '2026-10-24T09:10'],
+  ] as const)('10분 경계를 넘어도 %s', async (_name, action, expected) => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-24T09:00:00+09:00'));
+    const calls: { at: string | undefined; lng: number; refresh: boolean | undefined }[] = [];
+    const destinations = [...targets, { ...targets[0]!, id: 'choice02', lng: 127.02 }];
+    const runtime = ManagedRuntime.make(
+      Layer.mergeAll(
+        AppLayer,
+        Layer.succeed(
+          RouteLookup,
+          RouteLookup.of({
+            leg: (mode, _from, to, options) => {
+              calls.push({ at: options?.at, lng: to[0], refresh: options?.refresh });
+              return calls.length === 1
+                ? Effect.fail(new RouteLookupError({ code: 'OFFLINE', seq: 1, fresh: false }))
+                : Effect.succeed({
+                    mode,
+                    durationS: 600,
+                    distanceM: 1000,
+                    tollFare: null,
+                    path: [],
+                    queriedAt: '2026-10-24T00:00:00Z',
+                    seq: calls.length,
+                    fresh: options?.refresh === true,
+                  });
+            },
+          }),
+        ),
+      ),
+    );
+    setAppRuntimeForTest(runtime);
+    const { result, rerender, unmount } = renderHook(
+      ({ targets }) => useMeetingCompute({ participants, targets, mode: 'transit', at: null }),
+      { initialProps: { targets: destinations } },
+    );
+    try {
+      await act(() => result.current.compute());
+      expect(result.current.errors.choice01?.person01).toBe('OFFLINE');
+      expect(result.current.times.choice02?.person01).toBe(10);
+      expect(result.current.departure).toBe('2026-10-24T09:00');
+      expect(calls.map((call) => call.at)).toEqual(['2026-10-24T09:00', '2026-10-24T09:00']);
+
+      vi.setSystemTime(new Date('2026-10-24T09:17:00+09:00'));
+      if (action === 'changed') {
+        rerender({ targets: destinations.map((t) => ({ ...t, lng: t.lng + 0.01 })) });
+      }
+      await act(() =>
+        action === 'compute'
+          ? result.current.compute()
+          : result.current.retry('choice01', 'person01'),
+      );
+      expect(calls.slice(2)).toEqual(
+        action === 'compute'
+          ? destinations.map((t) => ({ at: expected, lng: t.lng, refresh: false }))
+          : [
+              {
+                at: expected,
+                lng: targets[0]!.lng + (action === 'changed' ? 0.01 : 0),
+                refresh: true,
+              },
+            ],
+      );
+      expect(result.current.departure).toBe(expected);
+      expect(result.current.times.choice01?.person01).toBe(10);
+      expect(result.current.errors.choice01?.person01).toBeUndefined();
+      if (action === 'retry') expect(result.current.times.choice02?.person01).toBe(10);
+    } finally {
+      unmount();
+      await runtime.dispose();
+      vi.useRealTimers();
+    }
   });
   it('조회 실패 칸을 null로 남기고 그 칸만 다시 시도한다', async () => {
     let count = 0;

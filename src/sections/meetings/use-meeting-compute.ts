@@ -43,9 +43,10 @@ export function useMeetingCompute(input: Input) {
     mode: input.mode,
     at: input.at,
   });
-  const latest = useRef({ input, key });
+  const [state, setState] = useState<State>(empty);
+  const latest = useRef({ input, key, state });
   useLayoutEffect(() => {
-    latest.current = { input, key };
+    latest.current = { input, key, state };
   });
   const generation = useRef(0);
   const requests = useRef(new Map<string, number>());
@@ -55,19 +56,21 @@ export function useMeetingCompute(input: Input) {
     const tasks = running.current;
     return () => tasks.forEach((cancel) => cancel());
   }, []);
-  const [state, setState] = useState<State>(empty);
-
   const execute = useCallback(
     (only?: { cid: string; pid: string }, refresh = false, signal?: AbortSignal) => {
       if (signal?.aborted) return Promise.resolve();
-      const { input: args, key: startedKey } = latest.current;
+      const { input: args, key: startedKey, state: previous } = latest.current;
       const token = only === undefined ? ++generation.current : generation.current;
       if (only === undefined) {
         running.current.forEach((cancel) => cancel());
         requests.current.clear();
       }
-      const now = new Date();
-      const departure = args.mode === 'transit' ? transitDeparture(args.at, now) : null;
+      const departure =
+        only !== undefined && previous.key === startedKey
+          ? previous.departure
+          : args.mode === 'transit'
+            ? transitDeparture(args.at, new Date())
+            : null;
       const cells = args.targets.flatMap((t) =>
         args.participants
           .filter(

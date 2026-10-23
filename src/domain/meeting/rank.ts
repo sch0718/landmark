@@ -51,9 +51,9 @@ export function preselectHubs(origins: readonly LngLat[], hubs: readonly Hub[], 
   return ids.map((id) => byId.get(id)!);
 }
 
-/** 일시가 있으면 한 시간 전, 없으면 지금의 한국 시각을 쓴다. */
+/** 일시가 있으면 한 시간 전, 없으면 지금의 한국 시각을 10분 단위로 내린다. */
 export function transitDeparture(at: Meeting['at']['value'], now: Date): string {
   const instant =
     at === null ? now.getTime() : new Date(`${at.date}T${at.time}:00+09:00`).getTime() - 3_600_000;
-  return new Date(instant + 9 * 3_600_000).toISOString().slice(0, 16);
+  return new Date(instant + 9 * 3_600_000).toISOString().slice(0, 15) + '0';
 }

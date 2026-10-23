@@ -112,6 +112,13 @@ describe('약속 순위', () => {
     expect(hubs[0]!.id).toBe('far');
     expect(preselectHubs([], hubs)).toEqual([]);
   });
+  it.each([
+    [{ date: '2026-10-31', time: '18:19' }, '2026-10-31T17:10'],
+    [{ date: '2026-10-31', time: '00:05' }, '2026-10-30T23:00'],
+    [null, '2026-10-24T09:00'],
+  ])('출발 시각을 10분 단위로 내린다: %j → %s', (at, expected) => {
+    expect(transitDeparture(at, new Date('2026-10-24T09:07:59.999+09:00'))).toBe(expected);
+  });
   it('자정 전날과 연도 경계를 넘겨 한 시간 뺀다', () => {
     expect(transitDeparture({ date: '2026-10-31', time: '00:30' }, new Date())).toBe(
       '2026-10-30T23:30',
@@ -120,7 +127,7 @@ describe('약속 순위', () => {
       '2025-12-31T23:00',
     );
   });
-  it('일시가 없으면 현재 한국 시각이다', () => {
-    expect(transitDeparture(null, new Date('2026-10-24T16:23:00Z'))).toBe('2026-10-25T01:23');
+  it('일시가 없으면 현재 한국 시각을 10분 단위로 내린다', () => {
+    expect(transitDeparture(null, new Date('2026-10-24T16:23:00Z'))).toBe('2026-10-25T01:20');
   });
 });
