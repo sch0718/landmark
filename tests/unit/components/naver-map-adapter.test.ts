@@ -143,6 +143,37 @@ function installSdk() {
 }
 
 describe('NaverMapAdapter SDK 계약', () => {
+  it('다른 Day 점은 이름표 아래에 놓고 설명·클릭·키보드 입력을 유지한다', async () => {
+    const sdk = installSdk();
+    const adapter = new NaverMapAdapter('id');
+    const pending = adapter.mount(document.createElement('div'));
+    release();
+    await pending;
+    const click = vi.fn();
+    adapter.onMarkerClick(click);
+    const base = { lng: 128, lat: 37.5, color: '#123456', clusterable: false };
+    adapter.setMarkers([
+      { ...base, id: '라벨', label: '1 시장' },
+      { ...base, id: '점', label: 'Day 2 · 카페', shape: 'dot', dimmed: true },
+    ]);
+    const dot = sdk.labels.find((el) => el.dataset.shape === 'dot')!;
+    expect(dot).toHaveAccessibleName('Day 2 · 카페');
+    expect(dot.title).toBe('Day 2 · 카페');
+    expect(dot).toHaveAttribute('role', 'button');
+    expect(dot).toHaveAttribute('tabindex', '0');
+    expect(dot.style.width).toBe('32px');
+    expect((dot.firstElementChild as HTMLElement).style.width).toBe('12px');
+    expect(sdk.markerOptions[1]!.zIndex).toBeLessThan(sdk.markerOptions[0]!.zIndex as number);
+    dot.click();
+    for (const key of ['Enter', ' ']) {
+      dot.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+    }
+    expect(click.mock.calls).toEqual([['점'], ['점'], ['점']]);
+    adapter.destroy();
+    dot.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    expect(click).toHaveBeenCalledTimes(3);
+  });
+
   // SDK 막대는 대신 쓸 ＋/− 버튼을 그리는 쪽(MapView)만 끈다. 공유 지도(`share-map/main.ts`)처럼 옵션 없이 만들면
   // 터치 전용 기기에서도 막대를 보인다 — 끄기만 하면 한 손가락 축소 수단이 없어진다.
   it.each([

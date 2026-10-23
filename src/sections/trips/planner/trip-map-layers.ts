@@ -26,7 +26,8 @@ const point = (place: Place) => ({ lng: place.lng, lat: place.lat });
  * - 고른 Day의 Stop: `"<번호> <이름>"`, Day 색
  * - 출발점·숙소: `"🏠 <이름>"`(여행 출발지) / `"🛏 <이름>"`(숙소), Day 색에 검정 테두리
  * - 후보: 이름, 회색
- * - 다른 Day의 Stop: 그 Day 색의 흐린 작은 점(이름 없음)
+ * - 다른 Day의 Stop: 그 Day 색의 흐린 원(`shape: 'dot'`). 글자는 숨기고 `Day N · 이름`을 title·접근 이름으로 둔다.
+ *   `showOtherDays`가 false면 제외한다. 눌렀을 때는 같은 장소 카드가 열린다.
  * - 경로선: 고른 Day의 구간마다 하나(같은 지점 구간은 없음), 도보는 점선. 경로가 없으면 두 점 직선이다.
  * - 자동 나누기 미리보기 중(`splitPlan`)이면 후보 핀은 배정될 Day의 색이다. 고른 Day의 번호는 미리보기의 새 순서를
  *   따르고(그날로 올 후보도 번호를 받는다, 스펙 §5.2), 경로선은 지금 순서의 것이라 숨긴다.
@@ -39,6 +40,7 @@ export function tripMapLayers(
   legs: PlannedLeg[],
   selectedPlaceId: string | null,
   splitPlan: string[][] | null = null,
+  showOtherDays = true,
 ): { markers: MapMarker[]; polylines: MapPolyline[] } {
   const nameOf = (place: Place) => placeMarkerName(place, firstPlaceLabel(place, lib.labels));
   const color = dayColor(dayIndex);
@@ -113,13 +115,14 @@ export function tripMapLayers(
   }
 
   trip.days.forEach((other, d) => {
-    if (d === dayIndex) return;
+    if (!showOtherDays || d === dayIndex) return;
     for (const stop of visibleStops(lib, other)) {
       const place = lib.places[stop.placeId]!;
       push({
         id: place.id,
         ...point(place),
-        label: '',
+        shape: 'dot',
+        label: `Day ${d + 1} · ${nameOf(place)}`,
         color: dayColor(d),
         dimmed: true,
         selected: selected(place.id),

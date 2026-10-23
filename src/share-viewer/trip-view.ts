@@ -204,10 +204,10 @@ export function tripPins(doc: ShareDocV2, tab: TripTab): { pins: MapPin[]; lines
     });
   }
 
-  // 다른 Day의 Stop: 그 Day 색의 흐린 작은 점(이름 없음).
+  // 다른 Day의 Stop: 그 Day 색의 흐린 원. 이름은 지도 페이지가 Day와 함께 설명으로 쓴다.
   trip.days.forEach((other, d) => {
     if (d === dayIndex) return;
-    for (const stop of other.stops) pinOf(stop.placeId, stop.placeId, () => '', d, 'dim');
+    for (const stop of other.stops) pinOf(stop.placeId, stop.placeId, (n) => n, d, 'dim');
   });
 
   return { pins, lines };

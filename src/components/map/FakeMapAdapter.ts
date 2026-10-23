@@ -181,6 +181,7 @@ export class FakeMapAdapter implements MapAdapter {
       const { button } = entry;
       const label = JSON.stringify([
         marker.label ?? '',
+        marker.shape,
         marker.color,
         marker.textColor,
         marker.borderColor,
@@ -195,7 +196,21 @@ export class FakeMapAdapter implements MapAdapter {
         else button.removeAttribute('aria-pressed');
         if (marker.dimmed) button.dataset.dimmed = 'true';
         else delete button.dataset.dimmed;
-        button.replaceChildren(createMarkerLabelElement(marker.label ?? '', marker.color, marker));
+        const content = createMarkerLabelElement(marker.label ?? '', marker.color, marker);
+        if (marker.shape === 'dot') {
+          button.dataset.shape = 'dot';
+          button.setAttribute('aria-label', marker.label ?? '');
+          button.title = marker.label ?? '';
+          // 가짜 지도는 좌표 배치 없이 단추를 나열하므로 누름 영역과 점의 중심을 맞춘다.
+          button.style.cssText = 'padding:0;border:0;background:transparent;border-radius:50%';
+          content.style.transform = 'none';
+        } else {
+          delete button.dataset.shape;
+          button.removeAttribute('aria-label');
+          button.removeAttribute('title');
+          button.removeAttribute('style');
+        }
+        button.replaceChildren(content);
       }
       if (root.children[index] !== button) {
         root.insertBefore(button, root.children[index] ?? null);

@@ -53,15 +53,21 @@ describe('drawLayers 마커', () => {
     expect(only(stop())).not.toHaveProperty('borderColor');
   });
 
-  it('dim: 이름 없음, 흐림, 맞추기 제외', () => {
-    const m = only(stop({ id: 'z', label: '무시될 이름', role: 'dim', day: 3 }));
+  it('dim: 점 모양, Day·장소 설명, 흐림, 맞추기 제외', () => {
+    const m = only(stop({ id: 'z', label: '바다 카페', role: 'dim', day: 3 }));
     expect(m).toMatchObject({
-      label: '',
+      shape: 'dot',
+      label: 'Day 4 · 바다 카페',
       dimmed: true,
       fit: false,
       color: dayColor(3),
       clusterable: false,
     });
+  });
+
+  it('dim: 이름이 빈 옛 일정 파일은 Day만 알린다', () => {
+    const m = only(stop({ id: 'z', label: '', role: 'dim', day: 1 }));
+    expect(m).toMatchObject({ shape: 'dot', label: 'Day 2', dimmed: true });
   });
 
   it('day가 null이면 회색이고 맞추기에서 뺀다(Day 없는 후보)', () => {

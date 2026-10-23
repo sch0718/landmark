@@ -381,8 +381,19 @@ export class NaverMapAdapter implements MapAdapter {
         onClick();
       };
       el.setAttribute(MARKER_ATTR, '');
+      el.setAttribute('role', 'button');
+      el.setAttribute('tabindex', '0');
+      const handleKeyDown = (event: KeyboardEvent) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        handleClick();
+      };
       el.addEventListener('click', handleClick);
-      this.markerClickCleanups.push(() => el.removeEventListener('click', handleClick));
+      el.addEventListener('keydown', handleKeyDown);
+      this.markerClickCleanups.push(() => {
+        el.removeEventListener('click', handleClick);
+        el.removeEventListener('keydown', handleKeyDown);
+      });
       el.style.cursor = 'pointer';
       this.markerOverlays.push(overlay);
     };
@@ -409,7 +420,7 @@ export class NaverMapAdapter implements MapAdapter {
         mk.lat,
         createMarkerLabelElement(mk.label ?? '', mk.color, mk),
         () => this.markerCb?.(mk.id),
-        mk.selected ? SELECTED_Z_INDEX : 0,
+        mk.selected ? SELECTED_Z_INDEX : mk.shape === 'dot' ? -1 : 0,
       );
     }
   }

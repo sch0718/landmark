@@ -1,4 +1,5 @@
 import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
 import { useAtomValue } from 'jotai';
 import { useCallback, useMemo, useState } from 'react';
 import type { MapPadding } from 'src/components/map/MapAdapter';
@@ -24,6 +25,8 @@ type Props = {
    * 새 순서로 매기며 경로선은 숨긴다.
    */
   splitPlan?: string[][] | null;
+  /** 중간 폭에서 지도를 덮는 시간표 너비. 단추 기둥도 그만큼 옮긴다. */
+  controlsRight?: number;
 };
 
 /**
@@ -38,11 +41,13 @@ export function TripMap({
   cardPlaceId,
   onOpenCard,
   splitPlan = null,
+  controlsRight = 0,
 }: Props) {
   const library = useAtomValue(libraryAtom);
+  const [showOtherDays, setShowOtherDays] = useState(true);
   const { markers, polylines } = useMemo(
-    () => tripMapLayers(library, trip, dayIndex, legs, cardPlaceId, splitPlan),
-    [library, trip, dayIndex, legs, cardPlaceId, splitPlan],
+    () => tripMapLayers(library, trip, dayIndex, legs, cardPlaceId, splitPlan, showOtherDays),
+    [library, trip, dayIndex, legs, cardPlaceId, splitPlan, showOtherDays],
   );
 
   // 카드가 새 장소로 열리면 그 장소로 옮긴다(렌더 중 상태 갱신). 방금 핀을 눌러 연 장소는 이미 보이므로 그대로 둔다.
@@ -79,6 +84,35 @@ export function TripMap({
         focus={focus}
         fitKey={`${trip.id}:${dayIndex}`}
         onUnavailable={setUnavailable}
+        controlsRight={controlsRight}
+        controls={
+          <Button
+            aria-label="다른 Day 장소"
+            aria-pressed={showOtherDays}
+            title="다른 Day 장소의 점 색은 해당 Day를 뜻해요"
+            onClick={() => setShowOtherDays((shown) => !shown)}
+            sx={{
+              minWidth: 44,
+              minHeight: 44,
+              px: 1,
+              gap: 0.5,
+              bgcolor: 'var(--tm-bg-surface)',
+              color: 'var(--tm-text-primary)',
+              border: '1px solid var(--tm-border-strong, var(--tm-border))',
+              borderRadius: 'var(--tm-radius-md)',
+              boxShadow: 'var(--tm-shadow-1)',
+              fontWeight: 700,
+              // MUI 버튼 기본값(대문자)이 `Day`를 `DAY`로 바꾸지 않게 한다.
+              textTransform: 'none',
+              '&:hover': { bgcolor: 'var(--tm-bg-raised)' },
+            }}
+          >
+            다른 Day 장소
+            <Box component="span" aria-hidden="true">
+              {showOtherDays ? '켬' : '끔'}
+            </Box>
+          </Button>
+        }
       />
       {unavailable !== null && (
         <Box

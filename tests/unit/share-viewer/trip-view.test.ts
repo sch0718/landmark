@@ -253,7 +253,7 @@ describe('tripPins', () => {
       day: 0,
       role: 'endpoint',
     });
-    expect(byId.get(IDS.c)).toMatchObject({ label: '', day: 1, role: 'dim' });
+    expect(byId.get(IDS.c)).toMatchObject({ label: '장소 4', day: 1, role: 'dim' });
     expect(byId.has(IDS.d)).toBe(false); // 후보는 Day 탭에 없다
     expect(lines.map((l) => l.id)).toEqual([
       `${IDS.home}>${IDS.a}`,
@@ -281,7 +281,11 @@ describe('tripPins', () => {
       label: '🛏 장소 1',
       day: 1,
     });
-    expect(pins.find((p) => p.id === IDS.a)).toMatchObject({ label: '', day: 0, role: 'dim' });
+    expect(pins.find((p) => p.id === IDS.a)).toMatchObject({
+      label: '장소 2',
+      day: 0,
+      role: 'dim',
+    });
     expect(pins.find((p) => p.id === IDS.c)).toMatchObject({
       label: '1 장소 4',
       day: 1,

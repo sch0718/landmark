@@ -2,6 +2,40 @@ import { expect, it, vi } from 'vitest';
 import { FakeMapAdapter } from 'src/components/map/FakeMapAdapter';
 import type { MapMarker } from 'src/components/map/MapAdapter';
 
+it('점의 접근 이름·모양을 갱신하고 이름표로 돌아가면 점 속성을 지운다', async () => {
+  const host = document.createElement('div');
+  const adapter = new FakeMapAdapter();
+  await adapter.mount(host);
+  const marker: MapMarker = {
+    id: '점',
+    lng: 128,
+    lat: 37,
+    label: 'Day 2 · 카페',
+    color: '#123456',
+    shape: 'dot',
+    dimmed: true,
+    clusterable: false,
+  };
+  const click = vi.fn();
+  adapter.onMarkerClick(click);
+  adapter.setMarkers([marker]);
+  const button = host.querySelector('button')!;
+  expect(button).toHaveAccessibleName('Day 2 · 카페');
+  expect(button).toHaveAttribute('title', 'Day 2 · 카페');
+  expect(button).toHaveAttribute('data-shape', 'dot');
+  expect(button.textContent).toBe('');
+  button.click();
+  expect(click).toHaveBeenCalledWith('점');
+  adapter.setMarkers([{ ...marker, label: 'Day 3 · 카페' }]);
+  expect(button).toHaveAccessibleName('Day 3 · 카페');
+  adapter.setMarkers([{ ...marker, shape: undefined, label: '1 카페', dimmed: false }]);
+  expect(button).toHaveAccessibleName('1 카페');
+  expect(button).not.toHaveAttribute('data-shape');
+  expect(button).not.toHaveAttribute('data-dimmed');
+  expect(button.textContent).toBe('1 카페');
+  adapter.destroy();
+});
+
 it('500개 marker와 click을 보존하고 독립 layer 갱신에서 DOM을 재사용한다', async () => {
   const host = document.createElement('div');
   const adapter = new FakeMapAdapter();

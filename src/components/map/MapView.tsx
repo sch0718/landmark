@@ -259,6 +259,8 @@ export function MapView(props: Props) {
             zIndex: 1,
             display: 'flex',
             flexDirection: 'column',
+            // 글자 단추의 폭에 맞춰 44px 확대·축소 묶음까지 늘어나지 않게 한다.
+            alignItems: 'flex-end',
             gap: 1,
           }}
         >
