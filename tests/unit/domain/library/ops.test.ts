@@ -10,7 +10,6 @@ import {
   reorderLabels,
   restorePlaces,
   setLabelColor,
-  setLabelIcon,
   setPlaceCategory,
   setPlaceMemo,
   setPlaceName,
@@ -337,17 +336,14 @@ describe('label ops', () => {
     });
   });
 
-  it('setLabelColor and setLabelIcon change only their field', () => {
+  it('setLabelColor changes only its field', () => {
     const l = lib([], [label(A, '맛집', 0)]);
     const colored = setLabelColor(l, A, 'blue', ctx);
     expect(colored.labels[A]!.color).toEqual({ value: 'blue', updatedAt: NOW });
     expect(colored.labels[A]!.name).toBe(l.labels[A]!.name);
-    const iconed = setLabelIcon(colored, A, 'coffee', ctx);
-    expect(iconed.labels[A]!.icon).toEqual({ value: 'coffee', updatedAt: NOW });
-    expect(iconed.labels[A]!.color).toBe(colored.labels[A]!.color);
-    expect(setLabelColor(iconed, A, 'blue', ctx)).toBe(iconed);
-    expect(setLabelIcon(iconed, 'nope0000', 'coffee', ctx)).toBe(iconed);
-    expect(valid(iconed)).toBe(true);
+    expect(colored.labels[A]!.icon).toBe(l.labels[A]!.icon);
+    expect(setLabelColor(colored, A, 'blue', ctx)).toBe(colored);
+    expect(valid(colored)).toBe(true);
   });
 
   it('reorderLabels renumbers live labels and keeps untouched ones identical', () => {

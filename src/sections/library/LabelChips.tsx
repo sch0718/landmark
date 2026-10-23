@@ -148,12 +148,14 @@ export function LabelChips({
               tone={labelColors(label.color.value)}
               onClick={() => toggleLabel(label.id)}
             >
-              <Box
-                component="span"
-                sx={{ display: 'inline-flex', color: labelColors(label.color.value).marker }}
-              >
-                <LabelGlyph emoji={label.emoji?.value} name={label.icon.value} size={14} />
-              </Box>
+              {label.emoji?.value && (
+                <Box
+                  component="span"
+                  sx={{ display: 'inline-flex', color: labelColors(label.color.value).marker }}
+                >
+                  <LabelGlyph emoji={label.emoji?.value} size={14} />
+                </Box>
+              )}
               {label.name.value}{' '}
               <Box component="span" sx={{ fontWeight: 500 }}>
                 {counts.get(label.id) ?? 0}

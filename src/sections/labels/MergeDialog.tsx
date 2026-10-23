@@ -66,8 +66,17 @@ export function MergeDialog({ from, targets, counts, onCancel, onConfirm }: Prop
                   '&:focus-visible': { outlineOffset: -2 },
                 }}
               >
-                <Box component="span" sx={{ display: 'inline-flex', color: tone.marker }}>
-                  <LabelGlyph emoji={label.emoji?.value} name={label.icon.value} size={18} />
+                <Box
+                  component="span"
+                  sx={{
+                    display: 'inline-flex',
+                    flexShrink: 0,
+                    width: 18,
+                    height: 18,
+                    color: tone.marker,
+                  }}
+                >
+                  <LabelGlyph emoji={label.emoji?.value} size={18} />
                 </Box>
                 <TruncatedText sx={{ flex: 1, minWidth: 0 }}>{label.name.value}</TruncatedText>
               </Box>

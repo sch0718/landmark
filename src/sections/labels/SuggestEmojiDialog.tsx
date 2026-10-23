@@ -110,7 +110,7 @@ export function SuggestEmojiDialog({ library, onClose }: { library: Library; onC
                     }
                     sx={{ p: 1.5 }}
                   />
-                  <LabelGlyph name="star" emoji={item.suggested} size={24} />
+                  <LabelGlyph emoji={item.suggested} size={24} />
                   <Box component="span" sx={{ minWidth: 0, overflowWrap: 'anywhere' }}>
                     {item.nameBefore.value}
                     <Box

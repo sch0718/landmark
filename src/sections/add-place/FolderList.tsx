@@ -230,7 +230,7 @@ export function FolderList({
                   tone={labelColors(label.color.value)}
                   onClick={() => setPickedLabelId(labelId === label.id ? null : label.id)}
                 >
-                  <LabelGlyph emoji={label.emoji?.value} name={label.icon.value} size={14} />
+                  <LabelGlyph emoji={label.emoji?.value} size={14} />
                   {label.name.value}
                 </ChipButton>
               ))}

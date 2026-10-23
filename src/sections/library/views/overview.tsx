@@ -35,7 +35,7 @@ export function isBlockSelected(target: string, query: LibraryQuery): boolean {
     : !query.unlabeled && query.labelIds.length === 1 && query.labelIds[0] === target;
 }
 
-/** 라벨 블록(벤토·타일 공용). 색·아이콘·개수를 보여 주는 토글 버튼이다. */
+/** 라벨 블록(벤토·타일 공용). 색·이모지·개수를 보여 주는 토글 버튼이다. */
 export function LabelBlock({
   label,
   count,
@@ -79,14 +79,14 @@ export function LabelBlock({
       ]}
     >
       <TruncatedText
-        sx={{ display: 'block', pr: label === null ? 0 : 4.5, fontWeight: 800, fontSize: 15 }}
+        sx={{ display: 'block', pr: label?.emoji?.value ? 4.5 : 0, fontWeight: 800, fontSize: 15 }}
       >
         {label === null ? '미분류' : label.name.value}
       </TruncatedText>
       <Box component="span" sx={{ display: 'block', mt: 0.25, fontSize: 12 }}>
         {count}곳
       </Box>
-      {label !== null && (
+      {label?.emoji?.value && (
         <Box
           component="span"
           aria-hidden="true"
@@ -104,7 +104,7 @@ export function LabelBlock({
             fontSize: 18,
           }}
         >
-          <LabelGlyph emoji={label.emoji?.value} name={label.icon.value} size={18} />
+          <LabelGlyph emoji={label.emoji?.value} size={18} />
         </Box>
       )}
     </Box>

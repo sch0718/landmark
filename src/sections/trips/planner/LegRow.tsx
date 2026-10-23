@@ -3,7 +3,7 @@ import Button from '@mui/material/Button';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import { useState } from 'react';
-import { LabelGlyph } from 'src/components/icons';
+import { CarIcon, FootprintsIcon } from 'src/components/icons';
 import { useLayout } from 'src/sections/shell/use-layout';
 import { formatDistance, formatDuration } from 'src/sections/trips/planner/format';
 import { naverDirectionsUrl } from 'src/sections/trips/planner/naver-directions';
@@ -90,7 +90,11 @@ export function LegRow({ leg, onMode, onRetry }: Props) {
           '&:focus-visible': { outlineOffset: -2 },
         }}
       >
-        <LabelGlyph name={leg.mode === 'car' ? 'car' : 'footprints'} size={16} />
+        {leg.mode === 'car' ? (
+          <CarIcon aria-hidden="true" width={16} height={16} />
+        ) : (
+          <FootprintsIcon aria-hidden="true" width={16} height={16} />
+        )}
         <span>{MODE_LABEL[leg.mode]}</span>
       </Box>
       <span>{`${formatDuration(leg.time.durationS)} · ${formatDistance(leg.time.distanceM)}`}</span>

@@ -258,9 +258,15 @@ export function LabelPickerDialog({
                       <Box
                         component="span"
                         aria-hidden="true"
-                        sx={{ flex: 'none', display: 'inline-flex', color: tone.marker }}
+                        sx={{
+                          flex: 'none',
+                          display: 'inline-flex',
+                          width: 16,
+                          height: 16,
+                          color: tone.marker,
+                        }}
                       >
-                        <LabelGlyph emoji={label.emoji?.value} name={label.icon.value} size={16} />
+                        <LabelGlyph emoji={label.emoji?.value} size={16} />
                       </Box>
                       <Box
                         component="span"
