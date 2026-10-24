@@ -2,8 +2,8 @@
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="img/settings-dark.svg">
-    <img src="img/settings-light.svg" width="960" alt="설정 사용법: 1. 테마와 모드, 2. 백업 파일 받기, 3. 다른 기기에서 되살리기, 4. 백업 알림">
+    <source media="(prefers-color-scheme: dark)" srcset="../../public/help/img/settings-dark.svg">
+    <img src="../../public/help/img/settings-light.svg" width="960" alt="설정 사용법: 1. 테마와 모드, 2. 백업 파일 받기, 3. 다른 기기에서 되살리기, 4. 백업 알림">
   </picture>
 </p>
 

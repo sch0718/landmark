@@ -2,8 +2,8 @@
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="img/meetings-dark.svg">
-    <img src="img/meetings-light.svg" width="960" alt="약속 사용법: 1. 새 약속, 2. 참석자 출발지, 3. 중간 지점 찾기, 4. 링크로 함께 고르기">
+    <source media="(prefers-color-scheme: dark)" srcset="../../public/help/img/meetings-dark.svg">
+    <img src="../../public/help/img/meetings-light.svg" width="960" alt="약속 사용법: 1. 새 약속, 2. 참석자 출발지, 3. 중간 지점 찾기, 4. 링크로 함께 고르기">
   </picture>
 </p>
 

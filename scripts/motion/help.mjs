@@ -117,8 +117,8 @@ ${screens}</g>`;
 
 const picture = (page, alt) => `<p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="img/${page.id}-dark.svg">
-    <img src="img/${page.id}-light.svg" width="960" alt="${alt.replace(/"/g, '&quot;')}">
+    <source media="(prefers-color-scheme: dark)" srcset="../../public/help/img/${page.id}-dark.svg">
+    <img src="../../public/help/img/${page.id}-light.svg" width="960" alt="${alt.replace(/"/g, '&quot;')}">
   </picture>
 </p>`;
 
@@ -157,6 +157,25 @@ export function renderHelpIndex(pages) {
 | --- | --- |
 ${pages.map((p) => `| [${p.title}](${p.id}.md) | ${p.steps.map((s) => s.title).join(' → ')} |`).join('\n')}
 
-그림은 \`yarn build:motion\`이 \`scripts/motion/help-pages.mjs\`로 만듭니다. 화면 문구가 바뀌면 그 파일을 고치고 다시 만드세요.
+그림과 앱 도움말 데이터는 \`yarn build:motion\`이 \`scripts/motion/help-pages.mjs\`로 만듭니다. 화면 문구가 바뀌면 그 파일을 고치고 다시 만드세요.
+`;
+}
+
+/** 앱에서 쓰는 도움말 문구. 그림을 그리는 함수와 탭 정보는 포함하지 않는다. */
+export function renderHelpContent(pages) {
+  const content = pages.map(({ id, title, lead, steps, tips }) => ({
+    id,
+    title,
+    lead,
+    steps: steps.map(({ title, sub }) => ({ title, sub })),
+    tips,
+  }));
+  return `// 이 파일은 yarn build:motion으로 생성합니다. 직접 고치지 마세요.
+// 도움말 문구는 scripts/motion/help-pages.mjs에서 고칩니다.
+
+export const HELP_PAGES = ${JSON.stringify(content, null, 2)} as const;
+
+export type HelpPageId = (typeof HELP_PAGES)[number]['id'];
+export type HelpPage = (typeof HELP_PAGES)[number];
 `;
 }

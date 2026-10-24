@@ -2,8 +2,8 @@
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="img/map-dark.svg">
-    <img src="img/map-light.svg" width="960" alt="지도 사용법: 1. 라벨 색 마커로 보기, 2. 마커 누르기, 3. 내 위치 보기, 4. 가까운 곳만 보기">
+    <source media="(prefers-color-scheme: dark)" srcset="../../public/help/img/map-dark.svg">
+    <img src="../../public/help/img/map-light.svg" width="960" alt="지도 사용법: 1. 라벨 색 마커로 보기, 2. 마커 누르기, 3. 내 위치 보기, 4. 가까운 곳만 보기">
   </picture>
 </p>
 

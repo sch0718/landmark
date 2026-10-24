@@ -2,8 +2,8 @@
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="img/trips-dark.svg">
-    <img src="img/trips-light.svg" width="960" alt="여행 사용법: 1. 새 여행 만들기, 2. 후보 담고 Day에 넣기, 3. Day 일정과 이동 시간, 4. 여행 당일 모드">
+    <source media="(prefers-color-scheme: dark)" srcset="../../public/help/img/trips-dark.svg">
+    <img src="../../public/help/img/trips-light.svg" width="960" alt="여행 사용법: 1. 새 여행 만들기, 2. 후보 담고 Day에 넣기, 3. Day 일정과 이동 시간, 4. 여행 당일 모드">
   </picture>
 </p>
 

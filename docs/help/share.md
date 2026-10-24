@@ -2,8 +2,8 @@
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="img/share-dark.svg">
-    <img src="img/share-light.svg" width="960" alt="공유 사용법: 1. 내보내기 열기, 2. ‘링크 복사’, 3. 받은 사람이 열기, 4. 내 보관함에 담기">
+    <source media="(prefers-color-scheme: dark)" srcset="../../public/help/img/share-dark.svg">
+    <img src="../../public/help/img/share-light.svg" width="960" alt="공유 사용법: 1. 내보내기 열기, 2. ‘링크 복사’, 3. 받은 사람이 열기, 4. 내 보관함에 담기">
   </picture>
 </p>
 
