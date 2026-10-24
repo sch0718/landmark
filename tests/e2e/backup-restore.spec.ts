@@ -60,6 +60,7 @@ function withExtraPlace(library: Json): Json {
 
 /** 첫 방문 때 한 번만 저장소에 원문을 심는다(탭 세션 표시로 구분해서, 지운 뒤 새로고침해도 다시 심지 않는다). */
 async function seedOnce(page: Page, text: string): Promise<void> {
+  await seedStorage(page, { library: false });
   await page.addInitScript(
     ({ key, value }) => {
       if (sessionStorage.getItem('e2e:seeded') === null) {

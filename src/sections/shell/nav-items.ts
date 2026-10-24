@@ -32,6 +32,8 @@ export function isNavActive(
   if (pathname.startsWith(`${paths.place('')}`)) {
     return item.key === (placeOn === 'map' ? 'map' : 'library');
   }
+  if (pathname === paths.help || pathname.startsWith(`${paths.help}/`))
+    return item.key === 'settings';
   if (pathname === paths.meet) return item.key === 'meetings';
   return pathname === item.to || pathname.startsWith(`${item.to}/`);
 }

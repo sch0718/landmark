@@ -57,7 +57,13 @@ describe('PlaceDetail', () => {
     expect(within(detail()).getByRole('button', { name: '이름 수정' })).toHaveTextContent(
       '내가 찍은 곳',
     );
-    expect(within(detail()).queryByRole('link')).not.toBeInTheDocument();
+    expect(
+      within(detail()).queryByRole('link', { name: '네이버 지도에서 열기' }),
+    ).not.toBeInTheDocument();
+    expect(within(detail()).getByRole('link', { name: '도움말' })).toHaveAttribute(
+      'href',
+      '/help/place',
+    );
   });
 
   it('edits the name and the category', async () => {

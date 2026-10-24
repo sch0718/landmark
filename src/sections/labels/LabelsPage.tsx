@@ -20,6 +20,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import { HelpButton } from 'src/components/HelpButton';
 import { TruncatedText } from 'src/components/TruncatedText';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
@@ -259,8 +260,11 @@ export function LabelsPage() {
 
   return (
     <Box sx={{ maxWidth: 640, mx: 'auto', px: 2, py: 2 }}>
-      <Box component="h1" sx={{ m: 0, mb: 2, fontSize: 20, fontWeight: 800 }}>
-        라벨 관리
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+        <Box component="h1" sx={{ m: 0, fontSize: 20, fontWeight: 800 }}>
+          라벨 관리
+        </Box>
+        <HelpButton page="labels" />
       </Box>
 
       <Box

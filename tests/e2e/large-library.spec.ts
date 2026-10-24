@@ -8,10 +8,12 @@ import {
   rowsOf,
   SEA_COUNT,
   seedJson,
+  seedStorage,
 } from './fixtures';
 
 /** 실제 백업 대신 공개 시험 시드의 라벨만 늘린다. */
 async function seedManyLabels(page: Page) {
+  await seedStorage(page, { library: false });
   let library = JSON.parse(seedJson) as Library;
   const template = Object.values(library.labels)[0]!;
   for (let i = 0; i < 8; i++) {

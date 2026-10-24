@@ -14,4 +14,4 @@
 | [공유](share.md) | 내보내기 열기 → `링크 복사` → 받은 사람이 열기 → 내 보관함에 담기 |
 | [설정](settings.md) | 테마와 모드 → 백업 파일 받기 → 다른 기기에서 되살리기 → 백업 알림 |
 
-그림은 `yarn build:motion`이 `scripts/motion/help-pages.mjs`로 만듭니다. 화면 문구가 바뀌면 그 파일을 고치고 다시 만드세요.
+그림과 앱 도움말 데이터는 `yarn build:motion`이 `scripts/motion/help-pages.mjs`로 만듭니다. 화면 문구가 바뀌면 그 파일을 고치고 다시 만드세요.

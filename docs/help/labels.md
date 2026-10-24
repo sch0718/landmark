@@ -2,8 +2,8 @@
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="img/labels-dark.svg">
-    <img src="img/labels-light.svg" width="960" alt="라벨 관리 사용법: 1. 라벨 목록, 2. 색·이모지 고치기, 3. 이름으로 이모지 정하기, 4. 네이버 폴더 다시 가져오기">
+    <source media="(prefers-color-scheme: dark)" srcset="../../public/help/img/labels-dark.svg">
+    <img src="../../public/help/img/labels-light.svg" width="960" alt="라벨 관리 사용법: 1. 라벨 목록, 2. 색·이모지 고치기, 3. 이름으로 이모지 정하기, 4. 네이버 폴더 다시 가져오기">
   </picture>
 </p>
 

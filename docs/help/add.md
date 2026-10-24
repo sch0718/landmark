@@ -2,8 +2,8 @@
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="img/add-dark.svg">
-    <img src="img/add-light.svg" width="960" alt="장소 추가 사용법: 1. ＋ 누르기, 2. 링크 붙여넣기, 3. 확인하고 추가, 4. 네이버 폴더 통째로">
+    <source media="(prefers-color-scheme: dark)" srcset="../../public/help/img/add-dark.svg">
+    <img src="../../public/help/img/add-light.svg" width="960" alt="장소 추가 사용법: 1. ＋ 누르기, 2. 링크 붙여넣기, 3. 확인하고 추가, 4. 네이버 폴더 통째로">
   </picture>
 </p>
 

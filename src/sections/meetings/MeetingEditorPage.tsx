@@ -2,6 +2,7 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router';
+import { HelpButton } from 'src/components/HelpButton';
 import { MapView } from 'src/components/map/MapView';
 import type { Hub } from 'src/domain/meeting/hubs';
 import { useDocumentTitle } from 'src/lib/use-document-title';
@@ -36,9 +37,12 @@ function Editor({ meeting, library }: { meeting: Meeting; library: Library }) {
         bgcolor: 'var(--tm-bg-surface)',
       }}
     >
-      <Button component={Link} to={paths.meetings} sx={{ minHeight: 44 }}>
-        ← 약속 목록
-      </Button>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Button component={Link} to={paths.meetings} sx={{ minHeight: 44 }}>
+          ← 약속 목록
+        </Button>
+        <HelpButton page="meetings" />
+      </Box>
       <Box component="h1" sx={{ m: 0, mt: 1, fontSize: 22, overflowWrap: 'anywhere' }}>
         {meeting.title.value}
       </Box>

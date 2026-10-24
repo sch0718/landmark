@@ -139,6 +139,42 @@ describe('여행 계획: 여행 제목 h1은 늘 하나', () => {
   });
 });
 
+describe('여행 계획 도움말', () => {
+  it('중간 폭에서 후보 칸이 접혀도 도움말을 보여 주고 펼치면 제목 옆으로 옮긴다', async () => {
+    await open(lib(), { width: 1099 });
+    const map = screen.getByRole('region', { name: '지도' });
+    expect(within(map).getByRole('link', { name: '도움말' })).toHaveAttribute(
+      'href',
+      '/help/trips',
+    );
+    expect(within(map).getAllByRole('link', { name: '도움말' })).toHaveLength(1);
+    await userEvent.click(screen.getByRole('button', { name: '후보 칸 펼치기' }));
+    expect(within(map).queryByRole('link', { name: '도움말' })).not.toBeInTheDocument();
+    expect(within(candidates()!).getByRole('link', { name: '도움말' })).toHaveAttribute(
+      'href',
+      '/help/trips',
+    );
+  });
+
+  it('휴대폰의 Day 탭과 접힌 시트에도 도움말 링크 하나를 남긴다', async () => {
+    await open(lib(), { width: 375 });
+    const user = userEvent.setup();
+    const sheet = screen.getByRole('region', { name: '일정 시트' });
+    expect(within(sheet).getAllByRole('link', { name: '도움말' })).toHaveLength(1);
+    await user.click(within(sheet).getByRole('tab', { name: 'Day 1' }));
+    expect(within(sheet).getByRole('link', { name: '도움말' })).toHaveAttribute(
+      'href',
+      '/help/trips',
+    );
+    await user.click(within(sheet).getByRole('button', { name: '시트 높이 바꾸기' }));
+    await user.click(within(sheet).getByRole('button', { name: '시트 높이 바꾸기' }));
+    expect(sheet).toHaveAttribute('data-snap', 'collapsed');
+    expect(within(sheet).getAllByRole('link', { name: '도움말' })).toHaveLength(1);
+    await user.click(within(sheet).getByRole('tab', { name: '후보 1' }));
+    expect(within(sheet).getAllByRole('link', { name: '도움말' })).toHaveLength(1);
+  });
+});
+
 describe('끌기 손잡이 크기', () => {
   it('여행 계획의 끌기 손잡이는 최소 44×44px', async () => {
     await open(lib(), { width: 1280 });
@@ -181,13 +217,13 @@ describe('오늘 일정 버튼(스펙 §3.2)', () => {
     expect(within(mapPane()).getByRole('link', { name: '오늘 일정' })).toBeInTheDocument();
   });
 
-  it('중간 폭에서 후보 칸을 접으면 펼치기 버튼 오른쪽(왼쪽 60px)으로 비킨다', async () => {
+  it('중간 폭에서 후보 칸을 접으면 펼치기·도움말 버튼 오른쪽으로 비킨다', async () => {
     vi.setSystemTime(new Date(2026, 9, 23, 9, 0, 0));
     await open(lib(), { width: 1100 });
     expect(getComputedStyle(todayLink()!).left).toBe('8px');
     await userEvent.setup().click(screen.getByRole('button', { name: '후보 칸 접기' }));
     expect(screen.getByRole('button', { name: '후보 칸 펼치기' })).toBeInTheDocument();
-    expect(getComputedStyle(todayLink()!).left).toBe('60px');
+    expect(getComputedStyle(todayLink()!).left).toBe('112px');
   });
 
   it('오프라인 안내와 겹치지 않게 안내를 버튼 아래로 내린다', async () => {

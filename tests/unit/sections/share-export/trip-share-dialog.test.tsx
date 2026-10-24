@@ -1,6 +1,7 @@
 import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Effect, Layer, Result } from 'effect';
+import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SHARE_DATA_PLACEHOLDER } from 'src/domain/share/inject';
 import { readShareHtml } from 'src/domain/share/read-share';
@@ -365,6 +366,7 @@ describe('ShareFileDialog 크기 검사', () => {
           make={make}
           tooBigHint={withHint ? () => '줄여 주세요' : undefined}
         />,
+        { wrapper: MemoryRouter },
       );
     });
     const d = screen.getByRole('dialog', { name: '시험 창' });
@@ -466,6 +468,7 @@ describe('ShareFileDialog 장소 수 검사', () => {
           tooBigHint={() => '줄여 주세요'}
           tooManyHint={withHint ? hint : undefined}
         />,
+        { wrapper: MemoryRouter },
       );
     });
     const d = screen.getByRole('dialog', { name: '시험 창' });

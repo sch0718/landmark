@@ -2,8 +2,8 @@
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="img/library-dark.svg">
-    <img src="img/library-light.svg" width="960" alt="보관함 사용법: 1. 라벨로 거르기, 2. 지역·이름으로 좁히기, 3. 길게 눌러 여러 곳 고르기, 4. 여행에 넣기">
+    <source media="(prefers-color-scheme: dark)" srcset="../../public/help/img/library-dark.svg">
+    <img src="../../public/help/img/library-light.svg" width="960" alt="보관함 사용법: 1. 라벨로 거르기, 2. 지역·이름으로 좁히기, 3. 길게 눌러 여러 곳 고르기, 4. 여행에 넣기">
   </picture>
 </p>
 

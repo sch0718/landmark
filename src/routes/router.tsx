@@ -4,6 +4,8 @@ import { ErrorScreen } from 'src/components/ErrorScreen';
 import { LoadingNotice } from 'src/components/LoadingNotice';
 import { RouteErrorScreen } from 'src/components/RouteErrorScreen';
 import {
+  HelpIndexPage,
+  HelpPage,
   LabelsPage,
   MeetingsPage,
   MeetingEditorPage,
@@ -41,6 +43,8 @@ export const routes: RouteObject[] = [
       { path: paths.place(':id'), element: null },
       // 진입만 하는 경로다. `useImportEntry`가 곧바로 보관함(`/`)으로 바꾸고 추가 흐름을 연다.
       { path: paths.importShare, element: null },
+      { path: paths.help, element: lazyElement(<HelpIndexPage />, 'help') },
+      { path: paths.helpPage(':id'), element: lazyElement(<HelpPage />, 'help-page') },
       { path: paths.labels, element: lazyElement(<LabelsPage />, 'labels') },
       { path: paths.settings, element: lazyElement(<SettingsPage />, 'settings') },
       {

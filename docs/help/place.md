@@ -2,8 +2,8 @@
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="img/place-dark.svg">
-    <img src="img/place-light.svg" width="960" alt="장소 상세 사용법: 1. 장소 열기, 2. 라벨 바꾸기, 3. 다녀옴·한 줄 평, 4. 메모는 저절로 저장">
+    <source media="(prefers-color-scheme: dark)" srcset="../../public/help/img/place-dark.svg">
+    <img src="../../public/help/img/place-light.svg" width="960" alt="장소 상세 사용법: 1. 장소 열기, 2. 라벨 바꾸기, 3. 다녀옴·한 줄 평, 4. 메모는 저절로 저장">
   </picture>
 </p>
 

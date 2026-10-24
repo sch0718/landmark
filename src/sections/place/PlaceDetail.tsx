@@ -3,6 +3,7 @@ import { useAtomValue } from 'jotai';
 import { useMemo, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
+import { HelpButton } from 'src/components/HelpButton';
 import { ExternalLinkIcon, TrashIcon } from 'src/components/icons';
 import { naverPlaceUrlOf } from 'src/domain/library/links';
 import {
@@ -140,14 +141,19 @@ function PlaceBody({ place, level }: { place: Place; level: HeadingLevel }) {
 
   return (
     <Box sx={{ p: 2, pb: 4 }}>
-      <EditableText
-        variant="title"
-        headingLevel={level}
-        label="이름"
-        value={place.name.value}
-        allowEmpty={false}
-        onSave={saveName}
-      />
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <EditableText
+            variant="title"
+            headingLevel={level}
+            label="이름"
+            value={place.name.value}
+            allowEmpty={false}
+            onSave={saveName}
+          />
+        </Box>
+        <HelpButton page="place" />
+      </Box>
       <Box component="p" sx={{ m: 0, mt: 0.5, fontSize: 13, color: 'var(--tm-text-secondary)' }}>
         {place.address}
       </Box>

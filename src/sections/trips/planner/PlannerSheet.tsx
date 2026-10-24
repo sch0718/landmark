@@ -2,6 +2,7 @@ import Box from '@mui/material/Box';
 import Tabs from '@mui/material/Tabs';
 import { useAtomValue } from 'jotai';
 import { useRef, useState, type MouseEvent, type PointerEvent } from 'react';
+import { HelpButton } from 'src/components/HelpButton';
 import { visibleCandidates } from 'src/domain/trips/query';
 import type { Library } from 'src/schema/library';
 import type { Trip } from 'src/schema/trip';
@@ -153,37 +154,47 @@ export function PlannerSheet({ trip, library, dayIndex, plan, onSelectDay }: Pro
           sx={{ width: 40, height: 4, borderRadius: 2, bgcolor: 'var(--tm-border)' }}
         />
       </Box>
-      <Tabs
-        value={value}
-        onChange={(_event, next: 'candidates' | number) => select(next)}
-        onClick={() => {
-          // 이미 고른 탭을 다시 눌러도 접힌 시트는 연다.
-          if (snap === 'collapsed') setSnap('half');
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          flex: 'none',
+          borderBottom: '1px solid var(--tm-border)',
         }}
-        variant="scrollable"
-        scrollButtons={false}
-        aria-label="일정 시트 탭"
-        sx={{ flex: 'none', minHeight: 48, borderBottom: '1px solid var(--tm-border)' }}
       >
-        {/* 행을 끌어 탭에 놓을 수 있다: `후보 N`이면 후보로 빼고, `Day N`이면 그 Day 끝으로. */}
-        <DropTab
-          dropId="candidates-tab"
-          target={{ kind: 'candidates' }}
-          value="candidates"
-          label={`후보 ${candidateCount}`}
-          sx={{ textTransform: 'none' }}
-        />
-        {trip.days.map((_, i) => (
+        <Tabs
+          value={value}
+          onChange={(_event, next: 'candidates' | number) => select(next)}
+          onClick={() => {
+            // 이미 고른 탭을 다시 눌러도 접힌 시트는 연다.
+            if (snap === 'collapsed') setSnap('half');
+          }}
+          variant="scrollable"
+          scrollButtons={false}
+          aria-label="일정 시트 탭"
+          sx={{ flex: 1, minWidth: 0, minHeight: 48 }}
+        >
+          {/* 행을 끌어 탭에 놓을 수 있다: `후보 N`이면 후보로 빼고, `Day N`이면 그 Day 끝으로. */}
           <DropTab
-            key={i}
-            dropId={`tab:${i}`}
-            target={{ kind: 'day', dayIndex: i }}
-            value={i}
-            label={`Day ${i + 1}`}
+            dropId="candidates-tab"
+            target={{ kind: 'candidates' }}
+            value="candidates"
+            label={`후보 ${candidateCount}`}
             sx={{ textTransform: 'none' }}
           />
-        ))}
-      </Tabs>
+          {trip.days.map((_, i) => (
+            <DropTab
+              key={i}
+              dropId={`tab:${i}`}
+              target={{ kind: 'day', dayIndex: i }}
+              value={i}
+              label={`Day ${i + 1}`}
+              sx={{ textTransform: 'none' }}
+            />
+          ))}
+        </Tabs>
+        {(snap === 'collapsed' || tab !== 'candidates') && <HelpButton page="trips" />}
+      </Box>
       {/* 후보 칸이 그려지지 않으면(접힘·Day 탭) 화면 `h1`(여행 제목)을 눈에만 숨겨 남긴다. */}
       <TripTitleHeading
         title={trip.title.value}

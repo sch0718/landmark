@@ -1,4 +1,5 @@
 import HomeIcon from '~icons/lucide/house';
+import HelpIcon from '~icons/lucide/circle-help';
 import MapIcon from '~icons/lucide/map';
 import RouteIcon from '~icons/lucide/route';
 import MeetingIcon from '~icons/lucide/users-round';
@@ -43,6 +44,7 @@ import FootprintsIcon from '~icons/lucide/footprints';
 
 export {
   HomeIcon,
+  HelpIcon,
   BedIcon,
   CarIcon,
   FootprintsIcon,

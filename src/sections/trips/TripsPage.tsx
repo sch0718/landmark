@@ -11,6 +11,7 @@ import { useAtomValue } from 'jotai';
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { toast } from 'sonner';
+import { HelpButton } from 'src/components/HelpButton';
 import { EllipsisIcon } from 'src/components/icons';
 import { deleteTrip, restoreTrip } from 'src/domain/trips/ops';
 import { rolloverDate, todayStatus } from 'src/domain/trips/today';
@@ -207,11 +208,14 @@ export function TripsPage() {
         <Box component="h1" sx={{ m: 0, fontSize: 20, fontWeight: 800 }}>
           여행
         </Box>
-        {!empty && (
-          <Button variant="contained" onClick={() => setCreating(true)} sx={{ minHeight: 44 }}>
-            새 여행
-          </Button>
-        )}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          <HelpButton page="trips" />
+          {!empty && (
+            <Button variant="contained" onClick={() => setCreating(true)} sx={{ minHeight: 44 }}>
+              새 여행
+            </Button>
+          )}
+        </Box>
       </Box>
 
       {empty ? (

@@ -6,6 +6,7 @@ import { useAtom, useAtomValue } from 'jotai';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router';
 import { toast } from 'sonner';
+import { HelpButton } from 'src/components/HelpButton';
 import { NavigationIcon, PanelLeftOpenIcon } from 'src/components/icons';
 import type { MapPadding } from 'src/components/map/MapAdapter';
 import { hiddenPlaceCount, locatePlace } from 'src/domain/trips/query';
@@ -144,7 +145,7 @@ function OfflineNotice({
 }
 
 /**
- * 지도 칸 왼쪽 위의 `오늘 일정`(스펙 §3.2): 당일 모드로 간다. 후보 칸 펼치기 버튼이 있으면(`afterExpand`) 그 오른쪽.
+ * 지도 칸 왼쪽 위의 `오늘 일정`(스펙 §3.2): 당일 모드로 간다. 후보 칸을 접었으면(`afterExpand`) 펼치기·도움말 버튼 오른쪽.
  */
 function TodayLink({ tripId, afterExpand }: { tripId: string; afterExpand: boolean }) {
   return (
@@ -155,7 +156,7 @@ function TodayLink({ tripId, afterExpand }: { tripId: string; afterExpand: boole
       sx={{
         position: 'absolute',
         top: OVERLAY_GAP,
-        left: afterExpand ? OVERLAY_GAP * 2 + OVERLAY_BUTTON_PX : OVERLAY_GAP,
+        left: afterExpand ? OVERLAY_GAP * 3 + OVERLAY_BUTTON_PX * 2 : OVERLAY_GAP,
         zIndex: 1,
         height: OVERLAY_BUTTON_PX,
         px: 1.5,
@@ -312,7 +313,10 @@ function Planner({ trip, library }: { trip: Trip; library: Library }) {
         controlsRight={medium ? DETAIL_WIDTH : 0}
       />
       {plan.offline && (
-        <OfflineNotice rightInset={medium ? DETAIL_WIDTH : 0} belowButtons={during} />
+        <OfflineNotice
+          rightInset={medium ? DETAIL_WIDTH : 0}
+          belowButtons={during || expandShown}
+        />
       )}
       {extra}
       {during && <TodayLink tripId={trip.id} afterExpand={expandShown} />}
@@ -396,24 +400,40 @@ function Planner({ trip, library }: { trip: Trip; library: Library }) {
       {mapArea(
         medium ? MEDIUM_PADDING : WIDE_PADDING,
         !showCandidates && (
-          <IconButton
-            ref={expandButton}
-            aria-label="후보 칸 펼치기"
-            onClick={() => toggleCandidates(true)}
+          <Box
             sx={{
               position: 'absolute',
               top: OVERLAY_GAP,
               left: OVERLAY_GAP,
               zIndex: 1,
-              width: OVERLAY_BUTTON_PX,
-              height: OVERLAY_BUTTON_PX,
-              bgcolor: 'var(--tm-bg-surface)',
-              boxShadow: 'var(--tm-shadow-2)',
-              '&:hover': { bgcolor: 'var(--tm-bg-raised)' },
+              display: 'flex',
+              gap: 1,
             }}
           >
-            <PanelLeftOpenIcon aria-hidden="true" width={20} height={20} />
-          </IconButton>
+            <IconButton
+              ref={expandButton}
+              aria-label="후보 칸 펼치기"
+              onClick={() => toggleCandidates(true)}
+              sx={{
+                width: OVERLAY_BUTTON_PX,
+                height: OVERLAY_BUTTON_PX,
+                bgcolor: 'var(--tm-bg-surface)',
+                boxShadow: 'var(--tm-shadow-2)',
+                '&:hover': { bgcolor: 'var(--tm-bg-raised)' },
+              }}
+            >
+              <PanelLeftOpenIcon aria-hidden="true" width={20} height={20} />
+            </IconButton>
+            <Box
+              sx={{
+                bgcolor: 'var(--tm-bg-surface)',
+                borderRadius: '50%',
+                boxShadow: 'var(--tm-shadow-2)',
+              }}
+            >
+              <HelpButton page="trips" />
+            </Box>
+          </Box>
         ),
       )}
       <TimelinePane

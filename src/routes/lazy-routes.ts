@@ -144,3 +144,15 @@ export const PANEL_CHUNKS: readonly (() => Promise<unknown>)[] = [
 export const LabelFilterDialog = lazy(() =>
   loadLabelFilterDialog().then((m) => ({ default: m.LabelFilterDialog })),
 );
+
+// 도움말은 미리 받기 목록에 넣지 않는다. 화면을 열거나 처음 안내가 필요할 때만 받는다.
+export const loadHelpIndexPage = lazyChunk(() => import('src/sections/help/HelpIndexPage'));
+export const loadHelpPage = lazyChunk(() => import('src/sections/help/HelpPage'));
+export const loadHelpIntroDialog = lazyChunk(() => import('src/sections/help/HelpIntroDialog'));
+export const HelpIndexPage = lazy(() =>
+  loadHelpIndexPage().then((m) => ({ default: m.HelpIndexPage })),
+);
+export const HelpPage = lazy(() => loadHelpPage().then((m) => ({ default: m.HelpPage })));
+export const HelpIntroDialog = lazy(() =>
+  loadHelpIntroDialog().then((m) => ({ default: m.HelpIntroDialog })),
+);

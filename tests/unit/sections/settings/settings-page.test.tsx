@@ -82,6 +82,17 @@ describe('SettingsPage', () => {
     );
   });
 
+  it('도움말 링크와 처음 안내 초기화를 제공한다', async () => {
+    const user = userEvent.setup();
+    await open();
+    const section = within(screen.getByRole('region', { name: '도움말' }));
+    expect(section.getByText('메뉴별 사용법을 그림으로 볼 수 있어요')).toBeInTheDocument();
+    expect(section.getByRole('link', { name: '도움말 보기' })).toHaveAttribute('href', '/help');
+    await user.click(section.getByRole('button', { name: '처음 안내 다시 보기' }));
+    expect(localStorage.getItem('tripmap:help-seen:v1')).toBeNull();
+    expect(toastMock).toHaveBeenCalledWith('처음 안내를 다시 보여 드릴게요');
+  });
+
   it('data info shows counts', async () => {
     const { store } = await open();
     const bytes = JSON.stringify(store.get(libraryAtom)).length * 2;
@@ -97,6 +108,7 @@ describe('SettingsPage', () => {
       '보관함 보기',
       '백업',
       '가져오기',
+      '도움말',
       '데이터 정보',
     ]);
   });
