@@ -1,5 +1,12 @@
 # 랜드마크 (landmark)
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/readme/hero-dark.svg">
+    <img src="docs/readme/hero-light.svg" width="960" alt="랜드마크 소개: 장소를 라벨·이모지로 모으고, Day별 여행 일정을 짜고, 여러 사람의 출발지에서 공평한 약속 장소를 찾고, 링크 하나로 나누는 흐름">
+  </picture>
+</p>
+
 > 2026-10-11 저장소를 `sch0718/trip-map`에서 `sch0718/landmark`로 옮기며 이름을 바꿨습니다(옛 이름 trip-map). 기존 데이터와 이미 보낸 공유 파일이 계속 동작하도록 저장 키(`tripmap:*`)와 공유 파일 형식(`tripmap-share`)은 그대로 둡니다. 예전 landmark 저장소의 내용은 `archive/java-gradle-2025`(Java 코드), `archive/map-pages-2026-10`(이전 직전의 지도 페이지) 브랜치에 있습니다.
 
 평소에 모아 두고(보관함), 여행 때 꺼내 쓰는(계획) 장소 보관함 웹앱입니다. 운영 주소는 **https://landmark.sch0718.dev** 이고, 휴대폰 홈 화면에 앱처럼 추가할 수 있습니다.
@@ -112,22 +119,23 @@ curl -H 'Origin: http://localhost:8788' 'http://localhost:8788/api/place?url=htt
 - **메모 자동 저장**: 입력을 멈춘 뒤 저장하고, 다른 화면으로 이동하거나 탭을 백그라운드로 보낼 때 대기 중인 초안을 먼저 저장합니다. 탭·브라우저를 바로 닫을 때는 저장이 비동기 Web Lock 안에서 실행되므로 **최선 노력(best-effort)** 입니다. 백그라운드 전환과 앱 안 이동에서는 안정적으로 저장됩니다.
 - 네이버 지도 길찾기는 여행 구간(`네이버 지도로 길찾기`)·당일 모드의 다음 장소·약속 확정 화면에 있습니다(좁은 화면은 앱 주소 `nmap://`, 그 밖은 웹). 장소 상세에는 길찾기 대신 "네이버 지도에서 열기"가 있습니다.
 
-| 명령                 | 내용                                                                                                                |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `yarn lint`          | ESLint                                                                                                              |
-| `yarn fm:check`      | Prettier 포맷 검사                                                                                                  |
-| `yarn typecheck`     | `tsc -b --noEmit`                                                                                                   |
-| `yarn test`          | Vitest 단위·컴포넌트 테스트                                                                                         |
-| `yarn test:e2e`      | Playwright E2E(아래)                                                                                                |
-| `yarn validate`      | `trips/*.yaml`과 `public/data/*.json` 스키마 검증                                                                   |
-| `yarn orphans`       | 앱 진입점에서 닿지 않는 `src/**` 파일(쓰지 않는 옛 코드) 찾기. 정상이면 `orphans: none`                             |
-| `yarn effect:source` | `.reference/effect/`에 현재 `effect` 버전의 소스를 받습니다(API 확인용, 커밋 안 함)                                 |
-| `yarn build:viewer`  | 공유 파일의 보기 화면 틀을 `public/share-viewer.html`로 빌드(gitignore). `dev`·`dev:full`·`build`가 먼저 실행       |
-| `yarn build:map`     | 공유 파일 안 iframe이 띄우는 지도 페이지를 `dist-map/`으로 빌드(아래 "공유 파일과 지도 페이지")                     |
-| `yarn build:icons`   | `docs/branding/icon-a.svg`(앱 아이콘 원본)에서 `public/favicon.svg`와 홈 화면·manifest용 PNG 아이콘을 다시 만듭니다 |
-| `yarn build`         | 보기 화면 틀 + 타입 검사 + Vite 빌드 → `dist`                                                                       |
-| `yarn size`          | 첫 화면 JS·전체 JS 크기(원본·gzip)를 재고 `perf-budget.json` 예산을 넘으면 실패(`docs/ui-performance.md`)           |
-| `yarn build:ci`      | `validate → typecheck → test → build → size → build:map` (배포 빌드 명령)                                           |
+| 명령                 | 내용                                                                                                                                                              |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `yarn lint`          | ESLint                                                                                                                                                            |
+| `yarn fm:check`      | Prettier 포맷 검사                                                                                                                                                |
+| `yarn typecheck`     | `tsc -b --noEmit`                                                                                                                                                 |
+| `yarn test`          | Vitest 단위·컴포넌트 테스트                                                                                                                                       |
+| `yarn test:e2e`      | Playwright E2E(아래)                                                                                                                                              |
+| `yarn validate`      | `trips/*.yaml`과 `public/data/*.json` 스키마 검증                                                                                                                 |
+| `yarn orphans`       | 앱 진입점에서 닿지 않는 `src/**` 파일(쓰지 않는 옛 코드) 찾기. 정상이면 `orphans: none`                                                                           |
+| `yarn effect:source` | `.reference/effect/`에 현재 `effect` 버전의 소스를 받습니다(API 확인용, 커밋 안 함)                                                                               |
+| `yarn build:viewer`  | 공유 파일의 보기 화면 틀을 `public/share-viewer.html`로 빌드(gitignore). `dev`·`dev:full`·`build`가 먼저 실행                                                     |
+| `yarn build:map`     | 공유 파일 안 iframe이 띄우는 지도 페이지를 `dist-map/`으로 빌드(아래 "공유 파일과 지도 페이지")                                                                   |
+| `yarn build:icons`   | `docs/branding/icon-a.svg`(앱 아이콘 원본)에서 `public/favicon.svg`와 홈 화면·manifest용 PNG 아이콘을 다시 만듭니다                                               |
+| `yarn build:hero`    | README 맨 위 움직이는 소개 그림(`docs/readme/hero-light.svg`·`hero-dark.svg`)을 `scripts/build-readme-hero.mjs`로 다시 만듭니다. 색은 파스텔 테마 토큰을 읽습니다 |
+| `yarn build`         | 보기 화면 틀 + 타입 검사 + Vite 빌드 → `dist`                                                                                                                     |
+| `yarn size`          | 첫 화면 JS·전체 JS 크기(원본·gzip)를 재고 `perf-budget.json` 예산을 넘으면 실패(`docs/ui-performance.md`)                                                         |
+| `yarn build:ci`      | `validate → typecheck → test → build → size → build:map` (배포 빌드 명령)                                                                                         |
 
 ### E2E
 
