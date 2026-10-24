@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="960" height="440" viewBox="0 0 960 440" role="img" aria-labelledby="hero-title hero-desc">
-<title id="hero-title">랜드마크 — 평소에 모아 두고, 여행 때 꺼내 쓰는 장소 보관함</title>
-<desc id="hero-desc">장소를 라벨과 이모지로 모으고, Day별 여행 일정을 짜고, 여러 사람의 출발지에서 공평한 약속 장소를 찾고, 링크 하나로 나누는 흐름을 차례로 보여 주는 그림</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="440" viewBox="0 0 960 440" role="img" aria-labelledby="motion-title motion-desc">
+<title id="motion-title">랜드마크 — 평소에 모아 두고, 여행 때 꺼내 쓰는 장소 보관함</title>
+<desc id="motion-desc">장소를 라벨과 이모지로 모으고, Day별 여행 일정을 짜고, 여러 사람의 출발지에서 공평한 약속 장소를 찾고, 링크 하나로 나누는 흐름을 차례로 보여 주는 그림</desc>
 <style>
 text{font-family:'Pretendard Variable', Pretendard, 'Apple SD Gothic Neo', 'Noto Sans KR', system-ui, sans-serif}
 .sc{opacity:0;animation:scene 16s linear infinite backwards}
@@ -9,12 +9,14 @@ text{font-family:'Pretendard Variable', Pretendard, 'Apple SD Gothic Neo', 'Noto
 .draw{stroke-dasharray:1;stroke-dashoffset:1;animation:draw 16s ease-out infinite backwards}
 .slide{transform-box:fill-box;animation:slide 16s cubic-bezier(.2,.8,.2,1) infinite backwards}
 .pulse{transform-box:fill-box;transform-origin:center;opacity:0;animation:pulse 16s ease-out infinite backwards}
-@keyframes scene{0%{opacity:0}3%{opacity:1}22%{opacity:1}25%{opacity:0}100%{opacity:0}}
-@keyframes rise{0%{opacity:0;transform:translateY(14px)}3%{opacity:1;transform:none}100%{opacity:1;transform:none}}
-@keyframes pop{0%{transform:scale(0)}2%{transform:scale(1.15)}3%{transform:scale(1)}100%{transform:scale(1)}}
-@keyframes draw{0%{stroke-dashoffset:1}6%{stroke-dashoffset:0}100%{stroke-dashoffset:0}}
-@keyframes slide{0%{opacity:0;transform:translateX(-120px)}4%{opacity:1;transform:none}100%{opacity:1;transform:none}}
-@keyframes pulse{0%{opacity:.7;transform:scale(1)}6%{opacity:0;transform:scale(2.4)}100%{opacity:0;transform:scale(2.4)}}
+.tap{transform-box:fill-box;transform-origin:center;opacity:0;animation:tap 16s ease-out infinite backwards}
+@keyframes scene{0%{opacity:0}2.188%{opacity:1}22.813%{opacity:1}25.000%{opacity:0}100%{opacity:0}}
+@keyframes rise{0%{opacity:0;transform:translateY(14px)}2.813%{opacity:1;transform:none}100%{opacity:1;transform:none}}
+@keyframes pop{0%{transform:scale(0)}1.875%{transform:scale(1.15)}2.813%{transform:scale(1)}100%{transform:scale(1)}}
+@keyframes draw{0%{stroke-dashoffset:1}5.625%{stroke-dashoffset:0}100%{stroke-dashoffset:0}}
+@keyframes slide{0%{opacity:0;transform:translateX(-120px)}3.750%{opacity:1;transform:none}100%{opacity:1;transform:none}}
+@keyframes pulse{0%{opacity:.7;transform:scale(1)}5.625%{opacity:0;transform:scale(2.4)}100%{opacity:0;transform:scale(2.4)}}
+@keyframes tap{0%{opacity:0;transform:scale(.4)}0.750%{opacity:1;transform:scale(1)}4.375%{opacity:0;transform:scale(1.9)}100%{opacity:0;transform:scale(1.9)}}
 @media (prefers-reduced-motion:reduce){
 *{animation:none!important}
 .s0{opacity:1}
@@ -65,23 +67,23 @@ text{font-family:'Pretendard Variable', Pretendard, 'Apple SD Gothic Neo', 'Noto
 <text x="896" y="82" font-size="13" font-weight="400" fill="#8E8E98" text-anchor="end">장소 128곳</text>
 <g class="rise" style="animation-delay:0.20s">
 <rect x="396" y="98" width="46" height="26" rx="13" fill="#D9F99D"/><text x="419" y="115.5" font-size="13" font-weight="700" fill="#18181B" text-anchor="middle">전체</text>
-<rect x="448" y="98" width="69" height="26" rx="13" fill="#4A2520"/><text x="458" y="115.5" font-size="13" font-weight="700" fill="#FFB8A8" text-anchor="start">🍜 맛집</text><rect x="523" y="98" width="69" height="26" rx="13" fill="#4A3018"/><text x="533" y="115.5" font-size="13" font-weight="700" fill="#FFCC9A" text-anchor="start">☕ 카페</text><rect x="598" y="98" width="69" height="26" rx="13" fill="#2A3E18"/><text x="608" y="115.5" font-size="13" font-weight="700" fill="#C4E89A" text-anchor="start">⛰️ 명소</text><rect x="673" y="98" width="69" height="26" rx="13" fill="#173A5C"/><text x="683" y="115.5" font-size="13" font-weight="700" fill="#A9D6FF" text-anchor="start">🌊 바다</text>
+<rect x="448" y="98" width="69" height="26" rx="13" fill="#4A2520"/><text x="458" y="115.55" font-size="13" font-weight="700" fill="#FFB8A8" text-anchor="start">🍜 맛집</text><rect x="523" y="98" width="69" height="26" rx="13" fill="#4A3018"/><text x="533" y="115.55" font-size="13" font-weight="700" fill="#FFCC9A" text-anchor="start">☕ 카페</text><rect x="598" y="98" width="69" height="26" rx="13" fill="#2A3E18"/><text x="608" y="115.55" font-size="13" font-weight="700" fill="#C4E89A" text-anchor="start">⛰️ 명소</text><rect x="673" y="98" width="69" height="26" rx="13" fill="#173A5C"/><text x="683" y="115.55" font-size="13" font-weight="700" fill="#A9D6FF" text-anchor="start">🌊 바다</text>
 </g>
 <g class="rise" style="animation-delay:0.50s"><rect x="396" y="138" width="160" height="128" rx="12" fill="#26262B" stroke="#34343A"/>
 <rect x="404" y="146" width="144" height="44" rx="8" fill="#2A3E18"/><text x="476" y="177" font-size="24" font-weight="400" fill="undefined" text-anchor="middle">⛰️</text>
 <text x="408" y="212" font-size="15" font-weight="800" fill="#F4F4F5" text-anchor="start">바다 전망대</text>
 <text x="408" y="230" font-size="12" font-weight="400" fill="#8E8E98" text-anchor="start">강원 강릉시</text>
-<rect x="406" y="236" width="66" height="26" rx="13" fill="#2A3E18"/><text x="416" y="253.5" font-size="12" font-weight="700" fill="#C4E89A" text-anchor="start">⛰️ 명소</text></g><g class="rise" style="animation-delay:0.75s"><rect x="566" y="138" width="160" height="128" rx="12" fill="#26262B" stroke="#34343A"/>
+<rect x="406" y="236" width="66" height="26" rx="13" fill="#2A3E18"/><text x="416" y="253.2" font-size="12" font-weight="700" fill="#C4E89A" text-anchor="start">⛰️ 명소</text></g><g class="rise" style="animation-delay:0.75s"><rect x="566" y="138" width="160" height="128" rx="12" fill="#26262B" stroke="#34343A"/>
 <rect x="574" y="146" width="144" height="44" rx="8" fill="#4A2520"/><text x="646" y="177" font-size="24" font-weight="400" fill="undefined" text-anchor="middle">🍜</text>
 <text x="578" y="212" font-size="15" font-weight="800" fill="#F4F4F5" text-anchor="start">시장 칼국수</text>
 <text x="578" y="230" font-size="12" font-weight="400" fill="#8E8E98" text-anchor="start">강원 속초시</text>
-<rect x="576" y="236" width="66" height="26" rx="13" fill="#4A2520"/><text x="586" y="253.5" font-size="12" font-weight="700" fill="#FFB8A8" text-anchor="start">🍜 맛집</text></g><g class="rise" style="animation-delay:1.00s"><rect x="736" y="138" width="160" height="128" rx="12" fill="#26262B" stroke="#34343A"/>
+<rect x="576" y="236" width="66" height="26" rx="13" fill="#4A2520"/><text x="586" y="253.2" font-size="12" font-weight="700" fill="#FFB8A8" text-anchor="start">🍜 맛집</text></g><g class="rise" style="animation-delay:1.00s"><rect x="736" y="138" width="160" height="128" rx="12" fill="#26262B" stroke="#34343A"/>
 <rect x="744" y="146" width="144" height="44" rx="8" fill="#4A3018"/><text x="816" y="177" font-size="24" font-weight="400" fill="undefined" text-anchor="middle">☕</text>
 <text x="748" y="212" font-size="15" font-weight="800" fill="#F4F4F5" text-anchor="start">바다 뷰 카페</text>
 <text x="748" y="230" font-size="12" font-weight="400" fill="#8E8E98" text-anchor="start">강원 양양군</text>
-<rect x="746" y="236" width="66" height="26" rx="13" fill="#4A3018"/><text x="756" y="253.5" font-size="12" font-weight="700" fill="#FFCC9A" text-anchor="start">☕ 카페</text></g>
-<g><clipPath id="m396278"><rect x="396" y="278" width="500" height="96" rx="14"/></clipPath>
-<g clip-path="url(#m396278)"><rect x="396" y="278" width="500" height="96" fill="#1F2A22"/>
+<rect x="746" y="236" width="66" height="26" rx="13" fill="#4A3018"/><text x="756" y="253.2" font-size="12" font-weight="700" fill="#FFCC9A" text-anchor="start">☕ 카페</text></g>
+<g><clipPath id="map8"><rect x="396" y="278" width="500" height="96" rx="14"/></clipPath>
+<g clip-path="url(#map8)"><rect x="396" y="278" width="500" height="96" fill="#1F2A22"/>
 <path d="M756 278 C726 316.4 846 335.6 796 374 L896 374 L896 278 Z" fill="#16303F"/>
 <path d="M396 311.6 L896 330.8 M546 278 L606 374 M396 354.8 L746 345.2" stroke="#3A4A40" stroke-width="6" fill="none" stroke-linecap="round"/>
 </g><rect x="396" y="278" width="500" height="96" rx="14" fill="none" stroke="#34343A"/></g>
@@ -90,13 +92,13 @@ text{font-family:'Pretendard Variable', Pretendard, 'Apple SD Gothic Neo', 'Noto
 <g class="sc s1" style="animation-delay:4.00s">
 <text x="396" y="82" font-size="19" font-weight="800" fill="#F4F4F5" text-anchor="start">강릉 1박 2일</text>
 <text x="896" y="82" font-size="13" font-weight="400" fill="#8E8E98" text-anchor="end">10.31(토) – 11.1(일)</text>
-<g class="rise" style="animation-delay:4.20s"><rect x="396" y="100" width="95" height="26" rx="13" fill="#173A5C"/><text x="406" y="117.5" font-size="13" font-weight="700" fill="#A9D6FF" text-anchor="start">Day 1 · 토</text><rect x="497" y="100" width="95" height="26" rx="13" fill="#111113"/><text x="507" y="117.5" font-size="13" font-weight="700" fill="#8E8E98" text-anchor="start">Day 2 · 일</text></g>
-<g class="rise" style="animation-delay:4.50s"><rect x="396" y="130" width="230" height="36" rx="12" fill="#26262B" stroke="#34343A"/><g class="" style=""><circle cx="420" cy="148" r="11" fill="#55AEFF" stroke="#FFFFFF" stroke-width="2.5"/><text x="420" y="152.5" font-size="12" font-weight="800" fill="#FFFFFF" text-anchor="middle">1</text></g>
-<text x="440" y="153" font-size="14" font-weight="800" fill="#F4F4F5" text-anchor="start">바다 전망대</text><text x="616" y="153" font-size="12" font-weight="400" fill="#8E8E98" text-anchor="end">10:00</text></g><g class="rise" style="animation-delay:4.70s"><path d="M420 174 V202" stroke="#34343A" stroke-width="2" stroke-dasharray="3 4"/><text x="438" y="193" font-size="13" font-weight="700" fill="#B4B4BC" text-anchor="start">🚗 24분</text></g><g class="rise" style="animation-delay:4.90s"><rect x="396" y="210" width="230" height="36" rx="12" fill="#26262B" stroke="#34343A"/><g class="" style=""><circle cx="420" cy="228" r="11" fill="#55AEFF" stroke="#FFFFFF" stroke-width="2.5"/><text x="420" y="232.5" font-size="12" font-weight="800" fill="#FFFFFF" text-anchor="middle">2</text></g>
-<text x="440" y="233" font-size="14" font-weight="800" fill="#F4F4F5" text-anchor="start">시장 칼국수</text><text x="616" y="233" font-size="12" font-weight="400" fill="#8E8E98" text-anchor="end">11:30</text></g><g class="rise" style="animation-delay:5.10s"><path d="M420 254 V282" stroke="#34343A" stroke-width="2" stroke-dasharray="3 4"/><text x="438" y="273" font-size="13" font-weight="700" fill="#B4B4BC" text-anchor="start">🚶 8분</text></g><g class="rise" style="animation-delay:5.30s"><rect x="396" y="290" width="230" height="36" rx="12" fill="#26262B" stroke="#34343A"/><g class="" style=""><circle cx="420" cy="308" r="11" fill="#55AEFF" stroke="#FFFFFF" stroke-width="2.5"/><text x="420" y="312.5" font-size="12" font-weight="800" fill="#FFFFFF" text-anchor="middle">3</text></g>
+<g class="rise" style="animation-delay:4.20s"><rect x="396" y="100" width="95" height="26" rx="13" fill="#173A5C"/><text x="406" y="117.55" font-size="13" font-weight="700" fill="#A9D6FF" text-anchor="start">Day 1 · 토</text><rect x="497" y="100" width="95" height="26" rx="13" fill="#111113"/><text x="507" y="117.55" font-size="13" font-weight="700" fill="#8E8E98" text-anchor="start">Day 2 · 일</text></g>
+<g class="rise" style="animation-delay:4.50s"><rect x="396" y="130" width="230" height="36" rx="12" fill="#26262B" stroke="#34343A"/><g><circle cx="420" cy="148" r="11" fill="#55AEFF" stroke="#FFFFFF" stroke-width="2.5"/><text x="420" y="152.5" font-size="12" font-weight="800" fill="#FFFFFF" text-anchor="middle">1</text></g>
+<text x="440" y="153" font-size="14" font-weight="800" fill="#F4F4F5" text-anchor="start">바다 전망대</text><text x="616" y="153" font-size="12" font-weight="400" fill="#8E8E98" text-anchor="end">10:00</text></g><g class="rise" style="animation-delay:4.70s"><path d="M420 174 V202" stroke="#34343A" stroke-width="2" stroke-dasharray="3 4"/><text x="438" y="193" font-size="13" font-weight="700" fill="#B4B4BC" text-anchor="start">🚗 24분</text></g><g class="rise" style="animation-delay:4.90s"><rect x="396" y="210" width="230" height="36" rx="12" fill="#26262B" stroke="#34343A"/><g><circle cx="420" cy="228" r="11" fill="#55AEFF" stroke="#FFFFFF" stroke-width="2.5"/><text x="420" y="232.5" font-size="12" font-weight="800" fill="#FFFFFF" text-anchor="middle">2</text></g>
+<text x="440" y="233" font-size="14" font-weight="800" fill="#F4F4F5" text-anchor="start">시장 칼국수</text><text x="616" y="233" font-size="12" font-weight="400" fill="#8E8E98" text-anchor="end">11:30</text></g><g class="rise" style="animation-delay:5.10s"><path d="M420 254 V282" stroke="#34343A" stroke-width="2" stroke-dasharray="3 4"/><text x="438" y="273" font-size="13" font-weight="700" fill="#B4B4BC" text-anchor="start">🚶 8분</text></g><g class="rise" style="animation-delay:5.30s"><rect x="396" y="290" width="230" height="36" rx="12" fill="#26262B" stroke="#34343A"/><g><circle cx="420" cy="308" r="11" fill="#55AEFF" stroke="#FFFFFF" stroke-width="2.5"/><text x="420" y="312.5" font-size="12" font-weight="800" fill="#FFFFFF" text-anchor="middle">3</text></g>
 <text x="440" y="313" font-size="14" font-weight="800" fill="#F4F4F5" text-anchor="start">바다 뷰 카페</text><text x="616" y="313" font-size="12" font-weight="400" fill="#8E8E98" text-anchor="end">13:00</text></g>
-<g><clipPath id="m640100"><rect x="640" y="100" width="256" height="274" rx="14"/></clipPath>
-<g clip-path="url(#m640100)"><rect x="640" y="100" width="256" height="274" fill="#1F2A22"/>
+<g><clipPath id="map9"><rect x="640" y="100" width="256" height="274" rx="14"/></clipPath>
+<g clip-path="url(#map9)"><rect x="640" y="100" width="256" height="274" fill="#1F2A22"/>
 <path d="M824.3199999999999 100 C808.96 209.60000000000002 870.4 264.4 844.8 374 L896 374 L896 100 Z" fill="#16303F"/>
 <path d="M640 195.89999999999998 L896 250.70000000000002 M716.8 100 L747.52 374 M640 319.20000000000005 L819.2 291.79999999999995" stroke="#3A4A40" stroke-width="6" fill="none" stroke-linecap="round"/>
 </g><rect x="640" y="100" width="256" height="274" rx="14" fill="none" stroke="#34343A"/></g>
@@ -109,8 +111,8 @@ text{font-family:'Pretendard Variable', Pretendard, 'Apple SD Gothic Neo', 'Noto
 <g class="sc s2" style="animation-delay:8.00s">
 <text x="396" y="82" font-size="19" font-weight="800" fill="#F4F4F5" text-anchor="start">금요일 저녁 약속</text>
 <text x="896" y="82" font-size="13" font-weight="400" fill="#8E8E98" text-anchor="end">대중교통 · 3명</text>
-<g><clipPath id="m39698"><rect x="396" y="98" width="500" height="212" rx="14"/></clipPath>
-<g clip-path="url(#m39698)"><rect x="396" y="98" width="500" height="212" fill="#1F2A22"/>
+<g><clipPath id="map10"><rect x="396" y="98" width="500" height="212" rx="14"/></clipPath>
+<g clip-path="url(#map10)"><rect x="396" y="98" width="500" height="212" fill="#1F2A22"/>
 <path d="M756 98 C726 182.8 846 225.2 796 310 L896 310 L896 98 Z" fill="#16303F"/>
 <path d="M396 172.2 L896 214.60000000000002 M546 98 L606 310 M396 267.6 L746 246.39999999999998" stroke="#3A4A40" stroke-width="6" fill="none" stroke-linecap="round"/>
 </g><rect x="396" y="98" width="500" height="212" rx="14" fill="none" stroke="#34343A"/></g>
@@ -144,7 +146,8 @@ text{font-family:'Pretendard Variable', Pretendard, 'Apple SD Gothic Neo', 'Noto
 <g class="slide" style="animation-delay:13.20s"><rect x="728" y="122" width="144" height="46" rx="14" fill="#2A3E18"/>
 <text x="738" y="142" font-size="11" font-weight="800" fill="#F4F4F5" text-anchor="start">landmark.sch0718.dev</text>
 <text x="738" y="158" font-size="11" font-weight="400" fill="#B4B4BC" text-anchor="start">/view#d=…</text></g>
-<g class="rise" style="animation-delay:13.90s"><rect x="728" y="182" width="144" height="36" rx="10" fill="#26262B" stroke="#34343A"/><g class="" style=""><circle cx="746" cy="200" r="6" fill="#8FD14F" stroke="#FFFFFF" stroke-width="2.5"/></g><text x="760" y="205" font-size="12" font-weight="700" fill="#F4F4F5" text-anchor="start">⛰️ 바다 전망대</text></g><g class="rise" style="animation-delay:14.05s"><rect x="728" y="226" width="144" height="36" rx="10" fill="#26262B" stroke="#34343A"/><g class="" style=""><circle cx="746" cy="244" r="6" fill="#FF7A5C" stroke="#FFFFFF" stroke-width="2.5"/></g><text x="760" y="249" font-size="12" font-weight="700" fill="#F4F4F5" text-anchor="start">🍜 시장 칼국수</text></g><g class="rise" style="animation-delay:14.20s"><rect x="728" y="270" width="144" height="36" rx="10" fill="#26262B" stroke="#34343A"/><g class="" style=""><circle cx="746" cy="288" r="6" fill="#FFA040" stroke="#FFFFFF" stroke-width="2.5"/></g><text x="760" y="293" font-size="12" font-weight="700" fill="#F4F4F5" text-anchor="start">☕ 바다 뷰 카페</text></g>
+<g class="rise" style="animation-delay:13.90s"><rect x="728" y="182" width="144" height="36" rx="10" fill="#26262B" stroke="#34343A"/><g><circle cx="746" cy="200" r="6" fill="#8FD14F" stroke="#FFFFFF" stroke-width="2.5"/></g><text x="760" y="205" font-size="12" font-weight="700" fill="#F4F4F5" text-anchor="start">⛰️ 바다 전망대</text></g><g class="rise" style="animation-delay:14.05s"><rect x="728" y="226" width="144" height="36" rx="10" fill="#26262B" stroke="#34343A"/><g><circle cx="746" cy="244" r="6" fill="#FF7A5C" stroke="#FFFFFF" stroke-width="2.5"/></g><text x="760" y="249" font-size="12" font-weight="700" fill="#F4F4F5" text-anchor="start">🍜 시장 칼국수</text></g><g class="rise" style="animation-delay:14.20s"><rect x="728" y="270" width="144" height="36" rx="10" fill="#26262B" stroke="#34343A"/><g><circle cx="746" cy="288" r="6" fill="#FFA040" stroke="#FFFFFF" stroke-width="2.5"/></g><text x="760" y="293" font-size="12" font-weight="700" fill="#F4F4F5" text-anchor="start">☕ 바다 뷰 카페</text></g>
 <g class="rise" style="animation-delay:14.50s"><rect x="728" y="324" width="144" height="36" rx="18" fill="#D9F99D"/><text x="800" y="347" font-size="13" font-weight="800" fill="#18181B" text-anchor="middle">Landmark에 담기</text></g>
 </g>
+
 </svg>

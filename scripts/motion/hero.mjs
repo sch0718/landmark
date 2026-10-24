@@ -1,87 +1,16 @@
-import { readFile, mkdir, writeFile } from 'node:fs/promises';
-import { URL } from 'node:url';
-import { Buffer } from 'node:buffer';
-import console from 'node:console';
-import { pastel } from '../src/theme/tokens/pastel.ts';
+import { pastel } from '../../src/theme/tokens/pastel.ts';
+import { at, card, chip, chipRow, mapBase, motionCss, pin, svgDocument, text } from './kit.mjs';
 
-// README 맨 위의 움직이는 소개 그림(애니메이션 SVG)을 라이트·다크 두 장으로 만든다.
-// GitHub는 README의 SVG를 <img>로 보여 주므로 스크립트·웹 글꼴 없이 CSS 애니메이션만 쓴다.
-// 색은 기본 테마(파스텔) 토큰을 그대로 읽는다. 화면 문구를 바꾸면 이 파일을 고치고 `yarn build:hero`.
+// README 맨 위의 소개 그림. 장면 넷(모으기 → 계획하기 → 약속 잡기 → 나누기)이 이어서 돈다.
 
-const root = new URL('../', import.meta.url);
 const W = 960;
 const H = 440;
-/** 장면 하나의 길이(초). 장면 넷이 이어서 돈다. */
+/** 장면 하나의 길이(초). */
 const SCENE = 4;
 const SCENES = 4;
-const CYCLE = SCENE * SCENES;
+const delay = at(SCENE);
 
-const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-const delay = (scene, offset = 0) => `animation-delay:${(scene * SCENE + offset).toFixed(2)}s`;
-
-function text(
-  x,
-  y,
-  value,
-  { size = 14, weight = 400, fill, anchor = 'start', cls = '', style = '' } = {},
-) {
-  const extra = `${cls ? ` class="${cls}"` : ''}${style ? ` style="${style}"` : ''}`;
-  return `<text x="${x}" y="${y}" font-size="${size}" font-weight="${weight}" fill="${fill}" text-anchor="${anchor}"${extra}>${esc(value)}</text>`;
-}
-
-/** 라벨 칩. 글자 폭은 근사(한글 1em, 그 밖 0.6em, 이모지 1.2em)로 잰다. */
-function chipWidth(label, size) {
-  let w = 0;
-  for (const ch of label) {
-    if (/\p{Extended_Pictographic}/u.test(ch)) w += size * 1.2;
-    else if (/[ㄱ-힝]/u.test(ch)) w += size;
-    else if (ch !== '️') w += size * 0.6;
-  }
-  return Math.round(w + 20);
-}
-
-function chip(x, y, label, tone, { size = 13 } = {}) {
-  const w = chipWidth(label, size);
-  return {
-    w,
-    svg: `<rect x="${x}" y="${y}" width="${w}" height="26" rx="13" fill="${tone.fill}"/>${text(x + 10, y + 17.5, label, { size, weight: 700, fill: tone.text })}`,
-  };
-}
-
-function chipRow(x, y, items, gap = 6) {
-  let cx = x;
-  return items
-    .map(([label, tone]) => {
-      const c = chip(cx, y, label, tone);
-      cx += c.w + gap;
-      return c.svg;
-    })
-    .join('');
-}
-
-/** 지도 바탕: 땅·물·길. */
-function mapBase(x, y, w, h, t, dark) {
-  const land = dark ? '#1F2A22' : '#EEF3E6';
-  const water = dark ? '#16303F' : '#D7EAF6';
-  const road = dark ? '#3A4A40' : '#FFFFFF';
-  return `<g><clipPath id="m${x}${y}"><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="14"/></clipPath>
-<g clip-path="url(#m${x}${y})"><rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${land}"/>
-<path d="M${x + w * 0.72} ${y} C${x + w * 0.66} ${y + h * 0.4} ${x + w * 0.9} ${y + h * 0.6} ${x + w * 0.8} ${y + h} L${x + w} ${y + h} L${x + w} ${y} Z" fill="${water}"/>
-<path d="M${x} ${y + h * 0.35} L${x + w} ${y + h * 0.55} M${x + w * 0.3} ${y} L${x + w * 0.42} ${y + h} M${x} ${y + h * 0.8} L${x + w * 0.7} ${y + h * 0.7}" stroke="${road}" stroke-width="6" fill="none" stroke-linecap="round"/>
-</g><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="14" fill="none" stroke="${t.border}"/></g>`;
-}
-
-function pin(x, y, color, { label, r = 9, cls = 'pop', style = '', fg = '#FFFFFF' } = {}) {
-  return `<g class="${cls}" style="${style}"><circle cx="${x}" cy="${y}" r="${r}" fill="${color}" stroke="#FFFFFF" stroke-width="2.5"/>${
-    label ? text(x, y + 4.5, label, { size: 12, weight: 800, fill: fg, anchor: 'middle' }) : ''
-  }</g>`;
-}
-
-function card(x, y, w, h, t) {
-  return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="12" fill="${t.bg.raised}" stroke="${t.border}"/>`;
-}
-
-function render(mode) {
+export function renderHero(mode, logo) {
   const t = pastel[mode];
   const dark = mode === 'dark';
   const L = t.label;
@@ -247,34 +176,16 @@ ${places
 <g class="rise" style="${delay(3, 2.5)}"><rect x="${phone.x + 12}" y="${phone.y + 232}" width="${phone.w - 24}" height="36" rx="18" fill="${t.accent.main}"/>${text(phone.x + phone.w / 2, phone.y + 255, 'Landmark에 담기', { size: 13, weight: 800, fill: t.accent.contrast, anchor: 'middle' })}</g>
 </g>`;
 
-  const css = `
-text{font-family:${font}}
-.sc{opacity:0;animation:scene ${CYCLE}s linear infinite backwards}
-.rise{transform-box:fill-box;animation:rise ${CYCLE}s cubic-bezier(.2,.8,.2,1) infinite backwards}
-.pop{transform-box:fill-box;transform-origin:center;animation:pop ${CYCLE}s ease-out infinite backwards}
-.draw{stroke-dasharray:1;stroke-dashoffset:1;animation:draw ${CYCLE}s ease-out infinite backwards}
-.slide{transform-box:fill-box;animation:slide ${CYCLE}s cubic-bezier(.2,.8,.2,1) infinite backwards}
-.pulse{transform-box:fill-box;transform-origin:center;opacity:0;animation:pulse ${CYCLE}s ease-out infinite backwards}
-@keyframes scene{0%{opacity:0}3%{opacity:1}22%{opacity:1}25%{opacity:0}100%{opacity:0}}
-@keyframes rise{0%{opacity:0;transform:translateY(14px)}3%{opacity:1;transform:none}100%{opacity:1;transform:none}}
-@keyframes pop{0%{transform:scale(0)}2%{transform:scale(1.15)}3%{transform:scale(1)}100%{transform:scale(1)}}
-@keyframes draw{0%{stroke-dashoffset:1}6%{stroke-dashoffset:0}100%{stroke-dashoffset:0}}
-@keyframes slide{0%{opacity:0;transform:translateX(-120px)}4%{opacity:1;transform:none}100%{opacity:1;transform:none}}
-@keyframes pulse{0%{opacity:.7;transform:scale(1)}6%{opacity:0;transform:scale(2.4)}100%{opacity:0;transform:scale(2.4)}}
-@media (prefers-reduced-motion:reduce){
-*{animation:none!important}
-.s0{opacity:1}
-.rise,.slide{opacity:1;transform:none}
-.pop{transform:none}
-.draw{stroke-dashoffset:0}
-}`;
+  const css = motionCss({ sceneLength: SCENE, scenes: SCENES, font });
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-labelledby="hero-title hero-desc">
-<title id="hero-title">랜드마크 — 평소에 모아 두고, 여행 때 꺼내 쓰는 장소 보관함</title>
-<desc id="hero-desc">장소를 라벨과 이모지로 모으고, Day별 여행 일정을 짜고, 여러 사람의 출발지에서 공평한 약속 장소를 찾고, 링크 하나로 나누는 흐름을 차례로 보여 주는 그림</desc>
-<style>${css}</style>
-<rect x="1" y="1" width="${W - 2}" height="${H - 2}" rx="28" fill="${t.bg.base}" stroke="${t.border}"/>
-<g transform="translate(40 44) scale(0.109375)">${LOGO}</g>
+  return svgDocument({
+    w: W,
+    h: H,
+    title: '랜드마크 — 평소에 모아 두고, 여행 때 꺼내 쓰는 장소 보관함',
+    desc: '장소를 라벨과 이모지로 모으고, Day별 여행 일정을 짜고, 여러 사람의 출발지에서 공평한 약속 장소를 찾고, 링크 하나로 나누는 흐름을 차례로 보여 주는 그림',
+    css,
+    body: `<rect x="1" y="1" width="${W - 2}" height="${H - 2}" rx="28" fill="${t.bg.base}" stroke="${t.border}"/>
+<g transform="translate(40 44) scale(0.109375)">${logo}</g>
 ${text(112, 76, '랜드마크', { size: 30, weight: 800, fill: t.text.primary })}
 ${text(112, 100, 'landmark.sch0718.dev', { size: 13, fill: t.text.muted })}
 ${text(40, 140, '평소에 모아 두고,', { size: 17, weight: 700, fill: t.text.secondary })}
@@ -285,20 +196,6 @@ ${scene1}
 ${scene2}
 ${scene3}
 ${scene4}
-</svg>
-`;
-}
-
-const icon = await readFile(new URL('docs/branding/icon-a.svg', root), 'utf8');
-const LOGO = icon
-  .replace(/^[\s\S]*?<svg[^>]*>/, '')
-  .replace(/<\/svg>\s*$/, '')
-  .trim();
-
-await mkdir(new URL('docs/readme/', root), { recursive: true });
-for (const mode of ['light', 'dark']) {
-  const file = new URL(`docs/readme/hero-${mode}.svg`, root);
-  const svg = render(mode);
-  await writeFile(file, svg);
-  console.log(`${file.pathname.split('/docs/')[1]}: ${Buffer.byteLength(svg)} bytes`);
+`,
+  });
 }

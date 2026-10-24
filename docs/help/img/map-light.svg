@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="520" viewBox="0 0 960 520" role="img" aria-labelledby="motion-title motion-desc">
+<title id="motion-title">랜드마크 도움말 — 지도</title>
+<desc id="motion-desc">지도 사용법: 1. 라벨 색 마커로 보기(보관함과 같은 라벨 거르기를 써요) 2. 마커 누르기(아래 시트에 장소 정보가 열려요) 3. 내 위치 보기(지도 단추로 내 주변 저장 장소 확인) 4. 가까운 곳만 보기(보관함 정렬 ‘가까운 순’과 반경 칩)</desc>
+<style>
+text{font-family:'Pretendard Variable', Pretendard, 'Apple SD Gothic Neo', 'Noto Sans KR', system-ui, sans-serif}
+.sc{opacity:0;animation:scene 14.4s linear infinite backwards}
+.rise{transform-box:fill-box;animation:rise 14.4s cubic-bezier(.2,.8,.2,1) infinite backwards}
+.pop{transform-box:fill-box;transform-origin:center;animation:pop 14.4s ease-out infinite backwards}
+.draw{stroke-dasharray:1;stroke-dashoffset:1;animation:draw 14.4s ease-out infinite backwards}
+.slide{transform-box:fill-box;animation:slide 14.4s cubic-bezier(.2,.8,.2,1) infinite backwards}
+.pulse{transform-box:fill-box;transform-origin:center;opacity:0;animation:pulse 14.4s ease-out infinite backwards}
+.tap{transform-box:fill-box;transform-origin:center;opacity:0;animation:tap 14.4s ease-out infinite backwards}
+@keyframes scene{0%{opacity:0}2.431%{opacity:1}22.569%{opacity:1}25.000%{opacity:0}100%{opacity:0}}
+@keyframes rise{0%{opacity:0;transform:translateY(14px)}3.125%{opacity:1;transform:none}100%{opacity:1;transform:none}}
+@keyframes pop{0%{transform:scale(0)}2.083%{transform:scale(1.15)}3.125%{transform:scale(1)}100%{transform:scale(1)}}
+@keyframes draw{0%{stroke-dashoffset:1}6.250%{stroke-dashoffset:0}100%{stroke-dashoffset:0}}
+@keyframes slide{0%{opacity:0;transform:translateX(-120px)}4.167%{opacity:1;transform:none}100%{opacity:1;transform:none}}
+@keyframes pulse{0%{opacity:.7;transform:scale(1)}6.250%{opacity:0;transform:scale(2.4)}100%{opacity:0;transform:scale(2.4)}}
+@keyframes tap{0%{opacity:0;transform:scale(.4)}0.833%{opacity:1;transform:scale(1)}4.861%{opacity:0;transform:scale(1.9)}100%{opacity:0;transform:scale(1.9)}}
+@media (prefers-reduced-motion:reduce){
+*{animation:none!important}
+.s0{opacity:1}
+.rise,.slide{opacity:1;transform:none}
+.pop{transform:none}
+.draw{stroke-dashoffset:0}
+}</style>
+<rect x="1" y="1" width="958" height="518" rx="28" fill="#FAFAF7" stroke="#E4E4E7"/>
+<text x="40" y="66" font-size="14" font-weight="700" fill="#71717A" text-anchor="start">랜드마크 도움말</text>
+<text x="40" y="110" font-size="30" font-weight="800" fill="#18181B" text-anchor="start">지도</text>
+<text x="40" y="150" font-size="15" font-weight="600" fill="#52525B" text-anchor="start">보관함 장소를 라벨 색 마커로 보고,</text><text x="40" y="173" font-size="15" font-weight="600" fill="#52525B" text-anchor="start">마커를 눌러 바로 상세를 열어요.</text>
+<g>
+<rect class="sc s0" style="animation-delay:0.00s" x="32" y="213" width="510" height="48" rx="14" fill="#ECFCCB"/>
+<circle cx="58" cy="236" r="13" fill="none" stroke="#91919E" stroke-width="1.5"/>
+<text x="58" y="240.5" font-size="13" font-weight="800" fill="#52525B" text-anchor="middle">1</text>
+<g class="sc s0" style="animation-delay:0.00s"><circle cx="58" cy="236" r="13" fill="#18181B"/><text x="58" y="240.5" font-size="13" font-weight="800" fill="#D9F99D" text-anchor="middle">1</text></g>
+<text x="82" y="234" font-size="16" font-weight="800" fill="#18181B" text-anchor="start">라벨 색 마커로 보기</text>
+<text x="82" y="252" font-size="13" font-weight="400" fill="#71717A" text-anchor="start">보관함과 같은 라벨 거르기를 써요</text>
+</g><g>
+<rect class="sc s1" style="animation-delay:3.60s" x="32" y="265" width="510" height="48" rx="14" fill="#ECFCCB"/>
+<circle cx="58" cy="288" r="13" fill="none" stroke="#91919E" stroke-width="1.5"/>
+<text x="58" y="292.5" font-size="13" font-weight="800" fill="#52525B" text-anchor="middle">2</text>
+<g class="sc s1" style="animation-delay:3.60s"><circle cx="58" cy="288" r="13" fill="#18181B"/><text x="58" y="292.5" font-size="13" font-weight="800" fill="#D9F99D" text-anchor="middle">2</text></g>
+<text x="82" y="286" font-size="16" font-weight="800" fill="#18181B" text-anchor="start">마커 누르기</text>
+<text x="82" y="304" font-size="13" font-weight="400" fill="#71717A" text-anchor="start">아래 시트에 장소 정보가 열려요</text>
+</g><g>
+<rect class="sc s2" style="animation-delay:7.20s" x="32" y="317" width="510" height="48" rx="14" fill="#ECFCCB"/>
+<circle cx="58" cy="340" r="13" fill="none" stroke="#91919E" stroke-width="1.5"/>
+<text x="58" y="344.5" font-size="13" font-weight="800" fill="#52525B" text-anchor="middle">3</text>
+<g class="sc s2" style="animation-delay:7.20s"><circle cx="58" cy="340" r="13" fill="#18181B"/><text x="58" y="344.5" font-size="13" font-weight="800" fill="#D9F99D" text-anchor="middle">3</text></g>
+<text x="82" y="338" font-size="16" font-weight="800" fill="#18181B" text-anchor="start">내 위치 보기</text>
+<text x="82" y="356" font-size="13" font-weight="400" fill="#71717A" text-anchor="start">지도 단추로 내 주변 저장 장소 확인</text>
+</g><g>
+<rect class="sc s3" style="animation-delay:10.80s" x="32" y="369" width="510" height="48" rx="14" fill="#ECFCCB"/>
+<circle cx="58" cy="392" r="13" fill="none" stroke="#91919E" stroke-width="1.5"/>
+<text x="58" y="396.5" font-size="13" font-weight="800" fill="#52525B" text-anchor="middle">4</text>
+<g class="sc s3" style="animation-delay:10.80s"><circle cx="58" cy="392" r="13" fill="#18181B"/><text x="58" y="396.5" font-size="13" font-weight="800" fill="#D9F99D" text-anchor="middle">4</text></g>
+<text x="82" y="390" font-size="16" font-weight="800" fill="#18181B" text-anchor="start">가까운 곳만 보기</text>
+<text x="82" y="408" font-size="13" font-weight="400" fill="#71717A" text-anchor="start">보관함 정렬 ‘가까운 순’과 반경 칩</text>
+</g>
+<rect x="600" y="20" width="300" height="480" rx="42" fill="#FFFFFF" stroke="#91919E" stroke-width="2"/>
+<rect x="612" y="32" width="276" height="456" rx="32" fill="#FFFFFF"/>
+<rect x="720" y="40" width="60" height="7" rx="3.5" fill="#E4E4E7"/>
+<clipPath id="screen"><rect x="612" y="32" width="276" height="456" rx="32"/></clipPath>
+<g clip-path="url(#screen)"><path d="M612 430 H888" stroke="#E4E4E7"/><rect x="626" y="442" width="18" height="16" rx="5" fill="none" stroke="#71717A" stroke-width="1.6"/><text x="635" y="474" font-size="10.5" font-weight="500" fill="#71717A" text-anchor="middle">보관함</text><rect x="672" y="442" width="18" height="16" rx="5" fill="none" stroke="#18181B" stroke-width="2.2"/><text x="681" y="474" font-size="10.5" font-weight="800" fill="#18181B" text-anchor="middle">지도</text><circle cx="727" cy="456" r="19" fill="#18181B"/><text x="727" y="463" font-size="20" font-weight="800" fill="#D9F99D" text-anchor="middle">＋</text><rect x="764" y="442" width="18" height="16" rx="5" fill="none" stroke="#71717A" stroke-width="1.6"/><text x="773" y="474" font-size="10.5" font-weight="500" fill="#71717A" text-anchor="middle">여행</text><rect x="810" y="442" width="18" height="16" rx="5" fill="none" stroke="#71717A" stroke-width="1.6"/><text x="819" y="474" font-size="10.5" font-weight="500" fill="#71717A" text-anchor="middle">약속</text><rect x="856" y="442" width="18" height="16" rx="5" fill="none" stroke="#71717A" stroke-width="1.6"/><text x="865" y="474" font-size="10.5" font-weight="500" fill="#71717A" text-anchor="middle">설정</text>
+<g class="sc s0" style="animation-delay:0.00s"><text x="630" y="72" font-size="18" font-weight="800" fill="#18181B" text-anchor="start">지도</text><g><clipPath id="map3"><rect x="626" y="94" width="248" height="330" rx="12"/></clipPath>
+<g clip-path="url(#map3)"><rect x="626" y="94" width="248" height="330" fill="#EEF3E6"/>
+<path d="M804.56 94 C789.6800000000001 226 849.2 292 824.4 424 L874 424 L874 94 Z" fill="#D7EAF6"/>
+<path d="M626 209.5 L874 275.5 M700.4 94 L730.16 424 M626 358 L799.6 325" stroke="#FFFFFF" stroke-width="6" fill="none" stroke-linecap="round"/>
+</g><rect x="626" y="94" width="248" height="330" rx="12" fill="none" stroke="#E4E4E7"/></g>
+<g class="rise" style="animation-delay:0.10s"><rect x="634" y="102" width="64" height="24" rx="12" fill="#FFD6CC"/><text x="644" y="118.025" font-size="11.5" font-weight="700" fill="#8A2A14" text-anchor="start">🍜 맛집</text><rect x="703" y="102" width="64" height="24" rx="12" fill="#FFE3C4"/><text x="713" y="118.025" font-size="11.5" font-weight="700" fill="#7A3E05" text-anchor="start">☕ 카페</text><rect x="772" y="102" width="64" height="24" rx="12" fill="#E7F5D0"/><text x="782" y="118.025" font-size="11.5" font-weight="700" fill="#35540F" text-anchor="start">⛰️ 명소</text></g>
+<g class="pop" style="animation-delay:0.40s"><circle cx="664" cy="160" r="7" fill="#7CB518" stroke="#FFFFFF" stroke-width="2.5"/></g><g class="pop" style="animation-delay:0.48s"><circle cx="720" cy="132" r="7" fill="#E8553A" stroke="#FFFFFF" stroke-width="2.5"/></g><g class="pop" style="animation-delay:0.56s"><circle cx="790" cy="176" r="7" fill="#F08A24" stroke="#FFFFFF" stroke-width="2.5"/></g><g class="pop" style="animation-delay:0.64s"><circle cx="700" cy="214" r="7" fill="#E8553A" stroke="#FFFFFF" stroke-width="2.5"/></g><g class="pop" style="animation-delay:0.72s"><circle cx="832" cy="240" r="7" fill="#3B9BEB" stroke="#FFFFFF" stroke-width="2.5"/></g><g class="pop" style="animation-delay:0.80s"><circle cx="760" cy="268" r="7" fill="#7CB518" stroke="#FFFFFF" stroke-width="2.5"/></g><g class="pop" style="animation-delay:0.88s"><circle cx="676" cy="300" r="7" fill="#F08A24" stroke="#FFFFFF" stroke-width="2.5"/></g><g class="pop" style="animation-delay:0.96s"><circle cx="812" cy="318" r="7" fill="#E8553A" stroke="#FFFFFF" stroke-width="2.5"/></g>
+<circle class="tap" style="animation-delay:2.20s" cx="720" cy="132" r="16" fill="#18181B" fill-opacity=".28" stroke="#18181B" stroke-opacity=".5" stroke-width="2"/></g>
+<g class="sc s1" style="animation-delay:3.60s"><text x="630" y="72" font-size="18" font-weight="800" fill="#18181B" text-anchor="start">지도</text><g><clipPath id="map4"><rect x="626" y="94" width="248" height="330" rx="12"/></clipPath>
+<g clip-path="url(#map4)"><rect x="626" y="94" width="248" height="330" fill="#EEF3E6"/>
+<path d="M804.56 94 C789.6800000000001 226 849.2 292 824.4 424 L874 424 L874 94 Z" fill="#D7EAF6"/>
+<path d="M626 209.5 L874 275.5 M700.4 94 L730.16 424 M626 358 L799.6 325" stroke="#FFFFFF" stroke-width="6" fill="none" stroke-linecap="round"/>
+</g><rect x="626" y="94" width="248" height="330" rx="12" fill="none" stroke="#E4E4E7"/></g><g class="pop" style="animation-delay:3.60s"><circle cx="664" cy="160" r="7" fill="#7CB518" stroke="#FFFFFF" stroke-width="2.5"/></g><g class="pop" style="animation-delay:3.68s"><circle cx="720" cy="132" r="7" fill="#E8553A" stroke="#FFFFFF" stroke-width="2.5"/></g><g class="pop" style="animation-delay:3.76s"><circle cx="790" cy="176" r="7" fill="#F08A24" stroke="#FFFFFF" stroke-width="2.5"/></g><g class="pop" style="animation-delay:3.84s"><circle cx="700" cy="214" r="7" fill="#E8553A" stroke="#FFFFFF" stroke-width="2.5"/></g><g class="pop" style="animation-delay:3.92s"><circle cx="832" cy="240" r="7" fill="#3B9BEB" stroke="#FFFFFF" stroke-width="2.5"/></g><g class="pop" style="animation-delay:4.00s"><circle cx="760" cy="268" r="7" fill="#7CB518" stroke="#FFFFFF" stroke-width="2.5"/></g><g class="pop" style="animation-delay:4.08s"><circle cx="676" cy="300" r="7" fill="#F08A24" stroke="#FFFFFF" stroke-width="2.5"/></g><g class="pop" style="animation-delay:4.16s"><circle cx="812" cy="318" r="7" fill="#E8553A" stroke="#FFFFFF" stroke-width="2.5"/></g>
+<g class="pop" style="animation-delay:3.70s"><circle cx="720" cy="132" r="11" fill="#E8553A" stroke="#FFFFFF" stroke-width="2.5"/></g>
+<g class="rise" style="animation-delay:3.90s"><path d="M612 296 q0 -20 20 -20 h236 q20 0 20 20 V456 q0 32 -32 32 h-212 q-32 0 -32 -32 Z" fill="#FFFFFF" stroke="#E4E4E7"/>
+<rect x="732" y="284" width="36" height="5" rx="2.5" fill="#E4E4E7"/>
+<text x="626" y="318" font-size="16" font-weight="800" fill="#18181B" text-anchor="start">🍜 시장 칼국수</text><text x="626" y="338" font-size="11.5" font-weight="400" fill="#71717A" text-anchor="start">강원 속초시 중앙로 12</text>
+<rect x="626" y="348" width="64" height="22" rx="11" fill="#FFD6CC"/><text x="636" y="363.025" font-size="11.5" font-weight="700" fill="#8A2A14" text-anchor="start">🍜 맛집</text>
+<rect x="626" y="380" width="150" height="30" rx="15" fill="none" stroke="#91919E"/><text x="701" y="399.32" font-size="12" font-weight="700" fill="#18181B" text-anchor="middle">네이버 지도에서 열기</text><text x="874" y="400" font-size="12" font-weight="700" fill="#18181B" text-anchor="end">펼치기</text></g></g>
+<g class="sc s2" style="animation-delay:7.20s"><text x="630" y="72" font-size="18" font-weight="800" fill="#18181B" text-anchor="start">지도</text><g><clipPath id="map5"><rect x="626" y="94" width="248" height="330" rx="12"/></clipPath>
+<g clip-path="url(#map5)"><rect x="626" y="94" width="248" height="330" fill="#EEF3E6"/>
+<path d="M804.56 94 C789.6800000000001 226 849.2 292 824.4 424 L874 424 L874 94 Z" fill="#D7EAF6"/>
+<path d="M626 209.5 L874 275.5 M700.4 94 L730.16 424 M626 358 L799.6 325" stroke="#FFFFFF" stroke-width="6" fill="none" stroke-linecap="round"/>
+</g><rect x="626" y="94" width="248" height="330" rx="12" fill="none" stroke="#E4E4E7"/></g><g class="pop" style="animation-delay:7.20s"><circle cx="664" cy="160" r="7" fill="#7CB518" stroke="#FFFFFF" stroke-width="2.5"/></g><g class="pop" style="animation-delay:7.28s"><circle cx="720" cy="132" r="7" fill="#E8553A" stroke="#FFFFFF" stroke-width="2.5"/></g><g class="pop" style="animation-delay:7.36s"><circle cx="790" cy="176" r="7" fill="#F08A24" stroke="#FFFFFF" stroke-width="2.5"/></g><g class="pop" style="animation-delay:7.44s"><circle cx="700" cy="214" r="7" fill="#E8553A" stroke="#FFFFFF" stroke-width="2.5"/></g><g class="pop" style="animation-delay:7.52s"><circle cx="832" cy="240" r="7" fill="#3B9BEB" stroke="#FFFFFF" stroke-width="2.5"/></g><g class="pop" style="animation-delay:7.60s"><circle cx="760" cy="268" r="7" fill="#7CB518" stroke="#FFFFFF" stroke-width="2.5"/></g><g class="pop" style="animation-delay:7.68s"><circle cx="676" cy="300" r="7" fill="#F08A24" stroke="#FFFFFF" stroke-width="2.5"/></g><g class="pop" style="animation-delay:7.76s"><circle cx="812" cy="318" r="7" fill="#E8553A" stroke="#FFFFFF" stroke-width="2.5"/></g>
+<circle class="pop" style="animation-delay:7.80s" cx="742" cy="236" r="34" fill="#3B82F6" fill-opacity=".14" stroke="#3B82F6" stroke-opacity=".4"/>
+<circle class="pop" style="animation-delay:7.80s" cx="742" cy="236" r="7" fill="#3B82F6" stroke="#FFFFFF" stroke-width="2.5"/>
+<rect x="830" y="324" width="36" height="36" rx="18" fill="#FFFFFF" stroke="#E4E4E7"/><circle cx="848" cy="342" r="6" fill="none" stroke="#18181B" stroke-width="2"/>
+<circle class="tap" style="animation-delay:7.30s" cx="848" cy="342" r="16" fill="#18181B" fill-opacity=".28" stroke="#18181B" stroke-opacity=".5" stroke-width="2"/><g class="rise" style="animation-delay:8.40s"><rect x="649" y="384" width="202" height="32" rx="16" fill="#18181B"/><text x="750" y="404.5" font-size="12" font-weight="700" fill="#FAFAF7" text-anchor="middle">내 위치를 지도에 표시했어요</text></g></g>
+<g class="sc s3" style="animation-delay:10.80s"><text x="630" y="72" font-size="18" font-weight="800" fill="#18181B" text-anchor="start">지도</text><g><clipPath id="map6"><rect x="626" y="94" width="248" height="330" rx="12"/></clipPath>
+<g clip-path="url(#map6)"><rect x="626" y="94" width="248" height="330" fill="#EEF3E6"/>
+<path d="M804.56 94 C789.6800000000001 226 849.2 292 824.4 424 L874 424 L874 94 Z" fill="#D7EAF6"/>
+<path d="M626 209.5 L874 275.5 M700.4 94 L730.16 424 M626 358 L799.6 325" stroke="#FFFFFF" stroke-width="6" fill="none" stroke-linecap="round"/>
+</g><rect x="626" y="94" width="248" height="330" rx="12" fill="none" stroke="#E4E4E7"/></g>
+<circle cx="742" cy="236" r="92" fill="#3B82F6" fill-opacity=".08" stroke="#3B82F6" stroke-opacity=".5" stroke-dasharray="5 5"/>
+<circle cx="742" cy="236" r="7" fill="#3B82F6" stroke="#FFFFFF" stroke-width="2.5"/>
+<g class="pop" style="animation-delay:11.10s"><circle cx="790" cy="176" r="7" fill="#F08A24" stroke="#FFFFFF" stroke-width="2.5"/></g><g class="pop" style="animation-delay:11.18s"><circle cx="700" cy="214" r="7" fill="#E8553A" stroke="#FFFFFF" stroke-width="2.5"/></g><g class="pop" style="animation-delay:11.26s"><circle cx="832" cy="240" r="7" fill="#3B9BEB" stroke="#FFFFFF" stroke-width="2.5"/></g><g class="pop" style="animation-delay:11.34s"><circle cx="760" cy="268" r="7" fill="#7CB518" stroke="#FFFFFF" stroke-width="2.5"/></g>
+<g class="rise" style="animation-delay:10.90s"><rect x="634" y="102" width="103" height="24" rx="12" fill="#18181B"/><text x="644" y="118.025" font-size="11.5" font-weight="700" fill="#D9F99D" text-anchor="start">내 근처 1km ×</text><rect x="742" y="102" width="64" height="24" rx="12" fill="#FFD6CC"/><text x="752" y="118.025" font-size="11.5" font-weight="700" fill="#8A2A14" text-anchor="start">🍜 맛집</text></g></g></g>
+</svg>

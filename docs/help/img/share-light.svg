@@ -1,0 +1,121 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="520" viewBox="0 0 960 520" role="img" aria-labelledby="motion-title motion-desc">
+<title id="motion-title">랜드마크 도움말 — 공유</title>
+<desc id="motion-desc">공유 사용법: 1. 내보내기 열기(지금 보이는 장소나 고른 장소를) 2. ‘링크 복사’(메신저에 붙여 넣으면 끝) 3. 받은 사람이 열기(설치·로그인 없이 지도와 목록으로) 4. 내 보관함에 담기(넣을 장소와 라벨을 고르고 가져오기)</desc>
+<style>
+text{font-family:'Pretendard Variable', Pretendard, 'Apple SD Gothic Neo', 'Noto Sans KR', system-ui, sans-serif}
+.sc{opacity:0;animation:scene 14.4s linear infinite backwards}
+.rise{transform-box:fill-box;animation:rise 14.4s cubic-bezier(.2,.8,.2,1) infinite backwards}
+.pop{transform-box:fill-box;transform-origin:center;animation:pop 14.4s ease-out infinite backwards}
+.draw{stroke-dasharray:1;stroke-dashoffset:1;animation:draw 14.4s ease-out infinite backwards}
+.slide{transform-box:fill-box;animation:slide 14.4s cubic-bezier(.2,.8,.2,1) infinite backwards}
+.pulse{transform-box:fill-box;transform-origin:center;opacity:0;animation:pulse 14.4s ease-out infinite backwards}
+.tap{transform-box:fill-box;transform-origin:center;opacity:0;animation:tap 14.4s ease-out infinite backwards}
+@keyframes scene{0%{opacity:0}2.431%{opacity:1}22.569%{opacity:1}25.000%{opacity:0}100%{opacity:0}}
+@keyframes rise{0%{opacity:0;transform:translateY(14px)}3.125%{opacity:1;transform:none}100%{opacity:1;transform:none}}
+@keyframes pop{0%{transform:scale(0)}2.083%{transform:scale(1.15)}3.125%{transform:scale(1)}100%{transform:scale(1)}}
+@keyframes draw{0%{stroke-dashoffset:1}6.250%{stroke-dashoffset:0}100%{stroke-dashoffset:0}}
+@keyframes slide{0%{opacity:0;transform:translateX(-120px)}4.167%{opacity:1;transform:none}100%{opacity:1;transform:none}}
+@keyframes pulse{0%{opacity:.7;transform:scale(1)}6.250%{opacity:0;transform:scale(2.4)}100%{opacity:0;transform:scale(2.4)}}
+@keyframes tap{0%{opacity:0;transform:scale(.4)}0.833%{opacity:1;transform:scale(1)}4.861%{opacity:0;transform:scale(1.9)}100%{opacity:0;transform:scale(1.9)}}
+@media (prefers-reduced-motion:reduce){
+*{animation:none!important}
+.s0{opacity:1}
+.rise,.slide{opacity:1;transform:none}
+.pop{transform:none}
+.draw{stroke-dashoffset:0}
+}</style>
+<rect x="1" y="1" width="958" height="518" rx="28" fill="#FAFAF7" stroke="#E4E4E7"/>
+<text x="40" y="66" font-size="14" font-weight="700" fill="#71717A" text-anchor="start">랜드마크 도움말</text>
+<text x="40" y="110" font-size="30" font-weight="800" fill="#18181B" text-anchor="start">공유</text>
+<text x="40" y="150" font-size="15" font-weight="600" fill="#52525B" text-anchor="start">보관함 장소나 여행 일정을 링크·HTML 파일로 보내고,</text><text x="40" y="173" font-size="15" font-weight="600" fill="#52525B" text-anchor="start">받은 사람은 ‘Landmark에 담기’로 가져가요.</text>
+<g>
+<rect class="sc s0" style="animation-delay:0.00s" x="32" y="213" width="510" height="48" rx="14" fill="#ECFCCB"/>
+<circle cx="58" cy="236" r="13" fill="none" stroke="#91919E" stroke-width="1.5"/>
+<text x="58" y="240.5" font-size="13" font-weight="800" fill="#52525B" text-anchor="middle">1</text>
+<g class="sc s0" style="animation-delay:0.00s"><circle cx="58" cy="236" r="13" fill="#18181B"/><text x="58" y="240.5" font-size="13" font-weight="800" fill="#D9F99D" text-anchor="middle">1</text></g>
+<text x="82" y="234" font-size="16" font-weight="800" fill="#18181B" text-anchor="start">내보내기 열기</text>
+<text x="82" y="252" font-size="13" font-weight="400" fill="#71717A" text-anchor="start">지금 보이는 장소나 고른 장소를</text>
+</g><g>
+<rect class="sc s1" style="animation-delay:3.60s" x="32" y="265" width="510" height="48" rx="14" fill="#ECFCCB"/>
+<circle cx="58" cy="288" r="13" fill="none" stroke="#91919E" stroke-width="1.5"/>
+<text x="58" y="292.5" font-size="13" font-weight="800" fill="#52525B" text-anchor="middle">2</text>
+<g class="sc s1" style="animation-delay:3.60s"><circle cx="58" cy="288" r="13" fill="#18181B"/><text x="58" y="292.5" font-size="13" font-weight="800" fill="#D9F99D" text-anchor="middle">2</text></g>
+<text x="82" y="286" font-size="16" font-weight="800" fill="#18181B" text-anchor="start">‘링크 복사’</text>
+<text x="82" y="304" font-size="13" font-weight="400" fill="#71717A" text-anchor="start">메신저에 붙여 넣으면 끝</text>
+</g><g>
+<rect class="sc s2" style="animation-delay:7.20s" x="32" y="317" width="510" height="48" rx="14" fill="#ECFCCB"/>
+<circle cx="58" cy="340" r="13" fill="none" stroke="#91919E" stroke-width="1.5"/>
+<text x="58" y="344.5" font-size="13" font-weight="800" fill="#52525B" text-anchor="middle">3</text>
+<g class="sc s2" style="animation-delay:7.20s"><circle cx="58" cy="340" r="13" fill="#18181B"/><text x="58" y="344.5" font-size="13" font-weight="800" fill="#D9F99D" text-anchor="middle">3</text></g>
+<text x="82" y="338" font-size="16" font-weight="800" fill="#18181B" text-anchor="start">받은 사람이 열기</text>
+<text x="82" y="356" font-size="13" font-weight="400" fill="#71717A" text-anchor="start">설치·로그인 없이 지도와 목록으로</text>
+</g><g>
+<rect class="sc s3" style="animation-delay:10.80s" x="32" y="369" width="510" height="48" rx="14" fill="#ECFCCB"/>
+<circle cx="58" cy="392" r="13" fill="none" stroke="#91919E" stroke-width="1.5"/>
+<text x="58" y="396.5" font-size="13" font-weight="800" fill="#52525B" text-anchor="middle">4</text>
+<g class="sc s3" style="animation-delay:10.80s"><circle cx="58" cy="392" r="13" fill="#18181B"/><text x="58" y="396.5" font-size="13" font-weight="800" fill="#D9F99D" text-anchor="middle">4</text></g>
+<text x="82" y="390" font-size="16" font-weight="800" fill="#18181B" text-anchor="start">내 보관함에 담기</text>
+<text x="82" y="408" font-size="13" font-weight="400" fill="#71717A" text-anchor="start">넣을 장소와 라벨을 고르고 가져오기</text>
+</g>
+<rect x="600" y="20" width="300" height="480" rx="42" fill="#FFFFFF" stroke="#91919E" stroke-width="2"/>
+<rect x="612" y="32" width="276" height="456" rx="32" fill="#FFFFFF"/>
+<rect x="720" y="40" width="60" height="7" rx="3.5" fill="#E4E4E7"/>
+<clipPath id="screen"><rect x="612" y="32" width="276" height="456" rx="32"/></clipPath>
+<g clip-path="url(#screen)"><path d="M612 430 H888" stroke="#E4E4E7"/><rect x="626" y="442" width="18" height="16" rx="5" fill="none" stroke="#18181B" stroke-width="2.2"/><text x="635" y="474" font-size="10.5" font-weight="800" fill="#18181B" text-anchor="middle">보관함</text><rect x="672" y="442" width="18" height="16" rx="5" fill="none" stroke="#71717A" stroke-width="1.6"/><text x="681" y="474" font-size="10.5" font-weight="500" fill="#71717A" text-anchor="middle">지도</text><circle cx="727" cy="456" r="19" fill="#18181B"/><text x="727" y="463" font-size="20" font-weight="800" fill="#D9F99D" text-anchor="middle">＋</text><rect x="764" y="442" width="18" height="16" rx="5" fill="none" stroke="#71717A" stroke-width="1.6"/><text x="773" y="474" font-size="10.5" font-weight="500" fill="#71717A" text-anchor="middle">여행</text><rect x="810" y="442" width="18" height="16" rx="5" fill="none" stroke="#71717A" stroke-width="1.6"/><text x="819" y="474" font-size="10.5" font-weight="500" fill="#71717A" text-anchor="middle">약속</text><rect x="856" y="442" width="18" height="16" rx="5" fill="none" stroke="#71717A" stroke-width="1.6"/><text x="865" y="474" font-size="10.5" font-weight="500" fill="#71717A" text-anchor="middle">설정</text>
+<g class="sc s0" style="animation-delay:0.00s"><text x="630" y="72" font-size="18" font-weight="800" fill="#18181B" text-anchor="start">보관함</text><rect x="626" y="94" width="248" height="34" rx="17" fill="#FAFAF7" stroke="#E4E4E7"/>
+<circle cx="644" cy="110" r="5.5" fill="none" stroke="#71717A" stroke-width="1.6"/><path d="M648 114 l4 4" stroke="#71717A" stroke-width="1.6"/>
+<text x="658" y="116" font-size="12.5" font-weight="400" fill="#71717A" text-anchor="start">이름·주소·메모·라벨 검색</text>
+<g class="rise" style="animation-delay:0.10s"><rect x="626" y="138" width="43" height="24" rx="12" fill="#FAFAF7" stroke="#E4E4E7"/><text x="636" y="154.025" font-size="11.5" font-weight="700" fill="#52525B" text-anchor="start">벤토</text><rect x="673" y="138" width="43" height="24" rx="12" fill="#18181B"/><text x="683" y="154.025" font-size="11.5" font-weight="700" fill="#D9F99D" text-anchor="start">카드</text><rect x="720" y="138" width="43" height="24" rx="12" fill="#FAFAF7" stroke="#E4E4E7"/><text x="730" y="154.025" font-size="11.5" font-weight="700" fill="#52525B" text-anchor="start">타일</text><rect x="767" y="138" width="43" height="24" rx="12" fill="#FAFAF7" stroke="#E4E4E7"/><text x="777" y="154.025" font-size="11.5" font-weight="700" fill="#52525B" text-anchor="start">목록</text><rect x="844" y="136" width="28" height="28" rx="14" fill="#FFFFFF" stroke="#E4E4E7"/><path d="M858 156 V144 m-5 5 l5 -5 l5 5" stroke="#18181B" stroke-width="1.8" fill="none"/></g>
+<g class="rise" style="animation-delay:0.30s"><rect x="626" y="176" width="248" height="50" rx="12" fill="#FFFFFF" stroke="#E4E4E7"/>
+<text x="638" y="197" font-size="13.5" font-weight="800" fill="#18181B" text-anchor="start">⛰️ 바다 전망대</text>
+<text x="638" y="214" font-size="11" font-weight="400" fill="#71717A" text-anchor="start">강원 강릉시</text>
+<rect x="802" y="202" width="62" height="18" rx="9" fill="#E7F5D0"/><text x="812" y="214.85" font-size="11" font-weight="700" fill="#35540F" text-anchor="start">⛰️ 명소</text></g><g class="rise" style="animation-delay:0.40s"><rect x="626" y="234" width="248" height="50" rx="12" fill="#FFFFFF" stroke="#E4E4E7"/>
+<text x="638" y="255" font-size="13.5" font-weight="800" fill="#18181B" text-anchor="start">🍜 시장 칼국수</text>
+<text x="638" y="272" font-size="11" font-weight="400" fill="#71717A" text-anchor="start">강원 속초시</text>
+<rect x="802" y="260" width="62" height="18" rx="9" fill="#FFD6CC"/><text x="812" y="272.85" font-size="11" font-weight="700" fill="#8A2A14" text-anchor="start">🍜 맛집</text></g><g class="rise" style="animation-delay:0.50s"><rect x="626" y="292" width="248" height="50" rx="12" fill="#FFFFFF" stroke="#E4E4E7"/>
+<text x="638" y="313" font-size="13.5" font-weight="800" fill="#18181B" text-anchor="start">☕ 바다 뷰 카페</text>
+<text x="638" y="330" font-size="11" font-weight="400" fill="#71717A" text-anchor="start">강원 양양군</text>
+<rect x="802" y="318" width="62" height="18" rx="9" fill="#FFE3C4"/><text x="812" y="330.85" font-size="11" font-weight="700" fill="#7A3E05" text-anchor="start">☕ 카페</text></g>
+<circle class="tap" style="animation-delay:2.20s" cx="858" cy="150" r="16" fill="#18181B" fill-opacity=".28" stroke="#18181B" stroke-opacity=".5" stroke-width="2"/></g>
+<g class="sc s1" style="animation-delay:3.60s"><text x="630" y="72" font-size="18" font-weight="800" fill="#18181B" text-anchor="start">공유</text><rect x="612" y="32" width="276" height="456" rx="32" fill="#000" fill-opacity=".35"/>
+<g class="rise" style="animation-delay:3.60s"><path d="M612 82 q0 -22 22 -22 h232 q22 0 22 22 V456 q0 32 -32 32 h-212 q-32 0 -32 -32 Z" fill="#FFFFFF"/>
+<rect x="732" y="68" width="36" height="5" rx="2.5" fill="#E4E4E7"/>
+<text x="626" y="98" font-size="16" font-weight="800" fill="#18181B" text-anchor="start">내보내기</text></g>
+<g class="rise" style="animation-delay:3.80s"><text x="626" y="124" font-size="12" font-weight="400" fill="#52525B" text-anchor="start">지금 보이는 3곳을 내보냅니다</text><text x="626" y="140" font-size="11" font-weight="700" fill="#71717A" text-anchor="start">제목</text><rect x="626" y="146" width="248" height="32" rx="9" fill="#FAFAF7" stroke="#91919E"/><text x="636" y="167" font-size="12.5" font-weight="400" fill="#18181B" text-anchor="start">강원 맛집 모음</text>
+<rect x="626" y="194" width="16" height="16" rx="4" fill="none" stroke="#91919E" stroke-width="1.5"/><text x="650" y="207" font-size="12.5" font-weight="400" fill="#18181B" text-anchor="start">메모 포함</text>
+<rect x="626" y="226" width="120" height="32" rx="16" fill="#18181B"/><text x="686" y="246.5" font-size="12.5" font-weight="800" fill="#D9F99D" text-anchor="middle">링크 복사</text><rect x="754" y="226" width="120" height="32" rx="16" fill="none" stroke="#91919E"/><text x="814" y="246.5" font-size="12.5" font-weight="700" fill="#18181B" text-anchor="middle">링크 공유</text>
+<text x="626" y="278" font-size="11" font-weight="400" fill="#71717A" text-anchor="start">링크를 받은 사람은 누구나 메모를 볼 수 있어요</text>
+<text x="666" y="320.5" font-size="12.5" font-weight="800" fill="#18181B" text-anchor="middle">닫기</text><rect x="774" y="300" width="100" height="32" rx="16" fill="none" stroke="#91919E"/><text x="824" y="320.5" font-size="12.5" font-weight="700" fill="#18181B" text-anchor="middle">파일 저장</text></g>
+<circle class="tap" style="animation-delay:5.20s" cx="686" cy="242" r="16" fill="#18181B" fill-opacity=".28" stroke="#18181B" stroke-opacity=".5" stroke-width="2"/><g class="rise" style="animation-delay:5.80s"><rect x="680.5" y="384" width="139" height="32" rx="16" fill="#18181B"/><text x="750" y="404.5" font-size="12" font-weight="700" fill="#FAFAF7" text-anchor="middle">링크를 복사했어요</text></g></g>
+<g class="sc s2" style="animation-delay:7.20s"><text x="630" y="72" font-size="18" font-weight="800" fill="#18181B" text-anchor="start">강원 맛집 모음</text><g><clipPath id="map7"><rect x="626" y="94" width="248" height="132" rx="12"/></clipPath>
+<g clip-path="url(#map7)"><rect x="626" y="94" width="248" height="132" fill="#EEF3E6"/>
+<path d="M804.56 94 C789.6800000000001 146.8 849.2 173.2 824.4 226 L874 226 L874 94 Z" fill="#D7EAF6"/>
+<path d="M626 140.2 L874 166.60000000000002 M700.4 94 L730.16 226 M626 199.60000000000002 L799.6 186.39999999999998" stroke="#FFFFFF" stroke-width="6" fill="none" stroke-linecap="round"/>
+</g><rect x="626" y="94" width="248" height="132" rx="12" fill="none" stroke="#E4E4E7"/></g><g class="pop" style="animation-delay:7.40s"><circle cx="660" cy="150" r="7" fill="#7CB518" stroke="#FFFFFF" stroke-width="2.5"/></g><g class="pop" style="animation-delay:7.48s"><circle cx="742" cy="128" r="7" fill="#E8553A" stroke="#FFFFFF" stroke-width="2.5"/></g><g class="pop" style="animation-delay:7.56s"><circle cx="820" cy="190" r="7" fill="#F08A24" stroke="#FFFFFF" stroke-width="2.5"/></g>
+<g class="rise" style="animation-delay:7.70s"><rect x="626" y="236" width="248" height="50" rx="12" fill="#FFFFFF" stroke="#E4E4E7"/>
+<text x="638" y="257" font-size="13.5" font-weight="800" fill="#18181B" text-anchor="start">⛰️ 바다 전망대</text>
+<text x="638" y="274" font-size="11" font-weight="400" fill="#71717A" text-anchor="start">강원 강릉시</text>
+<rect x="802" y="262" width="62" height="18" rx="9" fill="#E7F5D0"/><text x="812" y="274.85" font-size="11" font-weight="700" fill="#35540F" text-anchor="start">⛰️ 명소</text></g><g class="rise" style="animation-delay:7.80s"><rect x="626" y="292" width="248" height="50" rx="12" fill="#FFFFFF" stroke="#E4E4E7"/>
+<text x="638" y="313" font-size="13.5" font-weight="800" fill="#18181B" text-anchor="start">🍜 시장 칼국수</text>
+<text x="638" y="330" font-size="11" font-weight="400" fill="#71717A" text-anchor="start">강원 속초시</text>
+<rect x="802" y="318" width="62" height="18" rx="9" fill="#FFD6CC"/><text x="812" y="330.85" font-size="11" font-weight="700" fill="#8A2A14" text-anchor="start">🍜 맛집</text></g>
+<g class="rise" style="animation-delay:8.00s"><rect x="626" y="356" width="248" height="36" rx="18" fill="#18181B"/><text x="750" y="378.68" font-size="13" font-weight="800" fill="#D9F99D" text-anchor="middle">Landmark에 담기</text></g>
+<circle class="tap" style="animation-delay:9.20s" cx="750" cy="374" r="16" fill="#18181B" fill-opacity=".28" stroke="#18181B" stroke-opacity=".5" stroke-width="2"/></g>
+<g class="sc s3" style="animation-delay:10.80s"><text x="630" y="72" font-size="18" font-weight="800" fill="#18181B" text-anchor="start">공유</text><rect x="612" y="32" width="276" height="456" rx="32" fill="#000" fill-opacity=".35"/>
+<g class="rise" style="animation-delay:10.80s"><path d="M612 82 q0 -22 22 -22 h232 q22 0 22 22 V456 q0 32 -32 32 h-212 q-32 0 -32 -32 Z" fill="#FFFFFF"/>
+<rect x="732" y="68" width="36" height="5" rx="2.5" fill="#E4E4E7"/>
+<text x="626" y="98" font-size="16" font-weight="800" fill="#18181B" text-anchor="start">강원 맛집 모음 · 3곳</text></g>
+<g class="rise" style="animation-delay:11.00s"><rect x="626" y="114" width="16" height="16" rx="4" fill="#18181B"/><text x="634" y="127" font-size="11" font-weight="800" fill="#D9F99D" text-anchor="middle">✓</text><text x="650" y="127" font-size="12.5" font-weight="400" fill="#18181B" text-anchor="start">파일 제목 라벨도 붙이기</text></g>
+<g class="rise" style="animation-delay:11.10s"><rect x="626" y="142" width="248" height="50" rx="12" fill="#ECFCCB" stroke="#E4E4E7"/><circle cx="644" cy="167" r="9" fill="#18181B"/><text x="644" y="171" font-size="11" font-weight="800" fill="#D9F99D" text-anchor="middle">✓</text>
+<text x="662" y="163" font-size="13.5" font-weight="800" fill="#18181B" text-anchor="start">⛰️ 바다 전망대</text>
+<text x="662" y="180" font-size="11" font-weight="400" fill="#71717A" text-anchor="start">강원 강릉시</text>
+</g><g class="rise" style="animation-delay:11.20s"><rect x="626" y="198" width="248" height="50" rx="12" fill="#ECFCCB" stroke="#E4E4E7"/><circle cx="644" cy="223" r="9" fill="#18181B"/><text x="644" y="227" font-size="11" font-weight="800" fill="#D9F99D" text-anchor="middle">✓</text>
+<text x="662" y="219" font-size="13.5" font-weight="800" fill="#18181B" text-anchor="start">🍜 시장 칼국수</text>
+<text x="662" y="236" font-size="11" font-weight="400" fill="#71717A" text-anchor="start">강원 속초시</text>
+</g><g class="rise" style="animation-delay:11.30s"><rect x="626" y="254" width="248" height="50" rx="12" fill="#FFFFFF" stroke="#E4E4E7"/><circle cx="644" cy="279" r="9" fill="none" stroke="#91919E" stroke-width="1.5"/>
+<text x="662" y="275" font-size="13.5" font-weight="800" fill="#18181B" text-anchor="start">☕ 바다 뷰 카페</text>
+<text x="662" y="292" font-size="11" font-weight="400" fill="#71717A" text-anchor="start">강원 양양군</text>
+<rect x="804" y="272" width="71" height="20" rx="10" fill="#FAFAF7"/><text x="814" y="285.85" font-size="11" font-weight="700" fill="#52525B" text-anchor="start">이미 있음</text></g>
+<g class="rise" style="animation-delay:11.50s"><rect x="626" y="322" width="248" height="34" rx="17" fill="#18181B"/><text x="750" y="343.68" font-size="13" font-weight="800" fill="#D9F99D" text-anchor="middle">2곳 가져오기</text></g>
+<circle class="tap" style="animation-delay:12.60s" cx="750" cy="339" r="16" fill="#18181B" fill-opacity=".28" stroke="#18181B" stroke-opacity=".5" stroke-width="2"/></g></g>
+</svg>

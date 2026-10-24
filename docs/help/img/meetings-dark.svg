@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="520" viewBox="0 0 960 520" role="img" aria-labelledby="motion-title motion-desc">
+<title id="motion-title">랜드마크 도움말 — 약속</title>
+<desc id="motion-desc">약속 사용법: 1. 새 약속(이름·날짜·시각, 이동수단) 2. 참석자 출발지(‘검색’ · ‘지도에서’ · ‘보관함에서’) 3. 중간 지점 찾기(모두에게 공평한 번화가 역 순위) 4. 링크로 함께 고르기(‘후보 링크 보내기’ → 답장 모아 ‘확정’)</desc>
+<style>
+text{font-family:'Pretendard Variable', Pretendard, 'Apple SD Gothic Neo', 'Noto Sans KR', system-ui, sans-serif}
+.sc{opacity:0;animation:scene 14.4s linear infinite backwards}
+.rise{transform-box:fill-box;animation:rise 14.4s cubic-bezier(.2,.8,.2,1) infinite backwards}
+.pop{transform-box:fill-box;transform-origin:center;animation:pop 14.4s ease-out infinite backwards}
+.draw{stroke-dasharray:1;stroke-dashoffset:1;animation:draw 14.4s ease-out infinite backwards}
+.slide{transform-box:fill-box;animation:slide 14.4s cubic-bezier(.2,.8,.2,1) infinite backwards}
+.pulse{transform-box:fill-box;transform-origin:center;opacity:0;animation:pulse 14.4s ease-out infinite backwards}
+.tap{transform-box:fill-box;transform-origin:center;opacity:0;animation:tap 14.4s ease-out infinite backwards}
+@keyframes scene{0%{opacity:0}2.431%{opacity:1}22.569%{opacity:1}25.000%{opacity:0}100%{opacity:0}}
+@keyframes rise{0%{opacity:0;transform:translateY(14px)}3.125%{opacity:1;transform:none}100%{opacity:1;transform:none}}
+@keyframes pop{0%{transform:scale(0)}2.083%{transform:scale(1.15)}3.125%{transform:scale(1)}100%{transform:scale(1)}}
+@keyframes draw{0%{stroke-dashoffset:1}6.250%{stroke-dashoffset:0}100%{stroke-dashoffset:0}}
+@keyframes slide{0%{opacity:0;transform:translateX(-120px)}4.167%{opacity:1;transform:none}100%{opacity:1;transform:none}}
+@keyframes pulse{0%{opacity:.7;transform:scale(1)}6.250%{opacity:0;transform:scale(2.4)}100%{opacity:0;transform:scale(2.4)}}
+@keyframes tap{0%{opacity:0;transform:scale(.4)}0.833%{opacity:1;transform:scale(1)}4.861%{opacity:0;transform:scale(1.9)}100%{opacity:0;transform:scale(1.9)}}
+@media (prefers-reduced-motion:reduce){
+*{animation:none!important}
+.s0{opacity:1}
+.rise,.slide{opacity:1;transform:none}
+.pop{transform:none}
+.draw{stroke-dashoffset:0}
+}</style>
+<rect x="1" y="1" width="958" height="518" rx="28" fill="#111113" stroke="#34343A"/>
+<text x="40" y="66" font-size="14" font-weight="700" fill="#8E8E98" text-anchor="start">랜드마크 도움말</text>
+<text x="40" y="110" font-size="30" font-weight="800" fill="#F4F4F5" text-anchor="start">약속</text>
+<text x="40" y="150" font-size="15" font-weight="600" fill="#B4B4BC" text-anchor="start">모두의 출발지에서 공평한 역을 찾고,</text><text x="40" y="173" font-size="15" font-weight="600" fill="#B4B4BC" text-anchor="start">후보를 링크로 보내 함께 골라요.</text>
+<g>
+<rect class="sc s0" style="animation-delay:0.00s" x="32" y="213" width="510" height="48" rx="14" fill="#2A3E18"/>
+<circle cx="58" cy="236" r="13" fill="none" stroke="#71717D" stroke-width="1.5"/>
+<text x="58" y="240.5" font-size="13" font-weight="800" fill="#B4B4BC" text-anchor="middle">1</text>
+<g class="sc s0" style="animation-delay:0.00s"><circle cx="58" cy="236" r="13" fill="#D9F99D"/><text x="58" y="240.5" font-size="13" font-weight="800" fill="#18181B" text-anchor="middle">1</text></g>
+<text x="82" y="234" font-size="16" font-weight="800" fill="#F4F4F5" text-anchor="start">새 약속</text>
+<text x="82" y="252" font-size="13" font-weight="400" fill="#8E8E98" text-anchor="start">이름·날짜·시각, 이동수단</text>
+</g><g>
+<rect class="sc s1" style="animation-delay:3.60s" x="32" y="265" width="510" height="48" rx="14" fill="#2A3E18"/>
+<circle cx="58" cy="288" r="13" fill="none" stroke="#71717D" stroke-width="1.5"/>
+<text x="58" y="292.5" font-size="13" font-weight="800" fill="#B4B4BC" text-anchor="middle">2</text>
+<g class="sc s1" style="animation-delay:3.60s"><circle cx="58" cy="288" r="13" fill="#D9F99D"/><text x="58" y="292.5" font-size="13" font-weight="800" fill="#18181B" text-anchor="middle">2</text></g>
+<text x="82" y="286" font-size="16" font-weight="800" fill="#F4F4F5" text-anchor="start">참석자 출발지</text>
+<text x="82" y="304" font-size="13" font-weight="400" fill="#8E8E98" text-anchor="start">‘검색’ · ‘지도에서’ · ‘보관함에서’</text>
+</g><g>
+<rect class="sc s2" style="animation-delay:7.20s" x="32" y="317" width="510" height="48" rx="14" fill="#2A3E18"/>
+<circle cx="58" cy="340" r="13" fill="none" stroke="#71717D" stroke-width="1.5"/>
+<text x="58" y="344.5" font-size="13" font-weight="800" fill="#B4B4BC" text-anchor="middle">3</text>
+<g class="sc s2" style="animation-delay:7.20s"><circle cx="58" cy="340" r="13" fill="#D9F99D"/><text x="58" y="344.5" font-size="13" font-weight="800" fill="#18181B" text-anchor="middle">3</text></g>
+<text x="82" y="338" font-size="16" font-weight="800" fill="#F4F4F5" text-anchor="start">중간 지점 찾기</text>
+<text x="82" y="356" font-size="13" font-weight="400" fill="#8E8E98" text-anchor="start">모두에게 공평한 번화가 역 순위</text>
+</g><g>
+<rect class="sc s3" style="animation-delay:10.80s" x="32" y="369" width="510" height="48" rx="14" fill="#2A3E18"/>
+<circle cx="58" cy="392" r="13" fill="none" stroke="#71717D" stroke-width="1.5"/>
+<text x="58" y="396.5" font-size="13" font-weight="800" fill="#B4B4BC" text-anchor="middle">4</text>
+<g class="sc s3" style="animation-delay:10.80s"><circle cx="58" cy="392" r="13" fill="#D9F99D"/><text x="58" y="396.5" font-size="13" font-weight="800" fill="#18181B" text-anchor="middle">4</text></g>
+<text x="82" y="390" font-size="16" font-weight="800" fill="#F4F4F5" text-anchor="start">링크로 함께 고르기</text>
+<text x="82" y="408" font-size="13" font-weight="400" fill="#8E8E98" text-anchor="start">‘후보 링크 보내기’ → 답장 모아 ‘확정’</text>
+</g>
+<rect x="600" y="20" width="300" height="480" rx="42" fill="#26262B" stroke="#71717D" stroke-width="2"/>
+<rect x="612" y="32" width="276" height="456" rx="32" fill="#1B1B1F"/>
+<rect x="720" y="40" width="60" height="7" rx="3.5" fill="#34343A"/>
+<clipPath id="screen"><rect x="612" y="32" width="276" height="456" rx="32"/></clipPath>
+<g clip-path="url(#screen)"><path d="M612 430 H888" stroke="#34343A"/><rect x="626" y="442" width="18" height="16" rx="5" fill="none" stroke="#8E8E98" stroke-width="1.6"/><text x="635" y="474" font-size="10.5" font-weight="500" fill="#8E8E98" text-anchor="middle">보관함</text><rect x="672" y="442" width="18" height="16" rx="5" fill="none" stroke="#8E8E98" stroke-width="1.6"/><text x="681" y="474" font-size="10.5" font-weight="500" fill="#8E8E98" text-anchor="middle">지도</text><circle cx="727" cy="456" r="19" fill="#D9F99D"/><text x="727" y="463" font-size="20" font-weight="800" fill="#18181B" text-anchor="middle">＋</text><rect x="764" y="442" width="18" height="16" rx="5" fill="none" stroke="#8E8E98" stroke-width="1.6"/><text x="773" y="474" font-size="10.5" font-weight="500" fill="#8E8E98" text-anchor="middle">여행</text><rect x="810" y="442" width="18" height="16" rx="5" fill="none" stroke="#F4F4F5" stroke-width="2.2"/><text x="819" y="474" font-size="10.5" font-weight="800" fill="#F4F4F5" text-anchor="middle">약속</text><rect x="856" y="442" width="18" height="16" rx="5" fill="none" stroke="#8E8E98" stroke-width="1.6"/><text x="865" y="474" font-size="10.5" font-weight="500" fill="#8E8E98" text-anchor="middle">설정</text>
+<g class="sc s0" style="animation-delay:0.00s"><text x="630" y="72" font-size="18" font-weight="800" fill="#F4F4F5" text-anchor="start">약속</text><rect x="612" y="32" width="276" height="456" rx="32" fill="#000" fill-opacity=".35"/>
+<g class="rise" style="animation-delay:0.00s"><path d="M612 82 q0 -22 22 -22 h232 q22 0 22 22 V456 q0 32 -32 32 h-212 q-32 0 -32 -32 Z" fill="#1B1B1F"/>
+<rect x="732" y="68" width="36" height="5" rx="2.5" fill="#34343A"/>
+<text x="626" y="98" font-size="16" font-weight="800" fill="#F4F4F5" text-anchor="start">새 약속</text></g>
+<g class="rise" style="animation-delay:0.20s"><text x="626" y="120" font-size="11" font-weight="700" fill="#8E8E98" text-anchor="start">약속 이름</text><rect x="626" y="126" width="248" height="32" rx="9" fill="#111113" stroke="#71717D"/><text x="636" y="147" font-size="12.5" font-weight="400" fill="#F4F4F5" text-anchor="start">금요일 저녁</text><text x="626" y="172" font-size="11" font-weight="700" fill="#8E8E98" text-anchor="start">날짜 (선택)</text><rect x="626" y="178" width="120" height="32" rx="9" fill="#111113" stroke="#71717D"/><text x="636" y="199" font-size="12.5" font-weight="400" fill="#F4F4F5" text-anchor="start">2026-10-30</text><text x="754" y="172" font-size="11" font-weight="700" fill="#8E8E98" text-anchor="start">시각 (선택)</text><rect x="754" y="178" width="120" height="32" rx="9" fill="#111113" stroke="#71717D"/><text x="764" y="199" font-size="12.5" font-weight="400" fill="#F4F4F5" text-anchor="start">19:00</text>
+<text x="626" y="228" font-size="11" font-weight="700" fill="#8E8E98" text-anchor="start">이동수단</text><rect x="626" y="236" width="68" height="28" rx="14" fill="#D9F99D"/><text x="636" y="254.2" font-size="12" font-weight="700" fill="#18181B" text-anchor="start">대중교통</text><rect x="700" y="236" width="56" height="28" rx="14" fill="#111113" stroke="#34343A"/><text x="710" y="254.2" font-size="12" font-weight="700" fill="#B4B4BC" text-anchor="start">자동차</text><rect x="762" y="236" width="68" height="28" rx="14" fill="#111113" stroke="#34343A"/><text x="772" y="254.2" font-size="12" font-weight="700" fill="#B4B4BC" text-anchor="start">직선거리</text></g>
+<g class="rise" style="animation-delay:0.50s"><rect x="784" y="300" width="90" height="34" rx="17" fill="#D9F99D"/><text x="829" y="321.68" font-size="13" font-weight="800" fill="#18181B" text-anchor="middle">만들기</text></g>
+<circle class="tap" style="animation-delay:1.80s" cx="829" cy="317" r="16" fill="#F4F4F5" fill-opacity=".28" stroke="#F4F4F5" stroke-opacity=".5" stroke-width="2"/></g>
+<g class="sc s1" style="animation-delay:3.60s"><text x="630" y="72" font-size="18" font-weight="800" fill="#F4F4F5" text-anchor="start">금요일 저녁</text><text x="626" y="98" font-size="13.5" font-weight="800" fill="#F4F4F5" text-anchor="start">참석자</text>
+<g class="rise" style="animation-delay:3.80s"><rect x="626" y="110" width="248" height="46" rx="12" fill="#26262B" stroke="#34343A"/><text x="638" y="130" font-size="13.5" font-weight="800" fill="#F4F4F5" text-anchor="start">나</text><text x="638" y="147" font-size="11.5" font-weight="400" fill="#8E8E98" text-anchor="start">강남역</text></g><g class="rise" style="animation-delay:3.90s"><rect x="626" y="162" width="248" height="46" rx="12" fill="#26262B" stroke="#34343A"/><text x="638" y="182" font-size="13.5" font-weight="800" fill="#F4F4F5" text-anchor="start">민지</text><text x="638" y="199" font-size="11.5" font-weight="400" fill="#8E8E98" text-anchor="start">홍대입구역</text></g><g class="rise" style="animation-delay:4.00s"><rect x="626" y="214" width="248" height="46" rx="12" fill="#26262B" stroke="#34343A"/><text x="638" y="234" font-size="13.5" font-weight="800" fill="#F4F4F5" text-anchor="start">준호</text><text x="638" y="251" font-size="11.5" font-weight="400" fill="#8E8E98" text-anchor="start">출발지 없음</text><text x="864" y="242" font-size="12" font-weight="800" fill="#D9F99D" text-anchor="end">출발지 고르기</text></g>
+<g class="rise" style="animation-delay:4.10s"><rect x="626" y="272" width="100" height="30" rx="15" fill="none" stroke="#71717D"/><text x="676" y="291.32" font-size="12" font-weight="700" fill="#F4F4F5" text-anchor="middle">참석자 추가</text></g>
+<circle class="tap" style="animation-delay:4.80s" cx="828" cy="234" r="16" fill="#F4F4F5" fill-opacity=".28" stroke="#F4F4F5" stroke-opacity=".5" stroke-width="2"/>
+<rect x="612" y="32" width="276" height="456" rx="32" fill="#000" fill-opacity=".35"/>
+<g class="rise" style="animation-delay:5.40s"><path d="M612 258 q0 -22 22 -22 h232 q22 0 22 22 V456 q0 32 -32 32 h-212 q-32 0 -32 -32 Z" fill="#1B1B1F"/>
+<rect x="732" y="244" width="36" height="5" rx="2.5" fill="#34343A"/>
+<text x="626" y="274" font-size="16" font-weight="800" fill="#F4F4F5" text-anchor="start">출발지 고르기</text></g>
+<g class="rise" style="animation-delay:5.60s"><rect x="626" y="290" width="44" height="26" rx="13" fill="#D9F99D"/><text x="636" y="307.2" font-size="12" font-weight="700" fill="#18181B" text-anchor="start">검색</text><rect x="676" y="290" width="68" height="26" rx="13" fill="#111113" stroke="#34343A"/><text x="686" y="307.2" font-size="12" font-weight="700" fill="#B4B4BC" text-anchor="start">지도에서</text><rect x="750" y="290" width="80" height="26" rx="13" fill="#111113" stroke="#34343A"/><text x="760" y="307.2" font-size="12" font-weight="700" fill="#B4B4BC" text-anchor="start">보관함에서</text><rect x="626" y="326" width="248" height="34" rx="17" fill="#111113" stroke="#34343A"/>
+<circle cx="644" cy="342" r="5.5" fill="none" stroke="#8E8E98" stroke-width="1.6"/><path d="M648 346 l4 4" stroke="#8E8E98" stroke-width="1.6"/>
+<text x="658" y="348" font-size="12.5" font-weight="400" fill="#F4F4F5" text-anchor="start">공덕역</text></g></g>
+<g class="sc s2" style="animation-delay:7.20s"><text x="630" y="72" font-size="18" font-weight="800" fill="#F4F4F5" text-anchor="start">금요일 저녁</text><g class="rise" style="animation-delay:7.30s"><rect x="626" y="94" width="248" height="34" rx="17" fill="#D9F99D"/><text x="750" y="115.68" font-size="13" font-weight="800" fill="#18181B" text-anchor="middle">중간 지점 찾기</text></g>
+<g class="rise" style="animation-delay:7.60s"><rect x="626" y="140" width="94" height="26" rx="13" fill="#D9F99D"/><text x="636" y="157.2" font-size="12" font-weight="700" fill="#18181B" text-anchor="start">가장 먼 사람</text><rect x="726" y="140" width="44" height="26" rx="13" fill="#111113" stroke="#34343A"/><text x="736" y="157.2" font-size="12" font-weight="700" fill="#B4B4BC" text-anchor="start">평균</text><rect x="776" y="140" width="44" height="26" rx="13" fill="#111113" stroke="#34343A"/><text x="786" y="157.2" font-size="12" font-weight="700" fill="#B4B4BC" text-anchor="start">편차</text></g>
+<g class="rise" style="animation-delay:7.90s"><rect x="626" y="180" width="248" height="48" rx="12" fill="#2A3E18" stroke="#34343A"/><g><circle cx="644" cy="204" r="11" fill="#D9F99D" stroke="#FFFFFF" stroke-width="2.5"/><text x="644" y="208.5" font-size="12" font-weight="800" fill="#18181B" text-anchor="middle">1</text></g><text x="664" y="200" font-size="13.5" font-weight="800" fill="#F4F4F5" text-anchor="start">합정역</text><text x="664" y="217" font-size="11" font-weight="400" fill="#8E8E98" text-anchor="start">가장 먼 사람 35분 · 평균 32분</text></g><g class="rise" style="animation-delay:8.05s"><rect x="626" y="234" width="248" height="48" rx="12" fill="#26262B" stroke="#34343A"/><g><circle cx="644" cy="258" r="11" fill="#A68BFF" stroke="#FFFFFF" stroke-width="2.5"/><text x="644" y="262.5" font-size="12" font-weight="800" fill="#FFFFFF" text-anchor="middle">2</text></g><text x="664" y="254" font-size="13.5" font-weight="800" fill="#F4F4F5" text-anchor="start">공덕역</text><text x="664" y="271" font-size="11" font-weight="400" fill="#8E8E98" text-anchor="start">가장 먼 사람 38분 · 평균 31분</text></g><g class="rise" style="animation-delay:8.20s"><rect x="626" y="288" width="248" height="48" rx="12" fill="#26262B" stroke="#34343A"/><g><circle cx="644" cy="312" r="11" fill="#A68BFF" stroke="#FFFFFF" stroke-width="2.5"/><text x="644" y="316.5" font-size="12" font-weight="800" fill="#FFFFFF" text-anchor="middle">3</text></g><text x="664" y="308" font-size="13.5" font-weight="800" fill="#F4F4F5" text-anchor="start">신촌역</text><text x="664" y="325" font-size="11" font-weight="400" fill="#8E8E98" text-anchor="start">가장 먼 사람 40분 · 평균 33분</text></g>
+<g class="rise" style="animation-delay:8.60s"><rect x="626" y="348" width="120" height="30" rx="15" fill="none" stroke="#71717D"/><text x="686" y="367.32" font-size="12" font-weight="700" fill="#F4F4F5" text-anchor="middle">역 후보에 담기</text></g>
+<circle class="tap" style="animation-delay:9.40s" cx="686" cy="363" r="16" fill="#F4F4F5" fill-opacity=".28" stroke="#F4F4F5" stroke-opacity=".5" stroke-width="2"/></g>
+<g class="sc s3" style="animation-delay:10.80s"><text x="630" y="72" font-size="18" font-weight="800" fill="#F4F4F5" text-anchor="start">금요일 저녁</text><text x="626" y="98" font-size="13.5" font-weight="800" fill="#F4F4F5" text-anchor="start">후보와 집계</text>
+<g class="rise" style="animation-delay:10.90s"><rect x="626" y="110" width="248" height="50" rx="12" fill="#2A3E18" stroke="#34343A"/><text x="638" y="131" font-size="13.5" font-weight="800" fill="#F4F4F5" text-anchor="start">합정역</text><text x="638" y="148" font-size="11.5" font-weight="400" fill="#B4B4BC" text-anchor="start">♥ 3 · 나, 민지, 준호</text><rect x="812" y="120" width="52" height="28" rx="14" fill="#D9F99D"/><text x="838" y="138.32" font-size="12" font-weight="800" fill="#18181B" text-anchor="middle">확정</text></g><g class="rise" style="animation-delay:11.00s"><rect x="626" y="166" width="248" height="50" rx="12" fill="#26262B" stroke="#34343A"/><text x="638" y="187" font-size="13.5" font-weight="800" fill="#F4F4F5" text-anchor="start">🍜 망원 칼국수</text><text x="638" y="204" font-size="11.5" font-weight="400" fill="#B4B4BC" text-anchor="start">♥ 1 · 민지</text><rect x="812" y="176" width="52" height="28" rx="14" fill="none" stroke="#71717D"/><text x="838" y="194.32" font-size="12" font-weight="700" fill="#F4F4F5" text-anchor="middle">확정</text></g>
+<g class="rise" style="animation-delay:11.20s"><rect x="626" y="232" width="120" height="32" rx="16" fill="none" stroke="#71717D"/><text x="686" y="252.32" font-size="12" font-weight="700" fill="#F4F4F5" text-anchor="middle">후보 링크 보내기</text><rect x="754" y="232" width="120" height="32" rx="16" fill="#D9F99D"/><text x="814" y="252.32" font-size="12" font-weight="800" fill="#18181B" text-anchor="middle">확정 링크 보내기</text></g>
+<circle class="tap" style="animation-delay:11.80s" cx="838" cy="134" r="16" fill="#F4F4F5" fill-opacity=".28" stroke="#F4F4F5" stroke-opacity=".5" stroke-width="2"/><circle class="tap" style="animation-delay:12.70s" cx="814" cy="248" r="16" fill="#F4F4F5" fill-opacity=".28" stroke="#F4F4F5" stroke-opacity=".5" stroke-width="2"/><g class="rise" style="animation-delay:13.30s"><rect x="680.5" y="384" width="139" height="32" rx="16" fill="#F4F4F5"/><text x="750" y="404.5" font-size="12" font-weight="700" fill="#111113" text-anchor="middle">링크를 복사했어요</text></g></g></g>
+</svg>

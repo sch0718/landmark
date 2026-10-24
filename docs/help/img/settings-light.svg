@@ -1,0 +1,105 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="520" viewBox="0 0 960 520" role="img" aria-labelledby="motion-title motion-desc">
+<title id="motion-title">랜드마크 도움말 — 설정</title>
+<desc id="motion-desc">설정 사용법: 1. 테마와 모드(파스텔·수첩·나이트, 라이트·다크) 2. 백업 파일 받기(보관함 전체를 파일 하나로) 3. 다른 기기에서 되살리기(‘백업 파일로 되살리기’ → 파일 고르기) 4. 백업 알림(오래 백업하지 않으면 보관함 위에 알려요)</desc>
+<style>
+text{font-family:'Pretendard Variable', Pretendard, 'Apple SD Gothic Neo', 'Noto Sans KR', system-ui, sans-serif}
+.sc{opacity:0;animation:scene 14.4s linear infinite backwards}
+.rise{transform-box:fill-box;animation:rise 14.4s cubic-bezier(.2,.8,.2,1) infinite backwards}
+.pop{transform-box:fill-box;transform-origin:center;animation:pop 14.4s ease-out infinite backwards}
+.draw{stroke-dasharray:1;stroke-dashoffset:1;animation:draw 14.4s ease-out infinite backwards}
+.slide{transform-box:fill-box;animation:slide 14.4s cubic-bezier(.2,.8,.2,1) infinite backwards}
+.pulse{transform-box:fill-box;transform-origin:center;opacity:0;animation:pulse 14.4s ease-out infinite backwards}
+.tap{transform-box:fill-box;transform-origin:center;opacity:0;animation:tap 14.4s ease-out infinite backwards}
+@keyframes scene{0%{opacity:0}2.431%{opacity:1}22.569%{opacity:1}25.000%{opacity:0}100%{opacity:0}}
+@keyframes rise{0%{opacity:0;transform:translateY(14px)}3.125%{opacity:1;transform:none}100%{opacity:1;transform:none}}
+@keyframes pop{0%{transform:scale(0)}2.083%{transform:scale(1.15)}3.125%{transform:scale(1)}100%{transform:scale(1)}}
+@keyframes draw{0%{stroke-dashoffset:1}6.250%{stroke-dashoffset:0}100%{stroke-dashoffset:0}}
+@keyframes slide{0%{opacity:0;transform:translateX(-120px)}4.167%{opacity:1;transform:none}100%{opacity:1;transform:none}}
+@keyframes pulse{0%{opacity:.7;transform:scale(1)}6.250%{opacity:0;transform:scale(2.4)}100%{opacity:0;transform:scale(2.4)}}
+@keyframes tap{0%{opacity:0;transform:scale(.4)}0.833%{opacity:1;transform:scale(1)}4.861%{opacity:0;transform:scale(1.9)}100%{opacity:0;transform:scale(1.9)}}
+@media (prefers-reduced-motion:reduce){
+*{animation:none!important}
+.s0{opacity:1}
+.rise,.slide{opacity:1;transform:none}
+.pop{transform:none}
+.draw{stroke-dashoffset:0}
+}</style>
+<rect x="1" y="1" width="958" height="518" rx="28" fill="#FAFAF7" stroke="#E4E4E7"/>
+<text x="40" y="66" font-size="14" font-weight="700" fill="#71717A" text-anchor="start">랜드마크 도움말</text>
+<text x="40" y="110" font-size="30" font-weight="800" fill="#18181B" text-anchor="start">설정</text>
+<text x="40" y="150" font-size="15" font-weight="600" fill="#52525B" text-anchor="start">테마와 보기 방식을 고르고,</text><text x="40" y="173" font-size="15" font-weight="600" fill="#52525B" text-anchor="start">보관함을 백업 파일로 받아 두세요.</text>
+<g>
+<rect class="sc s0" style="animation-delay:0.00s" x="32" y="213" width="510" height="48" rx="14" fill="#ECFCCB"/>
+<circle cx="58" cy="236" r="13" fill="none" stroke="#91919E" stroke-width="1.5"/>
+<text x="58" y="240.5" font-size="13" font-weight="800" fill="#52525B" text-anchor="middle">1</text>
+<g class="sc s0" style="animation-delay:0.00s"><circle cx="58" cy="236" r="13" fill="#18181B"/><text x="58" y="240.5" font-size="13" font-weight="800" fill="#D9F99D" text-anchor="middle">1</text></g>
+<text x="82" y="234" font-size="16" font-weight="800" fill="#18181B" text-anchor="start">테마와 모드</text>
+<text x="82" y="252" font-size="13" font-weight="400" fill="#71717A" text-anchor="start">파스텔·수첩·나이트, 라이트·다크</text>
+</g><g>
+<rect class="sc s1" style="animation-delay:3.60s" x="32" y="265" width="510" height="48" rx="14" fill="#ECFCCB"/>
+<circle cx="58" cy="288" r="13" fill="none" stroke="#91919E" stroke-width="1.5"/>
+<text x="58" y="292.5" font-size="13" font-weight="800" fill="#52525B" text-anchor="middle">2</text>
+<g class="sc s1" style="animation-delay:3.60s"><circle cx="58" cy="288" r="13" fill="#18181B"/><text x="58" y="292.5" font-size="13" font-weight="800" fill="#D9F99D" text-anchor="middle">2</text></g>
+<text x="82" y="286" font-size="16" font-weight="800" fill="#18181B" text-anchor="start">백업 파일 받기</text>
+<text x="82" y="304" font-size="13" font-weight="400" fill="#71717A" text-anchor="start">보관함 전체를 파일 하나로</text>
+</g><g>
+<rect class="sc s2" style="animation-delay:7.20s" x="32" y="317" width="510" height="48" rx="14" fill="#ECFCCB"/>
+<circle cx="58" cy="340" r="13" fill="none" stroke="#91919E" stroke-width="1.5"/>
+<text x="58" y="344.5" font-size="13" font-weight="800" fill="#52525B" text-anchor="middle">3</text>
+<g class="sc s2" style="animation-delay:7.20s"><circle cx="58" cy="340" r="13" fill="#18181B"/><text x="58" y="344.5" font-size="13" font-weight="800" fill="#D9F99D" text-anchor="middle">3</text></g>
+<text x="82" y="338" font-size="16" font-weight="800" fill="#18181B" text-anchor="start">다른 기기에서 되살리기</text>
+<text x="82" y="356" font-size="13" font-weight="400" fill="#71717A" text-anchor="start">‘백업 파일로 되살리기’ → 파일 고르기</text>
+</g><g>
+<rect class="sc s3" style="animation-delay:10.80s" x="32" y="369" width="510" height="48" rx="14" fill="#ECFCCB"/>
+<circle cx="58" cy="392" r="13" fill="none" stroke="#91919E" stroke-width="1.5"/>
+<text x="58" y="396.5" font-size="13" font-weight="800" fill="#52525B" text-anchor="middle">4</text>
+<g class="sc s3" style="animation-delay:10.80s"><circle cx="58" cy="392" r="13" fill="#18181B"/><text x="58" y="396.5" font-size="13" font-weight="800" fill="#D9F99D" text-anchor="middle">4</text></g>
+<text x="82" y="390" font-size="16" font-weight="800" fill="#18181B" text-anchor="start">백업 알림</text>
+<text x="82" y="408" font-size="13" font-weight="400" fill="#71717A" text-anchor="start">오래 백업하지 않으면 보관함 위에 알려요</text>
+</g>
+<rect x="600" y="20" width="300" height="480" rx="42" fill="#FFFFFF" stroke="#91919E" stroke-width="2"/>
+<rect x="612" y="32" width="276" height="456" rx="32" fill="#FFFFFF"/>
+<rect x="720" y="40" width="60" height="7" rx="3.5" fill="#E4E4E7"/>
+<clipPath id="screen"><rect x="612" y="32" width="276" height="456" rx="32"/></clipPath>
+<g clip-path="url(#screen)"><path d="M612 430 H888" stroke="#E4E4E7"/><rect x="626" y="442" width="18" height="16" rx="5" fill="none" stroke="#71717A" stroke-width="1.6"/><text x="635" y="474" font-size="10.5" font-weight="500" fill="#71717A" text-anchor="middle">보관함</text><rect x="672" y="442" width="18" height="16" rx="5" fill="none" stroke="#71717A" stroke-width="1.6"/><text x="681" y="474" font-size="10.5" font-weight="500" fill="#71717A" text-anchor="middle">지도</text><circle cx="727" cy="456" r="19" fill="#18181B"/><text x="727" y="463" font-size="20" font-weight="800" fill="#D9F99D" text-anchor="middle">＋</text><rect x="764" y="442" width="18" height="16" rx="5" fill="none" stroke="#71717A" stroke-width="1.6"/><text x="773" y="474" font-size="10.5" font-weight="500" fill="#71717A" text-anchor="middle">여행</text><rect x="810" y="442" width="18" height="16" rx="5" fill="none" stroke="#71717A" stroke-width="1.6"/><text x="819" y="474" font-size="10.5" font-weight="500" fill="#71717A" text-anchor="middle">약속</text><rect x="856" y="442" width="18" height="16" rx="5" fill="none" stroke="#18181B" stroke-width="2.2"/><text x="865" y="474" font-size="10.5" font-weight="800" fill="#18181B" text-anchor="middle">설정</text>
+<g class="sc s0" style="animation-delay:0.00s"><text x="630" y="72" font-size="18" font-weight="800" fill="#18181B" text-anchor="start">설정</text><text x="626" y="98" font-size="13.5" font-weight="800" fill="#18181B" text-anchor="start">테마</text>
+<g class="rise" style="animation-delay:0.10s"><rect x="626" y="108" width="58" height="30" rx="15" fill="#18181B"/><text x="636" y="127.375" font-size="12.5" font-weight="700" fill="#D9F99D" text-anchor="start">파스텔</text><rect x="690" y="108" width="45" height="30" rx="15" fill="#FAFAF7" stroke="#E4E4E7"/><text x="700" y="127.375" font-size="12.5" font-weight="700" fill="#52525B" text-anchor="start">수첩</text><rect x="741" y="108" width="58" height="30" rx="15" fill="#FAFAF7" stroke="#E4E4E7"/><text x="751" y="127.375" font-size="12.5" font-weight="700" fill="#52525B" text-anchor="start">나이트</text></g>
+<text x="626" y="168" font-size="13.5" font-weight="800" fill="#18181B" text-anchor="start">모드</text>
+<g class="rise" style="animation-delay:0.20s"><rect x="626" y="178" width="58" height="30" rx="15" fill="#18181B"/><text x="636" y="197.375" font-size="12.5" font-weight="700" fill="#D9F99D" text-anchor="start">시스템</text><rect x="690" y="178" width="58" height="30" rx="15" fill="#FAFAF7" stroke="#E4E4E7"/><text x="700" y="197.375" font-size="12.5" font-weight="700" fill="#52525B" text-anchor="start">라이트</text><rect x="754" y="178" width="45" height="30" rx="15" fill="#FAFAF7" stroke="#E4E4E7"/><text x="764" y="197.375" font-size="12.5" font-weight="700" fill="#52525B" text-anchor="start">다크</text></g>
+<text x="626" y="238" font-size="13.5" font-weight="800" fill="#18181B" text-anchor="start">보관함 보기</text>
+<g class="rise" style="animation-delay:0.30s"><rect x="626" y="248" width="45" height="30" rx="15" fill="#FAFAF7" stroke="#E4E4E7"/><text x="636" y="267.375" font-size="12.5" font-weight="700" fill="#52525B" text-anchor="start">벤토</text><rect x="677" y="248" width="45" height="30" rx="15" fill="#18181B"/><text x="687" y="267.375" font-size="12.5" font-weight="700" fill="#D9F99D" text-anchor="start">카드</text><rect x="728" y="248" width="45" height="30" rx="15" fill="#FAFAF7" stroke="#E4E4E7"/><text x="738" y="267.375" font-size="12.5" font-weight="700" fill="#52525B" text-anchor="start">타일</text><rect x="779" y="248" width="45" height="30" rx="15" fill="#FAFAF7" stroke="#E4E4E7"/><text x="789" y="267.375" font-size="12.5" font-weight="700" fill="#52525B" text-anchor="start">목록</text></g>
+<circle class="tap" style="animation-delay:2.20s" cx="718" cy="193" r="16" fill="#18181B" fill-opacity=".28" stroke="#18181B" stroke-opacity=".5" stroke-width="2"/></g>
+<g class="sc s1" style="animation-delay:3.60s"><text x="630" y="72" font-size="18" font-weight="800" fill="#18181B" text-anchor="start">설정</text><text x="626" y="98" font-size="13.5" font-weight="800" fill="#18181B" text-anchor="start">백업</text>
+<g class="rise" style="animation-delay:3.70s"><text x="626" y="120" font-size="12" font-weight="400" fill="#52525B" text-anchor="start">마지막 백업: 8일 전</text>
+<rect x="626" y="134" width="248" height="34" rx="17" fill="#18181B"/><text x="750" y="155.68" font-size="13" font-weight="800" fill="#D9F99D" text-anchor="middle">백업 파일 받기</text>
+<rect x="626" y="176" width="248" height="34" rx="17" fill="none" stroke="#91919E"/><text x="750" y="197.68" font-size="13" font-weight="700" fill="#18181B" text-anchor="middle">백업 공유</text>
+<rect x="626" y="218" width="248" height="34" rx="17" fill="none" stroke="#91919E"/><text x="750" y="239.68" font-size="13" font-weight="700" fill="#18181B" text-anchor="middle">백업 파일로 되살리기</text></g>
+<text x="626" y="284" font-size="13.5" font-weight="800" fill="#18181B" text-anchor="start">데이터 정보</text><text x="626" y="306" font-size="11.5" font-weight="400" fill="#52525B" text-anchor="start">장소 128곳 · 라벨 9개 · 사용 용량 약 410 KB</text>
+<circle class="tap" style="animation-delay:5.20s" cx="750" cy="151" r="16" fill="#18181B" fill-opacity=".28" stroke="#18181B" stroke-opacity=".5" stroke-width="2"/><g class="rise" style="animation-delay:5.80s"><rect x="626" y="384" width="248" height="32" rx="16" fill="#18181B"/><text x="750" y="404.5" font-size="12" font-weight="700" fill="#FAFAF7" text-anchor="middle">landmark-backup-2026-10-24-0930.json</text></g></g>
+<g class="sc s2" style="animation-delay:7.20s"><text x="630" y="72" font-size="18" font-weight="800" fill="#18181B" text-anchor="start">설정</text><rect x="612" y="32" width="276" height="456" rx="32" fill="#000" fill-opacity=".35"/>
+<g class="rise" style="animation-delay:7.20s"><path d="M612 82 q0 -22 22 -22 h232 q22 0 22 22 V456 q0 32 -32 32 h-212 q-32 0 -32 -32 Z" fill="#FFFFFF"/>
+<rect x="732" y="68" width="36" height="5" rx="2.5" fill="#E4E4E7"/>
+<text x="626" y="98" font-size="16" font-weight="800" fill="#18181B" text-anchor="start">백업에서 되살리기</text></g>
+<g class="rise" style="animation-delay:7.40s"><rect x="626" y="116" width="100" height="30" rx="15" fill="none" stroke="#91919E"/><text x="676" y="135.32" font-size="12" font-weight="700" fill="#18181B" text-anchor="middle">파일 고르기</text>
+<text x="626" y="168" font-size="12" font-weight="700" fill="#18181B" text-anchor="start">landmark-backup-2026-10-24-0930.json</text>
+<text x="626" y="186" font-size="11.5" font-weight="400" fill="#52525B" text-anchor="start">장소 128곳 · 라벨 9개 · 여행 2개</text>
+<rect x="626" y="200" width="248" height="44" rx="12" fill="#FFF1EE" stroke="#E4E4E7"/><text x="638" y="226" font-size="10.5" font-weight="400" fill="#D32F2F" text-anchor="start">지금 보관함은 지워지고 이 백업 내용으로 바뀌어요.</text>
+<rect x="626" y="258" width="248" height="32" rx="16" fill="none" stroke="#91919E"/><text x="750" y="278.5" font-size="12.5" font-weight="700" fill="#18181B" text-anchor="middle">지금 보관함 먼저 받기</text>
+<rect x="626" y="298" width="248" height="32" rx="16" fill="#18181B"/><text x="750" y="318.5" font-size="12.5" font-weight="800" fill="#D9F99D" text-anchor="middle">이 백업으로 바꾸기</text></g>
+<circle class="tap" style="animation-delay:9.00s" cx="750" cy="314" r="16" fill="#18181B" fill-opacity=".28" stroke="#18181B" stroke-opacity=".5" stroke-width="2"/><g class="rise" style="animation-delay:9.60s"><rect x="674.5" y="384" width="151" height="32" rx="16" fill="#18181B"/><text x="750" y="404.5" font-size="12" font-weight="700" fill="#FAFAF7" text-anchor="middle">백업에서 되살렸어요</text></g></g>
+<g class="sc s3" style="animation-delay:10.80s"><text x="630" y="72" font-size="18" font-weight="800" fill="#18181B" text-anchor="start">보관함</text><g class="rise" style="animation-delay:11.00s"><rect x="626" y="94" width="248" height="80" rx="12" fill="#ECFCCB" stroke="#E4E4E7"/>
+<text x="638" y="116" font-size="12.5" font-weight="800" fill="#18181B" text-anchor="start">마지막 백업이 8일 전이에요.</text>
+<text x="638" y="134" font-size="12" font-weight="400" fill="#52525B" text-anchor="start">그 뒤로 바뀐 내용이 있어요</text>
+<rect x="638" y="142" width="78" height="26" rx="13" fill="#18181B"/><text x="677" y="159.14" font-size="11.5" font-weight="800" fill="#D9F99D" text-anchor="middle">백업 받기</text><text x="752" y="159.14" font-size="11.5" font-weight="800" fill="#18181B" text-anchor="middle">나중에</text></g>
+<g class="" style="animation-delay:10.80s"><rect x="626" y="186" width="248" height="50" rx="12" fill="#FFFFFF" stroke="#E4E4E7"/>
+<text x="638" y="207" font-size="13.5" font-weight="800" fill="#18181B" text-anchor="start">⛰️ 바다 전망대</text>
+<text x="638" y="224" font-size="11" font-weight="400" fill="#71717A" text-anchor="start">강원 강릉시</text>
+<rect x="802" y="212" width="62" height="18" rx="9" fill="#E7F5D0"/><text x="812" y="224.85" font-size="11" font-weight="700" fill="#35540F" text-anchor="start">⛰️ 명소</text></g><g class="" style="animation-delay:10.80s"><rect x="626" y="244" width="248" height="50" rx="12" fill="#FFFFFF" stroke="#E4E4E7"/>
+<text x="638" y="265" font-size="13.5" font-weight="800" fill="#18181B" text-anchor="start">🍜 시장 칼국수</text>
+<text x="638" y="282" font-size="11" font-weight="400" fill="#71717A" text-anchor="start">강원 속초시</text>
+<rect x="802" y="270" width="62" height="18" rx="9" fill="#FFD6CC"/><text x="812" y="282.85" font-size="11" font-weight="700" fill="#8A2A14" text-anchor="start">🍜 맛집</text></g><g class="" style="animation-delay:10.80s"><rect x="626" y="302" width="248" height="50" rx="12" fill="#FFFFFF" stroke="#E4E4E7"/>
+<text x="638" y="323" font-size="13.5" font-weight="800" fill="#18181B" text-anchor="start">☕ 바다 뷰 카페</text>
+<text x="638" y="340" font-size="11" font-weight="400" fill="#71717A" text-anchor="start">강원 양양군</text>
+<rect x="802" y="328" width="62" height="18" rx="9" fill="#FFE3C4"/><text x="812" y="340.85" font-size="11" font-weight="700" fill="#7A3E05" text-anchor="start">☕ 카페</text></g>
+<circle class="tap" style="animation-delay:12.60s" cx="677" cy="155" r="16" fill="#18181B" fill-opacity=".28" stroke="#18181B" stroke-opacity=".5" stroke-width="2"/></g></g>
+</svg>

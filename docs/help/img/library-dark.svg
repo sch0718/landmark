@@ -1,0 +1,130 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="520" viewBox="0 0 960 520" role="img" aria-labelledby="motion-title motion-desc">
+<title id="motion-title">랜드마크 도움말 — 보관함</title>
+<desc id="motion-desc">보관함 사용법: 1. 라벨로 거르기(칩을 누르면 그 라벨 장소만 보여요) 2. 지역·이름으로 좁히기(시·도 → 시·군을 고르고, 검색 칸에 이름) 3. 길게 눌러 여러 곳 고르기(고른 뒤 아래 막대에서 한꺼번에 정리) 4. 여행에 넣기(고른 장소를 여행 후보로 보내요)</desc>
+<style>
+text{font-family:'Pretendard Variable', Pretendard, 'Apple SD Gothic Neo', 'Noto Sans KR', system-ui, sans-serif}
+.sc{opacity:0;animation:scene 14.4s linear infinite backwards}
+.rise{transform-box:fill-box;animation:rise 14.4s cubic-bezier(.2,.8,.2,1) infinite backwards}
+.pop{transform-box:fill-box;transform-origin:center;animation:pop 14.4s ease-out infinite backwards}
+.draw{stroke-dasharray:1;stroke-dashoffset:1;animation:draw 14.4s ease-out infinite backwards}
+.slide{transform-box:fill-box;animation:slide 14.4s cubic-bezier(.2,.8,.2,1) infinite backwards}
+.pulse{transform-box:fill-box;transform-origin:center;opacity:0;animation:pulse 14.4s ease-out infinite backwards}
+.tap{transform-box:fill-box;transform-origin:center;opacity:0;animation:tap 14.4s ease-out infinite backwards}
+@keyframes scene{0%{opacity:0}2.431%{opacity:1}22.569%{opacity:1}25.000%{opacity:0}100%{opacity:0}}
+@keyframes rise{0%{opacity:0;transform:translateY(14px)}3.125%{opacity:1;transform:none}100%{opacity:1;transform:none}}
+@keyframes pop{0%{transform:scale(0)}2.083%{transform:scale(1.15)}3.125%{transform:scale(1)}100%{transform:scale(1)}}
+@keyframes draw{0%{stroke-dashoffset:1}6.250%{stroke-dashoffset:0}100%{stroke-dashoffset:0}}
+@keyframes slide{0%{opacity:0;transform:translateX(-120px)}4.167%{opacity:1;transform:none}100%{opacity:1;transform:none}}
+@keyframes pulse{0%{opacity:.7;transform:scale(1)}6.250%{opacity:0;transform:scale(2.4)}100%{opacity:0;transform:scale(2.4)}}
+@keyframes tap{0%{opacity:0;transform:scale(.4)}0.833%{opacity:1;transform:scale(1)}4.861%{opacity:0;transform:scale(1.9)}100%{opacity:0;transform:scale(1.9)}}
+@media (prefers-reduced-motion:reduce){
+*{animation:none!important}
+.s0{opacity:1}
+.rise,.slide{opacity:1;transform:none}
+.pop{transform:none}
+.draw{stroke-dashoffset:0}
+}</style>
+<rect x="1" y="1" width="958" height="518" rx="28" fill="#111113" stroke="#34343A"/>
+<text x="40" y="66" font-size="14" font-weight="700" fill="#8E8E98" text-anchor="start">랜드마크 도움말</text>
+<text x="40" y="110" font-size="30" font-weight="800" fill="#F4F4F5" text-anchor="start">보관함</text>
+<text x="40" y="150" font-size="15" font-weight="600" fill="#B4B4BC" text-anchor="start">모아 둔 장소를 라벨·지역·이름으로 거르고,</text><text x="40" y="173" font-size="15" font-weight="600" fill="#B4B4BC" text-anchor="start">여러 곳을 한꺼번에 정리해요.</text>
+<g>
+<rect class="sc s0" style="animation-delay:0.00s" x="32" y="213" width="510" height="48" rx="14" fill="#2A3E18"/>
+<circle cx="58" cy="236" r="13" fill="none" stroke="#71717D" stroke-width="1.5"/>
+<text x="58" y="240.5" font-size="13" font-weight="800" fill="#B4B4BC" text-anchor="middle">1</text>
+<g class="sc s0" style="animation-delay:0.00s"><circle cx="58" cy="236" r="13" fill="#D9F99D"/><text x="58" y="240.5" font-size="13" font-weight="800" fill="#18181B" text-anchor="middle">1</text></g>
+<text x="82" y="234" font-size="16" font-weight="800" fill="#F4F4F5" text-anchor="start">라벨로 거르기</text>
+<text x="82" y="252" font-size="13" font-weight="400" fill="#8E8E98" text-anchor="start">칩을 누르면 그 라벨 장소만 보여요</text>
+</g><g>
+<rect class="sc s1" style="animation-delay:3.60s" x="32" y="265" width="510" height="48" rx="14" fill="#2A3E18"/>
+<circle cx="58" cy="288" r="13" fill="none" stroke="#71717D" stroke-width="1.5"/>
+<text x="58" y="292.5" font-size="13" font-weight="800" fill="#B4B4BC" text-anchor="middle">2</text>
+<g class="sc s1" style="animation-delay:3.60s"><circle cx="58" cy="288" r="13" fill="#D9F99D"/><text x="58" y="292.5" font-size="13" font-weight="800" fill="#18181B" text-anchor="middle">2</text></g>
+<text x="82" y="286" font-size="16" font-weight="800" fill="#F4F4F5" text-anchor="start">지역·이름으로 좁히기</text>
+<text x="82" y="304" font-size="13" font-weight="400" fill="#8E8E98" text-anchor="start">시·도 → 시·군을 고르고, 검색 칸에 이름</text>
+</g><g>
+<rect class="sc s2" style="animation-delay:7.20s" x="32" y="317" width="510" height="48" rx="14" fill="#2A3E18"/>
+<circle cx="58" cy="340" r="13" fill="none" stroke="#71717D" stroke-width="1.5"/>
+<text x="58" y="344.5" font-size="13" font-weight="800" fill="#B4B4BC" text-anchor="middle">3</text>
+<g class="sc s2" style="animation-delay:7.20s"><circle cx="58" cy="340" r="13" fill="#D9F99D"/><text x="58" y="344.5" font-size="13" font-weight="800" fill="#18181B" text-anchor="middle">3</text></g>
+<text x="82" y="338" font-size="16" font-weight="800" fill="#F4F4F5" text-anchor="start">길게 눌러 여러 곳 고르기</text>
+<text x="82" y="356" font-size="13" font-weight="400" fill="#8E8E98" text-anchor="start">고른 뒤 아래 막대에서 한꺼번에 정리</text>
+</g><g>
+<rect class="sc s3" style="animation-delay:10.80s" x="32" y="369" width="510" height="48" rx="14" fill="#2A3E18"/>
+<circle cx="58" cy="392" r="13" fill="none" stroke="#71717D" stroke-width="1.5"/>
+<text x="58" y="396.5" font-size="13" font-weight="800" fill="#B4B4BC" text-anchor="middle">4</text>
+<g class="sc s3" style="animation-delay:10.80s"><circle cx="58" cy="392" r="13" fill="#D9F99D"/><text x="58" y="396.5" font-size="13" font-weight="800" fill="#18181B" text-anchor="middle">4</text></g>
+<text x="82" y="390" font-size="16" font-weight="800" fill="#F4F4F5" text-anchor="start">여행에 넣기</text>
+<text x="82" y="408" font-size="13" font-weight="400" fill="#8E8E98" text-anchor="start">고른 장소를 여행 후보로 보내요</text>
+</g>
+<rect x="600" y="20" width="300" height="480" rx="42" fill="#26262B" stroke="#71717D" stroke-width="2"/>
+<rect x="612" y="32" width="276" height="456" rx="32" fill="#1B1B1F"/>
+<rect x="720" y="40" width="60" height="7" rx="3.5" fill="#34343A"/>
+<clipPath id="screen"><rect x="612" y="32" width="276" height="456" rx="32"/></clipPath>
+<g clip-path="url(#screen)"><path d="M612 430 H888" stroke="#34343A"/><rect x="626" y="442" width="18" height="16" rx="5" fill="none" stroke="#F4F4F5" stroke-width="2.2"/><text x="635" y="474" font-size="10.5" font-weight="800" fill="#F4F4F5" text-anchor="middle">보관함</text><rect x="672" y="442" width="18" height="16" rx="5" fill="none" stroke="#8E8E98" stroke-width="1.6"/><text x="681" y="474" font-size="10.5" font-weight="500" fill="#8E8E98" text-anchor="middle">지도</text><circle cx="727" cy="456" r="19" fill="#D9F99D"/><text x="727" y="463" font-size="20" font-weight="800" fill="#18181B" text-anchor="middle">＋</text><rect x="764" y="442" width="18" height="16" rx="5" fill="none" stroke="#8E8E98" stroke-width="1.6"/><text x="773" y="474" font-size="10.5" font-weight="500" fill="#8E8E98" text-anchor="middle">여행</text><rect x="810" y="442" width="18" height="16" rx="5" fill="none" stroke="#8E8E98" stroke-width="1.6"/><text x="819" y="474" font-size="10.5" font-weight="500" fill="#8E8E98" text-anchor="middle">약속</text><rect x="856" y="442" width="18" height="16" rx="5" fill="none" stroke="#8E8E98" stroke-width="1.6"/><text x="865" y="474" font-size="10.5" font-weight="500" fill="#8E8E98" text-anchor="middle">설정</text>
+<g class="sc s0" style="animation-delay:0.00s"><text x="630" y="72" font-size="18" font-weight="800" fill="#F4F4F5" text-anchor="start">보관함</text><rect x="626" y="94" width="248" height="34" rx="17" fill="#111113" stroke="#34343A"/>
+<circle cx="644" cy="110" r="5.5" fill="none" stroke="#8E8E98" stroke-width="1.6"/><path d="M648 114 l4 4" stroke="#8E8E98" stroke-width="1.6"/>
+<text x="658" y="116" font-size="12.5" font-weight="400" fill="#8E8E98" text-anchor="start">이름·주소·메모·라벨 검색</text>
+<g class="rise" style="animation-delay:0.15s"><rect x="626" y="138" width="73" height="24" rx="12" fill="#111113" stroke="#34343A"/><text x="636" y="154.025" font-size="11.5" font-weight="700" fill="#B4B4BC" text-anchor="start">라벨 관리</text><rect x="704" y="138" width="84" height="24" rx="12" fill="#4A2520"/><text x="714" y="154.025" font-size="11.5" font-weight="700" fill="#FFB8A8" text-anchor="start">🍜 맛집 12</text><rect x="793" y="138" width="78" height="24" rx="12" fill="#4A3018"/><text x="803" y="154.025" font-size="11.5" font-weight="700" fill="#FFCC9A" text-anchor="start">☕ 카페 8</text><rect x="876" y="138" width="78" height="24" rx="12" fill="#2A3E18"/><text x="886" y="154.025" font-size="11.5" font-weight="700" fill="#C4E89A" text-anchor="start">⛰️ 명소 5</text></g>
+<g class="rise" style="animation-delay:0.30s"><rect x="626" y="176" width="248" height="50" rx="12" fill="#26262B" stroke="#34343A"/>
+<text x="638" y="197" font-size="13.5" font-weight="800" fill="#F4F4F5" text-anchor="start">⛰️ 바다 전망대</text>
+<text x="638" y="214" font-size="11" font-weight="400" fill="#8E8E98" text-anchor="start">강원 강릉시</text>
+<rect x="802" y="202" width="62" height="18" rx="9" fill="#2A3E18"/><text x="812" y="214.85" font-size="11" font-weight="700" fill="#C4E89A" text-anchor="start">⛰️ 명소</text></g><g class="rise" style="animation-delay:0.40s"><rect x="626" y="234" width="248" height="50" rx="12" fill="#26262B" stroke="#34343A"/>
+<text x="638" y="255" font-size="13.5" font-weight="800" fill="#F4F4F5" text-anchor="start">🍜 시장 칼국수</text>
+<text x="638" y="272" font-size="11" font-weight="400" fill="#8E8E98" text-anchor="start">강원 속초시</text>
+<rect x="802" y="260" width="62" height="18" rx="9" fill="#4A2520"/><text x="812" y="272.85" font-size="11" font-weight="700" fill="#FFB8A8" text-anchor="start">🍜 맛집</text></g><g class="rise" style="animation-delay:0.50s"><rect x="626" y="292" width="248" height="50" rx="12" fill="#26262B" stroke="#34343A"/>
+<text x="638" y="313" font-size="13.5" font-weight="800" fill="#F4F4F5" text-anchor="start">☕ 바다 뷰 카페</text>
+<text x="638" y="330" font-size="11" font-weight="400" fill="#8E8E98" text-anchor="start">강원 양양군</text>
+<rect x="802" y="318" width="62" height="18" rx="9" fill="#4A3018"/><text x="812" y="330.85" font-size="11" font-weight="700" fill="#FFCC9A" text-anchor="start">☕ 카페</text></g><g class="rise" style="animation-delay:0.60s"><rect x="626" y="350" width="248" height="50" rx="12" fill="#26262B" stroke="#34343A"/>
+<text x="638" y="371" font-size="13.5" font-weight="800" fill="#F4F4F5" text-anchor="start">🍜 초당 순두부</text>
+<text x="638" y="388" font-size="11" font-weight="400" fill="#8E8E98" text-anchor="start">강원 강릉시</text>
+<rect x="802" y="376" width="62" height="18" rx="9" fill="#4A2520"/><text x="812" y="388.85" font-size="11" font-weight="700" fill="#FFB8A8" text-anchor="start">🍜 맛집</text></g>
+<circle class="tap" style="animation-delay:2.20s" cx="728" cy="150" r="16" fill="#F4F4F5" fill-opacity=".28" stroke="#F4F4F5" stroke-opacity=".5" stroke-width="2"/></g>
+<g class="sc s1" style="animation-delay:3.60s"><text x="630" y="72" font-size="18" font-weight="800" fill="#F4F4F5" text-anchor="start">보관함</text><rect x="626" y="94" width="248" height="34" rx="17" fill="#111113" stroke="#34343A"/>
+<circle cx="644" cy="110" r="5.5" fill="none" stroke="#8E8E98" stroke-width="1.6"/><path d="M648 114 l4 4" stroke="#8E8E98" stroke-width="1.6"/>
+<text x="658" y="116" font-size="12.5" font-weight="400" fill="#F4F4F5" text-anchor="start">칼국수</text>
+<rect x="626" y="138" width="73" height="24" rx="12" fill="#111113" stroke="#34343A"/><text x="636" y="154.025" font-size="11.5" font-weight="700" fill="#B4B4BC" text-anchor="start">라벨 관리</text><rect x="704" y="138" width="84" height="24" rx="12" fill="#D9F99D"/><text x="714" y="154.025" font-size="11.5" font-weight="700" fill="#18181B" text-anchor="start">🍜 맛집 12</text><rect x="793" y="138" width="78" height="24" rx="12" fill="#4A3018"/><text x="803" y="154.025" font-size="11.5" font-weight="700" fill="#FFCC9A" text-anchor="start">☕ 카페 8</text>
+<g class="rise" style="animation-delay:3.80s"><rect x="626" y="170" width="57" height="24" rx="12" fill="#D9F99D"/><text x="636" y="186.025" font-size="11.5" font-weight="700" fill="#18181B" text-anchor="start">강원 9</text><rect x="688" y="170" width="57" height="24" rx="12" fill="#111113" stroke="#34343A"/><text x="698" y="186.025" font-size="11.5" font-weight="700" fill="#B4B4BC" text-anchor="start">서울 2</text><rect x="750" y="170" width="57" height="24" rx="12" fill="#111113" stroke="#34343A"/><text x="760" y="186.025" font-size="11.5" font-weight="700" fill="#B4B4BC" text-anchor="start">제주 1</text></g>
+<g class="rise" style="animation-delay:4.00s"><rect x="626" y="200" width="87" height="24" rx="12" fill="#111113" stroke="#34343A"/><text x="636" y="216.025" font-size="11.5" font-weight="700" fill="#B4B4BC" text-anchor="start">강원 전체 9</text><rect x="718" y="200" width="57" height="24" rx="12" fill="#111113" stroke="#34343A"/><text x="728" y="216.025" font-size="11.5" font-weight="700" fill="#B4B4BC" text-anchor="start">강릉 5</text><rect x="780" y="200" width="57" height="24" rx="12" fill="#D9F99D"/><text x="790" y="216.025" font-size="11.5" font-weight="700" fill="#18181B" text-anchor="start">속초 3</text></g>
+<g class="rise" style="animation-delay:4.30s"><rect x="626" y="238" width="248" height="50" rx="12" fill="#26262B" stroke="#34343A"/>
+<text x="638" y="259" font-size="13.5" font-weight="800" fill="#F4F4F5" text-anchor="start">🍜 시장 칼국수</text>
+<text x="638" y="276" font-size="11" font-weight="400" fill="#8E8E98" text-anchor="start">강원 속초시</text>
+<rect x="802" y="264" width="62" height="18" rx="9" fill="#4A2520"/><text x="812" y="276.85" font-size="11" font-weight="700" fill="#FFB8A8" text-anchor="start">🍜 맛집</text></g>
+<circle class="tap" style="animation-delay:5.00s" cx="836" cy="212" r="16" fill="#F4F4F5" fill-opacity=".28" stroke="#F4F4F5" stroke-opacity=".5" stroke-width="2"/></g>
+<g class="sc s2" style="animation-delay:7.20s"><text x="630" y="72" font-size="18" font-weight="800" fill="#F4F4F5" text-anchor="start">보관함</text><rect x="626" y="94" width="248" height="34" rx="17" fill="#111113" stroke="#34343A"/>
+<circle cx="644" cy="110" r="5.5" fill="none" stroke="#8E8E98" stroke-width="1.6"/><path d="M648 114 l4 4" stroke="#8E8E98" stroke-width="1.6"/>
+<text x="658" y="116" font-size="12.5" font-weight="400" fill="#8E8E98" text-anchor="start">이름·주소·메모·라벨 검색</text>
+<g class="" style="animation-delay:7.20s"><rect x="626" y="138" width="248" height="50" rx="12" fill="#2A3E18" stroke="#34343A"/><circle cx="644" cy="163" r="9" fill="#D9F99D"/><text x="644" y="167" font-size="11" font-weight="800" fill="#18181B" text-anchor="middle">✓</text>
+<text x="662" y="159" font-size="13.5" font-weight="800" fill="#F4F4F5" text-anchor="start">⛰️ 바다 전망대</text>
+<text x="662" y="176" font-size="11" font-weight="400" fill="#8E8E98" text-anchor="start">강원 강릉시</text>
+<rect x="802" y="164" width="62" height="18" rx="9" fill="#2A3E18"/><text x="812" y="176.85" font-size="11" font-weight="700" fill="#C4E89A" text-anchor="start">⛰️ 명소</text></g><g class="" style="animation-delay:7.20s"><rect x="626" y="196" width="248" height="50" rx="12" fill="#2A3E18" stroke="#34343A"/><circle cx="644" cy="221" r="9" fill="#D9F99D"/><text x="644" y="225" font-size="11" font-weight="800" fill="#18181B" text-anchor="middle">✓</text>
+<text x="662" y="217" font-size="13.5" font-weight="800" fill="#F4F4F5" text-anchor="start">🍜 시장 칼국수</text>
+<text x="662" y="234" font-size="11" font-weight="400" fill="#8E8E98" text-anchor="start">강원 속초시</text>
+<rect x="802" y="222" width="62" height="18" rx="9" fill="#4A2520"/><text x="812" y="234.85" font-size="11" font-weight="700" fill="#FFB8A8" text-anchor="start">🍜 맛집</text></g><g class="" style="animation-delay:7.20s"><rect x="626" y="254" width="248" height="50" rx="12" fill="#26262B" stroke="#34343A"/><circle cx="644" cy="279" r="9" fill="none" stroke="#71717D" stroke-width="1.5"/>
+<text x="662" y="275" font-size="13.5" font-weight="800" fill="#F4F4F5" text-anchor="start">☕ 바다 뷰 카페</text>
+<text x="662" y="292" font-size="11" font-weight="400" fill="#8E8E98" text-anchor="start">강원 양양군</text>
+<rect x="802" y="280" width="62" height="18" rx="9" fill="#4A3018"/><text x="812" y="292.85" font-size="11" font-weight="700" fill="#FFCC9A" text-anchor="start">☕ 카페</text></g><g class="" style="animation-delay:7.20s"><rect x="626" y="312" width="248" height="50" rx="12" fill="#26262B" stroke="#34343A"/><circle cx="644" cy="337" r="9" fill="none" stroke="#71717D" stroke-width="1.5"/>
+<text x="662" y="333" font-size="13.5" font-weight="800" fill="#F4F4F5" text-anchor="start">🍜 초당 순두부</text>
+<text x="662" y="350" font-size="11" font-weight="400" fill="#8E8E98" text-anchor="start">강원 강릉시</text>
+<rect x="802" y="338" width="62" height="18" rx="9" fill="#4A2520"/><text x="812" y="350.85" font-size="11" font-weight="700" fill="#FFB8A8" text-anchor="start">🍜 맛집</text></g>
+<circle class="tap" style="animation-delay:7.40s" cx="700" cy="221" r="16" fill="#F4F4F5" fill-opacity=".28" stroke="#F4F4F5" stroke-opacity=".5" stroke-width="2"/>
+<g class="rise" style="animation-delay:7.80s"><rect x="612" y="372" width="276" height="116" rx="0" fill="#26262B" stroke="#34343A"/><path d="M612 456 V372" stroke="none"/>
+<text x="626" y="398" font-size="13.5" font-weight="800" fill="#F4F4F5" text-anchor="start">2곳 선택</text><text x="874" y="398" font-size="12" font-weight="700" fill="#D9F99D" text-anchor="end">선택 해제</text>
+<rect x="626" y="412" width="84" height="28" rx="14" fill="#111113" stroke="#34343A"/><text x="636" y="430.025" font-size="11.5" font-weight="700" fill="#B4B4BC" text-anchor="start">라벨 붙이기</text><rect x="715" y="412" width="55" height="28" rx="14" fill="#111113" stroke="#34343A"/><text x="725" y="430.025" font-size="11.5" font-weight="700" fill="#B4B4BC" text-anchor="start">다녀옴</text><rect x="775" y="412" width="84" height="28" rx="14" fill="#111113" stroke="#34343A"/><text x="785" y="430.025" font-size="11.5" font-weight="700" fill="#B4B4BC" text-anchor="start">여행에 넣기</text></g>
+<circle class="tap" style="animation-delay:9.40s" cx="836" cy="426" r="16" fill="#F4F4F5" fill-opacity=".28" stroke="#F4F4F5" stroke-opacity=".5" stroke-width="2"/></g>
+<g class="sc s3" style="animation-delay:10.80s"><text x="630" y="72" font-size="18" font-weight="800" fill="#F4F4F5" text-anchor="start">보관함</text><g class="" style="animation-delay:10.80s"><rect x="626" y="94" width="248" height="50" rx="12" fill="#2A3E18" stroke="#34343A"/><circle cx="644" cy="119" r="9" fill="#D9F99D"/><text x="644" y="123" font-size="11" font-weight="800" fill="#18181B" text-anchor="middle">✓</text>
+<text x="662" y="115" font-size="13.5" font-weight="800" fill="#F4F4F5" text-anchor="start">⛰️ 바다 전망대</text>
+<text x="662" y="132" font-size="11" font-weight="400" fill="#8E8E98" text-anchor="start">강원 강릉시</text>
+<rect x="802" y="120" width="62" height="18" rx="9" fill="#2A3E18"/><text x="812" y="132.85" font-size="11" font-weight="700" fill="#C4E89A" text-anchor="start">⛰️ 명소</text></g><g class="" style="animation-delay:10.80s"><rect x="626" y="152" width="248" height="50" rx="12" fill="#2A3E18" stroke="#34343A"/><circle cx="644" cy="177" r="9" fill="#D9F99D"/><text x="644" y="181" font-size="11" font-weight="800" fill="#18181B" text-anchor="middle">✓</text>
+<text x="662" y="173" font-size="13.5" font-weight="800" fill="#F4F4F5" text-anchor="start">🍜 시장 칼국수</text>
+<text x="662" y="190" font-size="11" font-weight="400" fill="#8E8E98" text-anchor="start">강원 속초시</text>
+<rect x="802" y="178" width="62" height="18" rx="9" fill="#4A2520"/><text x="812" y="190.85" font-size="11" font-weight="700" fill="#FFB8A8" text-anchor="start">🍜 맛집</text></g>
+<rect x="612" y="32" width="276" height="456" rx="32" fill="#000" fill-opacity=".35"/>
+<g class="rise" style="animation-delay:10.90s"><path d="M612 218 q0 -22 22 -22 h232 q22 0 22 22 V456 q0 32 -32 32 h-212 q-32 0 -32 -32 Z" fill="#1B1B1F"/>
+<rect x="732" y="204" width="36" height="5" rx="2.5" fill="#34343A"/>
+<text x="626" y="234" font-size="16" font-weight="800" fill="#F4F4F5" text-anchor="start">여행에 넣기</text></g>
+<g class="rise" style="animation-delay:11.10s"><rect x="626" y="250" width="90" height="30" rx="15" fill="none" stroke="#71717D"/><text x="671" y="269.32" font-size="12" font-weight="700" fill="#F4F4F5" text-anchor="middle">새 여행</text>
+<rect x="626" y="292" width="248" height="46" rx="12" fill="#26262B" stroke="#34343A"/><text x="638" y="311" font-size="13.5" font-weight="800" fill="#F4F4F5" text-anchor="start">강릉 1박 2일</text><text x="638" y="328" font-size="11" font-weight="400" fill="#8E8E98" text-anchor="start">일정 4곳 · 후보 2곳</text>
+<rect x="626" y="344" width="248" height="46" rx="12" fill="#26262B" stroke="#34343A"/><text x="638" y="363" font-size="13.5" font-weight="800" fill="#F4F4F5" text-anchor="start">제주 여름 휴가</text><text x="638" y="380" font-size="11" font-weight="400" fill="#8E8E98" text-anchor="start">일정 0곳 · 후보 6곳</text></g>
+<circle class="tap" style="animation-delay:12.20s" cx="720" cy="315" r="16" fill="#F4F4F5" fill-opacity=".28" stroke="#F4F4F5" stroke-opacity=".5" stroke-width="2"/><g class="rise" style="animation-delay:13.00s"><rect x="667" y="384" width="166" height="32" rx="16" fill="#F4F4F5"/><text x="750" y="404.5" font-size="12" font-weight="700" fill="#111113" text-anchor="middle">2곳을 후보에 넣었어요</text></g></g></g>
+</svg>
