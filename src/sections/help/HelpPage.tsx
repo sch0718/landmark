@@ -1,6 +1,7 @@
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
+import { useLayoutEffect, useRef } from 'react';
 import { Link, useParams } from 'react-router';
 import { useDocumentTitle } from 'src/lib/use-document-title';
 import { paths } from 'src/routes/paths';
@@ -8,15 +9,32 @@ import { HELP_PAGES } from './help-content';
 import { helpText } from './help-text';
 import { HelpFigure } from './HelpFigure';
 
+/** 이 화면을 담은 스크롤 칸. 셸이 화면 사이에 칸을 재사용하므로 문서 스크롤만 보면 안 된다. */
+function scrollParent(element: HTMLElement): Element | null {
+  for (let node = element.parentElement; node !== null; node = node.parentElement) {
+    const { overflowY } = getComputedStyle(node);
+    if (overflowY === 'auto' || overflowY === 'scroll') return node;
+  }
+  // 브라우저 밖(시험 환경 등)에는 문서 스크롤 칸이 없을 수 있다.
+  return document.scrollingElement ?? null;
+}
+
 export function HelpPage() {
   const { id } = useParams();
+  const rootRef = useRef<HTMLDivElement>(null);
+  // 이전·다음으로 메뉴를 바꾸면 같은 화면이 다시 쓰여 스크롤이 남는다. 새 메뉴는 맨 위부터 보인다.
+  useLayoutEffect(() => {
+    if (rootRef.current === null) return;
+    const pane = scrollParent(rootRef.current);
+    if (pane !== null) pane.scrollTop = 0;
+  }, [id]);
   const index = HELP_PAGES.findIndex((page) => page.id === id);
   const page = HELP_PAGES[index];
   useDocumentTitle(page === undefined ? '도움말을 찾을 수 없어요' : `${page.title} 도움말`);
   const previous = HELP_PAGES[index - 1];
   const next = HELP_PAGES[index + 1];
   return (
-    <Box sx={{ maxWidth: 960, mx: 'auto', p: 2, color: 'var(--tm-text-primary)' }}>
+    <Box ref={rootRef} sx={{ maxWidth: 960, mx: 'auto', p: 2, color: 'var(--tm-text-primary)' }}>
       <Button component={Link} to={paths.help} sx={{ minHeight: 44 }}>
         ← 도움말
       </Button>

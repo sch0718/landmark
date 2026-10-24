@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
 import { HelpPage } from 'src/sections/help/HelpPage';
@@ -54,5 +54,18 @@ describe('도움말 본문', () => {
     render(page('missing'));
     expect(screen.getByRole('heading', { name: '도움말을 찾을 수 없어요' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /도움말/ })).toHaveAttribute('href', '/help');
+  });
+  it('이전·다음으로 메뉴를 바꾸면 담은 스크롤 칸을 맨 위로 돌린다', () => {
+    resolved.mode = 'light';
+    const { container } = render(
+      <div data-testid="pane" style={{ overflowY: 'auto', height: 200 }}>
+        {page('map')}
+      </div>,
+    );
+    const pane = container.querySelector<HTMLElement>('[data-testid="pane"]')!;
+    pane.scrollTop = 600;
+    fireEvent.click(screen.getByRole('link', { name: /다음.*장소 추가/ }));
+    expect(screen.getByRole('heading', { name: '장소 추가', level: 1 })).toBeInTheDocument();
+    expect(pane.scrollTop).toBe(0);
   });
 });
