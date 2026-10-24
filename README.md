@@ -186,7 +186,7 @@ node scripts/measure-ui-assets.mjs dist/assets
    - `publicId`와 `stop.id`는 비워 두면 collect가 생성해 yaml에 기록합니다.
 2. `yarn collect trips/<여행>.yaml` — 네이버 저장 목록과 자동차 경로를 받아 `public/data/<publicId>.json`을 만듭니다.
    - 실패한 구간은 직선으로 표시되고 다음 collect에서 다시 시도합니다. `--refresh-routes`면 캐시를 무시하고 모든 구간을 다시 조회합니다.
-3. yaml과 JSON을 함께 커밋·push → Cloudflare Pages가 배포합니다.
+3. 옛 앱에서는 yaml과 JSON을 함께 커밋·push해 Cloudflare Pages로 배포했습니다. 지금은 `.gitignore`가 `trips/*`(`example.yaml` 제외)와 `public/data/*`를 막으므로, 이 결과를 배포하려면 직접 판단해 강제로 추가해야 합니다(아래 공개 범위).
 4. 옛 앱에서는 `https://<도메인>/t/<publicId>`가 공유 링크였습니다. 이제 이 경로는 옛 여행 가져오기 화면입니다.
 
 ### 경로 캐시 (`.cache/routes`)
@@ -227,7 +227,7 @@ node scripts/measure-ui-assets.mjs dist/assets
 
 ## 공개 범위 주의
 
-저장소가 공개이므로 커밋한 `trips/*.yaml`(네이버 폴더 shareId 포함)도 누구나 볼 수 있습니다. 실제 여행 yaml은 커밋하지 마세요(지금은 `trips/example.yaml`만 있습니다). 또 **배포된 `public/data/*.json`은 공개 파일**입니다. `noindex`는 검색 엔진에 대한 지시일 뿐 접근 제어가 아니며, URL을 아는 사람은 누구나 JSON 전체를 받을 수 있습니다.
+저장소가 공개이므로 커밋한 파일은 누구나 볼 수 있습니다. 그래서 `.gitignore`가 개인 여행 yaml(`trips/*`, 네이버 폴더 shareId 포함)과 수집 결과(`public/data/*`)를 막고 `trips/example.yaml`만 추적합니다. 또 **배포된 `public/data/*.json`은 공개 파일**입니다. `noindex`는 검색 엔진에 대한 지시일 뿐 접근 제어가 아니며, URL을 아는 사람은 누구나 JSON 전체를 받을 수 있습니다.
 
 | 데이터              | 처리                                                                                                                             |
 | ------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
