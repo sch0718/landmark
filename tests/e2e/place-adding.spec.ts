@@ -253,11 +253,12 @@ test.describe('키보드·포커스', () => {
       await page.keyboard.press('Tab');
       await expect(plus).toBeFocused();
       await page.keyboard.press('Enter');
-      // 시트가 열리면 시트 자체에 포커스가 가고, 다음 Tab이 첫 항목이다.
-      const linkItem = page
-        .getByRole('dialog', { name: '장소 추가' })
-        .getByRole('button', { name: /링크 붙여넣기/ });
+      // 시트가 열리면 시트 자체에 포커스가 가고, 다음 Tab이 제목 줄의 도움말, 그다음이 첫 항목이다.
+      const sheet = page.getByRole('dialog', { name: '장소 추가' });
+      const linkItem = sheet.getByRole('button', { name: /링크 붙여넣기/ });
       await expect(linkItem).toBeVisible();
+      await page.keyboard.press('Tab');
+      await expect(sheet.getByRole('link', { name: '도움말' })).toBeFocused();
       await page.keyboard.press('Tab');
       await expect(linkItem).toBeFocused();
       await page.keyboard.press('Enter');
