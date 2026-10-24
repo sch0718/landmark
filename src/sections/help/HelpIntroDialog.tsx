@@ -40,7 +40,7 @@ export function HelpIntroDialog({
     >
       <DialogTitle id={titleId}>{page.title}</DialogTitle>
       <DialogContent>
-        <HelpFigure page={page} />
+        <HelpFigure page={page} compact />
         <Typography component="p" sx={{ mt: 2 }}>
           {helpText(page.lead.join(' '))}
         </Typography>
