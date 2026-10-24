@@ -28,7 +28,7 @@ export function createHelpSeenStore(storage: () => Storage = () => window.localS
       return memory;
     }
     // 깨진 값은 빈 기록으로 본다. 다음 기록이 덮어쓰도록 저장소는 계속 쓴다.
-    let parsed: unknown = [];
+    let parsed: unknown;
     try {
       parsed = JSON.parse(raw ?? '[]');
     } catch {
