@@ -1,7 +1,8 @@
 import Box from '@mui/material/Box';
 import { Link, useLocation } from 'react-router';
 import { AppLogo } from 'src/components/brand/AppLogo';
-import { PlusIcon } from 'src/components/icons';
+import { helpIdForPath } from 'src/sections/help/help-routing';
+import { HelpIcon, PlusIcon } from 'src/components/icons';
 import { paths } from 'src/routes/paths';
 import { ADD_LABEL, isNavActive, NAV_ITEMS } from 'src/sections/shell/nav-items';
 
@@ -25,6 +26,7 @@ const ITEM_SX = {
  */
 export function NavRail({ onAdd }: { onAdd: (opener: HTMLElement) => void }) {
   const { pathname } = useLocation();
+  const helpId = helpIdForPath(pathname);
   return (
     <Box
       component="nav"
@@ -94,6 +96,15 @@ export function NavRail({ onAdd }: { onAdd: (opener: HTMLElement) => void }) {
           </Box>
         );
       })}
+      <Box
+        component={Link}
+        to={helpId === null ? paths.help : paths.helpPage(helpId)}
+        aria-label="도움말"
+        title="도움말"
+        sx={{ ...ITEM_SX, mt: 'auto', mb: 2, color: 'var(--tm-text-secondary)' }}
+      >
+        <HelpIcon aria-hidden="true" />
+      </Box>
     </Box>
   );
 }

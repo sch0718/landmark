@@ -11,6 +11,7 @@ import Typography from '@mui/material/Typography';
 import { Effect, Result } from 'effect';
 import { useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { toast } from 'sonner';
+import { HelpButton } from 'src/components/HelpButton';
 import type { ShareDoc } from 'src/schema/share';
 import { downloadText } from 'src/lib/download-text';
 import { SHARE_IMPORT_LIMITS } from 'src/domain/share/read-share';
@@ -276,7 +277,12 @@ export function ShareFileDialog({
 
   return (
     <Dialog open={open} onClose={onClose} aria-labelledby={titleId} fullWidth maxWidth="xs">
-      <DialogTitle id={titleId}>{heading}</DialogTitle>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, pr: 2 }}>
+        <DialogTitle id={titleId} sx={{ flex: 1, minWidth: 0 }}>
+          {heading}
+        </DialogTitle>
+        <HelpButton page="share" onClick={onClose} />
+      </Box>
       <DialogContent>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <Typography variant="body2" sx={{ color: 'var(--tm-text-secondary)' }}>

@@ -11,6 +11,7 @@ import { useAtomValue } from 'jotai';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { toast } from 'sonner';
+import { HelpButton } from 'src/components/HelpButton';
 import { EllipsisIcon } from 'src/components/icons';
 import { deleteMeeting, restoreMeeting } from 'src/domain/meeting/ops';
 import { useDocumentTitle } from 'src/lib/use-document-title';
@@ -60,11 +61,14 @@ export function MeetingsPage() {
         <Box component="h1" sx={{ m: 0, fontSize: 20, fontWeight: 800 }}>
           약속
         </Box>
-        {meetings.length > 0 && (
-          <Button variant="contained" onClick={() => setCreating(true)} sx={{ minHeight: 44 }}>
-            새 약속
-          </Button>
-        )}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          <HelpButton page="meetings" />
+          {meetings.length > 0 && (
+            <Button variant="contained" onClick={() => setCreating(true)} sx={{ minHeight: 44 }}>
+              새 약속
+            </Button>
+          )}
+        </Box>
       </Box>
       {meetings.length === 0 ? (
         <EmptyState

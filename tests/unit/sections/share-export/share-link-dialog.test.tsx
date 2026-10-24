@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Result } from 'effect';
+import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ShareDoc } from 'src/schema/share';
 import { ShareFileDialog, type ShareFileOptions } from 'src/sections/share-export/ShareFileDialog';
@@ -52,7 +53,7 @@ const props = {
 
 async function setup(linkDoc = makeDoc) {
   await renderLibrary(sampleLibrary(), { path: '/trips' });
-  const view = render(<ShareFileDialog {...props} linkDoc={linkDoc} />);
+  const view = render(<ShareFileDialog {...props} linkDoc={linkDoc} />, { wrapper: MemoryRouter });
   const d = within(screen.getByRole('dialog', { name: '링크 시험' }));
   return { ...view, d, copy: () => d.getByRole('button', { name: '링크 복사' }) };
 }
@@ -66,6 +67,15 @@ afterEach(() => {
 });
 
 describe('공유 창 링크 버튼', () => {
+  it('공유 도움말로 이동할 때 원래 창을 닫는다', async () => {
+    const { d } = await setup();
+    const help = d.getByRole('link', { name: '도움말' });
+    expect(help).toHaveAttribute('href', '/help/share');
+    await userEvent.click(help);
+    expect(props.onClose).toHaveBeenCalledTimes(1);
+    props.onClose.mockClear();
+  });
+
   it('복사 성공을 알리고 제목·메모를 담은 앱 주소 링크를 복사한다', async () => {
     vi.stubEnv('VITE_APP_URL', 'https://app.test/');
     const user = userEvent.setup();

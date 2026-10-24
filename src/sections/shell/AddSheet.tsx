@@ -4,6 +4,7 @@ import Typography from '@mui/material/Typography';
 import { useAtomValue, useSetAtom } from 'jotai';
 import type { ComponentType, SVGProps } from 'react';
 import { matchPath, useLocation, useNavigate } from 'react-router';
+import { HelpButton } from 'src/components/HelpButton';
 import { FolderInputIcon, LinkIcon, MapPinIcon, ShareIcon } from 'src/components/icons';
 import { paths } from 'src/routes/paths';
 import { ADD_LABEL } from 'src/sections/shell/nav-items';
@@ -91,9 +92,12 @@ export function AddSheet({ open, onClose }: { open: boolean; onClose: (chosen: b
           mb: 1.5,
         }}
       />
-      <Typography variant="subtitle1" component="h2" sx={{ fontWeight: 800, mb: 1 }}>
-        {ADD_LABEL}
-      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+        <Typography variant="subtitle1" component="h2" sx={{ fontWeight: 800 }}>
+          {ADD_LABEL}
+        </Typography>
+        <HelpButton page="add" onClick={() => onClose(true)} />
+      </Box>
       <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0 }}>
         {options.map(({ label, description, Icon, flow, to }) => (
           <li key={label}>

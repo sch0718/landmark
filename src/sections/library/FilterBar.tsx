@@ -1,6 +1,7 @@
 import Box from '@mui/material/Box';
 import InputBase from '@mui/material/InputBase';
 import type { Ref } from 'react';
+import { HelpButton } from 'src/components/HelpButton';
 import { SEARCH_BOX_SX, SEARCH_INPUT_SX } from 'src/components/field-style';
 import { SearchIcon, ShareIcon } from 'src/components/icons';
 import type { LibraryQuery } from 'src/domain/library/query';
@@ -79,9 +80,17 @@ export function FilterBar({
         </Box>
       </Box>
 
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 1 }}>
+      <Box
+        sx={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          px: 1,
+        }}
+      >
         <ViewSwitcher value={view} onChange={onViewChange} />
-        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', ml: 'auto' }}>
           <SortMenu
             value={query.sort}
             visitedSort={visitedSort}
@@ -113,6 +122,7 @@ export function FilterBar({
           >
             <ShareIcon aria-hidden="true" width={18} height={18} />
           </Box>
+          <HelpButton page="library" />
         </Box>
       </Box>
 

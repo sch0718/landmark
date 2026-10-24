@@ -7,6 +7,7 @@ import { useLayoutEffect, type ReactNode } from 'react';
 import { matchPath, Outlet, useLocation, useNavigate } from 'react-router';
 import { XIcon } from 'src/components/icons';
 import { useDocumentTitle } from 'src/lib/use-document-title';
+import { HelpIntroHost } from 'src/sections/help/HelpIntroHost';
 import { paths } from 'src/routes/paths';
 import { AddPlaceHost, useAddFlowRoute } from 'src/sections/add-place/AddPlaceHost';
 import { ShareDropOverlay } from 'src/sections/share-import/ShareDropOverlay';
@@ -328,6 +329,7 @@ export function AppShell() {
       <AddSheet open={addOpen} onClose={closeAdd} />
       {layout === 'compact' && <AddPlaceHost />}
       <ShareDropOverlay />
+      <HelpIntroHost blocked={addOpen || flow.step !== 'closed'} />
     </Box>
   );
 }

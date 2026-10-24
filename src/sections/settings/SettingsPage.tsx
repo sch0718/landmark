@@ -3,11 +3,12 @@ import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { useNavigate, useSearchParams } from 'react-router';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import { MonitorIcon, MoonIcon, SunIcon } from 'src/components/icons';
 import { liveLabels, livePlaces } from 'src/domain/library/query';
 import { useDocumentTitle } from 'src/lib/use-document-title';
 import type { Prefs } from 'src/schema/prefs';
+import { ResetHelpButton } from 'src/sections/help/ResetHelpButton';
 import { paths } from 'src/routes/paths';
 import { BackupSection } from 'src/sections/backup/BackupSection';
 import { RestoreDialogHost } from 'src/sections/backup/RestoreDialogHost';
@@ -155,6 +156,17 @@ export function SettingsPage() {
           >
             공유 파일 가져오기
           </Button>
+        </Box>
+      </Section>
+      <Section title="도움말">
+        <Typography variant="body2" sx={{ color: 'var(--tm-text-secondary)' }}>
+          메뉴별 사용법을 그림으로 볼 수 있어요
+        </Typography>
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+          <Button component={Link} to={paths.help} variant="outlined" sx={{ minHeight: 44 }}>
+            도움말 보기
+          </Button>
+          <ResetHelpButton />
         </Box>
       </Section>
       <Section title="데이터 정보">

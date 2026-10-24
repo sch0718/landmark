@@ -29,6 +29,18 @@ const SEED_FILE = fileURLToPath(new URL('../fixtures/library/seed.json', import.
 
 export const LIBRARY_KEY = 'tripmap:library:v2';
 export const PREFS_KEY = 'tripmap:prefs';
+export const HELP_SEEN_KEY = 'tripmap:help-seen:v1';
+const HELP_PAGE_IDS = [
+  'library',
+  'map',
+  'add',
+  'place',
+  'labels',
+  'trips',
+  'meetings',
+  'share',
+  'settings',
+];
 
 /** 보관함 시드 JSON 문자열(장소 30 · 라벨 6). */
 export const seedJson: string = readFileSync(SEED_FILE, 'utf8');
@@ -63,29 +75,34 @@ export function prefsJson(prefs: PrefsSeed = {}): string {
 }
 
 /**
- * 첫 로드 전에 localStorage에 보관함 시드(와 UI 선호)를 심는다. 이미 값이 있으면 건드리지 않아서
- * 새로고침 후에도 앱이 저장한 값이 유지된다.
+ * 첫 로드 전에 localStorage에 보관함 시드·UI 선호·도움말 확인 이력을 심는다. 이미 값이 있으면
+ * 건드리지 않아서 새로고침 후에도 앱이 저장한 값이 유지된다. `helpSeen: false`면 안내를 확인할 수 있다.
  */
 export async function seedStorage(
   page: Page,
-  options: { library?: boolean; prefs?: PrefsSeed } = {},
+  options: { library?: boolean; prefs?: PrefsSeed; helpSeen?: boolean } = {},
 ): Promise<void> {
-  const { library = true, prefs } = options;
+  const { library = true, prefs, helpSeen = true } = options;
   const prefsValue = prefs === undefined ? null : prefsJson(prefs);
   await page.addInitScript(
-    ({ libraryKey, prefsKey, libraryJson, prefsValue }) => {
+    ({ libraryKey, prefsKey, helpSeenKey, libraryJson, prefsValue, helpSeenValue }) => {
       if (libraryJson !== null && localStorage.getItem(libraryKey) === null) {
         localStorage.setItem(libraryKey, libraryJson);
       }
       if (prefsValue !== null && localStorage.getItem(prefsKey) === null) {
         localStorage.setItem(prefsKey, prefsValue);
       }
+      if (helpSeenValue !== null && localStorage.getItem(helpSeenKey) === null) {
+        localStorage.setItem(helpSeenKey, helpSeenValue);
+      }
     },
     {
       libraryKey: LIBRARY_KEY,
       prefsKey: PREFS_KEY,
+      helpSeenKey: HELP_SEEN_KEY,
       libraryJson: library ? seedJson : null,
       prefsValue,
+      helpSeenValue: helpSeen ? JSON.stringify(HELP_PAGE_IDS) : null,
     },
   );
 }

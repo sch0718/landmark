@@ -4,6 +4,7 @@ import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { useMemo, useState, type Ref } from 'react';
+import { HelpButton } from 'src/components/HelpButton';
 import { PanelLeftCloseIcon, PlusIcon } from 'src/components/icons';
 import { TruncatedText } from 'src/components/TruncatedText';
 import { liveLabels } from 'src/domain/library/query';
@@ -200,6 +201,7 @@ export function CandidatePanel({ trip, dayIndex, onCollapse, collapseRef, fill =
             {periodLabel(trip.startDate.value, trip.endDate.value)}
           </Box>
         </Box>
+        <HelpButton page="trips" />
         {onCollapse !== undefined && (
           <IconButton
             ref={collapseRef}

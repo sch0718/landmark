@@ -3,6 +3,7 @@ import { visuallyHidden } from '@mui/utils';
 import { useAtomValue, useSetAtom, useStore } from 'jotai';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { HelpButton } from 'src/components/HelpButton';
 import type { MapPadding } from 'src/components/map/MapAdapter';
 import { MapView } from 'src/components/map/MapView';
 import { MyLocationButton } from 'src/components/map/MyLocationButton';
@@ -322,7 +323,21 @@ export function LibraryMap() {
           onUnavailable={setUnavailable}
           onCenterChange={setCenter}
           myLocation={fix}
-          controls={<MyLocationButton locating={locating} onClick={() => void onLocate()} />}
+          controls={
+            <>
+              <MyLocationButton locating={locating} onClick={() => void onLocate()} />
+              <Box
+                sx={{
+                  bgcolor: 'var(--tm-bg-surface)',
+                  border: '1px solid var(--tm-border-strong, var(--tm-border))',
+                  borderRadius: 'var(--tm-radius-md)',
+                  boxShadow: 'var(--tm-shadow-1)',
+                }}
+              >
+                <HelpButton page="map" />
+              </Box>
+            </>
+          }
           controlsRight={detailOverlaid ? DETAIL_WIDTH : 0}
           extraFitPoints={extraFitPoints}
           fitMarkers={activeFix === null}
