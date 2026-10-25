@@ -41,3 +41,11 @@ export async function shareMeetingDoc(doc: MeetDoc, title: string) {
     toast.error('링크를 만들지 못했어요. 다시 시도해 주세요');
   }
 }
+
+/** 주최자 비밀은 질의 문자열 대신 해시로만 전달한다. */
+export function onlineMeetingUrl(id: string, hostToken?: string): string {
+  const app = appUrl(
+    import.meta.env.VITE_APP_URL || (import.meta.env.DEV ? window.location.origin : undefined),
+  );
+  return `${app}/meet/${encodeURIComponent(id)}${hostToken ? `#h=${encodeURIComponent(hostToken)}` : ''}`;
+}

@@ -14,11 +14,19 @@ import { MeetingResults } from 'src/sections/meetings/MeetingResults';
 import { ParticipantList } from 'src/sections/meetings/ParticipantList';
 import { meetingMapLayers } from 'src/sections/meetings/meeting-map-layers';
 import { useMeeting } from 'src/sections/meetings/use-meeting';
+import { OnlineHostMenu } from './OnlineHostMenu';
+import { useOnlineMeeting, type OnlineCompute } from './use-online-meeting';
 import { useLayout } from 'src/sections/shell/use-layout';
 
 const MODE_LABEL = { transit: '대중교통', car: '자동차', straight: '직선거리' };
 
 function Editor({ meeting, library }: { meeting: Meeting; library: Library }) {
+  const [compute, setCompute] = useState<OnlineCompute>({
+    times: {},
+    unit: meeting.mode.value === 'straight' ? 'm' : 'min',
+    pending: true,
+  });
+  const online = useOnlineMeeting(meeting, compute);
   const compact = useLayout() === 'compact';
   const [editing, setEditing] = useState(false);
   const [hubs, setHubs] = useState<Hub[]>([]);
@@ -41,7 +49,10 @@ function Editor({ meeting, library }: { meeting: Meeting; library: Library }) {
         <Button component={Link} to={paths.meetings} sx={{ minHeight: 44 }}>
           ← 약속 목록
         </Button>
-        <HelpButton page="meetings" />
+        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+          <OnlineHostMenu meeting={meeting} online={online} />
+          <HelpButton page="meetings" />
+        </Box>
       </Box>
       <Box component="h1" sx={{ m: 0, mt: 1, fontSize: 22, overflowWrap: 'anywhere' }}>
         {meeting.title.value}
@@ -56,7 +67,13 @@ function Editor({ meeting, library }: { meeting: Meeting; library: Library }) {
         기본 정보 고치기
       </Button>
       <ParticipantList meeting={meeting} />
-      <MeetingResults meeting={meeting} library={library} onHubsChange={setHubs} />
+      <MeetingResults
+        meeting={meeting}
+        library={library}
+        onHubsChange={setHubs}
+        online={online}
+        onComputeChange={setCompute}
+      />
     </Box>
   );
   const map = (

@@ -18,6 +18,7 @@ import { useDocumentTitle } from 'src/lib/use-document-title';
 import { paths } from 'src/routes/paths';
 import { EmptyState } from 'src/sections/library/EmptyState';
 import { MeetingFormDialog } from 'src/sections/meetings/MeetingFormDialog';
+import { readOnline } from 'src/services/meet-online/store';
 import { libraryAtom, useLibraryAction } from 'src/stores/library-state';
 
 const MODE_LABEL = { transit: '대중교통', car: '자동차', straight: '직선거리' };
@@ -79,6 +80,8 @@ export function MeetingsPage() {
       ) : (
         <Box component="ul" aria-label="약속 목록" sx={{ m: 0, p: 0 }}>
           {meetings.map((meeting) => {
+            const record = readOnline(meeting.id);
+            const sharing = record?.ended ? '공유 끝남' : record?.hostToken ? '공유 중' : null;
             const at = meeting.at.value;
             const info = `${at === null ? '일시 미정' : `${at.date.replaceAll('-', '.')} ${at.time}`} · ${MODE_LABEL[meeting.mode.value]}`;
             const counts = `참석자 ${meeting.participants.value.length}명 · 후보 ${meeting.candidates.value.length}곳`;
@@ -126,6 +129,7 @@ export function MeetingsPage() {
                   <Box sx={{ mt: 0.25, fontSize: 13, color: 'var(--tm-text-secondary)' }}>
                     {counts}
                   </Box>
+                  {sharing && <Box sx={{ mt: 0.5, fontSize: 13 }}>{sharing}</Box>}
                   {decided !== undefined && (
                     <Box sx={{ mt: 0.5, fontSize: 13, fontWeight: 700 }}>확정: {decided.name}</Box>
                   )}

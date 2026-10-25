@@ -1,6 +1,6 @@
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { HUBS, type Hub } from 'src/domain/meeting/hubs';
 import { fitMeetingText } from 'src/domain/meeting/limits';
@@ -22,18 +22,29 @@ import { NearbyPlaces } from './NearbyPlaces';
 import { CandidateTally } from './CandidateTally';
 import { shareMeetingDoc } from './share-link';
 import { useMeetingCompute } from './use-meeting-compute';
+import type { OnlineCompute, OnlineMeeting } from './use-online-meeting';
 
 /** 찾기·후보·집계는 같은 약속 연산으로 저장하고 계산값은 화면에만 둔다. */
 export function MeetingResults({
   meeting,
   library,
   onHubsChange,
+  online,
+  onComputeChange,
 }: {
   meeting: Meeting;
   library: Library;
   onHubsChange?(hubs: Hub[]): void;
+  online?: OnlineMeeting;
+  onComputeChange?(compute: OnlineCompute): void;
 }) {
   const { run } = useLibraryAction();
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (online?.mode !== 'online') return;
+    const timer = setInterval(() => setNow(Date.now()), 10_000);
+    return () => clearInterval(timer);
+  }, [online?.mode]);
   const [hubs, setHubs] = useState<Hub[]>([]);
   const [findSeq, setFindSeq] = useState(0);
   const [condition, setCondition] = useState<string | null>(null);
@@ -69,6 +80,21 @@ export function MeetingResults({
   };
   const hubCompute = useMeetingCompute({ ...args, targets: hubs });
   const candidateCompute = useMeetingCompute({ ...args, targets: meeting.candidates.value });
+  const reportCompute = useEffectEvent(() =>
+    onComputeChange?.({
+      times: candidateCompute.times,
+      unit: candidateCompute.unit,
+      pending: candidateCompute.pending,
+    }),
+  );
+  const computeKey = JSON.stringify([
+    candidateCompute.times,
+    candidateCompute.unit,
+    candidateCompute.pending,
+  ]);
+  useEffect(() => {
+    reportCompute();
+  }, [computeKey]);
   const rankedHubIds = JSON.stringify(
     rankRows(
       hubs.map((h) => ({
@@ -129,6 +155,20 @@ export function MeetingResults({
       );
     }
   };
+  const displayTimes = Object.fromEntries(
+    meeting.candidates.value.map((candidate) => [
+      candidate.id,
+      { ...candidateCompute.times[candidate.id], ...online?.replyTimes[candidate.id] },
+    ]),
+  );
+  const displayErrors = Object.fromEntries(
+    Object.entries(candidateCompute.errors).map(([cid, errors]) => [
+      cid,
+      Object.fromEntries(
+        Object.entries(errors).filter(([pid]) => online?.replyTimes[cid]?.[pid] === undefined),
+      ),
+    ]),
+  );
   const host = meeting.participants.value[0];
   const pending = hubCompute.pending || candidateCompute.pending;
   const queried =
@@ -185,10 +225,20 @@ export function MeetingResults({
           )}
         />
       )}
+      {online?.mode === 'online' && (
+        <Box role="status" sx={{ my: 1, color: 'var(--tm-text-secondary)' }}>
+          {online.status.failing ? '연결이 원활하지 않아요' : '친구 답장이 자동으로 모여요'}
+          {' · '}
+          {online.status.lastOkAt === null
+            ? '확인 중'
+            : `${Math.max(0, Math.floor((now - online.status.lastOkAt) / 60_000))}분 전 기준`}
+        </Box>
+      )}
+      {online?.mode === 'ended' && <Box role="status">공유가 끝난 약속이에요</Box>}
       <CandidateTally
         meeting={meeting}
-        times={candidateCompute.times}
-        errors={candidateCompute.errors}
+        times={displayTimes}
+        errors={displayErrors}
         unit={candidateCompute.unit}
         onLike={(cid) => {
           if (host) void run((lib, ctx) => toggleLike(lib, meeting.id, host.id, cid, ctx));
@@ -200,17 +250,19 @@ export function MeetingResults({
       <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
         <Button
           variant="outlined"
-          disabled={meeting.candidates.value.length === 0 || pending}
+          disabled={meeting.candidates.value.length === 0 || pending || online?.mode === 'ended'}
           onClick={() =>
-            void shareMeetingDoc(
-              inviteFromMeeting(
-                meeting,
-                candidateCompute.times,
-                candidateCompute.unit,
-                new Date().toISOString(),
-              ),
-              meeting.title.value,
-            )
+            online
+              ? void online.share()
+              : void shareMeetingDoc(
+                  inviteFromMeeting(
+                    meeting,
+                    candidateCompute.times,
+                    candidateCompute.unit,
+                    new Date().toISOString(),
+                  ),
+                  meeting.title.value,
+                )
           }
           sx={{ minHeight: 44 }}
         >
@@ -219,7 +271,12 @@ export function MeetingResults({
         {meeting.decided.value !== null && (
           <Button
             variant="contained"
+            disabled={online?.mode === 'ended'}
             onClick={() => {
+              if (online) {
+                void online.shareFinal();
+                return;
+              }
               const doc = finalFromMeeting(meeting);
               if (doc) void shareMeetingDoc(doc, meeting.title.value);
             }}
