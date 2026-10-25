@@ -9,7 +9,7 @@
   },
   "scripts": {
     "dev": "yarn build:viewer && vite",
-    "dev:full": "yarn build:viewer && wrangler pages dev --proxy 5173 -- vite --port 5173 --strictPort",
+    "dev:full": "yarn build:viewer && wrangler pages dev --d1 DB --proxy 5173 -- vite --port 5173 --strictPort",
     "build": "yarn build:viewer && tsc -b && vite build",
     "build:icons": "node scripts/build-icons.mjs",
     "build:motion": "node --disable-warning=ExperimentalWarning scripts/build-motion.mjs && prettier --write --log-level warn docs/help src/sections/help/help-content.ts",

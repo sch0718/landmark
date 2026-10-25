@@ -1,15 +1,18 @@
 import { Schema } from 'effect';
 import {
   MeetingDocSchema,
+  ReplyInputSchema,
   type MeetingDoc,
+  type ReplyInput,
   type OnlineReply,
   type OnlineState,
 } from '../../domain/meeting/online-doc';
-import { MeetingId } from '../../schema/meeting';
+import { MeetingId, MeetingMemberId, MeetingName } from '../../schema/meeting';
+import { LIBRARY_LIMITS } from '../../schema/library-base';
 import { safeParse } from '../../schema/parse';
 import { requestOrigin } from '../handler';
 import { ApiError, errorResponse, isAllowedOrigin, jsonResponse, type ApiErrorCode } from '../http';
-import { ensureSchema, type MeetDb } from './db';
+import { ensureSchema, type MeetDb, type MeetStatement } from './db';
 import type { MeetContext } from './env';
 import { consumeLimit, pruneLimits, type LimitAction } from './limits';
 import { hashIp, hashToken, newToken } from './tokens';
@@ -368,5 +371,231 @@ export function handleDelete(ctx: MeetContext, deps: MeetDeps): Promise<Response
       ctx.env.DB.prepare('DELETE FROM meetings WHERE id = ?').bind(id),
     ]);
     return new Response(null, { status: 204, headers: PRIVATE_HEADERS });
+  });
+}
+
+const claimSchema = Schema.Union([
+  Schema.Struct({ participantId: MeetingMemberId }),
+  Schema.Struct({ newName: Schema.String }),
+]);
+const releaseSchema = Schema.Union([
+  Schema.Struct({ participantId: MeetingMemberId }),
+  Schema.Struct({ host: Schema.Literal(true) }),
+]);
+const normalizeName = (name: string) => name.normalize('NFC').trim().replace(/\s+/g, ' ');
+const revisionGuard = 'EXISTS (SELECT 1 FROM meetings WHERE id = ? AND rev = ?)';
+
+function newParticipantId(): string {
+  const alphabet = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  let id = '';
+  while (id.length < 8) {
+    for (const byte of crypto.getRandomValues(new Uint8Array(16))) {
+      if (byte >= 252) continue;
+      id += alphabet[byte % alphabet.length];
+      if (id.length === 8) break;
+    }
+  }
+  return id;
+}
+
+// 읽었던 버전일 때만 한 배치로 쓴다. 충돌하면 권한과 인원도 다시 확인한다.
+async function changeMeeting(
+  ctx: MeetContext,
+  id: string,
+  now: Date,
+  build: (
+    row: MeetingRow,
+    doc: MeetingDoc,
+  ) => Promise<{
+    statements: MeetStatement[];
+    fields?: Record<string, unknown>;
+  }>,
+): Promise<Response> {
+  const db = ctx.env.DB;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const row = await activeMeeting(db, id, now);
+    const doc: MeetingDoc = JSON.parse(row.doc);
+    const { statements, fields } = await build(row, doc);
+    const results = await db.batch([
+      ...statements,
+      db
+        .prepare(
+          'UPDATE meetings SET rev = rev + 1, updated_at = ?, expires_at = ? WHERE id = ? AND rev = ?',
+        )
+        .bind(now.toISOString(), expiresAt(doc, now), id, row.rev),
+    ]);
+    if (changes(results[results.length - 1]) === 0) continue;
+    return jsonResponse({ rev: row.rev + 1, ...fields }, { headers: PRIVATE_HEADERS });
+  }
+  throw new MeetError('CONFLICT', '잠시 뒤 다시 해 주세요', { reason: 'busy' });
+}
+
+export function handleClaim(ctx: MeetContext, deps: MeetDeps): Promise<Response> {
+  return withRequest(ctx, async (origin) => {
+    const id = readMeetingId(ctx);
+    const now = deps.now();
+    await prepare(ctx, origin, now, 'claim');
+    // 만료·없는 약속을 입력 오류보다 먼저 알린다.
+    await activeMeeting(ctx.env.DB, id, now);
+    const input = validate(claimSchema, await readJson(ctx.request));
+    const name = 'newName' in input ? validate(MeetingName, normalizeName(input.newName)) : null;
+    return changeMeeting(ctx, id, now, async (row, doc) => {
+      const db = ctx.env.DB;
+      const { results: replies } = await db
+        .prepare('SELECT participant_id, name FROM meeting_replies WHERE meeting_id = ?')
+        .bind(id)
+        .all<Pick<ReplyRow, 'participant_id' | 'name'>>();
+      let participantId: string;
+      let isNew = false;
+      if ('participantId' in input) {
+        if (!doc.participants.some((p) => p.id === input.participantId)) {
+          throw new ApiError('NOT_FOUND', '참석자가 없어요');
+        }
+        participantId = input.participantId;
+      } else {
+        const participant = doc.participants.find((p) => normalizeName(p.name) === name);
+        const bodyIds = new Set(doc.participants.map((p) => p.id));
+        const reply = replies.find(
+          (r) => !bodyIds.has(r.participant_id) && normalizeName(r.name) === name,
+        );
+        const existing = participant?.id ?? reply?.participant_id;
+        if (existing) participantId = existing;
+        else {
+          const ids = new Set([
+            ...doc.participants.map((p) => p.id),
+            ...replies.map((r) => r.participant_id),
+          ]);
+          if (ids.size >= LIBRARY_LIMITS.meetingParticipantsMax) {
+            throw new MeetError('CONFLICT', '참석자는 10명까지예요', { reason: 'full' });
+          }
+          do {
+            participantId = newParticipantId();
+          } while (ids.has(participantId));
+          isNew = true;
+        }
+      }
+      if (participantId === doc.participants[0]?.id) {
+        throw new MeetError('CONFLICT', '주최자는 고를 수 없어요', { reason: 'host' });
+      }
+      if (
+        await db
+          .prepare(
+            "SELECT hash FROM meeting_tokens WHERE meeting_id = ? AND participant_id = ? AND kind = 'guest'",
+          )
+          .bind(id, participantId)
+          .first()
+      ) {
+        throw new MeetError('CONFLICT', '다른 기기에서 이미 골랐어요', { reason: 'taken' });
+      }
+      const guestToken = newToken();
+      const statements = isNew
+        ? [
+            db
+              .prepare(
+                `INSERT INTO meeting_replies (meeting_id, participant_id, name, origin, likes, times, updated_at) SELECT ?, ?, ?, NULL, '[]', NULL, ? WHERE ${revisionGuard}`,
+              )
+              .bind(id, participantId, name, now.toISOString(), id, row.rev),
+          ]
+        : [];
+      statements.push(
+        db
+          .prepare(
+            `INSERT INTO meeting_tokens (hash, meeting_id, kind, participant_id, created_at) SELECT ?, ?, 'guest', ?, ? WHERE ${revisionGuard}`,
+          )
+          .bind(await hashToken(guestToken), id, participantId, now.toISOString(), id, row.rev),
+      );
+      return { statements, fields: { participantId, guestToken } };
+    });
+  });
+}
+
+export function handleReply(ctx: MeetContext, deps: MeetDeps): Promise<Response> {
+  return withRequest(ctx, async (origin) => {
+    const id = readMeetingId(ctx);
+    const now = deps.now();
+    await prepare(ctx, origin, now, 'reply');
+    let input: ReplyInput | undefined;
+    return changeMeeting(ctx, id, now, async (row, doc) => {
+      const token = await readToken(ctx, id);
+      if (token?.kind !== 'guest' || !token.participant_id) {
+        throw new ApiError('UNAUTHORIZED', '참석자 연결을 확인해 주세요');
+      }
+      input ??= validate(ReplyInputSchema, await readJson(ctx.request));
+      const candidates = new Set(doc.candidates.map((c) => c.id));
+      if (
+        input.likes.some((cid) => !candidates.has(cid)) ||
+        Object.keys(input.times ?? {}).some((cid) => !candidates.has(cid))
+      ) {
+        throw new ApiError('BAD_REQUEST', '없는 후보예요');
+      }
+      const db = ctx.env.DB;
+      const old = await db
+        .prepare('SELECT * FROM meeting_replies WHERE meeting_id = ? AND participant_id = ?')
+        .bind(id, token.participant_id)
+        .first<ReplyRow>();
+      const name = doc.participants.find((p) => p.id === token.participant_id)?.name ?? old?.name;
+      if (!name) throw new ApiError('UNAUTHORIZED', '참석자 연결을 확인해 주세요');
+      const encode = (value: unknown) => (value == null ? null : JSON.stringify(value));
+      return {
+        statements: [
+          db
+            .prepare(
+              `INSERT INTO meeting_replies (meeting_id, participant_id, name, origin, likes, times, updated_at) SELECT ?, ?, ?, ?, ?, ?, ? WHERE ${revisionGuard} ON CONFLICT(meeting_id, participant_id) DO UPDATE SET name = excluded.name, origin = excluded.origin, likes = excluded.likes, times = excluded.times, updated_at = excluded.updated_at`,
+            )
+            .bind(
+              id,
+              token.participant_id,
+              name,
+              input.origin === undefined ? (old?.origin ?? null) : encode(input.origin),
+              JSON.stringify(input.likes),
+              input.times === undefined ? (old?.times ?? null) : encode(input.times),
+              now.toISOString(),
+              id,
+              row.rev,
+            ),
+        ],
+      };
+    });
+  });
+}
+
+export function handleRelease(ctx: MeetContext, deps: MeetDeps): Promise<Response> {
+  return withRequest(ctx, async (origin) => {
+    const id = readMeetingId(ctx);
+    const now = deps.now();
+    await prepare(ctx, origin, now);
+    let input: { readonly participantId: string } | { readonly host: true } | undefined;
+    return changeMeeting(ctx, id, now, async (row) => {
+      await requireHost(ctx, id);
+      input ??= validate(releaseSchema, await readJson(ctx.request));
+      const db = ctx.env.DB;
+      if ('participantId' in input) {
+        return {
+          statements: [
+            db
+              .prepare(
+                `DELETE FROM meeting_tokens WHERE meeting_id = ? AND participant_id = ? AND kind = 'guest' AND ${revisionGuard}`,
+              )
+              .bind(id, input.participantId, id, row.rev),
+          ],
+        };
+      }
+      const hostToken = newToken();
+      return {
+        statements: [
+          db
+            .prepare(
+              `DELETE FROM meeting_tokens WHERE meeting_id = ? AND kind = 'host' AND ${revisionGuard}`,
+            )
+            .bind(id, id, row.rev),
+          db
+            .prepare(
+              `INSERT INTO meeting_tokens (hash, meeting_id, kind, participant_id, created_at) SELECT ?, ?, 'host', NULL, ? WHERE ${revisionGuard}`,
+            )
+            .bind(await hashToken(hostToken), id, now.toISOString(), id, row.rev),
+        ],
+        fields: { hostToken },
+      };
+    });
   });
 }

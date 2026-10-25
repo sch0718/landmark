@@ -747,3 +747,102 @@ describe('약속 API 진입점', () => {
     },
   );
 });
+
+describe('온라인 약속 Pages 진입점', () => {
+  const routes = [
+    ['올리기', 'POST'],
+    ['읽기', 'GET'],
+    ['고치기', 'PUT'],
+    ['지우기', 'DELETE'],
+    ['고르기', 'POST'],
+    ['답장', 'PUT'],
+    ['풀기', 'POST'],
+  ] as const;
+  it.each(routes)('%s는 실제 DB와 처리 함수를 연결한다', async (action, method) => {
+    const { createSqliteD1 } = await import('../../helpers/sqlite-d1');
+    const { buildMeeting } = await import('../../fixtures/builders');
+    const { docFromMeeting } = await import('src/domain/meeting/online-doc');
+    const { onRequestPost: create } = await import('../../../functions/api/meet/index');
+    const item = await import('../../../functions/api/meet/[id]');
+    const { onRequestPost: claim } = await import('../../../functions/api/meet/[id]/claim');
+    const { onRequestPut: reply } = await import('../../../functions/api/meet/[id]/reply');
+    const { onRequestPost: release } = await import('../../../functions/api/meet/[id]/release');
+    const db = createSqliteD1();
+    const pending: Promise<unknown>[] = [];
+    const meeting = buildMeeting();
+    const doc = {
+      ...docFromMeeting(meeting, {}, 'min'),
+      participants: [...meeting.participants.value, { id: 'person02', name: '친구', origin: null }],
+    };
+    const ctx = (verb: string, body?: unknown, token?: string) => ({
+      request: new Request(`http://localhost:8788/api/meet/${doc.meetingId}`, {
+        method: verb,
+        headers: { Origin: ALLOWED_ORIGIN, ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      }),
+      env: { DB: db },
+      params: { id: doc.meetingId },
+      waitUntil: (p: Promise<unknown>) => {
+        pending.push(p);
+      },
+    });
+    try {
+      stubFetch({});
+      const created = await create(ctx('POST', { doc, turnstile: 'dev' }));
+      expect(created.status).toBe(201);
+      const { hostToken } = await created.json();
+      await Promise.all(pending);
+      let response: Response;
+      if (action === '올리기') response = created;
+      else if (action === '읽기') response = await item.onRequestGet(ctx(method));
+      else if (action === '고치기')
+        response = await item.onRequestPut(ctx(method, { doc, baseRev: 1 }, hostToken));
+      else if (action === '지우기')
+        response = await item.onRequestDelete(ctx(method, undefined, hostToken));
+      else if (action === '고르기')
+        response = await claim(ctx(method, { participantId: 'person02' }));
+      else if (action === '답장') {
+        const claimed = await claim(ctx('POST', { participantId: 'person02' }));
+        const { guestToken } = await claimed.json();
+        response = await reply(ctx(method, { likes: ['choice01'] }, guestToken));
+      } else response = await release(ctx(method, { host: true }, hostToken));
+      expect(response.status).toBe(action === '올리기' ? 201 : action === '지우기' ? 204 : 200);
+      expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+    } finally {
+      await Promise.all(pending);
+      db.close();
+    }
+  });
+  it('올리기의 Turnstile 호출은 런타임 fetch의 this를 보존한다', async () => {
+    const { createSqliteD1 } = await import('../../helpers/sqlite-d1');
+    const { buildMeeting } = await import('../../fixtures/builders');
+    const { docFromMeeting } = await import('src/domain/meeting/online-doc');
+    const { onRequestPost } = await import('../../../functions/api/meet/index');
+    const db = createSqliteD1();
+    const pending: Promise<unknown>[] = [];
+    const url = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
+    const calls = stubFetch({ [url]: () => new Response('{"success":true}') });
+    try {
+      const response = await onRequestPost({
+        request: new Request('http://localhost:8788/api/meet', {
+          method: 'POST',
+          headers: { Origin: ALLOWED_ORIGIN },
+          body: JSON.stringify({
+            doc: docFromMeeting(buildMeeting(), {}, 'min'),
+            turnstile: 'test',
+          }),
+        }),
+        env: { DB: db, TURNSTILE_SECRET: 'test-only' },
+        params: {},
+        waitUntil: (p) => {
+          pending.push(p);
+        },
+      });
+      expect(response.status).toBe(201);
+      expect(calls).toEqual([url]);
+    } finally {
+      await Promise.all(pending);
+      db.close();
+    }
+  });
+});

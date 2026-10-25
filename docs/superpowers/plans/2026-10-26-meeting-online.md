@@ -173,7 +173,7 @@
   - `type OnlineError = { code: 'offline' | 'unauthorized' | 'conflict' | 'ended' | 'not-found' | 'rate-limited' | 'unavailable' | 'switched-off' | 'invalid' | 'turnstile' | 'taken' | 'host' | 'full'; rev?: number }` — 503 `reason: 'off'`는 `switched-off`, 그 밖의 503은 `unavailable`.
   - `meetApi` — 모두 `Promise<{ ok: true; value } | { ok: false; error: OnlineError }>`:
     - `create(doc: MeetingDoc, turnstile: string) → { id, rev, docRev, hostToken }`
-    - 오류 본문은 `{ error: { code, message }, reason?, rev?, docRev? }` 모양이다(`reason`·`rev`·`docRev`는 최상위). `reason`으로 `taken`·`host`·`full`·`off`·`config`·`turnstile`을 가른다.
+    - 오류 본문은 `{ error: { code, message }, reason?, rev?, docRev? }` 모양이다(`reason`·`rev`·`docRev`는 최상위). `reason`으로 `taken`·`host`·`full`·`off`·`config`·`turnstile`·`busy`를 가른다(`busy`는 동시 변경이 몰려 서버가 5번 시도 뒤 포기한 409 — `OnlineError.code = 'conflict'`로 두고 다음 확인 때 다시 보낸다).
     - `get(id, since: number | null, token: string | null) → OnlineState | 'unchanged'`
     - `update(id, doc, baseDocRev, hostToken) → { rev, docRev }`
     - `remove(id, hostToken) → void`

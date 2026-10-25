@@ -7,6 +7,9 @@ import { ensureSchema } from 'src/server/meet/db';
 import type { MeetContext, MeetEnv } from 'src/server/meet/env';
 import {
   expiresAt,
+  handleClaim,
+  handleReply,
+  handleRelease,
   handleCreate,
   handleDelete,
   handleGet,
@@ -781,5 +784,518 @@ describe('Turnstile 검증', () => {
         vi.fn<typeof fetch>().mockRejectedValue(new Error('연결 실패')),
       ),
     ).toBe(false);
+  });
+});
+
+describe('참석자 고르기', () => {
+  async function claim(body: unknown) {
+    return handleClaim(context('POST', body), deps);
+  }
+  async function conflict(body: unknown, reason: string) {
+    const response = await claim(body);
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ reason, error: { code: 'CONFLICT' } });
+  }
+  it('고른 참석자 토큰은 해시로 저장하고 rev만 올린다', async () => {
+    await seed();
+    const response = await claim({ participantId: 'person02' });
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+    const body = await response.json();
+    expect(body).toMatchObject({ participantId: 'person02', rev: 2 });
+    expect(body.guestToken).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(
+      await db
+        .prepare("SELECT hash, participant_id FROM meeting_tokens WHERE kind = 'guest'")
+        .first(),
+    ).toEqual({ hash: await hashToken(body.guestToken), participant_id: 'person02' });
+    expect(await db.prepare('SELECT rev, doc_rev, doc FROM meetings').first()).toEqual({
+      rev: 2,
+      doc_rev: 1,
+      doc: JSON.stringify(doc()),
+    });
+  });
+  it('이미 고른 참석자는 taken이고 주최자는 host이다', async () => {
+    await seed();
+    expect((await claim({ participantId: 'person02' })).status).toBe(200);
+    await conflict({ participantId: 'person02' }, 'taken');
+    await conflict({ participantId: 'person01' }, 'host');
+    await conflict({ newName: ' 나 ' }, 'host');
+  });
+  it('없는 참석자 id는 404다', async () => {
+    await seed();
+    await expectError(await claim({ participantId: 'person99' }), 404, 'NOT_FOUND');
+  });
+  it('새 이름은 NFC와 공백을 정리해 빈 답장 줄로 만든다', async () => {
+    await seed();
+    const response = await claim({ newName: '  가   친구  ' });
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.participantId).toMatch(/^[a-z0-9]{8}$/);
+    expect(await db.prepare('SELECT * FROM meeting_replies').first()).toEqual({
+      meeting_id: 'meeting001',
+      participant_id: body.participantId,
+      name: '가 친구',
+      origin: null,
+      likes: '[]',
+      times: null,
+      updated_at: NOW.toISOString(),
+    });
+    expect(await db.prepare('SELECT doc FROM meetings').first()).toEqual({
+      doc: JSON.stringify(doc()),
+    });
+  });
+  it('같은 이름이면 본문 참석자를 고르고 차지 중이면 taken이다', async () => {
+    const next = doc({
+      participants: [doc().participants[0]!, { id: 'person02', name: '가  친구', origin: work }],
+    });
+    expect((await create(next)).status).toBe(201);
+    const response = await claim({ newName: '  가 친구 ' });
+    expect(await response.json()).toMatchObject({ participantId: 'person02' });
+    expect(await count('meeting_replies')).toBe(0);
+    await conflict({ newName: '가 친구' }, 'taken');
+  });
+  it('답장에만 있는 새 참석자 이름도 중복 차지를 막는다', async () => {
+    await seed();
+    expect((await claim({ newName: '새 친구' })).status).toBe(200);
+    await conflict({ newName: ' 새   친구 ' }, 'taken');
+    expect(await count('meeting_replies')).toBe(1);
+  });
+  it('본문에서 이름을 바꾼 참석자의 옛 답장 이름으로 차지하지 않는다', async () => {
+    const host = await seed();
+    await addReply();
+    const next = doc({
+      participants: [doc().participants[0]!, { id: 'person02', name: '바꾼 이름', origin: work }],
+    });
+    expect(
+      (await handleUpdate(context('PUT', { doc: next, baseRev: 1 }, { token: host }), deps)).status,
+    ).toBe(200);
+    const response = await claim({ newName: '친구' });
+    expect(response.status).toBe(200);
+    expect((await response.json()).participantId).not.toBe('person02');
+    expect(await count('meeting_replies')).toBe(2);
+  });
+  it('본문과 새 답장 참석자를 합쳐 10명까지만 만든다', async () => {
+    await seed();
+    for (let i = 0; i < 8; i++) expect((await claim({ newName: `새 친구 ${i}` })).status).toBe(200);
+    await conflict({ newName: '열한 번째' }, 'full');
+    expect((await claim({ newName: '친구' })).status).toBe(200);
+    expect(await count('meeting_replies')).toBe(8);
+  });
+  it('본문으로 합쳐진 새 참석자를 중복으로 세지 않는다', async () => {
+    const host = await seed();
+    const response = await claim({ newName: '새 친구' });
+    const { participantId } = await response.json();
+    const next = doc({
+      participants: [...doc().participants, { id: participantId, name: '새 친구', origin: null }],
+    });
+    expect(
+      (await handleUpdate(context('PUT', { doc: next, baseRev: 1 }, { token: host }), deps)).status,
+    ).toBe(200);
+    for (let i = 0; i < 7; i++) expect((await claim({ newName: `친구 ${i}` })).status).toBe(200);
+    await conflict({ newName: '초과' }, 'full');
+  });
+  it('동시에 같은 참석자를 고르면 한 요청만 성공한다', async () => {
+    await seed();
+    const responses = await Promise.all([
+      claim({ participantId: 'person02' }),
+      claim({ participantId: 'person02' }),
+    ]);
+    expect(responses.map((r) => r.status).sort()).toEqual([200, 409]);
+    expect(await responses.find((r) => r.status === 409)!.json()).toMatchObject({
+      reason: 'taken',
+    });
+    expect(await db.prepare('SELECT rev, doc_rev FROM meetings').first()).toEqual({
+      rev: 2,
+      doc_rev: 1,
+    });
+  });
+  it('동시에 같은 새 이름을 고르거나 마지막 자리를 골라도 한 명만 더한다', async () => {
+    await seed();
+    const same = await Promise.all([
+      claim({ newName: '같은 친구' }),
+      claim({ newName: '같은 친구' }),
+    ]);
+    expect(same.map((r) => r.status).sort()).toEqual([200, 409]);
+    for (let i = 0; i < 6; i++) expect((await claim({ newName: `친구 ${i}` })).status).toBe(200);
+    const last = await Promise.all([
+      claim({ newName: '마지막 가' }),
+      claim({ newName: '마지막 나' }),
+    ]);
+    expect(last.map((r) => r.status).sort()).toEqual([200, 409]);
+    expect(await last.find((r) => r.status === 409)!.json()).toMatchObject({ reason: 'full' });
+    expect(await count('meeting_replies')).toBe(8);
+  });
+  it.each([
+    {},
+    { participantId: 'person02', newName: '친구' },
+    { participantId: 'bad' },
+    { newName: '' },
+    { newName: '   ' },
+    { newName: '가'.repeat(21) },
+    { newName: 3 },
+    { newName: '친구', extra: true },
+  ])('잘못된 고르기 입력 %j는 400이다', async (body) => {
+    await seed();
+    await expectError(await claim(body), 400, 'BAD_REQUEST');
+    expect(await count('meeting_tokens')).toBe(1);
+  });
+  it('61번째 고르기부터 429다', async () => {
+    await seed();
+    for (let i = 0; i < 60; i++)
+      expect((await claim({ participantId: 'person99' })).status).toBe(404);
+    await expectError(await claim({ participantId: 'person02' }), 429, 'RATE_LIMITED');
+  });
+  it('배치가 실패하면 토큰·새 답장·rev가 모두 남지 않는다', async () => {
+    await seed();
+    await db
+      .prepare(
+        "CREATE TRIGGER reject_claim BEFORE UPDATE ON meetings BEGIN SELECT RAISE(ABORT, '시험 오류'); END",
+      )
+      .run();
+    await expectError(await claim({ newName: '친구 셋' }), 502, 'UPSTREAM_ERROR');
+    expect(await count('meeting_tokens')).toBe(1);
+    expect(await count('meeting_replies')).toBe(0);
+    expect(await db.prepare('SELECT rev FROM meetings').first()).toEqual({ rev: 1 });
+  });
+});
+
+describe('참석자 답장', () => {
+  async function guest() {
+    const response = await handleClaim(context('POST', { participantId: 'person02' }), deps);
+    expect(response.status).toBe(200);
+    return (await response.json()).guestToken as string;
+  }
+  it('버전 충돌이 계속되면 총 5번 시도 뒤 busy 409를 돌려준다', async () => {
+    await seed();
+    const token = await guest();
+    const batch = db.batch.bind(db);
+    let attempts = 0;
+    vi.spyOn(db, 'batch').mockImplementation(async (statements) => {
+      attempts++;
+      // 제한이 사라져도 시험 자체가 끝없이 돌지 않게 한다.
+      if (attempts > 5) throw new Error('재시도 한도 초과');
+      const results = await batch(statements);
+      results[results.length - 1] = { meta: { changes: 0 } };
+      return results;
+    });
+
+    const response = await handleReply(context('PUT', { likes: [] }, { token }), deps);
+
+    expect(response.status).toBe(409);
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(await response.json()).toEqual({
+      error: { code: 'CONFLICT', message: '잠시 뒤 다시 해 주세요' },
+      reason: 'busy',
+    });
+    expect(attempts).toBe(5);
+  });
+  it.each(['없음', '잘못된 토큰', '주최자', '다른 약속'])('%s은 답장 401이다', async (kind) => {
+    const host = await seed();
+    const token =
+      kind === '없음'
+        ? undefined
+        : kind === '주최자'
+          ? host
+          : kind === '다른 약속'
+            ? await addReply('person02', null, 'another001')
+            : 'wrong-token';
+    await expectError(
+      await handleReply(context('PUT', { likes: [] }, { token }), deps),
+      401,
+      'UNAUTHORIZED',
+    );
+  });
+  it('자기 줄만 저장하고 rev·갱신·만료를 올리며 주최자가 읽을 수 있다', async () => {
+    const host = await seed();
+    const token = await guest();
+    deps.now = () => new Date('2026-10-27T12:00:00Z');
+    const response = await handleReply(
+      context('PUT', { likes: ['choice01'], origin: changed, times: { choice01: 25 } }, { token }),
+      deps,
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(await response.json()).toEqual({ rev: 3 });
+    const state = await (await handleGet(context('GET', undefined, { token: host }), deps)).json();
+    expect(state).toMatchObject({
+      rev: 3,
+      docRev: 1,
+      replies: [
+        {
+          participantId: 'person02',
+          name: '친구',
+          origin: changed,
+          likes: ['choice01'],
+          times: { choice01: 25 },
+          updatedAt: '2026-10-27T12:00:00.000Z',
+        },
+      ],
+    });
+    expect(await db.prepare('SELECT updated_at, expires_at FROM meetings').first()).toEqual({
+      updated_at: '2026-10-27T12:00:00.000Z',
+      expires_at: '2026-11-26T12:00:00.000Z',
+    });
+  });
+  it('다른 참석자 id를 본문에 넣어도 남의 줄을 바꾸지 못한다', async () => {
+    await seed();
+    const token = await guest();
+    await expectError(
+      await handleReply(context('PUT', { participantId: 'person01', likes: [] }, { token }), deps),
+      400,
+      'BAD_REQUEST',
+    );
+    expect(await count('meeting_replies')).toBe(0);
+    expect((await handleReply(context('PUT', { likes: [] }, { token }), deps)).status).toBe(200);
+    expect(await db.prepare('SELECT participant_id FROM meeting_replies').all()).toEqual({
+      results: [{ participant_id: 'person02' }],
+    });
+  });
+  it('새 참석자는 claim 이름을 보존하고 두 번째 답장은 같은 줄을 덮는다', async () => {
+    await seed();
+    const response = await handleClaim(context('POST', { newName: '새 친구' }), deps);
+    const { guestToken: token, participantId } = await response.json();
+    expect(
+      (
+        await handleReply(
+          context(
+            'PUT',
+            { likes: ['choice01'], origin: changed, times: { choice01: 22 } },
+            { token },
+          ),
+          deps,
+        )
+      ).status,
+    ).toBe(200);
+    expect(
+      (await handleReply(context('PUT', { likes: [], origin: null, times: null }, { token }), deps))
+        .status,
+    ).toBe(200);
+    expect(
+      await db
+        .prepare('SELECT participant_id, name, origin, likes, times FROM meeting_replies')
+        .first(),
+    ).toEqual({
+      participant_id: participantId,
+      name: '새 친구',
+      origin: null,
+      likes: '[]',
+      times: null,
+    });
+    expect(await count('meeting_replies')).toBe(1);
+  });
+  it('출발지·시간을 생략하면 이전 값을 보존한다', async () => {
+    await seed();
+    const token = await guest();
+    expect(
+      (
+        await handleReply(
+          context(
+            'PUT',
+            { likes: ['choice01'], origin: changed, times: { choice01: 12 } },
+            { token },
+          ),
+          deps,
+        )
+      ).status,
+    ).toBe(200);
+    expect((await handleReply(context('PUT', { likes: [] }, { token }), deps)).status).toBe(200);
+    expect(await db.prepare('SELECT origin, times FROM meeting_replies').first()).toEqual({
+      origin: JSON.stringify(changed),
+      times: '{"choice01":12}',
+    });
+  });
+  it.each([
+    { likes: ['choice99'] },
+    { likes: [], times: { choice99: 12 } },
+    { likes: ['choice01', 'choice01'] },
+    { likes: [], origin: { name: '밖', lng: 0, lat: 0 } },
+    { likes: [], times: { choice01: -1 } },
+    { likes: [], extra: true },
+    {},
+  ])('잘못된 답장 %j는 400이고 rev를 유지한다', async (body) => {
+    await seed();
+    const token = await guest();
+    await expectError(await handleReply(context('PUT', body, { token }), deps), 400, 'BAD_REQUEST');
+    expect(await db.prepare('SELECT rev, doc_rev FROM meetings').first()).toEqual({
+      rev: 2,
+      doc_rev: 1,
+    });
+  });
+  it('601번째 답장은 429다', async () => {
+    await seed();
+    const token = await guest();
+    await db
+      .prepare('INSERT INTO rate_counters VALUES (?, 600)')
+      .bind(`reply:${await hashIp('192.0.2.10', 'dev-salt')}:2026-10-26`)
+      .run();
+    await expectError(
+      await handleReply(context('PUT', { likes: [] }, { token }), deps),
+      429,
+      'RATE_LIMITED',
+    );
+  });
+  it('배치가 실패하면 답장·rev가 모두 바뀌지 않는다', async () => {
+    await seed();
+    const token = await guest();
+    await db
+      .prepare(
+        "CREATE TRIGGER reject_reply BEFORE UPDATE ON meetings BEGIN SELECT RAISE(ABORT, '시험 오류'); END",
+      )
+      .run();
+    await expectError(
+      await handleReply(context('PUT', { likes: ['choice01'] }, { token }), deps),
+      502,
+      'UPSTREAM_ERROR',
+    );
+    expect(await count('meeting_replies')).toBe(0);
+    expect(await db.prepare('SELECT rev FROM meetings').first()).toEqual({ rev: 2 });
+  });
+});
+
+describe('참석자 풀기와 주최자 재발급', () => {
+  it('답장을 남긴 채 차지를 풀고 이전 토큰을 철회하며 다른 토큰으로 다시 고른다', async () => {
+    const host = await seed();
+    const old = await addReply();
+    const before = await db.prepare('SELECT * FROM meeting_replies').first();
+    const response = await handleRelease(
+      context('POST', { participantId: 'person02' }, { token: host }),
+      deps,
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(await response.json()).toEqual({ rev: 2 });
+    expect(await db.prepare('SELECT * FROM meeting_replies').first()).toEqual(before);
+    await expectError(
+      await handleReply(context('PUT', { likes: [] }, { token: old }), deps),
+      401,
+      'UNAUTHORIZED',
+    );
+    const claimed = await handleClaim(context('POST', { participantId: 'person02' }), deps);
+    expect(claimed.status).toBe(200);
+    expect((await claimed.json()).guestToken).not.toBe(old);
+    expect(await db.prepare('SELECT rev, doc_rev FROM meetings').first()).toEqual({
+      rev: 3,
+      doc_rev: 1,
+    });
+  });
+  it('본문에 없는 새 참석자도 이름으로 다시 고르고 기존 답장은 남긴다', async () => {
+    const host = await seed();
+    const first = await handleClaim(context('POST', { newName: '새 친구' }), deps);
+    const { participantId, guestToken } = await first.json();
+    expect(
+      (await handleReply(context('PUT', { likes: ['choice01'] }, { token: guestToken }), deps))
+        .status,
+    ).toBe(200);
+    expect(
+      (await handleRelease(context('POST', { participantId }, { token: host }), deps)).status,
+    ).toBe(200);
+    const next = await handleClaim(context('POST', { newName: ' 새 친구 ' }), deps);
+    expect(next.status).toBe(200);
+    expect(await next.json()).toMatchObject({ participantId });
+    expect(await db.prepare('SELECT likes FROM meeting_replies').first()).toEqual({
+      likes: '["choice01"]',
+    });
+  });
+  it('주최자 토큰 재발급은 이전 토큰을 철회하고 새 토큰만 전체 좌표를 읽는다', async () => {
+    const old = await seed();
+    const response = await handleRelease(context('POST', { host: true }, { token: old }), deps);
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.rev).toBe(2);
+    expect(body.hostToken).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(body.hostToken).not.toBe(old);
+    await expectError(
+      await handleUpdate(context('PUT', { doc: doc(), baseRev: 1 }, { token: old }), deps),
+      401,
+      'UNAUTHORIZED',
+    );
+    expect(
+      (await handleGet(context('GET', undefined, { token: body.hostToken }), deps)).status,
+    ).toBe(200);
+    expect(
+      (await (await handleGet(context('GET', undefined, { token: body.hostToken }), deps)).json())
+        .doc.participants[0].origin,
+    ).toEqual(home);
+    expect(await db.prepare("SELECT hash FROM meeting_tokens WHERE kind = 'host'").all()).toEqual({
+      results: [{ hash: await hashToken(body.hostToken) }],
+    });
+    expect(await db.prepare('SELECT rev, doc_rev FROM meetings').first()).toEqual({
+      rev: 2,
+      doc_rev: 1,
+    });
+  });
+  it.each([undefined, 'wrong', 'guest'])('주최자가 아닌 토큰 %s는 풀기 401이다', async (kind) => {
+    await seed();
+    const token = kind === 'guest' ? await addReply() : kind;
+    await expectError(
+      await handleRelease(context('POST', { participantId: 'person02' }, { token }), deps),
+      401,
+      'UNAUTHORIZED',
+    );
+  });
+  it.each([
+    {},
+    { host: false },
+    { host: true, participantId: 'person02' },
+    { participantId: 'bad' },
+    { host: true, extra: 1 },
+  ])('잘못된 풀기 %j는 400이다', async (body) => {
+    const token = await seed();
+    await expectError(
+      await handleRelease(context('POST', body, { token }), deps),
+      400,
+      'BAD_REQUEST',
+    );
+  });
+  it('재발급 배치가 실패하면 원래 주최자 토큰을 보존한다', async () => {
+    const token = await seed();
+    await db
+      .prepare(
+        "CREATE TRIGGER reject_release BEFORE UPDATE ON meetings BEGIN SELECT RAISE(ABORT, '시험 오류'); END",
+      )
+      .run();
+    await expectError(
+      await handleRelease(context('POST', { host: true }, { token }), deps),
+      502,
+      'UPSTREAM_ERROR',
+    );
+    expect(await db.prepare("SELECT hash FROM meeting_tokens WHERE kind = 'host'").first()).toEqual(
+      { hash: await hashToken(token) },
+    );
+  });
+});
+
+describe('고르기·답장·풀기 공통 검사', () => {
+  it.each([handleClaim, handleReply, handleRelease])(
+    '출처·경로·만료를 검사한다 %#',
+    async (handler) => {
+      await expectError(
+        await handler(context('POST', {}, { origin: 'https://evil.example' }), deps),
+        403,
+        'FORBIDDEN_ORIGIN',
+      );
+      await expectError(
+        await handler(context('POST', {}, { id: 'bad' }), deps),
+        400,
+        'BAD_REQUEST',
+      );
+      await expectError(await handler(context('POST', {}), deps), 404, 'NOT_FOUND');
+      await seed();
+      await db.prepare('UPDATE meetings SET expires_at = ?').bind(NOW.toISOString()).run();
+      await expectError(await handler(context('POST', {}), deps), 410, 'ENDED');
+    },
+  );
+  it('기능 스위치가 꺼져도 기존 약속의 고르기·답장·풀기는 허용한다', async () => {
+    const host = await seed();
+    env.MEET_ONLINE = 'off';
+    const response = await handleClaim(context('POST', { participantId: 'person02' }), deps);
+    expect(response.status).toBe(200);
+    const { guestToken: token } = await response.json();
+    expect((await handleReply(context('PUT', { likes: [] }, { token }), deps)).status).toBe(200);
+    expect(
+      (await handleRelease(context('POST', { participantId: 'person02' }, { token: host }), deps))
+        .status,
+    ).toBe(200);
   });
 });
