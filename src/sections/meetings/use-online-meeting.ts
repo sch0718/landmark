@@ -61,6 +61,10 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
   const unauthorizedNotified = useRef(false);
   const deferred = useRef(false);
   const baseline = useRef<string | null>(null);
+  const hostLikesBaseline = useRef('[]');
+  const hostReplyInFlight = useRef(false);
+  const hostReplyDeferred = useRef(false);
+  const hostReplyRetry = useRef(false);
   const mode: OnlineMeetingMode = record?.ended
     ? 'ended'
     : isLinkMeeting(meeting, record)
@@ -69,6 +73,8 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
         ? 'online'
         : 'local';
   const json = JSON.stringify(docFromMeeting(meeting, compute.times, compute.unit));
+  const hostId = meeting.participants.value[0]!.id;
+  const hostLikesJson = JSON.stringify(meeting.replies.value[hostId]?.likes ?? []);
 
   const save = useCallback(
     (next: OnlineRecord) => {
@@ -96,6 +102,36 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
   function markOk() {
     if (active.current) setStatus({ lastOkAt: Date.now(), failing: false });
   }
+  async function sendHostLikes(): Promise<boolean> {
+    const current = currentRecord();
+    if (!current?.hostToken || current.ended || hostReplyInFlight.current) return true;
+    const input = latest.current.meeting;
+    const likes = input.replies.value[input.participants.value[0]!.id]?.likes ?? [];
+    const sent = JSON.stringify(likes);
+    if (sent === hostLikesBaseline.current) {
+      hostReplyRetry.current = false;
+      hostReplyDeferred.current = false;
+      return true;
+    }
+    hostReplyInFlight.current = true;
+    try {
+      const response = await meetApi.reply(meeting.id, { likes }, current.hostToken);
+      if (!response.ok) {
+        hostReplyRetry.current = true;
+        hostReplyDeferred.current = true;
+        markError(response.error);
+        return false;
+      }
+      hostLikesBaseline.current = sent;
+      hostReplyRetry.current = false;
+      hostReplyDeferred.current = false;
+      if (active.current) setUploaded((count) => count + 1);
+      markOk();
+      return true;
+    } finally {
+      hostReplyInFlight.current = false;
+    }
+  }
   async function merge(state: OnlineState): Promise<Meeting | null> {
     let merged: Meeting | null = null;
     const result = await latest.current.run((lib, ctx) => {
@@ -108,6 +144,13 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
     if (current && !current.ended) save({ ...current, lastRev: state.rev, docRev: state.docRev });
     hydrated.current = true;
     baseline.current = JSON.stringify(state.doc);
+    if (!hostReplyInFlight.current) {
+      hostLikesBaseline.current = JSON.stringify(
+        state.replies.find(
+          (r) => r.participantId === latest.current.meeting.participants.value[0]!.id,
+        )?.likes ?? [],
+      );
+    }
     if (active.current) setReplyState(state);
     return merged;
   }
@@ -196,6 +239,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
         deferred.current = true;
         return 'error';
       }
+      if (hostReplyRetry.current && !(await sendHostLikes())) return 'error';
       markOk();
       return 'ok';
     } finally {
@@ -251,6 +295,15 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
     return () => clearTimeout(timer);
   }, [json, compute.pending, mode, uploaded]);
 
+  const autoHostReply = useEffectEvent(() => {
+    if (!hostReplyDeferred.current) void sendHostLikes();
+  });
+  useEffect(() => {
+    if (mode !== 'online') return;
+    const timer = setTimeout(() => autoHostReply(), 1000);
+    return () => clearTimeout(timer);
+  }, [hostLikesJson, mode, uploaded]);
+
   async function share() {
     const current = currentRecord();
     if (current?.ended) return;
@@ -303,6 +356,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
           syncedAt: sentAt,
         });
         markOk();
+        await sendHostLikes();
       } finally {
         creating.current = false;
       }

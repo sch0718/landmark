@@ -56,15 +56,12 @@ export function OnlineInviteView({ id }: { id: string }) {
   const pid = guest?.participantId;
   const ownReply = state?.replies.find((r) => r.participantId === pid);
   const selected = state?.doc.participants.find((p) => p.id === pid);
-  const origin =
-    draft?.origin !== undefined
-      ? (draft.origin ?? selected?.origin ?? null)
-      : (ownReply?.origin ?? selected?.origin ?? null);
+  const origin = draft?.origin ?? ownReply?.origin ?? selected?.origin ?? null;
   const likes = (draft?.likes ?? ownReply?.likes ?? []).filter((cid) =>
     state?.doc.candidates.some((c) => c.id === cid),
   );
   const mine: Participant[] =
-    pid && draft?.origin != null
+    pid && (draft?.origin ?? ownReply?.origin) != null
       ? [{ id: pid, name: selected?.name ?? ownReply?.name ?? name, origin }]
       : [];
   const compute = useMeetingCompute({
@@ -83,32 +80,31 @@ export function OnlineInviteView({ id }: { id: string }) {
     // 값이 같은 서버 응답으로 계산을 다시 시작하지 않는다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [computeKey, computeTimes]);
+  const calculatedTimes = Object.fromEntries(
+    (state?.doc.candidates ?? []).map((c) => [c.id, compute.times[c.id]?.[pid!] ?? null]),
+  );
+  const pending = mine.length > 0 && (compute.pending || compute.stale);
+  const recalculated =
+    mine.length > 0 &&
+    !pending &&
+    state?.doc.candidates.every((c) => Object.hasOwn(compute.times[c.id] ?? {}, pid!)) &&
+    (ownReply?.times == null ||
+      state.doc.candidates.some((c) => ownReply.times?.[c.id] !== calculatedTimes[c.id]));
   const input: ReplyInput | null =
-    draft && state
+    state && (draft || recalculated)
       ? {
           likes,
-          ...(draft.origin === undefined
-            ? {}
-            : {
-                origin: draft.origin,
-                times:
-                  draft.origin === null
-                    ? null
-                    : Object.fromEntries(
-                        state.doc.candidates.map((c) => [
-                          c.id,
-                          compute.times[c.id]?.[pid!] ?? null,
-                        ]),
-                      ),
-              }),
-          ...(draft.origin !== undefined || draft.times === undefined
-            ? {}
-            : { times: draft.times }),
+          ...(draft?.origin == null ? {} : { origin: draft.origin }),
+          ...(mine.length > 0
+            ? { times: calculatedTimes }
+            : draft?.origin === undefined && draft?.times !== undefined
+              ? { times: draft.times }
+              : {}),
         }
       : null;
-  const latest = useRef({ guest, state, draft, input, pending: compute.pending });
+  const latest = useRef({ guest, state, draft, input, pending });
   useLayoutEffect(() => {
-    latest.current = { guest, state, draft, input, pending: compute.pending };
+    latest.current = { guest, state, draft, input, pending };
   });
   useEffect(() => {
     active.current = true;
@@ -237,12 +233,12 @@ export function OnlineInviteView({ id }: { id: string }) {
     }
   });
   useEffect(() => {
-    if (!inputKey || inputKey === 'null' || compute.pending) return;
+    if (!inputKey || inputKey === 'null' || pending) return;
     const timer = setTimeout(() => {
       void autoSave();
     }, 1000);
     return () => clearTimeout(timer);
-  }, [inputKey, compute.pending, saved]);
+  }, [inputKey, pending, saved]);
 
   function edit(patch: Partial<ReplyInput>) {
     if (!guest) return;
@@ -310,12 +306,12 @@ export function OnlineInviteView({ id }: { id: string }) {
     Object.entries(doc.times).map(([cid, row]) => [cid, { ...row }]),
   );
   for (const reply of state.replies) {
-    if (reply.participantId === pid && draft?.origin === null) continue;
     for (const [cid, value] of Object.entries(reply.times ?? {}))
       (times[cid] ??= {})[reply.participantId] = value;
   }
-  if (draft?.origin != null && pid)
-    for (const c of doc.candidates) (times[c.id] ??= {})[pid] = input?.times?.[c.id] ?? null;
+  if (pid && (mine.length > 0 || ownReply?.times === null))
+    for (const c of doc.candidates)
+      (times[c.id] ??= {})[pid] = mine.length > 0 ? (compute.times[c.id]?.[pid] ?? null) : null;
   const field = <T,>(value: T) => ({
     value,
     updatedAt: new Date(lastOkAt ?? 0).toISOString(),
@@ -408,11 +404,6 @@ export function OnlineInviteView({ id }: { id: string }) {
           <Button onClick={() => setPicking(true)} sx={{ minHeight: 44 }}>
             내 출발지 고르기
           </Button>
-          {(draft?.origin ?? ownReply?.origin) && (
-            <Button onClick={() => edit({ origin: null, times: null })} sx={{ minHeight: 44 }}>
-              원래 출발지로 되돌리기
-            </Button>
-          )}
           {compute.pending && <p role="status">내 소요시간을 다시 찾는 중이에요</p>}
         </Box>
       )}

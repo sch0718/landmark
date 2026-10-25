@@ -160,8 +160,8 @@ export const meetApi = {
   claim(id: string, who: { participantId: string } | { newName: string }) {
     return request(`${pathFor(id)}/claim`, 'POST', claimSchema, { body: who });
   },
-  reply(id: string, input: ReplyInput, guestToken: string) {
-    return request(`${pathFor(id)}/reply`, 'PUT', revSchema, { body: input, token: guestToken });
+  reply(id: string, input: ReplyInput, token: string) {
+    return request(`${pathFor(id)}/reply`, 'PUT', revSchema, { body: input, token });
   },
   release(id: string, body: { participantId: string } | { host: true }, hostToken: string) {
     return request(`${pathFor(id)}/release`, 'POST', releaseSchema, { body, token: hostToken });

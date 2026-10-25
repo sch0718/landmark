@@ -6,6 +6,8 @@ import { emptyLibrary, type Library } from 'src/schema/library';
 import { meetApi } from 'src/services/meet-online/client';
 import { readOnline, writeOnline } from 'src/services/meet-online/store';
 import { loadMeetDraft, saveMeetDraft } from 'src/sections/meetings/meet-drafts';
+import { OnlineInviteView } from 'src/sections/meetings/OnlineInviteView';
+import { useMeetingCompute } from 'src/sections/meetings/use-meeting-compute';
 import { MeetLinkPage } from 'src/sections/meetings/MeetLinkPage';
 import type { useLibraryAction } from 'src/stores/library-state';
 import { buildMeeting } from '../../../fixtures/builders';
@@ -21,6 +23,7 @@ const compute = vi.hoisted(() => ({
   times: {} as Record<string, Record<string, number | null>>,
   errors: {},
   pending: false,
+  stale: false,
   queriedAt: null,
   compute: vi.fn(async () => {}),
   retry: vi.fn(),
@@ -110,6 +113,7 @@ beforeEach(() => {
   };
   compute.times = {};
   compute.pending = false;
+  compute.stale = false;
   vi.mocked(meetApi.get).mockImplementation(async () => ({
     ok: true,
     value: structuredClone(remote),
@@ -462,7 +466,7 @@ it('주최자 토큰 조회가 익명 본문을 돌려줘도 철회된 링크로
   expect(library).toBe(before);
   expect(readOnline('meeting001')).toBeNull();
 });
-it('출발지 덮어쓰기를 되돌리면 본문의 출발지와 소요시간을 쓴다', async () => {
+it('출발지를 바꾼 뒤에도 되돌리기 없이 새 출발지만 고를 수 있다', async () => {
   guest();
   remote = {
     ...remote,
@@ -484,19 +488,15 @@ it('출발지 덮어쓰기를 되돌리면 본문의 출발지와 소요시간�
     ],
   };
   await setup();
-  fireEvent.click(screen.getByRole('button', { name: '원래 출발지로 되돌리기' }));
+  expect(screen.queryByRole('button', { name: '원래 출발지로 되돌리기' })).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: '내 출발지 고르기' }));
+  fireEvent.click(screen.getByRole('button', { name: '시험 출발지' }));
   await advance(1000);
   expect(meetApi.reply).toHaveBeenCalledWith(
     'meeting001',
-    { likes: [], origin: null, times: null },
+    expect.objectContaining({ origin: { name: '새 출발지', lng: 128, lat: 36 } }),
     token,
   );
-  expect(
-    within(screen.getByRole('region', { name: '내 출발지' })).getByText('원래 집'),
-  ).toBeInTheDocument();
-  expect(
-    within(screen.getByRole('listitem', { name: '강남역' })).getByText('20분'),
-  ).toBeInTheDocument();
 });
 it('기존 주최자의 좋아요는 재연결 뒤에도 살아 있는 후보만 남긴다', async () => {
   library = {
@@ -514,4 +514,139 @@ it('기존 주최자의 좋아요는 재연결 뒤에도 살아 있는 후보만
   remote = { rev: remote.rev, docRev: remote.docRev, doc: remote.doc, replies: remote.replies };
   await setup(`/meet/meeting001#h=${hostToken}`);
   expect(library.meetings?.meeting001?.replies.value.person01?.likes).toEqual(['choice01']);
+});
+
+it('이전 버전의 되돌리기 초안도 null 출발지를 보내지 않는다', async () => {
+  guest();
+  saveMeetDraft('meeting001', {
+    participantId: 'person02',
+    likes: ['choice01'],
+    origin: null,
+    times: null,
+  });
+  await setup();
+  await advance(1000);
+  expect(meetApi.reply).toHaveBeenCalledExactlyOnceWith(
+    'meeting001',
+    { likes: ['choice01'] },
+    token,
+  );
+});
+
+it('초안 없이 직선거리에서 대중교통으로 바뀌면 옛 m 값을 숨기고 내 줄을 재계산해 저장한다', async () => {
+  guest();
+  const origin = { name: '내 회사', lng: 128, lat: 36 };
+  remote = {
+    ...remote,
+    doc: { ...remote.doc, mode: 'straight', unit: 'm', times: { choice01: { person02: 4200 } } },
+    replies: [
+      {
+        participantId: 'person02',
+        name: '친구',
+        origin,
+        likes: ['choice01'],
+        times: { choice01: 4200, choice02: 5000 },
+        updatedAt: now,
+      },
+    ],
+  };
+  compute.times = { choice01: { person02: 4200 }, choice02: { person02: 5000 } };
+  const view = render(<OnlineInviteView id="meeting001" />);
+  await act(async () => {});
+  expect(loadMeetDraft('meeting001')).toBeNull();
+  expect(compute.compute).toHaveBeenCalledTimes(1);
+  await advance(1000);
+  expect(meetApi.reply).not.toHaveBeenCalled();
+  remote = {
+    ...remote,
+    rev: 3,
+    docRev: 2,
+    doc: { ...remote.doc, mode: 'transit', unit: 'min' },
+    replies: remote.replies.map((r) => ({ ...r, times: null })),
+  };
+  compute.pending = true;
+  compute.times = {};
+  await advance(9000);
+  expect(screen.queryByText('4200分')).toBeNull();
+  expect(screen.getByText('내 소요시간을 다시 찾는 중이에요')).toBeInTheDocument();
+  expect(useMeetingCompute).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      mode: 'transit',
+      participants: [{ id: 'person02', name: '친구', origin }],
+    }),
+  );
+  expect(compute.compute).toHaveBeenCalledTimes(2);
+  expect(meetApi.reply).not.toHaveBeenCalled();
+  compute.pending = false;
+  compute.times = { choice01: { person02: 11 }, choice02: { person02: 13 } };
+  view.rerender(<OnlineInviteView id="meeting001" />);
+  expect(
+    within(screen.getByRole('listitem', { name: '강남역' })).getByText('11분'),
+  ).toBeInTheDocument();
+  await advance(1000);
+  expect(meetApi.reply).toHaveBeenCalledExactlyOnceWith(
+    'meeting001',
+    {
+      likes: ['choice01'],
+      times: { choice01: 11, choice02: 13 },
+    },
+    token,
+  );
+  await advance(1000);
+  expect(meetApi.reply).toHaveBeenCalledTimes(1);
+});
+
+it('주최자 답장의 좋아요도 친구 화면의 온라인 집계에 들어간다', async () => {
+  guest();
+  remote = {
+    ...remote,
+    replies: [
+      {
+        participantId: 'person01',
+        name: '주최자',
+        origin: null,
+        likes: ['choice01'],
+        times: null,
+        updatedAt: now,
+      },
+    ],
+  };
+  await setup();
+  expect(screen.getByText('좋아요 1명 · 주최자')).toBeInTheDocument();
+  expect(
+    within(screen.getByRole('listitem', { name: '강남역' })).getByText('10분'),
+  ).toBeInTheDocument();
+});
+
+it('내 출발지가 없으면 지난 계산이 stale이어도 좋아요를 저장한다', async () => {
+  guest();
+  compute.stale = true;
+  await setup();
+  like();
+  await advance(1000);
+  expect(meetApi.reply).toHaveBeenCalledExactlyOnceWith(
+    'meeting001',
+    { likes: ['choice01'] },
+    token,
+  );
+});
+it('이전 null 출발지 초안이 있어도 서버에 저장된 내 출발지로 계산한다', async () => {
+  guest();
+  const origin = { name: '내 회사', lng: 128, lat: 36 };
+  remote = {
+    ...remote,
+    replies: [
+      { participantId: 'person02', name: '친구', origin, likes: [], times: null, updatedAt: now },
+    ],
+  };
+  saveMeetDraft('meeting001', { participantId: 'person02', likes: [], origin: null, times: null });
+  await setup();
+  expect(
+    within(screen.getByRole('region', { name: '내 출발지' })).getByText('내 회사'),
+  ).toBeInTheDocument();
+  expect(useMeetingCompute).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      participants: [{ id: 'person02', name: '친구', origin }],
+    }),
+  );
 });

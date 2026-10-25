@@ -19,7 +19,14 @@ vi.mock('src/components/map/MapView', () => ({ MapView: () => <div /> }));
 vi.mock('src/theme/fonts', () => ({ loadDisplayFont: vi.fn(async () => {}) }));
 vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 vi.mock('src/services/meet-online/client', () => ({
-  meetApi: { create: vi.fn(), get: vi.fn(), update: vi.fn(), remove: vi.fn(), release: vi.fn() },
+  meetApi: {
+    create: vi.fn(),
+    reply: vi.fn(),
+    get: vi.fn(),
+    update: vi.fn(),
+    remove: vi.fn(),
+    release: vi.fn(),
+  },
 }));
 vi.mock('src/services/meet-online/turnstile-loader', () => ({ getTurnstileToken: vi.fn() }));
 vi.mock('src/sections/meetings/share-link', async (original) => ({
@@ -106,6 +113,7 @@ beforeEach(() => {
     value: { id: saved.id, rev: 1, docRev: 1, hostToken: token },
   });
   vi.mocked(meetApi.get).mockResolvedValue({ ok: true, value: 'unchanged' });
+  vi.mocked(meetApi.reply).mockResolvedValue({ ok: true, value: { rev: 3 } });
   vi.mocked(meetApi.update).mockResolvedValue({ ok: true, value: { rev: 3, docRev: 2 } });
   vi.mocked(meetApi.release).mockResolvedValue({
     ok: true,
@@ -760,4 +768,55 @@ it('unauthorized 확인 세 번에도 같은 화면에서는 알림을 한 번�
   expect(toast.error).toHaveBeenCalledExactlyOnceWith(
     '이 기기의 주최자 연결이 끊겼어요. 주최자 링크로 다시 연결하세요',
   );
+});
+
+it('주최자 좋아요 변경을 1초 모아 본문 대신 답장으로 한 번 전송한다', async () => {
+  online();
+  setup();
+  await flush();
+  await edit({
+    replies: f({ person01: { likes: ['choice01'], sentAt: startAt, receivedAt: startAt } }),
+  });
+  await advance(500);
+  await edit({ replies: f({ person01: { likes: [], sentAt: startAt, receivedAt: startAt } }) });
+  await advance(500);
+  await edit({
+    replies: f({ person01: { likes: ['choice01'], sentAt: startAt, receivedAt: startAt } }),
+  });
+  await advance(999);
+  expect(meetApi.reply).not.toHaveBeenCalled();
+  await advance(1);
+  expect(meetApi.reply).toHaveBeenCalledExactlyOnceWith(saved.id, { likes: ['choice01'] }, token);
+  expect(meetApi.update).not.toHaveBeenCalled();
+  await advance(1000);
+  expect(meetApi.reply).toHaveBeenCalledTimes(1);
+});
+it('create 직후 기존 주최자 좋아요를 전송한다', async () => {
+  saved = {
+    ...saved,
+    replies: f({ person01: { likes: ['choice01'], sentAt: startAt, receivedAt: startAt } }),
+  };
+  const { result } = setup();
+  await act(() => result.current.share());
+  expect(meetApi.reply).toHaveBeenCalledExactlyOnceWith(saved.id, { likes: ['choice01'] }, token);
+  await advance(1000);
+  expect(meetApi.reply).toHaveBeenCalledTimes(1);
+});
+it('실패한 주최자 좋아요는 다음 확인에서 다시 보내고 빈 좋아요도 저장한다', async () => {
+  online();
+  setup();
+  await flush();
+  vi.mocked(meetApi.reply).mockResolvedValueOnce({ ok: false, error: { code: 'offline' } });
+  await edit({
+    replies: f({ person01: { likes: ['choice01'], sentAt: startAt, receivedAt: startAt } }),
+  });
+  await advance(1000);
+  expect(meetApi.reply).toHaveBeenCalledTimes(1);
+  await advance(1000);
+  expect(meetApi.reply).toHaveBeenCalledTimes(1);
+  await advance(8000);
+  expect(meetApi.reply).toHaveBeenCalledTimes(2);
+  await edit({ replies: f({}) });
+  await advance(1000);
+  expect(meetApi.reply).toHaveBeenLastCalledWith(saved.id, { likes: [] }, token);
 });

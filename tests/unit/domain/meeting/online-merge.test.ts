@@ -64,7 +64,7 @@ describe('온라인 상태를 보관한 약속에 합친다', () => {
     }
   });
 
-  it('새 참석자를 서버의 id·이름·출발지로 더한다', () => {
+  it('서버 본문에 없는 답장 전용 참석자를 서버의 id·이름·출발지로 더한다', () => {
     const next = mergedMeeting(
       merge(library(), state([reply({ participantId: 'new00001', name: '새 친구', origin })])),
     );
@@ -75,6 +75,16 @@ describe('온라인 상태를 보관한 약속에 합친다', () => {
       sentAt: updatedAt,
       receivedAt: now,
     });
+  });
+
+  it('서버 본문에 남아 있어도 이 기기에서 지운 참석자와 답장은 되살리지 않는다', () => {
+    const local = {
+      ...meeting,
+      participants: { ...meeting.participants, value: meeting.participants.value.slice(0, 1) },
+    };
+    const next = mergedMeeting(merge(library(local), state([reply({ origin })])));
+    expect(next.participants).toBe(local.participants);
+    expect(next.replies.value.person01).toBeUndefined();
   });
 
   it('11번째 참석자 답장은 건너뛰고 기존 참석자 답장은 반영한다', () => {

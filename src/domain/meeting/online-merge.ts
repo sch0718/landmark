@@ -25,6 +25,7 @@ export function mergeOnline(
 
     const participant = next.participants.value.find((p) => p.id === pid);
     if (participant === undefined) {
+      if (state.doc.participants.some((p) => p.id === pid)) continue;
       if (next.participants.value.length >= LIBRARY_LIMITS.meetingParticipantsMax) continue;
       next = meetingField(
         next,

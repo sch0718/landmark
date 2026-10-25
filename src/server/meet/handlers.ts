@@ -339,6 +339,22 @@ export function handleUpdate(ctx: MeetContext, deps: MeetDeps): Promise<Response
         )
         .bind(id, pid, id, baseRev),
     ]);
+    const oldCandidates = new Map(old.candidates.map((c) => [c.id, c]));
+    const changedConditions =
+      doc.mode !== old.mode ||
+      JSON.stringify(doc.at) !== JSON.stringify(old.at) ||
+      doc.candidates.length !== old.candidates.length ||
+      doc.candidates.some((c) => {
+        const previous = oldCandidates.get(c.id);
+        return !previous || c.lng !== previous.lng || c.lat !== previous.lat;
+      });
+    if (changedConditions) {
+      cleanup.push(
+        db
+          .prepare(`UPDATE meeting_replies SET times = NULL WHERE meeting_id = ? AND ${guard}`)
+          .bind(id, id, baseRev),
+      );
+    }
     const results = await db.batch([
       ...cleanup,
       db
@@ -517,23 +533,25 @@ export function handleReply(ctx: MeetContext, deps: MeetDeps): Promise<Response>
     let input: ReplyInput | undefined;
     return changeMeeting(ctx, id, now, async (row, doc) => {
       const token = await readToken(ctx, id);
-      if (token?.kind !== 'guest' || !token.participant_id) {
+      if (!token || (token.kind === 'guest' && !token.participant_id)) {
         throw new ApiError('UNAUTHORIZED', '참석자 연결을 확인해 주세요');
       }
       input ??= validate(ReplyInputSchema, await readJson(ctx.request));
+      const host = token.kind === 'host';
+      const participantId = host ? doc.participants[0]!.id : token.participant_id!;
       const candidates = new Set(doc.candidates.map((c) => c.id));
       if (
         input.likes.some((cid) => !candidates.has(cid)) ||
-        Object.keys(input.times ?? {}).some((cid) => !candidates.has(cid))
+        (!host && Object.keys(input.times ?? {}).some((cid) => !candidates.has(cid)))
       ) {
         throw new ApiError('BAD_REQUEST', '없는 후보예요');
       }
       const db = ctx.env.DB;
       const old = await db
         .prepare('SELECT * FROM meeting_replies WHERE meeting_id = ? AND participant_id = ?')
-        .bind(id, token.participant_id)
+        .bind(id, participantId)
         .first<ReplyRow>();
-      const name = doc.participants.find((p) => p.id === token.participant_id)?.name ?? old?.name;
+      const name = doc.participants.find((p) => p.id === participantId)?.name ?? old?.name;
       if (!name) throw new ApiError('UNAUTHORIZED', '참석자 연결을 확인해 주세요');
       const encode = (value: unknown) => (value == null ? null : JSON.stringify(value));
       return {
@@ -544,11 +562,15 @@ export function handleReply(ctx: MeetContext, deps: MeetDeps): Promise<Response>
             )
             .bind(
               id,
-              token.participant_id,
+              participantId,
               name,
-              input.origin === undefined ? (old?.origin ?? null) : encode(input.origin),
+              host
+                ? null
+                : input.origin === undefined
+                  ? (old?.origin ?? null)
+                  : encode(input.origin),
               JSON.stringify(input.likes),
-              input.times === undefined ? (old?.times ?? null) : encode(input.times),
+              host ? null : input.times === undefined ? (old?.times ?? null) : encode(input.times),
               now.toISOString(),
               id,
               row.rev,

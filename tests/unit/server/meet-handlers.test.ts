@@ -507,6 +507,93 @@ describe('약속 고치기와 지우기', () => {
       expires_at: '2026-11-26T12:00:00.000Z',
     });
   });
+  it.each([
+    ['이동수단', { mode: 'straight', unit: 'm' }],
+    ['약속 일시', { at: { date: '2026-10-31', time: '18:00' } }],
+    ['후보 경도', { candidates: doc().candidates.map((c) => ({ ...c, lng: c.lng + 0.01 })) }],
+    ['후보 위도', { candidates: doc().candidates.map((c) => ({ ...c, lat: c.lat + 0.01 })) }],
+    [
+      '후보 추가',
+      { candidates: [...doc().candidates, { ...doc().candidates[0]!, id: 'choice02' }] },
+    ],
+    ['후보 삭제', { candidates: [], times: {} }],
+    ['후보 id', { candidates: [{ ...doc().candidates[0]!, id: 'choice02' }], times: {} }],
+  ] satisfies [string, Partial<MeetingDoc>][])(
+    '%s 변경은 이 약속의 모든 답장 times만 비운다',
+    async (_label, patch) => {
+      const token = await seed();
+      await addReply();
+      await addReply('person03');
+      await addReply('person02', changed, 'another001');
+      const response = await handleUpdate(
+        context('PUT', { doc: doc(patch), baseRev: 1 }, { token }),
+        deps,
+      );
+      expect(response.status).toBe(200);
+      expect(
+        (
+          await db
+            .prepare('SELECT times, likes, origin FROM meeting_replies WHERE meeting_id = ?')
+            .bind('meeting001')
+            .all()
+        ).results,
+      ).toEqual([
+        { times: null, likes: '["choice01"]', origin: JSON.stringify(changed) },
+        { times: null, likes: '["choice01"]', origin: JSON.stringify(changed) },
+      ]);
+      expect(
+        await db
+          .prepare('SELECT times FROM meeting_replies WHERE meeting_id = ?')
+          .bind('another001')
+          .first(),
+      ).toEqual({ times: '{"choice01":25}' });
+    },
+  );
+  it.each([
+    ['제목', { title: '새 제목' }],
+    ['후보 이름', { candidates: doc().candidates.map((c) => ({ ...c, name: '새 이름' })) }],
+  ] satisfies [string, Partial<MeetingDoc>][])(
+    '%s만 바꾸면 답장 times를 보존한다',
+    async (_label, patch) => {
+      const token = await seed();
+      await addReply();
+      expect(
+        (await handleUpdate(context('PUT', { doc: doc(patch), baseRev: 1 }, { token }), deps))
+          .status,
+      ).toBe(200);
+      expect(await db.prepare('SELECT times FROM meeting_replies').first()).toEqual({
+        times: '{"choice01":25}',
+      });
+    },
+  );
+  it('본문을 읽은 뒤 doc_rev가 바뀌면 소요시간도 비우지 않는다', async () => {
+    const token = await seed();
+    await addReply();
+    const batch = db.batch.bind(db);
+    vi.spyOn(db, 'batch').mockImplementationOnce(async (statements) => {
+      await db.prepare('UPDATE meetings SET doc_rev = doc_rev + 1').run();
+      return batch(statements);
+    });
+    expect(
+      (
+        await handleUpdate(
+          context(
+            'PUT',
+            {
+              doc: doc({ mode: 'straight', unit: 'm' }),
+              baseRev: 1,
+            },
+            { token },
+          ),
+          deps,
+        )
+      ).status,
+    ).toBe(409);
+    expect(await db.prepare('SELECT times FROM meeting_replies').first()).toEqual({
+      times: '{"choice01":25}',
+    });
+  });
+
   it('친구 답장으로 rev만 올라가도 본문 버전으로 고치고 빠진 참석자를 지운다', async () => {
     const token = await seed();
     await addReply();
@@ -990,7 +1077,7 @@ describe('참석자 답장', () => {
     });
     expect(attempts).toBe(5);
   });
-  it.each(['없음', '잘못된 토큰', '주최자', '다른 약속'])('%s은 답장 401이다', async (kind) => {
+  it.each(['없음', '잘못된 토큰', '다른 약속'])('%s은 답장 401이다', async (kind) => {
     const host = await seed();
     const token =
       kind === '없음'
@@ -1006,6 +1093,48 @@ describe('참석자 답장', () => {
       'UNAUTHORIZED',
     );
   });
+  it('주최자 토큰은 본문의 주최자 줄에 좋아요를 쓰고 출발지와 소요시간은 무시한다', async () => {
+    const host = await seed();
+    const guestToken = await guest();
+    expect(
+      (await handleReply(context('PUT', { likes: [] }, { token: guestToken }), deps)).status,
+    ).toBe(200);
+    const response = await handleReply(
+      context(
+        'PUT',
+        {
+          likes: ['choice01'],
+          origin: changed,
+          times: { choice01: 99 },
+        },
+        { token: host },
+      ),
+      deps,
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ rev: 4 });
+    expect(
+      (
+        await db
+          .prepare(
+            'SELECT participant_id, name, origin, times, likes FROM meeting_replies ORDER BY participant_id',
+          )
+          .all()
+      ).results,
+    ).toEqual([
+      { participant_id: 'person01', name: '나', origin: null, times: null, likes: '["choice01"]' },
+      { participant_id: 'person02', name: '친구', origin: null, times: null, likes: '[]' },
+    ]);
+    const state = await (
+      await handleGet(context('GET', undefined, { token: guestToken }), deps)
+    ).json();
+    expect(state.replies).toContainEqual(
+      expect.objectContaining({ participantId: 'person01', likes: ['choice01'] }),
+    );
+    expect(state.doc.participants[0].origin).toBeNull();
+    expect(state.originNames.person01).toBe('집');
+  });
+
   it('자기 줄만 저장하고 rev·갱신·만료를 올리며 주최자가 읽을 수 있다', async () => {
     const host = await seed();
     const token = await guest();
