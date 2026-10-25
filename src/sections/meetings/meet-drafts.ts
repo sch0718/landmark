@@ -1,4 +1,5 @@
 import { Schema } from 'effect';
+import { ReplyInputSchema } from 'src/domain/meeting/online-doc';
 import { MeetingId, MeetingMemberId, MeetingName, OriginSchema } from 'src/schema/meeting';
 import { safeParse } from 'src/schema/parse';
 
@@ -8,6 +9,7 @@ const DraftSchema = Schema.Struct({
   newName: Schema.optionalKey(MeetingName),
   origin: Schema.optionalKey(Schema.NullOr(OriginSchema)),
   likes: Schema.Array(MeetingMemberId).check(Schema.isMaxLength(8)),
+  times: ReplyInputSchema.fields.times,
 }).check(
   Schema.makeFilter(
     (draft) =>
@@ -68,5 +70,20 @@ export function loadMeetDraft(meetingId: string, storage?: Storage): MeetDraft |
     return entry.draft;
   } catch {
     return null;
+  }
+}
+
+/** 서버에 도착한 초안은 지워 다음 방문에 예전 답장을 다시 보내지 않는다. */
+export function removeMeetDraft(meetingId: string, storage?: Storage): void {
+  try {
+    const target = storage ?? window.localStorage;
+    target.setItem(
+      MEET_DRAFTS_KEY,
+      JSON.stringify({
+        drafts: readEntries(target).filter((entry) => entry.meetingId !== meetingId),
+      }),
+    );
+  } catch {
+    /* 저장소가 막혀도 이번 화면의 저장 결과는 유지한다. */
   }
 }

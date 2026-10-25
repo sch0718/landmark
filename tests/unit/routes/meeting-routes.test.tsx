@@ -24,6 +24,7 @@ describe('약속 경로', () => {
     expect(paths.meetings).toBe('/meetings');
     expect(paths.meeting('meeting001')).toBe('/meetings/meeting001');
     expect(paths.meet).toBe('/meet');
+    expect(paths.meetOnline('abcdefghij')).toBe('/meet/abcdefghij');
     for (const load of [loadMeetingsPage, loadMeetingEditorPage, loadMeetLinkPage])
       expect(ROUTE_CHUNKS).toContain(load);
   });
@@ -31,6 +32,7 @@ describe('약속 경로', () => {
     ['/meetings', '약속'],
     ['/meetings/meeting001', '약속 편집'],
     ['/meet#d=test', '약속 링크'],
+    ['/meet/abcdefghij', '약속 링크'],
   ])('%s를 셸 안에 그린다', async (path, heading) => {
     await act(async () => {
       await renderApp({ path });

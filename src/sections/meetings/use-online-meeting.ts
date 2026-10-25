@@ -58,6 +58,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
   const creating = useRef(false);
   const hydrated = useRef(false);
   const retry = useRef(false);
+  const unauthorizedNotified = useRef(false);
   const deferred = useRef(false);
   const baseline = useRef<string | null>(null);
   const mode: OnlineMeetingMode = record?.ended
@@ -86,7 +87,11 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
       save(ended);
     }
     if (active.current) setStatus((previous) => ({ ...previous, failing: true }));
-    if (notify || error.code === 'unauthorized') toast.error(errorMessage(error));
+    if (error.code === 'unauthorized') {
+      if (unauthorizedNotified.current) return;
+      unauthorizedNotified.current = true;
+      toast.error(errorMessage(error));
+    } else if (notify) toast.error(errorMessage(error));
   }
   function markOk() {
     if (active.current) setStatus({ lastOkAt: Date.now(), failing: false });

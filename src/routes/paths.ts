@@ -13,6 +13,7 @@ export const paths = {
   meetings: '/meetings',
   meeting: (id: string) => `/meetings/${id}`,
   meet: '/meet',
+  meetOnline: (id: string) => `/meet/${id}`,
   trips: '/trips',
   trip: (id: string) => `/trips/${id}`,
   /** 여행 당일 모드: 오늘 Day의 다음 장소·남은 일정. */

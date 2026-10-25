@@ -1,7 +1,16 @@
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import { useEffect, useState } from 'react';
-import { Link, useLocation } from 'react-router';
+import { Link, useLocation, useNavigate, useParams } from 'react-router';
+import { mergeOnline } from 'src/domain/meeting/online-merge';
+import { meetingFailure, storeMeeting } from 'src/domain/meeting/ops';
+import { LIBRARY_LIMITS } from 'src/schema/library';
+import { MeetingId, type Meeting } from 'src/schema/meeting';
+import { safeParse } from 'src/schema/parse';
+import { meetApi } from 'src/services/meet-online/client';
+import { readOnline, writeOnline } from 'src/services/meet-online/store';
+import { OnlineInviteView } from './OnlineInviteView';
+import { useMeeting } from './use-meeting';
 import { readMeetHash } from 'src/domain/meeting/link';
 import { useDocumentTitle } from 'src/lib/use-document-title';
 import { paths } from 'src/routes/paths';
@@ -11,10 +20,9 @@ import { ReplyImport } from './ReplyImport';
 
 type ReadResult = Awaited<ReturnType<typeof readMeetHash>>;
 /** 해시를 남겨 새로고침을 지원하고 이전 해시의 늦은 해석 결과는 버린다. */
-export function MeetLinkPage() {
+function LegacyMeetLinkPage() {
   const { hash } = useLocation();
   const [state, setState] = useState<{ hash: string; result: ReadResult } | null>(null);
-  useDocumentTitle('약속 링크');
   useEffect(() => {
     let active = true;
     void readMeetHash(hash).then(
@@ -58,4 +66,130 @@ export function MeetLinkPage() {
   ) : (
     <FinalView key={hash} doc={doc} />
   );
+}
+
+function LinkError({ message = '링크를 읽지 못했어요' }: { message?: string }) {
+  return (
+    <Box role="alert" sx={{ p: 3 }}>
+      <h1>{message}</h1>
+      <Button component={Link} to={paths.meetings}>
+        약속 목록으로
+      </Button>
+    </Box>
+  );
+}
+
+/** 해시를 먼저 지우고 서버 본문을 담은 뒤에만 주최자 화면으로 옮긴다. */
+function HostLink({ id, token }: { id: string; token: string }) {
+  const { run } = useMeeting(id);
+  const navigate = useNavigate();
+  const { search } = useLocation();
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    let active = true;
+    window.history.replaceState(window.history.state, '', `${paths.meetOnline(id)}${search}`);
+    void (async () => {
+      const response = await meetApi.get(id, null, token);
+      if (!active) return;
+      if (!response.ok || response.value === 'unchanged') {
+        setError(
+          !response.ok && response.error.code === 'unauthorized'
+            ? '주최자 링크가 더 이상 쓸 수 없어요'
+            : !response.ok &&
+                (response.error.code === 'ended' || response.error.code === 'not-found')
+              ? '끝난 약속이에요'
+              : '지금은 열 수 없어요. 잠시 뒤 다시 해 주세요',
+        );
+        return;
+      }
+      const state = response.value;
+      // 현재 API는 철회된 토큰에도 익명 본문을 준다. 가려진 본문으로 보관함을 덮지 않는다.
+      if (state.originNames !== undefined) {
+        setError('주최자 링크가 더 이상 쓸 수 없어요');
+        return;
+      }
+      let syncedAt = '';
+      const result = await run((lib, ctx) => {
+        const before = lib.meetings?.[id];
+        if (!before && Object.keys(lib.meetings ?? {}).length >= LIBRARY_LIMITS.meetingsMax)
+          return meetingFailure('meetings-full');
+        const field = <T,>(value: T) => ({ value, updatedAt: ctx.now });
+        const meeting: Meeting = {
+          id,
+          title: field(state.doc.title),
+          at: field(state.doc.at),
+          mode: field(state.doc.mode),
+          rank: before?.rank ?? field('max'),
+          participants: field(state.doc.participants),
+          candidates: field(state.doc.candidates),
+          replies: field(
+            (() => {
+              const hostId = state.doc.participants[0]?.id;
+              const reply = hostId ? before?.replies.value[hostId] : undefined;
+              return hostId && reply
+                ? {
+                    [hostId]: {
+                      ...reply,
+                      likes: reply.likes.filter((cid) =>
+                        state.doc.candidates.some((c) => c.id === cid),
+                      ),
+                    },
+                  }
+                : {};
+            })(),
+          ),
+          decided: field(state.doc.decided),
+          createdAt: before?.createdAt ?? ctx.now,
+          deletedAt: null,
+        };
+        const stored = storeMeeting(lib, meeting);
+        if (!stored.ok) return stored;
+        syncedAt = ctx.now;
+        return mergeOnline(stored.lib, id, state, ctx, null);
+      });
+      if (!active) return;
+      if (!result.ok) {
+        setError('저장하지 못했어요. 다시 시도해 주세요');
+        return;
+      }
+      const record = {
+        ...readOnline(id),
+        hostToken: token,
+        lastRev: state.rev,
+        docRev: state.docRev,
+        syncedAt,
+      };
+      delete record.ended;
+      writeOnline(id, record);
+      void navigate(paths.meeting(id), { replace: true });
+    })();
+    return () => {
+      active = false;
+    };
+  }, [id, token, run, navigate, search]);
+  return error ? (
+    <LinkError message={error} />
+  ) : (
+    <Box role="status" sx={{ p: 3 }}>
+      주최자 약속을 담는 중이에요
+    </Box>
+  );
+}
+
+export function MeetLinkPage() {
+  const { id } = useParams();
+  const { hash } = useLocation();
+  useDocumentTitle('약속 링크');
+  if (id === undefined) return <LegacyMeetLinkPage />;
+  if (!safeParse(MeetingId, id).success) return <LinkError />;
+  if (hash.startsWith('#h=')) {
+    let token: string;
+    try {
+      token = decodeURIComponent(hash.slice(3));
+    } catch {
+      return <LinkError />;
+    }
+    return <HostLink key={`${id}:${token}`} id={id} token={token} />;
+  }
+  return <OnlineInviteView key={id} id={id} />;
 }

@@ -748,3 +748,16 @@ it.each(['mode', 'origin'] as const)(
     expect(result.current.replyTimes.choice01?.person02).toBeUndefined();
   },
 );
+
+it('unauthorized 확인 세 번에도 같은 화면에서는 알림을 한 번만 띄운다', async () => {
+  online();
+  vi.mocked(meetApi.get).mockResolvedValue({ ok: false, error: { code: 'unauthorized' } });
+  setup();
+  await flush();
+  await advance(10000);
+  await advance(10000);
+  expect(meetApi.get).toHaveBeenCalledTimes(3);
+  expect(toast.error).toHaveBeenCalledExactlyOnceWith(
+    '이 기기의 주최자 연결이 끊겼어요. 주최자 링크로 다시 연결하세요',
+  );
+});
