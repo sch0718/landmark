@@ -93,7 +93,7 @@
   - `docFromMeeting(meeting: Meeting, times: InviteDoc['times'], unit: InviteDoc['unit']): MeetingDoc`(화면 코드의 `MeetingTimes` 타입을 가져오지 않는다 — 도메인은 섹션을 import하지 않음) — `inviteFromMeeting` 결과에서 위 필드를 옮기고 `decided: meeting.decided.value`.
   - `OnlineReplySchema = { participantId: MeetingMemberId, name: MeetingName, origin: NullOr(OriginSchema), likes: Array(MeetingMemberId)(≤8, 중복 없음), times: NullOr(Record(후보 id, cell)), updatedAt: IsoDateTime }`. `origin: null`은 "본문 출발지 그대로". 타입 `OnlineReply`.
   - `ReplyInputSchema = { likes, origin?: NullOr(OriginSchema), times?: NullOr(Record) }` — 친구가 `PUT …/reply`로 보내는 본문(`participantId` 없음).
-  - `OnlineStateSchema = { rev: 정수 ≥1, doc: MeetingDoc, replies: Array(OnlineReply)(≤10), originNames?: Record(참석자 id, MeetingTitle) }`, 타입 `OnlineState`. 친구 응답에서는 남의 `doc.participants[].origin`과 남의 답장 `origin`을 `null`로 바꾸고, 그 출발지 **이름**만 `originNames[참석자 id]`에 둔다(설계 문서 §API: 좌표는 빼고 이름·출발지 이름·소요시간은 준다).
+  - `OnlineStateSchema = { rev: 정수 ≥1, docRev: 정수 ≥1, doc: MeetingDoc, replies: Array(OnlineReply)(≤10), originNames?: Record(참석자 id, MeetingTitle) }`, 타입 `OnlineState`. 친구 응답에서는 남의 `doc.participants[].origin`과 남의 답장 `origin`을 `null`로 바꾸고, 그 출발지 **이름**만 `originNames[참석자 id]`에 둔다(설계 문서 §API: 좌표는 빼고 이름·출발지 이름·소요시간은 준다).
   - `mergeOnline(lib: Library, meetingId: string, state: OnlineState, ctx: OpCtx, syncedAt: string | null): OpResult` —
     `syncedAt`은 이 기기가 서버와 마지막으로 맞춘 시각(마지막으로 성공한 `create`/`update`가 올린 본문의 기준 시각, `OnlineRecord.syncedAt`. 합치기만으로는 올리지 않는다). 처음 담는 기기(주최자 링크)는 `null`.
     1. 약속이 없거나 지워졌으면 `meetingFailure('not-found')`.
@@ -117,15 +117,15 @@
 - Consumes: Task 1 전부, `MeetingDocSchema`·`OnlineState`(Task 2), `isAllowedOrigin`·`requestOrigin`·`jsonResponse`·`errorResponse`·`ApiError`(`src/server/http.ts`, `src/server/handler.ts`)
 - Produces:
   - `type MeetDeps = { fetch: typeof fetch; now(): Date }`
-  - `handleCreate(ctx: MeetContext, deps: MeetDeps): Promise<Response>` — 본문 `{ doc, turnstile }`. 순서: 출처 검사 → `MEET_ONLINE === 'off'`면 `503 { reason: 'off' }`(설정 누락 503은 `{ reason: 'config' }`) → `ensureSchema` → IP 해시(`CF-Connecting-IP`, 없으면 `'local'`; 소금 없으면 localhost 출처에서만 `'dev-salt'`, 그 밖엔 503) → `consumeLimit('create')`(넘으면 429) → Turnstile(`TURNSTILE_SECRET` 없으면 localhost 출처일 때만 건너뜀, 그 밖엔 503) → `MeetingDocSchema` 검사(400) → 같은 id가 있으면 409 → `meetings` 넣기(`rev = 1`, `expires_at` 계산) + host 토큰 해시 넣기를 한 `batch` → `ctx.waitUntil`로 만료 정리(`pruneExpired(db, now, 20)`)와 `pruneLimits`. 응답 `201 { id, rev, hostToken }`.
-  - `handleGet(ctx, deps)` — `?since=<rev>`. 출처 검사 → `ensureSchema` → `consumeLimit('read')` → 약속 없음 404, 만료(`expires_at <= now`) 410 → `since`가 지금 `rev`와 같으면 `304`(본문 없음) → `Authorization`이 이 약속의 host 토큰이면 전체(`originNames` 없음), 아니면 `redactForGuest(state, guestParticipantId | null)` — 남의 본문·답장 `origin`을 `null`로 바꾸고 이름을 `originNames`에 옮긴 상태(토큰의 참석자 자신 것은 그대로). 응답 `200 OnlineState`.
-  - `handleUpdate(ctx, deps)` — host 토큰 필요(없거나 틀리면 401). 본문 `{ doc, baseRev }`. `baseRev`가 지금 `rev`와 다르면 `409 { rev }`. 통과하면 `doc`·`rev+1`·`updated_at`·`expires_at`을 갱신하고 `200 { rev }`. `doc.participants`에서 빠진 참석자의 답장 줄과 guest 토큰도 같은 `batch`로 지운다(주최자가 참석자를 지운 경우).
+  - `handleCreate(ctx: MeetContext, deps: MeetDeps): Promise<Response>` — 본문 `{ doc, turnstile }`. 순서: 출처 검사 → `MEET_ONLINE === 'off'`면 `503 { reason: 'off' }`(설정 누락 503은 `{ reason: 'config' }`) → `ensureSchema` → IP 해시(`CF-Connecting-IP`, 없으면 `'local'`; 소금 없으면 localhost 출처에서만 `'dev-salt'`, 그 밖엔 503) → `consumeLimit('create')`(넘으면 429) → Turnstile(`TURNSTILE_SECRET` 없으면 localhost 출처일 때만 건너뜀, 그 밖엔 503) → `MeetingDocSchema` 검사(400) → 같은 id가 있으면 409 → `meetings` 넣기(`rev = 1`, `expires_at` 계산) + host 토큰 해시 넣기를 한 `batch` → `ctx.waitUntil`로 만료 정리(`pruneExpired(db, now, 20)`)와 `pruneLimits`. 응답 `201 { id, rev: 1, docRev: 1, hostToken }`. `meetings`에는 `doc_rev INTEGER NOT NULL`(처음 1) 열이 있다(Task 1 표 정의에 추가).
+  - `handleGet(ctx, deps)` — `?since=<rev>`. 출처 검사 → `ensureSchema` → 약속 없음 404, 만료(`expires_at <= now`) 410 — **이 두 경우에만** `consumeLimit('read')`를 올리고 넘으면 429(id 추측 막기. 정상 확인마다 D1 쓰기를 쓰지 않기 위해) → `since`가 지금 `rev`와 같으면 `304`(본문 없음) → `Authorization`이 이 약속의 host 토큰이면 전체(`originNames` 없음), 아니면 `redactForGuest(state, guestParticipantId | null)` — 남의 본문·답장 `origin`을 `null`로 바꾸고 이름을 `originNames`에 옮긴 상태(토큰의 참석자 자신 것은 그대로). 응답 `200 OnlineState`.
+  - `handleUpdate(ctx, deps)` — host 토큰 필요(없거나 틀리면 401). 본문 `{ doc, baseRev }` — `baseRev`는 **본문 버전 `doc_rev`**다(답장·차지로 오르는 `rev`가 아님. 친구 답장 때문에 주최자 올리기가 충돌하지 않게). `baseRev`가 지금 `doc_rev`와 다르면 `409 { docRev }`. 통과하면 `doc`·`doc_rev+1`·`rev+1`·`updated_at`·`expires_at`을 갱신하고 `200 { rev, docRev }`. `doc.participants`에서 빠진 참석자의 답장 줄과 guest 토큰도 같은 `batch`로 지운다(주최자가 참석자를 지운 경우).
   - `handleDelete(ctx, deps)` — host 토큰 필요. 약속·답장·토큰 지우기 → `204`.
   - `expiresAt(doc: MeetingDoc, updatedAt: Date): string` — `max(doc.at의 날짜·시각을 Asia/Seoul로 읽은 시각, updatedAt) + 30일`의 ISO. `doc.at`이 null이면 `updatedAt + 30일`.
   - `pruneExpired(db, now, max): Promise<number>` — 만료된 약속을 `max`개까지 답장·토큰과 함께 지움.
   - `verifyTurnstile(token: string, secret: string, ip: string | null, fetchFn: typeof fetch): Promise<boolean>` — `https://challenges.cloudflare.com/turnstile/v0/siteverify`에 `application/x-www-form-urlencoded`(`secret`, `response`, `remoteip`) POST, `success === true`만 통과. 네트워크 오류는 false.
   - 모든 응답에 `Cache-Control: private, no-store`.
-- [ ] **Step 1: 실패하는 시험** — 올리기 성공(201, 토큰 43자, DB에는 해시만), 같은 id 409, 스키마 오류 400, 허용하지 않는 출처 403, `MEET_ONLINE=off` 503, 운영 출처에서 시크릿 없음 503, localhost에서 시크릿 없으면 Turnstile 건너뜀, Turnstile 실패(가짜 fetch가 `success:false`) 403 또는 400(설계 문서 문구에 맞춰 `BAD_REQUEST`), 21번째 올리기 429, `MEET_ONLINE=off`는 `reason: 'off'`. 읽기: 304, 404, 410, 친구 응답에서 남의 좌표가 `null`이고 출발지 이름은 `originNames`에 있음, 자기 출발지는 그대로, host 토큰이면 전체, `Cache-Control` 확인. 고치기: 401, `baseRev` 불일치 409, 성공 시 `rev` 증가, 빠진 참석자 답장 삭제. 지우기 204 후 읽기 404. `expiresAt`: 일시가 미래면 일시+30일, 과거면 갱신+30일. `pruneExpired`가 20개까지만 지움.
+- [ ] **Step 1: 실패하는 시험** — 올리기 성공(201, 토큰 43자, DB에는 해시만), 같은 id 409, 스키마 오류 400, 허용하지 않는 출처 403, `MEET_ONLINE=off` 503, 운영 출처에서 시크릿 없음 503, localhost에서 시크릿 없으면 Turnstile 건너뜀, Turnstile 실패(가짜 fetch가 `success:false`) 403 또는 400(설계 문서 문구에 맞춰 `BAD_REQUEST`), 21번째 올리기 429, `MEET_ONLINE=off`는 `reason: 'off'`. 읽기: 304, 404, 410, 친구 응답에서 남의 좌표가 `null`이고 출발지 이름은 `originNames`에 있음, 자기 출발지는 그대로, host 토큰이면 전체, `Cache-Control` 확인. 고치기: 401, `baseRev`(doc_rev) 불일치 409, 친구 답장으로 `rev`만 오른 뒤에도 `baseRev = docRev`면 성공(409 아님), 성공 시 `rev`·`docRev` 증가, 빠진 참석자 답장 삭제. 읽기 한도: 정상 읽기·304는 `rate_counters`를 쓰지 않음, 404가 5,001번째면 429. 지우기 204 후 읽기 404. `expiresAt`: 일시가 미래면 일시+30일, 과거면 갱신+30일. `pruneExpired`가 20개까지만 지움.
 - [ ] **Step 2:** `yarn vitest run tests/unit/server/meet-handlers.test.ts` → 실패 확인
 - [ ] **Step 3:** 구현
 - [ ] **Step 4:** 시험 통과, `yarn typecheck`
@@ -167,14 +167,15 @@
 - Consumes: `OnlineStateSchema`·`MeetingDoc`·`ReplyInputSchema`(Task 2), 서버 응답 모양(Task 3·4), `HELP_SEEN_KEY` 저장 방식(`src/services/help-seen.ts`, 깨진 값·막힌 저장소 처리 관례)
 - Produces:
   - `MEET_ONLINE_KEY = 'tripmap:meet-online:v1'`
-  - `type OnlineRecord = { hostToken?: string; guest?: { participantId: string; token: string }; lastRev: number; syncedAt?: string; ended?: true }` — `syncedAt`은 `mergeOnline`의 다섯째 인자(Task 2).
+  - `type OnlineRecord = { hostToken?: string; guest?: { participantId: string; token: string }; lastRev: number; docRev?: number; syncedAt?: string; ended?: true }` — `syncedAt`은 `mergeOnline`의 다섯째 인자(Task 2).
   - `readOnline(id): OnlineRecord | null`, `writeOnline(id, record: OnlineRecord): void`, `removeOnline(id): void`, `allOnline(): Record<string, OnlineRecord>` — 깨진 값은 빈 기록, 저장소가 막히면 페이지 메모리에만. 약속 200개 한도 넘는 기록은 오래된 것부터 버린다.
   - `isLinkMeeting(meeting: Meeting, record: OnlineRecord | null): boolean` — `record?.hostToken`이 없고 주최자가 아닌 참석자의 `replies`가 하나라도 있으면 true(설계 문서 §브라우저 저장).
   - `type OnlineError = { code: 'offline' | 'unauthorized' | 'conflict' | 'ended' | 'not-found' | 'rate-limited' | 'unavailable' | 'switched-off' | 'invalid' | 'turnstile' | 'taken' | 'host' | 'full'; rev?: number }` — 503 `reason: 'off'`는 `switched-off`, 그 밖의 503은 `unavailable`.
   - `meetApi` — 모두 `Promise<{ ok: true; value } | { ok: false; error: OnlineError }>`:
-    - `create(doc: MeetingDoc, turnstile: string) → { id, rev, hostToken }`
+    - `create(doc: MeetingDoc, turnstile: string) → { id, rev, docRev, hostToken }`
+    - 오류 본문은 `{ error: { code, message }, reason?, rev?, docRev? }` 모양이다(`reason`·`rev`·`docRev`는 최상위). `reason`으로 `taken`·`host`·`full`·`off`·`config`·`turnstile`을 가른다.
     - `get(id, since: number | null, token: string | null) → OnlineState | 'unchanged'`
-    - `update(id, doc, baseRev, hostToken) → { rev }`
+    - `update(id, doc, baseDocRev, hostToken) → { rev, docRev }`
     - `remove(id, hostToken) → void`
     - `claim(id, who: { participantId } | { newName }) → { participantId, guestToken, rev }`
     - `reply(id, input: ReplyInput, guestToken) → { rev }`
@@ -201,7 +202,7 @@
   - `useOnlineMeeting(meeting: Meeting, compute: { times: MeetingTimes; unit: 'min' | 'm'; pending: boolean })`(`MeetingTimes`는 `use-meeting-compute.ts`의 타입, 섹션 안이라 괜찮다): { mode: 'link' | 'local' | 'online' | 'ended'; share(): Promise<void>; shareFinal(): Promise<void>; openOnOtherDevice(): Promise<void>; releaseParticipant(pid: string): Promise<void>; removeFromServer(): Promise<void>; status: { lastOkAt: number | null; failing: boolean } }`
     - `mode`: `isLinkMeeting`이면 `'link'`(지금 동작 그대로), 기록이 `ended`면 `'ended'`, host 토큰이 있으면 `'online'`, 아니면 `'local'`(아직 안 올림).
     - `share()`: `'link'`면 기존 `shareMeetingDoc(inviteFromMeeting(…))`. `'local'`이면 `getTurnstileToken()` → `meetApi.create(docFromMeeting(…))` → 기록 저장 → `shareLink(`${app}/meet/${id}`, 제목)`. 오류 코드별 안내는 설계 문서 §오류·장애 문구 그대로(`unavailable`·`offline`이면 "지금은 보낼 수 없어요. 잠시 뒤 다시 해 주세요"). `switched-off`면 서버 기능 스위치가 꺼진 것이므로 알림 없이 기존 해시 링크(`shareMeetingDoc(inviteFromMeeting(…))`)로 공유한다(설계 문서 §호환·롤백의 비상구). 기록은 만들지 않는다. `'online'`이면 올리지 않고 짧은 링크만 공유.
-    - 자동 다시 올리기: `'online'`이고 `compute.pending`이 false일 때, `docFromMeeting` 결과의 JSON이 마지막으로 올린 JSON과 다르면 1초 모았다가 `update`. `409`면 `get(id, null, hostToken)` → `mergeOnline` → 다시 `update`(한 번만 재시도).
+    - 자동 다시 올리기: `'online'`이고 `compute.pending`이 false일 때, `docFromMeeting` 결과의 JSON이 마지막으로 올린 JSON과 다르면 1초 모았다가 `update(id, doc, record.docRev, hostToken)`. 성공하면 `docRev`·`syncedAt` 저장. `409`(주최자의 다른 기기가 본문을 바꾼 경우)면 `get(id, null, hostToken)` → `mergeOnline` → 받은 `docRev`로 다시 `update`(한 번만 재시도).
     - 10초 확인: `'online'`이고 화면이 보일 때 `useOnlinePoll`로 `get(id, lastRev, hostToken)` → 바뀌었으면 `run((lib, ctx) => mergeOnline(lib, id, state, ctx, record.syncedAt ?? null))`, `lastRev` 저장. `syncedAt`은 성공한 `create`/`update`의 응답 시각(요청 직전에 잡은 본문의 기준 시각)으로만 올린다 — 합치기만으로 올리면 아직 안 올린 확정이 "동기화됨"으로 보이게 된다. `ended`/`not-found`면 기록에 `ended: true`.
     - `shareFinal()`: `'online'`이면 확정은 자동 다시 올리기로 반영되므로 짧은 링크를 공유(친구 화면이 확정 화면으로 바뀜). `'link'`면 기존 `finalFromMeeting` 링크.
     - `openOnOtherDevice()`: `${app}/meet/${id}#h=${hostToken}`을 `shareLink`로. 메뉴에 `주최자 링크 다시 발급`(→ `release({ host: true })` → 새 토큰 저장, 안내 "이전 주최자 링크는 이제 쓸 수 없어요")도 둔다.

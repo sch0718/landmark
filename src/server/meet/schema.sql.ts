@@ -5,6 +5,7 @@ export const SCHEMA_STATEMENTS: string[] = [
     id TEXT PRIMARY KEY,
     doc TEXT NOT NULL,
     rev INTEGER NOT NULL,
+    doc_rev INTEGER NOT NULL,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     expires_at TEXT NOT NULL

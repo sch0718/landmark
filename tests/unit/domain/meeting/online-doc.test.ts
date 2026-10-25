@@ -168,14 +168,25 @@ describe('온라인 답장과 상태', () => {
   });
 
   it('새 참석자 답장과 좌표를 가린 상태의 출발지 이름을 읽는다', () => {
-    const state = { rev: 1, doc: doc(), replies: [reply()], originNames: { person01: '집' } };
+    const state = {
+      rev: 2,
+      docRev: 1,
+      doc: doc(),
+      replies: [reply()],
+      originNames: { person01: '집' },
+    };
     expect(safeParse(OnlineStateSchema, state, strict).success).toBe(true);
-    const hostState = { rev: state.rev, doc: state.doc, replies: state.replies };
+    const hostState = {
+      rev: state.rev,
+      docRev: state.docRev,
+      doc: state.doc,
+      replies: state.replies,
+    };
     expect(safeParse(OnlineStateSchema, hostState, strict).success).toBe(true);
   });
 
   it('버전·답장 수·출발지 이름의 키와 값을 검사한다', () => {
-    const state = { rev: 1, doc: doc(), replies: [] };
+    const state = { rev: 1, docRev: 1, doc: doc(), replies: [] };
     for (const patch of [
       { rev: 0 },
       { rev: 1.5 },
@@ -185,5 +196,10 @@ describe('온라인 답장과 상태', () => {
     ]) {
       expect(safeParse(OnlineStateSchema, { ...state, ...patch }, strict).success).toBe(false);
     }
+  });
+  it.each([undefined, null, 0, -1, 1.5, '1'])('본문 버전 %s를 거부한다', (docRev) => {
+    expect(safeParse(OnlineStateSchema, { rev: 2, docRev, doc: doc(), replies: [] }).success).toBe(
+      false,
+    );
   });
 });

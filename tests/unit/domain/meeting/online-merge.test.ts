@@ -39,6 +39,7 @@ const state = (
   decided: string | null = null,
 ): OnlineState => ({
   rev: 1,
+  docRev: 1,
   doc: { ...docFromMeeting(meeting, {}, 'min'), decided },
   replies,
 });

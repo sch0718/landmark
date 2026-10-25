@@ -17,6 +17,13 @@ afterEach(() => {
 });
 
 describe('ensureSchema', () => {
+  it('본문 충돌 검사에 쓸 정수 doc_rev 열을 필수로 만든다', async () => {
+    await ensureSchema(db);
+    const { results } = await db.prepare('PRAGMA table_info(meetings)').all();
+    expect(results).toContainEqual(
+      expect.objectContaining({ name: 'doc_rev', type: 'INTEGER', notnull: 1 }),
+    );
+  });
   it('빈 DB에 설계의 표·색인과 버전 1을 만든다', async () => {
     await ensureSchema(db);
 
@@ -90,8 +97,8 @@ describe('ensureSchema', () => {
     await db.batch(SCHEMA_STATEMENTS.map((sql) => db.prepare(sql)));
     await db.prepare('INSERT INTO schema_meta (version) VALUES (0)').run();
     await db
-      .prepare('INSERT INTO meetings VALUES (?, ?, ?, ?, ?, ?)')
-      .bind('meeting001', '{}', 1, '생성 시각', '변경 시각', '만료 시각')
+      .prepare('INSERT INTO meetings VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .bind('meeting001', '{}', 1, 1, '생성 시각', '변경 시각', '만료 시각')
       .run();
 
     await ensureSchema(db);

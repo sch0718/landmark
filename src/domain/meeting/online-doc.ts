@@ -75,6 +75,7 @@ export const ReplyInputSchema = Schema.Struct({
 });
 export const OnlineStateSchema = Schema.Struct({
   rev: Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(1)),
+  docRev: Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(1)),
   doc: MeetingDocSchema,
   replies: Schema.Array(OnlineReplySchema).check(
     Schema.isMaxLength(LIBRARY_LIMITS.meetingParticipantsMax),

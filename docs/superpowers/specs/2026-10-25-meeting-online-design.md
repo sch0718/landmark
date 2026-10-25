@@ -66,7 +66,8 @@
 CREATE TABLE meetings (
   id TEXT PRIMARY KEY,              -- 보관함 약속 id(10자 a-z0-9)
   doc TEXT NOT NULL,                -- 본문 JSON(아래 MeetingDoc)
-  rev INTEGER NOT NULL,             -- 본문·답장·차지가 바뀔 때마다 서버가 1씩 올린다
+  rev INTEGER NOT NULL,             -- 본문·답장·차지가 바뀔 때마다 서버가 1씩 올린다(바뀜 확인용)
+  doc_rev INTEGER NOT NULL,         -- 본문이 바뀔 때만 올린다(주최자 저장의 충돌 검사용)
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   expires_at TEXT NOT NULL          -- max(약속 일시, updated_at) + 30일
@@ -123,7 +124,7 @@ CREATE TABLE schema_meta (version INTEGER NOT NULL);  -- 1
 | 요청 | 하는 일 | 권한 | 성공 |
 |---|---|---|---|
 | `POST /api/meet` | 본문 올리기(`{ doc, turnstile }`) | 출처 + Turnstile + 한도 | `201 { id, rev, hostToken }` |
-| `PUT /api/meet/:id` | 본문 바꾸기·확정·확정 취소(`{ doc, baseRev }`) | 주최자 | `200 { rev }`, `rev`가 다르면 `409 { rev }` |
+| `PUT /api/meet/:id` | 본문 바꾸기·확정·확정 취소(`{ doc, baseRev }`, `baseRev`는 본문 버전) | 주최자 | `200 { rev, docRev }`, `doc_rev`가 다르면 `409 { docRev }` |
 | `GET /api/meet/:id?since=<rev>` | 본문 + 답장 전체 | 링크 소지자(주최자면 원래 좌표 포함) | `200 { rev, doc, replies }`, 안 바뀌었으면 `304` |
 | `POST /api/meet/:id/claim` | 참석자 고르기(`{ participantId }` 또는 `{ newName }`) | 링크 소지자 + 한도 | `200 { participantId, guestToken, rev }`, 이미 차지됐으면 `409` |
 | `PUT /api/meet/:id/reply` | 내 좋아요·출발지·소요시간 줄 저장 | 참석자 | `200 { rev }` |
@@ -169,7 +170,7 @@ CREATE TABLE schema_meta (version INTEGER NOT NULL);  -- 1
 - 미리보기 배포(`*.landmark-c5f.pages.dev`)는 미리보기 D1(`landmark-preview`)을 쓴다. 운영 D1을 읽지 않는다.
 - 시크릿·키는 저장소에 넣지 않는다. 저장소에 `wrangler.toml`을 두지 않는다. Pages는 설정 파일이 있으면 그것을 설정의 기준으로 삼아 대시보드 바인딩을 덮으므로, D1 바인딩·환경 변수·시크릿은 모두 대시보드에서 관리한다. 로컬은 `wrangler pages dev --d1 DB`로 로컬 D1을 붙인다.
 - `TURNSTILE_SECRET`이 없으면 요청 출처가 `http://localhost:*`일 때만 Turnstile 검사를 건너뛴다(로컬 개발·시험). 운영·미리보기 출처에서 비밀 키가 없으면 `POST /api/meet`는 `503`을 돌려준다(설정 누락을 조용히 넘기지 않기 위해).
-- 약속 id는 10자 `a-z0-9`(약 51비트)라 추측하기 어렵고, 읽기도 IP별 한도(하루 5,000)를 둔다.
+- 약속 id는 10자 `a-z0-9`(약 51비트)라 추측하기 어렵다. 없는·끝난 약속을 찾은 읽기만 IP별 하루 5,000번까지 센다(정상 확인마다 D1 쓰기를 쓰지 않기 위해).
 
 ## 첫 로딩·코드 위치
 
