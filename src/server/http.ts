@@ -9,7 +9,12 @@ export type ApiErrorCode =
   | 'UPSTREAM_ERROR'
   | 'TIMEOUT'
   | 'BAD_REQUEST'
-  | 'NO_ROUTE';
+  | 'NO_ROUTE'
+  | 'UNAUTHORIZED'
+  | 'CONFLICT'
+  | 'ENDED'
+  | 'RATE_LIMITED'
+  | 'UNAVAILABLE';
 
 /** 구글 링크에 위치가 없을 때만 붙는다. 앱이 이름을 채워 핀 모드로 간다. */
 export type ApiErrorDetail = { reason: 'no-location'; placeName: string };
@@ -34,6 +39,11 @@ export const STATUS: Record<ApiErrorCode, number> = {
   TIMEOUT: 504,
   BAD_REQUEST: 400,
   NO_ROUTE: 404,
+  UNAUTHORIZED: 401,
+  CONFLICT: 409,
+  ENDED: 410,
+  RATE_LIMITED: 429,
+  UNAVAILABLE: 503,
 };
 
 const EXACT_ORIGINS: readonly string[] = [

@@ -58,6 +58,11 @@ describe('STATUS', () => {
       TIMEOUT: 504,
       BAD_REQUEST: 400,
       NO_ROUTE: 404,
+      UNAUTHORIZED: 401,
+      CONFLICT: 409,
+      ENDED: 410,
+      RATE_LIMITED: 429,
+      UNAVAILABLE: 503,
     });
   });
 });
@@ -77,6 +82,19 @@ describe('jsonResponse', () => {
 });
 
 describe('errorResponse', () => {
+  it.each([
+    ['UNAUTHORIZED', 401],
+    ['CONFLICT', 409],
+    ['ENDED', 410],
+    ['RATE_LIMITED', 429],
+    ['UNAVAILABLE', 503],
+  ] as const)('%s → %i, 공유 캐시에 남기지 않는다', async (code, status) => {
+    const res = errorResponse(new ApiError(code, '약속 오류'));
+    expect(res.status).toBe(status);
+    expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(await res.json()).toEqual({ error: { code, message: '약속 오류' } });
+  });
+
   it.each(Object.entries(STATUS) as [ApiErrorCode, number][])(
     '%s → %d, 본문 { error: { code, message } }',
     async (code, status) => {

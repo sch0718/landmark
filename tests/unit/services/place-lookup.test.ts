@@ -87,6 +87,11 @@ describe('PlaceLookup.lookupLink', () => {
     ['TIMEOUT', 504],
     ['BAD_REQUEST', 400],
     ['NO_ROUTE', 404],
+    ['UNAUTHORIZED', 401],
+    ['CONFLICT', 409],
+    ['ENDED', 410],
+    ['RATE_LIMITED', 429],
+    ['UNAVAILABLE', 503],
   ] as const;
   it('경로 전용 코드(BAD_REQUEST·NO_ROUTE)는 UPSTREAM 문구로 보인다', () => {
     for (const code of ['BAD_REQUEST', 'NO_ROUTE'] as const) {
@@ -110,6 +115,7 @@ describe('PlaceLookup.lookupLink', () => {
         );
         expect(error).toBeInstanceOf(PlaceLookupError);
         expect(error.code).toBe(code);
+        expect(error.userMessage).toBeTruthy();
         expect(error.reason).toBeUndefined();
         expect(error.placeName).toBeUndefined();
       }),
