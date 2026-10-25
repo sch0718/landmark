@@ -17,6 +17,14 @@ function page(id: string) {
   );
 }
 
+function expectMeetingHelp(...patterns: RegExp[]) {
+  render(page('meetings'));
+  const items = screen.getAllByRole('listitem').map((item) => item.textContent);
+  expect(items).toEqual(
+    expect.arrayContaining(patterns.map((pattern) => expect.stringMatching(pattern))),
+  );
+}
+
 describe('도움말 본문', () => {
   it('제목·단계·팁·그림·앞뒤 링크를 보여 준다', () => {
     resolved.mode = 'light';
@@ -67,5 +75,34 @@ describe('도움말 본문', () => {
     fireEvent.click(screen.getByRole('link', { name: /다음.*장소 추가/ }));
     expect(screen.getByRole('heading', { name: '장소 추가', level: 1 })).toBeInTheDocument();
     expect(pane.scrollTop).toBe(0);
+  });
+
+  it('약속 도움말은 친구 답장의 자동 저장과 10초 집계를 안내한다', () => {
+    expectMeetingHelp(
+      /나는 누구\?.*좋아요.*자동 저장/,
+      /10초마다.*자동.*집계/,
+      /확정하면.*친구 화면/,
+    );
+  });
+
+  it('약속 도움말은 주최자 링크의 권한과 다시 발급, 참석자 차지 풀기를 안내한다', () => {
+    expectMeetingHelp(
+      /다른 기기에서 열기.*주최자 링크.*공유.*복사/,
+      /주최자 링크를 가진 기기는 약속을 고칠 수/,
+      /다시 발급.*이전.*링크/,
+      /참석자 차지 풀기.*다른 기기에서 다시/,
+    );
+  });
+
+  it('약속 도움말은 서버 사본의 보관 기한과 보관함에 남는 사본을 구분한다', () => {
+    expectMeetingHelp(
+      /약속 일시와 마지막 변경 중 늦은 쪽에서 30일/,
+      /서버에서 지우기.*보관함.*남/,
+      /백업.*주최자.*포함되지 않/,
+    );
+  });
+
+  it('약속 도움말은 이미 답장 링크로 주고받던 약속의 반영 방법도 남긴다', () => {
+    expectMeetingHelp(/이미 답장 링크로 주고받던 약속.*반영/);
   });
 });
