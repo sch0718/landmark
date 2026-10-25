@@ -94,12 +94,13 @@
   - `OnlineReplySchema = { participantId: MeetingMemberId, name: MeetingName, origin: NullOr(OriginSchema), likes: Array(MeetingMemberId)(≤8, 중복 없음), times: NullOr(Record(후보 id, cell)), updatedAt: IsoDateTime }`. `origin: null`은 "본문 출발지 그대로". 타입 `OnlineReply`.
   - `ReplyInputSchema = { likes, origin?: NullOr(OriginSchema), times?: NullOr(Record) }` — 친구가 `PUT …/reply`로 보내는 본문(`participantId` 없음).
   - `OnlineStateSchema = { rev: 정수 ≥1, doc: MeetingDoc, replies: Array(OnlineReply)(≤10), originNames?: Record(참석자 id, MeetingTitle) }`, 타입 `OnlineState`. 친구 응답에서는 남의 `doc.participants[].origin`과 남의 답장 `origin`을 `null`로 바꾸고, 그 출발지 **이름**만 `originNames[참석자 id]`에 둔다(설계 문서 §API: 좌표는 빼고 이름·출발지 이름·소요시간은 준다).
-  - `mergeOnline(lib: Library, meetingId: string, state: OnlineState, ctx: OpCtx): OpResult` —
+  - `mergeOnline(lib: Library, meetingId: string, state: OnlineState, ctx: OpCtx, syncedAt: string | null): OpResult` —
+    `syncedAt`은 이 기기가 서버와 마지막으로 맞춘 시각(마지막으로 성공한 `create`/`update`가 올린 본문의 기준 시각, `OnlineRecord.syncedAt`. 합치기만으로는 올리지 않는다). 처음 담는 기기(주최자 링크)는 `null`.
     1. 약속이 없거나 지워졌으면 `meetingFailure('not-found')`.
     2. `state.replies` 중 보관함 참석자에 없는 `participantId`는 새 참석자 `{ id: participantId, name, origin }`으로 더한다(10명 한도 넘으면 그 답장은 건너뜀).
     3. 각 답장의 `origin`이 null이 아니면 그 참석자 출발지를 바꾼다.
-    4. 주최자(`participants[0]`)가 아닌 답장은 `replies[participantId] = { likes(지금 후보만), sentAt: updatedAt, receivedAt: ctx.now }`. 같은 `participantId`의 기존 답장 `sentAt`이 `updatedAt`보다 같거나 새로우면 그대로 둔다(변경 없음이면 필드 시각도 그대로 — `meetingField`가 같은 값을 거르는지 확인하고, 아니면 바뀐 경우에만 부른다).
-    5. 본문 `decided`는 보관함 쪽 값을 바꾸지 않는다(본문 주인은 주최자 기기). 다른 주최자 기기가 확정한 경우는 `state.doc.decided`가 보관함 값과 다르면 보관함을 서버 값으로 맞춘다 — 단 `ctx.now`보다 보관함 `decided.updatedAt`이 새로우면 그대로(같은 기기의 미전송 변경).
+    4. 주최자(`participants[0]`)가 아닌 답장은 `replies[participantId] = { likes(지금 후보만), sentAt: updatedAt, receivedAt: ctx.now }`. 같은 `participantId`의 기존 답장 `sentAt`이 `updatedAt`보다 같거나 새로우면 그대로 둔다(변경 없음이면 필드 시각도 그대로).
+    5. 확정(`decided`): 본문 주인은 주최자 기기다. 서버 `state.doc.decided`가 보관함 값과 다르고, `syncedAt !== null`이며 보관함 `decided.updatedAt <= syncedAt`(이 기기가 마지막 동기화 뒤 확정을 바꾸지 않음)일 때만 서버 값으로 맞춘다(주최자의 다른 기기가 확정한 경우). `syncedAt === null`이면 서버 값을 쓴다. 그 밖에는 보관함 값을 지킨다(아직 올리지 않은 이 기기의 확정).
 - [ ] **Step 1: 실패하는 시험** — `online-doc.test.ts`: 정상 문서 통과, `decided`가 없는 후보면 거부, 64KB 넘으면 거부, `docFromMeeting`이 참석자 출발지·후보·times·unit·decided를 그대로 옮김, 남는 키(`sentAt`) 거부(`onExcessProperty: 'error'`). `online-merge.test.ts`: 새 참석자 추가, 11번째 참석자 건너뜀, 출발지 변경, 좋아요 중 없는 후보 제외, 같은 `updatedAt` 두 번 합쳐도 보관함이 같은 객체(`===`)를 돌려줌, 주최자 답장은 무시, 확정 동기화 규칙 두 갈래.
 - [ ] **Step 2:** `yarn vitest run tests/unit/domain/meeting/online-doc.test.ts tests/unit/domain/meeting/online-merge.test.ts` → 실패 확인
 - [ ] **Step 3:** 구현. `apply-reply.ts`의 작성 방식(미리보기 규칙·`meetingField` 사용)을 따른다.
@@ -166,7 +167,7 @@
 - Consumes: `OnlineStateSchema`·`MeetingDoc`·`ReplyInputSchema`(Task 2), 서버 응답 모양(Task 3·4), `HELP_SEEN_KEY` 저장 방식(`src/services/help-seen.ts`, 깨진 값·막힌 저장소 처리 관례)
 - Produces:
   - `MEET_ONLINE_KEY = 'tripmap:meet-online:v1'`
-  - `type OnlineRecord = { hostToken?: string; guest?: { participantId: string; token: string }; lastRev: number; ended?: true }`
+  - `type OnlineRecord = { hostToken?: string; guest?: { participantId: string; token: string }; lastRev: number; syncedAt?: string; ended?: true }` — `syncedAt`은 `mergeOnline`의 다섯째 인자(Task 2).
   - `readOnline(id): OnlineRecord | null`, `writeOnline(id, record: OnlineRecord): void`, `removeOnline(id): void`, `allOnline(): Record<string, OnlineRecord>` — 깨진 값은 빈 기록, 저장소가 막히면 페이지 메모리에만. 약속 200개 한도 넘는 기록은 오래된 것부터 버린다.
   - `isLinkMeeting(meeting: Meeting, record: OnlineRecord | null): boolean` — `record?.hostToken`이 없고 주최자가 아닌 참석자의 `replies`가 하나라도 있으면 true(설계 문서 §브라우저 저장).
   - `type OnlineError = { code: 'offline' | 'unauthorized' | 'conflict' | 'ended' | 'not-found' | 'rate-limited' | 'unavailable' | 'switched-off' | 'invalid' | 'turnstile' | 'taken' | 'host' | 'full'; rev?: number }` — 503 `reason: 'off'`는 `switched-off`, 그 밖의 503은 `unavailable`.
@@ -201,7 +202,7 @@
     - `mode`: `isLinkMeeting`이면 `'link'`(지금 동작 그대로), 기록이 `ended`면 `'ended'`, host 토큰이 있으면 `'online'`, 아니면 `'local'`(아직 안 올림).
     - `share()`: `'link'`면 기존 `shareMeetingDoc(inviteFromMeeting(…))`. `'local'`이면 `getTurnstileToken()` → `meetApi.create(docFromMeeting(…))` → 기록 저장 → `shareLink(`${app}/meet/${id}`, 제목)`. 오류 코드별 안내는 설계 문서 §오류·장애 문구 그대로(`unavailable`·`offline`이면 "지금은 보낼 수 없어요. 잠시 뒤 다시 해 주세요"). `switched-off`면 서버 기능 스위치가 꺼진 것이므로 알림 없이 기존 해시 링크(`shareMeetingDoc(inviteFromMeeting(…))`)로 공유한다(설계 문서 §호환·롤백의 비상구). 기록은 만들지 않는다. `'online'`이면 올리지 않고 짧은 링크만 공유.
     - 자동 다시 올리기: `'online'`이고 `compute.pending`이 false일 때, `docFromMeeting` 결과의 JSON이 마지막으로 올린 JSON과 다르면 1초 모았다가 `update`. `409`면 `get(id, null, hostToken)` → `mergeOnline` → 다시 `update`(한 번만 재시도).
-    - 10초 확인: `'online'`이고 화면이 보일 때 `useOnlinePoll`로 `get(id, lastRev, hostToken)` → 바뀌었으면 `run((lib, ctx) => mergeOnline(lib, id, state, ctx))`, `lastRev` 저장. `ended`/`not-found`면 기록에 `ended: true`.
+    - 10초 확인: `'online'`이고 화면이 보일 때 `useOnlinePoll`로 `get(id, lastRev, hostToken)` → 바뀌었으면 `run((lib, ctx) => mergeOnline(lib, id, state, ctx, record.syncedAt ?? null))`, `lastRev` 저장. `syncedAt`은 성공한 `create`/`update`의 응답 시각(요청 직전에 잡은 본문의 기준 시각)으로만 올린다 — 합치기만으로 올리면 아직 안 올린 확정이 "동기화됨"으로 보이게 된다. `ended`/`not-found`면 기록에 `ended: true`.
     - `shareFinal()`: `'online'`이면 확정은 자동 다시 올리기로 반영되므로 짧은 링크를 공유(친구 화면이 확정 화면으로 바뀜). `'link'`면 기존 `finalFromMeeting` 링크.
     - `openOnOtherDevice()`: `${app}/meet/${id}#h=${hostToken}`을 `shareLink`로. 메뉴에 `주최자 링크 다시 발급`(→ `release({ host: true })` → 새 토큰 저장, 안내 "이전 주최자 링크는 이제 쓸 수 없어요")도 둔다.
     - `releaseParticipant(pid)`: 확인 창 뒤 `release({ participantId })`.
@@ -209,7 +210,7 @@
   - `OnlineHostMenu`: `mode === 'online'`일 때 약속 편집 화면 머리글 메뉴(기존 메뉴 관례를 따른다)에 세 항목. `참석자 차지 풀기`는 참석자 목록에서 고르는 작은 창.
   - 상태 줄: `'online'`이면 집계표 위에 "친구 답장이 자동으로 모여요 · ○분 전 기준"(`failing`이면 "연결이 원활하지 않아요 · ○분 전 기준"). `'ended'`면 "공유가 끝난 약속이에요".
   - `'online'` 약속에서는 `ReplyImport`로 가는 안내·`반영` 문구를 보이지 않는다(링크 방식 약속은 그대로).
-- [ ] **Step 1: 실패하는 시험** — `online-host.test.tsx`(가짜 `meetApi`·가짜 저장소·가짜 타이머): 링크 방식 약속은 기존 해시 링크 공유, 처음 공유 시 create 한 번 후 짧은 링크 공유와 기록 저장, 두 번째 공유는 create 없이 링크만, create 실패 코드별 알림 문구, `switched-off`면 해시 링크로 공유하고 기록 없음, 참석자 수정 뒤 1초 후 update 한 번, 409면 get→merge→update, 확인 결과의 새 답장이 보관함 약속 `replies`에 들어감, ended 응답이면 "공유가 끝난 약속이에요", 주최자 링크가 `#h=` 형식, 다시 발급 후 기록의 토큰이 바뀜, 서버에서 지우기 후 `ended`.
+- [ ] **Step 1: 실패하는 시험** — `online-host.test.tsx`(가짜 `meetApi`·가짜 저장소·가짜 타이머): 링크 방식 약속은 기존 해시 링크 공유, 처음 공유 시 create 한 번 후 짧은 링크 공유와 기록 저장, 두 번째 공유는 create 없이 링크만, create 실패 코드별 알림 문구, `switched-off`면 해시 링크로 공유하고 기록 없음, 참석자 수정 뒤 1초 후 update 한 번, 409면 get→merge→update, 확인 결과의 새 답장이 보관함 약속 `replies`에 들어감, 확정 직후(올리기 전) 확인이 돌아도 확정이 지워지지 않음, 성공한 update·합치기 뒤 기록의 `syncedAt` 갱신, ended 응답이면 "공유가 끝난 약속이에요", 주최자 링크가 `#h=` 형식, 다시 발급 후 기록의 토큰이 바뀜, 서버에서 지우기 후 `ended`.
 - [ ] **Step 2:** `yarn vitest run tests/unit/sections/meetings/online-host.test.tsx` → 실패 확인
 - [ ] **Step 3:** 구현. 기존 `tests/unit/sections/meetings/*` 시험이 깨지면 링크 방식 약속 동작이 바뀐 것이니 고치지 말고 구현을 맞춘다.
 - [ ] **Step 4:** 시험 통과(`yarn vitest run tests/unit/sections/meetings`), `yarn typecheck`
