@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import type { Library } from '../../src/schema/library';
 import { isCompact, LIBRARY_KEY, mockRoutes, mockSearch, seedStorage, seedJson } from './fixtures';
 
 declare global {
@@ -100,6 +101,39 @@ test('@smoke 약속 만들기부터 친구 답장 반영·집계·확정 길찾�
   const nearby = page.getByRole('region', { name: '원주역 근처 보관함 장소' });
   await nearby.getByRole('button', { name: '성수동 카페거리 후보에 담기', exact: true }).click();
   await hubs.getByRole('button', { name: '원주역 후보에 담기', exact: true }).click();
+  // 후보 저장이 끝난 뒤 보관함을 읽어 기존 답장을 넣는다.
+  await expect
+    .poll(() =>
+      page.evaluate((key) => {
+        const library = JSON.parse(localStorage.getItem(key)!) as Library;
+        return Object.values(library.meetings!)[0]!.candidates.value.length;
+      }, LIBRARY_KEY),
+    )
+    .toBe(2);
+  // 다른 참석자의 기존 답장이 있는 약속은 계속 링크 방식으로 공유한다.
+  await page.evaluate((key) => {
+    const library = JSON.parse(localStorage.getItem(key)!) as Library;
+    const meeting = Object.values(library.meetings!)[0]!;
+    const participant = meeting.participants.value.find((p) => p.name === '보관함 친구')!;
+    const now = new Date().toISOString();
+    localStorage.setItem(
+      key,
+      JSON.stringify({
+        ...library,
+        meetings: {
+          ...library.meetings,
+          [meeting.id]: {
+            ...meeting,
+            replies: {
+              value: { [participant.id]: { likes: [], sentAt: now, receivedAt: now } },
+              updatedAt: now,
+            },
+          },
+        },
+      }),
+    );
+  }, LIBRARY_KEY);
+  await page.reload();
   const invite = await sharedLink(page, '후보 링크 보내기', 'd');
   const friendContext = await browser.newContext({
     baseURL,
