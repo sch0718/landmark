@@ -2,7 +2,7 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router';
-import { mergeOnline } from 'src/domain/meeting/online-merge';
+import { mergeOnline, shouldAdoptRemoteDoc } from 'src/domain/meeting/online-merge';
 import { meetingFailure, storeMeeting } from 'src/domain/meeting/ops';
 import { LIBRARY_LIMITS } from 'src/schema/library';
 import { MeetingId, type Meeting } from 'src/schema/meeting';
@@ -108,44 +108,34 @@ function HostLink({ id, token }: { id: string; token: string }) {
         setError('주최자 링크가 더 이상 쓸 수 없어요');
         return;
       }
-      let syncedAt = '';
+      let adoptedAt: string | null = null;
       const result = await run((lib, ctx) => {
         const before = lib.meetings?.[id];
         if (!before && Object.keys(lib.meetings ?? {}).length >= LIBRARY_LIMITS.meetingsMax)
           return meetingFailure('meetings-full');
         const field = <T,>(value: T) => ({ value, updatedAt: ctx.now });
-        const meeting: Meeting = {
+        const restored = before?.deletedAt != null;
+        const meeting: Meeting = (restored ? { ...before, deletedAt: null } : before) ?? {
           id,
           title: field(state.doc.title),
           at: field(state.doc.at),
           mode: field(state.doc.mode),
-          rank: before?.rank ?? field('max'),
+          rank: field('max'),
           participants: field(state.doc.participants),
           candidates: field(state.doc.candidates),
-          replies: field(
-            (() => {
-              const hostId = state.doc.participants[0]?.id;
-              const reply = hostId ? before?.replies.value[hostId] : undefined;
-              return hostId && reply
-                ? {
-                    [hostId]: {
-                      ...reply,
-                      likes: reply.likes.filter((cid) =>
-                        state.doc.candidates.some((c) => c.id === cid),
-                      ),
-                    },
-                  }
-                : {};
-            })(),
-          ),
+          replies: field({}),
           decided: field(state.doc.decided),
-          createdAt: before?.createdAt ?? ctx.now,
+          createdAt: ctx.now,
           deletedAt: null,
         };
         const stored = storeMeeting(lib, meeting);
         if (!stored.ok) return stored;
-        syncedAt = ctx.now;
-        return mergeOnline(stored.lib, id, state, ctx, null);
+        const current = readOnline(id);
+        const sync = restored
+          ? { syncedAt: null, docRev: null }
+          : { syncedAt: current?.syncedAt ?? null, docRev: current?.docRev ?? null };
+        if (shouldAdoptRemoteDoc(meeting, state, sync)) adoptedAt = ctx.now;
+        return mergeOnline(stored.lib, id, state, ctx, sync);
       });
       if (!active) return;
       if (!result.ok) {
@@ -156,8 +146,7 @@ function HostLink({ id, token }: { id: string; token: string }) {
         ...readOnline(id),
         hostToken: token,
         lastRev: state.rev,
-        docRev: state.docRev,
-        syncedAt,
+        ...(adoptedAt === null ? {} : { docRev: state.docRev, syncedAt: adoptedAt }),
       };
       delete record.ended;
       writeOnline(id, record);

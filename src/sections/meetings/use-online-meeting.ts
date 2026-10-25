@@ -2,7 +2,7 @@ import { useCallback, useEffect, useEffectEvent, useLayoutEffect, useRef, useSta
 import { toast } from 'sonner';
 import { finalFromMeeting, inviteFromMeeting } from 'src/domain/meeting/link';
 import { docFromMeeting, type MeetingDoc, type OnlineState } from 'src/domain/meeting/online-doc';
-import { mergeOnline } from 'src/domain/meeting/online-merge';
+import { mergeOnline, shouldAdoptRemoteDoc } from 'src/domain/meeting/online-merge';
 import type { Meeting } from 'src/schema/meeting';
 import { meetApi, type OnlineError } from 'src/services/meet-online/client';
 import {
@@ -23,6 +23,8 @@ export type OnlineMeeting = ReturnType<typeof useOnlineMeeting>;
 
 function errorMessage(error: OnlineError, creating = false) {
   switch (error.code) {
+    case 'full':
+      return '참석자는 10명까지예요';
     case 'turnstile':
       return '확인에 실패했어요. 다시 해 주세요';
     case 'rate-limited':
@@ -97,7 +99,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
       if (unauthorizedNotified.current) return;
       unauthorizedNotified.current = true;
       toast.error(errorMessage(error));
-    } else if (notify) toast.error(errorMessage(error));
+    } else if (notify || error.code === 'full') toast.error(errorMessage(error));
   }
   function markOk() {
     if (active.current) setStatus({ lastOkAt: Date.now(), failing: false });
@@ -134,21 +136,33 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
   }
   async function merge(state: OnlineState): Promise<Meeting | null> {
     let merged: Meeting | null = null;
+    let adoptedAt: string | null = null;
     const result = await latest.current.run((lib, ctx) => {
-      const out = mergeOnline(lib, meeting.id, state, ctx, currentRecord()?.syncedAt ?? null);
+      const current = currentRecord();
+      const sync = { syncedAt: current?.syncedAt ?? null, docRev: current?.docRev ?? null };
+      const before = lib.meetings?.[meeting.id];
+      if (before && shouldAdoptRemoteDoc(before, state, sync)) adoptedAt = ctx.now;
+      const out = mergeOnline(lib, meeting.id, state, ctx, sync);
       if (out.ok) merged = out.lib.meetings![meeting.id]!;
       return out;
     });
     if (!result.ok) return null;
     const current = currentRecord();
-    if (current && !current.ended) save({ ...current, lastRev: state.rev, docRev: state.docRev });
+    if (current && !current.ended)
+      save({
+        ...current,
+        lastRev: state.rev,
+        ...(adoptedAt === null ? {} : { docRev: state.docRev, syncedAt: adoptedAt }),
+      });
     hydrated.current = true;
-    baseline.current = JSON.stringify(state.doc);
+    if (adoptedAt !== null) baseline.current = JSON.stringify(state.doc);
     if (!hostReplyInFlight.current) {
       hostLikesBaseline.current = JSON.stringify(
-        state.replies.find(
-          (r) => r.participantId === latest.current.meeting.participants.value[0]!.id,
-        )?.likes ?? [],
+        (
+          state.replies.find(
+            (r) => r.participantId === latest.current.meeting.participants.value[0]!.id,
+          )?.likes ?? []
+        ).filter((cid) => merged?.candidates.value.some((c) => c.id === cid)),
       );
     }
     if (active.current) setReplyState(state);
@@ -159,6 +173,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
     const input = latest.current;
     if (!current?.hostToken || current.ended || input.compute.pending) return true;
     let doc = docFromMeeting(input.meeting, input.compute.times, input.compute.unit);
+    let baseDocRev = current.docRev;
     if (JSON.stringify(doc) === baseline.current) {
       retry.current = false;
       deferred.current = false;
@@ -175,11 +190,17 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
       const merged = await merge(response.value);
       if (!merged) return false;
       current = currentRecord()!;
+      baseDocRev = response.value.docRev;
       doc = docFromMeeting(merged, latest.current.compute.times, latest.current.compute.unit);
+      if (JSON.stringify(doc) === baseline.current) {
+        retry.current = false;
+        deferred.current = false;
+        return true;
+      }
     }
     // 응답을 기다리는 사이 고친 필드는 이 시각보다 새로워 다음 확인에서도 보존된다.
     let sentAt = new Date().toISOString();
-    let response = await meetApi.update(meeting.id, doc, current.docRev!, current.hostToken!);
+    let response = await meetApi.update(meeting.id, doc, baseDocRev!, current.hostToken!);
     if (
       !response.ok &&
       response.error.code === 'conflict' &&

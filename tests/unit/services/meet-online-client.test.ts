@@ -235,3 +235,13 @@ describe('온라인 약속 API', () => {
     expect(await meetApi.create(doc, 'dev')).toEqual({ ok: false, error: { code: 'offline' } });
   });
 });
+
+it('답장 docRev를 보내고 timesDropped 성공 응답을 읽는다', async () => {
+  const input = { likes: ['choice01'], times: { choice01: 20 }, docRev: 1 };
+  respond({ rev: 8, timesDropped: true });
+  expect(await meetApi.reply(doc.meetingId, input, token)).toEqual({
+    ok: true,
+    value: { rev: 8, timesDropped: true },
+  });
+  expect(JSON.parse(fetchMock.mock.calls[0]![1]!.body as string)).toEqual(input);
+});

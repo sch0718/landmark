@@ -820,3 +820,71 @@ it('실패한 주최자 좋아요는 다음 확인에서 다시 보내고 빈 �
   await advance(1000);
   expect(meetApi.reply).toHaveBeenLastCalledWith(saved.id, { likes: [] }, token);
 });
+
+it('다른 기기의 확정과 확정 취소를 연이어 받고 다시 올리지 않는다', async () => {
+  online();
+  setup();
+  await flush();
+  vi.mocked(meetApi.get).mockResolvedValueOnce({
+    ok: true,
+    value: state({ rev: 3, docRev: 2, doc: { ...state().doc, decided: 'choice01' } }),
+  });
+  await advance(10000);
+  expect(saved.decided.value).toBe('choice01');
+  expect(readOnline(saved.id)).toMatchObject({ docRev: 2, syncedAt: new Date().toISOString() });
+  vi.mocked(meetApi.get).mockResolvedValueOnce({
+    ok: true,
+    value: state({ rev: 4, docRev: 3, doc: { ...state().doc, decided: null } }),
+  });
+  await advance(10000);
+  expect(saved.decided.value).toBeNull();
+  await advance(1000);
+  expect(meetApi.update).not.toHaveBeenCalled();
+});
+
+it('미전송 수정이 있으면 원격 본문 버전과 동기화 시각도 보존한다', async () => {
+  online();
+  const remote = state({ rev: 5, docRev: 4 });
+  setup();
+  await flush();
+  await advance(9500);
+  await edit({ title: f('로컬 제목', new Date().toISOString()) });
+  vi.mocked(meetApi.get).mockResolvedValueOnce({ ok: true, value: remote });
+  await advance(500);
+  expect(saved.title.value).toBe('로컬 제목');
+  expect(readOnline(saved.id)).toMatchObject({ docRev: 1, syncedAt: startAt, lastRev: 5 });
+});
+
+it('새 기기는 서버 주최자 좋아요를 복원하고 빈 좋아요를 자동 전송하지 않는다', async () => {
+  online();
+  vi.mocked(meetApi.get).mockResolvedValueOnce({
+    ok: true,
+    value: state({
+      replies: [
+        {
+          participantId: 'person01',
+          name: '나',
+          origin: null,
+          likes: ['choice01', 'deleted1'],
+          times: null,
+          updatedAt: startAt,
+        },
+      ],
+    }),
+  });
+  setup();
+  await flush();
+  expect(saved.replies.value.person01?.likes).toEqual(['choice01']);
+  await advance(1000);
+  expect(meetApi.reply).not.toHaveBeenCalled();
+});
+
+it('본문과 답장 참석자의 합계 한도 초과를 안내한다', async () => {
+  online();
+  setup();
+  await flush();
+  vi.mocked(meetApi.update).mockResolvedValueOnce({ ok: false, error: { code: 'full' } });
+  await edit({ title: f('수정', new Date().toISOString()) });
+  await advance(1000);
+  expect(toast.error).toHaveBeenCalledWith('참석자는 10명까지예요');
+});

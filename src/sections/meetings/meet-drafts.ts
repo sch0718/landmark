@@ -10,6 +10,7 @@ const DraftSchema = Schema.Struct({
   origin: Schema.optionalKey(Schema.NullOr(OriginSchema)),
   likes: Schema.Array(MeetingMemberId).check(Schema.isMaxLength(8)),
   times: ReplyInputSchema.fields.times,
+  docRev: ReplyInputSchema.fields.docRev,
 }).check(
   Schema.makeFilter(
     (draft) =>

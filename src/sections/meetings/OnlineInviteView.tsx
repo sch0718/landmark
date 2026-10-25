@@ -53,6 +53,7 @@ export function OnlineInviteView({ id }: { id: string }) {
   const inFlight = useRef(false);
   const needsFull = useRef(false);
   const deferred = useRef(false);
+  const needsFreshDoc = useRef(false);
   const pid = guest?.participantId;
   const ownReply = state?.replies.find((r) => r.participantId === pid);
   const selected = state?.doc.participants.find((p) => p.id === pid);
@@ -96,9 +97,12 @@ export function OnlineInviteView({ id }: { id: string }) {
           likes,
           ...(draft?.origin == null ? {} : { origin: draft.origin }),
           ...(mine.length > 0
-            ? { times: calculatedTimes }
+            ? { times: calculatedTimes, docRev: state.docRev }
             : draft?.origin === undefined && draft?.times !== undefined
-              ? { times: draft.times }
+              ? {
+                  times: draft.times,
+                  ...(draft.docRev === undefined ? {} : { docRev: draft.docRev }),
+                }
               : {}),
         }
       : null;
@@ -136,7 +140,7 @@ export function OnlineInviteView({ id }: { id: string }) {
   }
   async function sendDraft(): Promise<boolean> {
     const current = latest.current;
-    if (!current.guest || !current.input || current.pending) return true;
+    if (!current.guest || !current.input || current.pending || needsFreshDoc.current) return true;
     const sent = current.input;
     // 계산한 내 줄도 함께 남겨 새로고침 뒤 재시도할 수 있게 한다.
     saveMeetDraft(id, { participantId: current.guest.participantId, ...sent });
@@ -163,7 +167,11 @@ export function OnlineInviteView({ id }: { id: string }) {
             name: old?.name ?? participant?.name ?? name,
             origin: sent.origin === undefined ? (old?.origin ?? null) : sent.origin,
             likes: sent.likes,
-            times: sent.times === undefined ? (old?.times ?? null) : sent.times,
+            times: result.value.timesDropped
+              ? null
+              : sent.times === undefined
+                ? (old?.times ?? null)
+                : sent.times,
             updatedAt,
           },
         ],
@@ -173,7 +181,8 @@ export function OnlineInviteView({ id }: { id: string }) {
       removeMeetDraft(id);
       setDraft(null);
     }
-    deferred.current = false;
+    needsFreshDoc.current = result.value.timesDropped === true;
+    deferred.current = needsFreshDoc.current;
     setSaved((count) => count + 1);
     setError(null);
     setLastOkAt(Date.now());
@@ -190,7 +199,7 @@ export function OnlineInviteView({ id }: { id: string }) {
       const current = latest.current;
       const result = await meetApi.get(
         id,
-        full ? null : (current.state?.rev ?? null),
+        full || needsFreshDoc.current ? null : (current.state?.rev ?? null),
         current.guest?.token ?? null,
       );
       if (!active.current || current.guest?.token !== latest.current.guest?.token) return 'error';
@@ -199,6 +208,8 @@ export function OnlineInviteView({ id }: { id: string }) {
         return 'error';
       }
       if (result.value !== 'unchanged') {
+        needsFreshDoc.current = false;
+        deferred.current = false;
         setState(result.value);
         writeOnline(id, {
           ...readOnline(id),
@@ -283,9 +294,46 @@ export function OnlineInviteView({ id }: { id: string }) {
     lastOkAt === null
       ? '아직 확인하지 못했어요'
       : `${Math.max(0, Math.floor((clockNow - lastOkAt) / 60_000))}분 전 기준`;
+  const identity = !guest ? (
+    <Box component="section" aria-label="나는 누구?" sx={{ my: 2 }}>
+      <h2>나는 누구?</h2>
+      {doc.participants.slice(1).map((p) => (
+        <Button
+          key={p.id}
+          disabled={claiming}
+          onClick={() => void claim({ participantId: p.id })}
+          sx={{ minHeight: 44 }}
+        >
+          {p.name}
+        </Button>
+      ))}
+      <Button disabled={claiming} onClick={() => setNewPerson(true)} sx={{ minHeight: 44 }}>
+        목록에 없어요
+      </Button>
+      {newPerson && (
+        <Box>
+          <TextField
+            label="내 이름"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            inputProps={{ maxLength: 20 }}
+          />
+          <Button
+            disabled={claiming || !name.trim() || name.trim().length > 20}
+            onClick={() => void claim({ newName: name.trim() })}
+            sx={{ minHeight: 44 }}
+          >
+            참석하기
+          </Button>
+        </Box>
+      )}
+    </Box>
+  ) : null;
   if (doc.decided !== null)
     return (
       <>
+        {error && <p role="alert">{error}</p>}
+        {identity}
         <FinalView state={state} participantId={pid ?? null} />
         <Box sx={{ p: 2 }}>{age}</Box>
       </>
@@ -306,12 +354,12 @@ export function OnlineInviteView({ id }: { id: string }) {
     Object.entries(doc.times).map(([cid, row]) => [cid, { ...row }]),
   );
   for (const reply of state.replies) {
-    for (const [cid, value] of Object.entries(reply.times ?? {}))
+    if (reply.origin === null || reply.times === null) continue;
+    for (const [cid, value] of Object.entries(reply.times))
       (times[cid] ??= {})[reply.participantId] = value;
   }
-  if (pid && (mine.length > 0 || ownReply?.times === null))
-    for (const c of doc.candidates)
-      (times[c.id] ??= {})[pid] = mine.length > 0 ? (compute.times[c.id]?.[pid] ?? null) : null;
+  if (pid && mine.length > 0)
+    for (const c of doc.candidates) (times[c.id] ??= {})[pid] = compute.times[c.id]?.[pid] ?? null;
   const field = <T,>(value: T) => ({
     value,
     updatedAt: new Date(lastOkAt ?? 0).toISOString(),
@@ -364,39 +412,7 @@ export function OnlineInviteView({ id }: { id: string }) {
         {mapError && <Box role="status">{mapError}</Box>}
       </Box>
       {!guest ? (
-        <Box component="section" aria-label="나는 누구?" sx={{ my: 2 }}>
-          <h2>나는 누구?</h2>
-          {doc.participants.slice(1).map((p) => (
-            <Button
-              key={p.id}
-              disabled={claiming}
-              onClick={() => void claim({ participantId: p.id })}
-              sx={{ minHeight: 44 }}
-            >
-              {p.name}
-            </Button>
-          ))}
-          <Button disabled={claiming} onClick={() => setNewPerson(true)} sx={{ minHeight: 44 }}>
-            목록에 없어요
-          </Button>
-          {newPerson && (
-            <Box>
-              <TextField
-                label="내 이름"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                inputProps={{ maxLength: 20 }}
-              />
-              <Button
-                disabled={claiming || !name.trim() || name.trim().length > 20}
-                onClick={() => void claim({ newName: name.trim() })}
-                sx={{ minHeight: 44 }}
-              >
-                참석하기
-              </Button>
-            </Box>
-          )}
-        </Box>
+        identity
       ) : (
         <Box component="section" aria-label="내 출발지">
           <h2>내 출발지</h2>

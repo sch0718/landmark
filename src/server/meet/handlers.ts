@@ -313,64 +313,80 @@ export function handleUpdate(ctx: MeetContext, deps: MeetDeps): Promise<Response
     const id = readMeetingId(ctx);
     const now = deps.now();
     await prepare(ctx, origin, now, 'update');
-    const row = await activeMeeting(ctx.env.DB, id, now);
+    await activeMeeting(ctx.env.DB, id, now);
     await requireHost(ctx, id);
     const { doc, baseRev } = validate(updateSchema, await readJson(ctx.request));
     if (doc.meetingId !== id) throw new ApiError('BAD_REQUEST', '약속 id가 경로와 달라요');
     const conflict = (docRev: number): never => {
       throw new MeetError('CONFLICT', '약속이 바뀌었어요. 다시 확인해 주세요', { docRev });
     };
-    if (baseRev !== row.doc_rev) conflict(row.doc_rev);
-    const old: MeetingDoc = JSON.parse(row.doc);
-    const remaining = new Set(doc.participants.map((p) => p.id));
-    const removed = old.participants.filter((p) => !remaining.has(p.id)).map((p) => p.id);
-    const db = ctx.env.DB;
-    // 삭제도 버전 조건에 묶는다. 뒤늦게 도착한 요청이 다른 기기의 답장을 지우지 않는다.
-    const guard = 'EXISTS (SELECT 1 FROM meetings WHERE id = ? AND doc_rev = ?)';
-    const cleanup = removed.flatMap((pid) => [
-      db
-        .prepare(
-          `DELETE FROM meeting_replies WHERE meeting_id = ? AND participant_id = ? AND ${guard}`,
-        )
-        .bind(id, pid, id, baseRev),
-      db
-        .prepare(
-          `DELETE FROM meeting_tokens WHERE meeting_id = ? AND participant_id = ? AND kind = 'guest' AND ${guard}`,
-        )
-        .bind(id, pid, id, baseRev),
-    ]);
-    const oldCandidates = new Map(old.candidates.map((c) => [c.id, c]));
-    const changedConditions =
-      doc.mode !== old.mode ||
-      JSON.stringify(doc.at) !== JSON.stringify(old.at) ||
-      doc.candidates.length !== old.candidates.length ||
-      doc.candidates.some((c) => {
-        const previous = oldCandidates.get(c.id);
-        return !previous || c.lng !== previous.lng || c.lat !== previous.lat;
-      });
-    if (changedConditions) {
-      cleanup.push(
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const row = await activeMeeting(ctx.env.DB, id, now);
+      await requireHost(ctx, id);
+      if (baseRev !== row.doc_rev) conflict(row.doc_rev);
+      const old: MeetingDoc = JSON.parse(row.doc);
+      const remaining = new Set(doc.participants.map((p) => p.id));
+      const removed = old.participants.filter((p) => !remaining.has(p.id)).map((p) => p.id);
+      const db = ctx.env.DB;
+      const { results: replies } = await db
+        .prepare('SELECT participant_id FROM meeting_replies WHERE meeting_id = ?')
+        .bind(id)
+        .all<{ participant_id: string }>();
+      const replyOnly = replies.filter(
+        (r) => !remaining.has(r.participant_id) && !removed.includes(r.participant_id),
+      );
+      if (doc.participants.length + replyOnly.length > LIBRARY_LIMITS.meetingParticipantsMax)
+        throw new MeetError('CONFLICT', '참석자는 10명까지예요', { reason: 'full' });
+      // 삭제도 버전 조건에 묶는다. 뒤늦게 도착한 요청이 다른 기기의 답장을 지우지 않는다.
+      const guard = 'EXISTS (SELECT 1 FROM meetings WHERE id = ? AND doc_rev = ? AND rev = ?)';
+      const cleanup = removed.flatMap((pid) => [
         db
-          .prepare(`UPDATE meeting_replies SET times = NULL WHERE meeting_id = ? AND ${guard}`)
-          .bind(id, id, baseRev),
+          .prepare(
+            `DELETE FROM meeting_replies WHERE meeting_id = ? AND participant_id = ? AND ${guard}`,
+          )
+          .bind(id, pid, id, baseRev, row.rev),
+        db
+          .prepare(
+            `DELETE FROM meeting_tokens WHERE meeting_id = ? AND participant_id = ? AND kind = 'guest' AND ${guard}`,
+          )
+          .bind(id, pid, id, baseRev, row.rev),
+      ]);
+      const oldCandidates = new Map(old.candidates.map((c) => [c.id, c]));
+      const changedConditions =
+        doc.mode !== old.mode ||
+        JSON.stringify(doc.at) !== JSON.stringify(old.at) ||
+        doc.candidates.length !== old.candidates.length ||
+        doc.candidates.some((c) => {
+          const previous = oldCandidates.get(c.id);
+          return !previous || c.lng !== previous.lng || c.lat !== previous.lat;
+        });
+      if (changedConditions) {
+        cleanup.push(
+          db
+            .prepare(`UPDATE meeting_replies SET times = NULL WHERE meeting_id = ? AND ${guard}`)
+            .bind(id, id, baseRev, row.rev),
+        );
+      }
+      const results = await db.batch([
+        ...cleanup,
+        db
+          .prepare(
+            'UPDATE meetings SET doc = ?, doc_rev = doc_rev + 1, rev = rev + 1, updated_at = ?, expires_at = ? WHERE id = ? AND doc_rev = ? AND rev = ?',
+          )
+          .bind(JSON.stringify(doc), now.toISOString(), expiresAt(doc, now), id, baseRev, row.rev),
+      ]);
+      if (changes(results[results.length - 1]) === 0) {
+        continue;
+      }
+      const updated = await activeMeeting(db, id, now);
+      return jsonResponse(
+        { rev: updated.rev, docRev: updated.doc_rev },
+        { headers: PRIVATE_HEADERS },
       );
     }
-    const results = await db.batch([
-      ...cleanup,
-      db
-        .prepare(
-          'UPDATE meetings SET doc = ?, doc_rev = doc_rev + 1, rev = rev + 1, updated_at = ?, expires_at = ? WHERE id = ? AND doc_rev = ?',
-        )
-        .bind(JSON.stringify(doc), now.toISOString(), expiresAt(doc, now), id, baseRev),
-    ]);
-    if (changes(results[results.length - 1]) === 0) {
-      conflict((await activeMeeting(db, id, now)).doc_rev);
-    }
-    const updated = await activeMeeting(db, id, now);
-    return jsonResponse(
-      { rev: updated.rev, docRev: updated.doc_rev },
-      { headers: PRIVATE_HEADERS },
-    );
+    const latest = await activeMeeting(ctx.env.DB, id, now);
+    if (latest.doc_rev !== baseRev) conflict(latest.doc_rev);
+    throw new MeetError('CONFLICT', '잠시 뒤 다시 해 주세요', { reason: 'busy' });
   });
 }
 
@@ -538,11 +554,15 @@ export function handleReply(ctx: MeetContext, deps: MeetDeps): Promise<Response>
       }
       input ??= validate(ReplyInputSchema, await readJson(ctx.request));
       const host = token.kind === 'host';
+      const timesDropped =
+        !host && input.times !== undefined && input.times !== null && input.docRev !== row.doc_rev;
       const participantId = host ? doc.participants[0]!.id : token.participant_id!;
       const candidates = new Set(doc.candidates.map((c) => c.id));
       if (
         input.likes.some((cid) => !candidates.has(cid)) ||
-        (!host && Object.keys(input.times ?? {}).some((cid) => !candidates.has(cid)))
+        (!host &&
+          !timesDropped &&
+          Object.keys(input.times ?? {}).some((cid) => !candidates.has(cid)))
       ) {
         throw new ApiError('BAD_REQUEST', '없는 후보예요');
       }
@@ -555,6 +575,7 @@ export function handleReply(ctx: MeetContext, deps: MeetDeps): Promise<Response>
       if (!name) throw new ApiError('UNAUTHORIZED', '참석자 연결을 확인해 주세요');
       const encode = (value: unknown) => (value == null ? null : JSON.stringify(value));
       return {
+        ...(timesDropped ? { fields: { timesDropped: true } } : {}),
         statements: [
           db
             .prepare(
@@ -570,7 +591,11 @@ export function handleReply(ctx: MeetContext, deps: MeetDeps): Promise<Response>
                   ? (old?.origin ?? null)
                   : encode(input.origin),
               JSON.stringify(input.likes),
-              host ? null : input.times === undefined ? (old?.times ?? null) : encode(input.times),
+              host || timesDropped
+                ? null
+                : input.times === undefined
+                  ? (old?.times ?? null)
+                  : encode(input.times),
               now.toISOString(),
               id,
               row.rev,

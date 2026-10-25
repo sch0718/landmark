@@ -29,7 +29,10 @@ export type OnlineError = {
 type Result<A> = { ok: true; value: A } | { ok: false; error: OnlineError };
 const revision = Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(1));
 const token = Schema.String.check(Schema.isPattern(/^[A-Za-z0-9_-]{43}$/));
-const revSchema = Schema.Struct({ rev: revision });
+const replySchema = Schema.Struct({
+  rev: revision,
+  timesDropped: Schema.optionalKey(Schema.Boolean),
+});
 const updateSchema = Schema.Struct({ rev: revision, docRev: revision });
 const createSchema = Schema.Struct({
   id: MeetingId,
@@ -161,7 +164,7 @@ export const meetApi = {
     return request(`${pathFor(id)}/claim`, 'POST', claimSchema, { body: who });
   },
   reply(id: string, input: ReplyInput, token: string) {
-    return request(`${pathFor(id)}/reply`, 'PUT', revSchema, { body: input, token });
+    return request(`${pathFor(id)}/reply`, 'PUT', replySchema, { body: input, token });
   },
   release(id: string, body: { participantId: string } | { host: true }, hostToken: string) {
     return request(`${pathFor(id)}/release`, 'POST', releaseSchema, { body, token: hostToken });

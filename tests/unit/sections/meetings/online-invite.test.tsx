@@ -240,7 +240,7 @@ it('다른 사람 좋아요와 출발지 이름을 보이고 보관함은 쓰지
       {
         participantId: 'person03',
         name: '다른 친구',
-        origin: null,
+        origin: { name: '다른 회사', lng: 128, lat: 36 },
         likes: ['choice01'],
         times: { choice01: 12 },
         updatedAt: now,
@@ -270,6 +270,7 @@ it('출발지를 바꾸면 내 줄을 계산해 출발지와 함께 보낸다', 
       likes: [],
       origin: { name: '새 출발지', lng: 128, lat: 36 },
       times: { choice01: 7, choice02: 9 },
+      docRev: 1,
     },
     token,
   );
@@ -589,6 +590,7 @@ it('초안 없이 직선거리에서 대중교통으로 바뀌면 옛 m 값을 �
     {
       likes: ['choice01'],
       times: { choice01: 11, choice02: 13 },
+      docRev: 2,
     },
     token,
   );
@@ -649,4 +651,175 @@ it('이전 null 출발지 초안이 있어도 서버에 저장된 내 출발지�
       participants: [{ id: 'person02', name: '친구', origin }],
     }),
   );
+});
+
+it('새 기기에서 주최자 링크를 담으면 서버 주최자 좋아요도 남는다', async () => {
+  remote = {
+    rev: remote.rev,
+    docRev: remote.docRev,
+    doc: remote.doc,
+    replies: [
+      {
+        participantId: 'person01',
+        name: '주최자',
+        origin: null,
+        likes: ['choice01'],
+        times: null,
+        updatedAt: now,
+      },
+    ],
+  };
+  await setup(`/meet/meeting001#h=${hostToken}`);
+  expect(library.meetings?.meeting001?.replies.value.person01).toEqual({
+    likes: ['choice01'],
+    sentAt: now,
+    receivedAt: now,
+  });
+  await advance(1000);
+  expect(meetApi.reply).not.toHaveBeenCalled();
+});
+
+it('내 소요시간에는 계산한 본문 버전을 붙인다', async () => {
+  guest();
+  remote = { ...remote, docRev: 5 };
+  compute.times = { choice01: { person02: 7 }, choice02: { person02: 9 } };
+  await setup();
+  fireEvent.click(screen.getByRole('button', { name: '내 출발지 고르기' }));
+  fireEvent.click(screen.getByRole('button', { name: '시험 출발지' }));
+  await advance(1000);
+  expect(meetApi.reply).toHaveBeenCalledWith(
+    'meeting001',
+    expect.objectContaining({ times: { choice01: 7, choice02: 9 }, docRev: 5 }),
+    token,
+  );
+});
+
+it('서버가 옛 조건의 시간을 버리면 다음 확인 뒤 새 조건으로 재계산해 보낸다', async () => {
+  guest();
+  compute.times = { choice01: { person02: 7 }, choice02: { person02: 9 } };
+  await setup();
+  vi.mocked(meetApi.reply).mockResolvedValueOnce({
+    ok: true,
+    value: { rev: 4, timesDropped: true },
+  });
+  fireEvent.click(screen.getByRole('button', { name: '내 출발지 고르기' }));
+  fireEvent.click(screen.getByRole('button', { name: '시험 출발지' }));
+  await advance(1000);
+  await advance(1000);
+  expect(meetApi.reply).toHaveBeenCalledTimes(1);
+  remote = {
+    ...remote,
+    rev: 4,
+    docRev: 2,
+    doc: { ...remote.doc, mode: 'car' },
+    replies: [
+      {
+        participantId: 'person02',
+        name: '친구',
+        origin: { name: '새 출발지', lng: 128, lat: 36 },
+        likes: [],
+        times: null,
+        updatedAt: now,
+      },
+    ],
+  };
+  compute.times = { choice01: { person02: 17 }, choice02: { person02: 19 } };
+  await advance(8000);
+  await advance(1000);
+  expect(meetApi.reply).toHaveBeenCalledTimes(2);
+  expect(meetApi.reply).toHaveBeenLastCalledWith(
+    'meeting001',
+    { likes: [], times: { choice01: 17, choice02: 19 }, docRev: 2 },
+    token,
+  );
+});
+
+it('좋아요만 저장한 친구는 본문의 20분을 계속 표시한다', async () => {
+  guest();
+  await setup();
+  expect(
+    within(screen.getByRole('listitem', { name: '강남역' })).getByText('20분'),
+  ).toBeInTheDocument();
+  like();
+  await advance(1000);
+  expect(
+    within(screen.getByRole('listitem', { name: '강남역' })).getByText('20분'),
+  ).toBeInTheDocument();
+});
+
+it.each([null, { choice01: 99 }])(
+  '남의 답장 출발지가 null이면 답장 시간 %j 대신 본문 시간을 쓴다',
+  async (times) => {
+    guest();
+    remote = {
+      ...remote,
+      doc: { ...remote.doc, times: { choice01: { person01: 10, person02: 20, person03: 30 } } },
+      replies: [
+        {
+          participantId: 'person03',
+          name: '다른 친구',
+          origin: null,
+          likes: [],
+          times,
+          updatedAt: now,
+        },
+      ],
+    };
+    await setup();
+    const row = within(screen.getByRole('listitem', { name: '강남역' }));
+    expect(row.getByText('30분')).toBeInTheDocument();
+    expect(row.queryByText('99분')).toBeNull();
+  },
+);
+
+it('확정된 약속을 처음 열어도 참석자를 고른 뒤 자기 출발 길찾기를 연다', async () => {
+  remote = { ...remote, doc: { ...remote.doc, decided: 'choice01' } };
+  await setup();
+  expect(screen.getByRole('heading', { name: '확정 · 강남역' })).toBeInTheDocument();
+  expect(screen.getByRole('region', { name: '나는 누구?' })).toBeInTheDocument();
+  remote = {
+    ...remote,
+    doc: {
+      ...remote.doc,
+      participants: remote.doc.participants.map((p) =>
+        p.id === 'person02' ? { ...p, origin: { name: '내 집', lng: 127, lat: 37.5 } } : p,
+      ),
+    },
+  };
+  await act(async () => {
+    fireEvent.click(screen.getByRole('button', { name: '친구' }));
+  });
+  expect(meetApi.claim).toHaveBeenCalledWith('meeting001', { participantId: 'person02' });
+  expect(screen.queryByRole('region', { name: '나는 누구?' })).toBeNull();
+  expect(screen.getByRole('link', { name: '친구 출발 길찾기' })).toBeInTheDocument();
+});
+
+it('확정 화면에서도 이미 차지한 참석자를 고르면 기존 taken 안내를 보인다', async () => {
+  remote = { ...remote, doc: { ...remote.doc, decided: 'choice01' } };
+  vi.mocked(meetApi.claim).mockResolvedValueOnce({ ok: false, error: { code: 'taken' } });
+  await setup();
+  await act(async () => {
+    fireEvent.click(screen.getByRole('button', { name: '친구' }));
+  });
+  expect(screen.getByRole('alert')).toHaveTextContent(
+    '다른 기기에서 이미 답했어요. 주최자에게 풀어 달라고 하세요',
+  );
+});
+
+it('주최자 링크 재연결도 올리지 않은 로컬 본문과 버전을 보존한다', async () => {
+  const syncedAt = '2026-10-25T00:00:00.000Z';
+  writeOnline('meeting001', { hostToken, docRev: 1, lastRev: 1, syncedAt });
+  library = { ...library, meetings: { meeting001: buildMeeting({ title: f('미전송 제목') }) } };
+  remote = { rev: 3, docRev: 2, doc: remote.doc, replies: [] };
+  await setup(`/meet/meeting001#h=${hostToken}`);
+  expect(library.meetings?.meeting001?.title.value).toBe('미전송 제목');
+  expect(readOnline('meeting001')).toMatchObject({ docRev: 1, syncedAt, lastRev: 3 });
+});
+
+it('보관함에서 지운 약속도 유효한 주최자 링크로 다시 담는다', async () => {
+  library = { ...library, meetings: { meeting001: buildMeeting({ deletedAt: now }) } };
+  remote = { rev: remote.rev, docRev: remote.docRev, doc: remote.doc, replies: [] };
+  const router = await setup(`/meet/meeting001#h=${hostToken}`);
+  expect(library.meetings?.meeting001?.deletedAt).toBeNull();
+  expect(router.state.location.pathname).toBe('/meetings/meeting001');
 });

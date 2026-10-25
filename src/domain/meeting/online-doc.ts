@@ -72,6 +72,7 @@ export const ReplyInputSchema = Schema.Struct({
   likes,
   origin: Schema.optionalKey(Schema.NullOr(OriginSchema)),
   times: Schema.optionalKey(replyTimes),
+  docRev: Schema.optionalKey(Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(1))),
 });
 export const OnlineStateSchema = Schema.Struct({
   rev: Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(1)),

@@ -1140,7 +1140,11 @@ describe('참석자 답장', () => {
     const token = await guest();
     deps.now = () => new Date('2026-10-27T12:00:00Z');
     const response = await handleReply(
-      context('PUT', { likes: ['choice01'], origin: changed, times: { choice01: 25 } }, { token }),
+      context(
+        'PUT',
+        { likes: ['choice01'], origin: changed, times: { choice01: 25 }, docRev: 1 },
+        { token },
+      ),
       deps,
     );
     expect(response.status).toBe(200);
@@ -1189,7 +1193,7 @@ describe('참석자 답장', () => {
         await handleReply(
           context(
             'PUT',
-            { likes: ['choice01'], origin: changed, times: { choice01: 22 } },
+            { likes: ['choice01'], origin: changed, times: { choice01: 22 }, docRev: 1 },
             { token },
           ),
           deps,
@@ -1221,7 +1225,7 @@ describe('참석자 답장', () => {
         await handleReply(
           context(
             'PUT',
-            { likes: ['choice01'], origin: changed, times: { choice01: 12 } },
+            { likes: ['choice01'], origin: changed, times: { choice01: 12 }, docRev: 1 },
             { token },
           ),
           deps,
@@ -1236,7 +1240,7 @@ describe('참석자 답장', () => {
   });
   it.each([
     { likes: ['choice99'] },
-    { likes: [], times: { choice99: 12 } },
+    { likes: [], times: { choice99: 12 }, docRev: 1 },
     { likes: ['choice01', 'choice01'] },
     { likes: [], origin: { name: '밖', lng: 0, lat: 0 } },
     { likes: [], times: { choice01: -1 } },
@@ -1428,3 +1432,79 @@ describe('고르기·답장·풀기 공통 검사', () => {
     ).toBe(200);
   });
 });
+
+it.each([undefined, 1, 2])(
+  '소요시간 본문 버전 %s를 현재 버전과 비교해 시간만 저장하거나 버린다',
+  async (docRev) => {
+    const host = await seed();
+    const claim = await handleClaim(context('POST', { participantId: 'person02' }), deps);
+    const { guestToken: token } = await claim.json();
+    expect(
+      (
+        await handleUpdate(
+          context('PUT', { doc: doc({ mode: 'car' }), baseRev: 1 }, { token: host }),
+          deps,
+        )
+      ).status,
+    ).toBe(200);
+    const response = await handleReply(
+      context(
+        'PUT',
+        {
+          likes: ['choice01'],
+          origin: changed,
+          times: { choice01: 25 },
+          ...(docRev === undefined ? {} : { docRev }),
+        },
+        { token },
+      ),
+      deps,
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      rev: 4,
+      ...(docRev === 2 ? {} : { timesDropped: true }),
+    });
+    expect(await db.prepare('SELECT times, likes, origin FROM meeting_replies').first()).toEqual({
+      times: docRev === 2 ? '{"choice01":25}' : null,
+      likes: '["choice01"]',
+      origin: JSON.stringify(changed),
+    });
+  },
+);
+
+it.each([false, true])(
+  '본문 10명과 답장 전용 1명의 갱신은 409 full이다(동시 차지=%s)',
+  async (racing) => {
+    const token = await seed();
+    const next = doc({
+      participants: [
+        ...doc().participants,
+        ...Array.from({ length: 8 }, (_, i) => ({
+          id: `extra00${i}`,
+          name: `추가${i}`,
+          origin: null,
+        })),
+      ],
+    });
+    const add = async () => {
+      const result = await handleClaim(context('POST', { newName: '답장 전용' }), deps);
+      expect(result.status).toBe(200);
+    };
+    if (racing) {
+      const batch = db.batch.bind(db);
+      vi.spyOn(db, 'batch').mockImplementationOnce(async (statements) => {
+        await add();
+        return batch(statements);
+      });
+    } else await add();
+    const response = await handleUpdate(context('PUT', { doc: next, baseRev: 1 }, { token }), deps);
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ reason: 'full' });
+    expect(await db.prepare('SELECT doc, doc_rev FROM meetings').first()).toEqual({
+      doc: JSON.stringify(doc()),
+      doc_rev: 1,
+    });
+    expect(await count('meeting_replies')).toBe(1);
+  },
+);
