@@ -442,7 +442,8 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
     if (baseline.current === null) {
       const current = readOnline(meeting.id);
       const dirty =
-        current?.syncedDoc != null && hostEdits(meeting, current.syncedDoc, current.seen);
+        current?.syncedDoc != null &&
+        hostEdits(meeting, current.syncedDoc, current.seen, replyState?.replies);
       baseline.current = dirty ? '' : json;
     }
     if (document.visibilityState === 'visible' && navigator.onLine) void initialCheck();

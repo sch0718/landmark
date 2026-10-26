@@ -20,8 +20,18 @@ export function hostEdits(
   meeting: Meeting,
   syncedDoc: MeetingDoc,
   seen: readonly string[] = [],
+  replies: OnlineState['replies'] = [],
 ): boolean {
   const syncedIds = new Set(syncedDoc.participants.map((p) => p.id));
+  const hostId = meeting.participants.value[0]?.id;
+  const originEdited = meeting.participants.value.some((p) => {
+    const synced = syncedDoc.participants.find((previous) => previous.id === p.id);
+    if (!synced || JSON.stringify(p.origin) === JSON.stringify(synced.origin)) return false;
+    if (p.id === hostId) return true;
+    const reply = replies.find((r) => r.participantId === p.id);
+    // null은 출발지를 지운 답장이 아니라 본문 출발지를 그대로 쓴다는 뜻이다.
+    return reply?.origin == null || JSON.stringify(p.origin) !== JSON.stringify(reply.origin);
+  });
   const project = (
     doc: Pick<MeetingDoc, 'title' | 'at' | 'mode' | 'candidates' | 'decided' | 'participants'>,
   ) => ({
@@ -35,6 +45,7 @@ export function hostEdits(
       .map((p) => [p.id, p.name]),
   });
   return (
+    originEdited ||
     JSON.stringify(
       project(docFromMeeting(meeting, {}, meeting.mode.value === 'straight' ? 'm' : 'min')),
     ) !== JSON.stringify(project(syncedDoc))
@@ -47,7 +58,8 @@ export function shouldAdoptRemoteDoc(
   state: OnlineState,
   sync: OnlineSync,
 ): boolean {
-  const dirty = sync.syncedDoc !== null && hostEdits(meeting, sync.syncedDoc, sync.seen);
+  const dirty =
+    sync.syncedDoc !== null && hostEdits(meeting, sync.syncedDoc, sync.seen, state.replies);
   return (sync.docRev === null || state.docRev > sync.docRev) && !dirty;
 }
 

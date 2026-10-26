@@ -87,14 +87,54 @@ it('친구 출발지를 합친 뒤에도 다른 주최자 기기의 확정을 �
   const syncedDoc = docFromMeeting(meeting, {}, 'min');
   const changed = { name: '회사', lng: 128, lat: 38 };
   const first = merge(library(), state([reply({ origin: changed })]));
-  const result = mergeOnline(first, meeting.id, { ...state([], 'choice01'), docRev: 2 }, ctx, {
-    syncedDoc,
-    docRev: 1,
-    seen: [],
-    hostLikes: null,
-  });
+  const result = mergeOnline(
+    first,
+    meeting.id,
+    { ...state([reply({ origin: changed })], 'choice01'), docRev: 2 },
+    ctx,
+    {
+      syncedDoc,
+      docRev: 1,
+      seen: [],
+      hostLikes: null,
+    },
+  );
   expect(result.ok).toBe(true);
   if (result.ok) expect(mergedMeeting(result.lib).decided.value).toBe('choice01');
+});
+
+it.each([
+  {
+    pid: 'host0001',
+    changed: { name: '회사', lng: 128, lat: 38 },
+    replyOrigin: { name: '회사', lng: 128, lat: 38 },
+  },
+  { pid: 'host0001', changed: null, replyOrigin: null },
+  { pid: 'person01', changed: { name: '회사', lng: 128, lat: 38 }, replyOrigin: origin },
+  { pid: 'person01', changed: null, replyOrigin: null },
+])('미전송 출발지 수정은 원격 제목을 받아도 보존한다: %j', ({ pid, changed, replyOrigin }) => {
+  const remoteReply = reply({ participantId: pid, origin: replyOrigin });
+  const local = {
+    ...meeting,
+    participants: {
+      value: meeting.participants.value.map((p) => (p.id === pid ? { ...p, origin: changed } : p)),
+      updatedAt: now,
+    },
+    replies: {
+      value: { [pid]: { likes: ['choice01'], sentAt: updatedAt, receivedAt: updatedAt } },
+      updatedAt,
+    },
+  };
+  const remote = state([remoteReply]);
+  const next = mergedMeeting(
+    merge(library(local), {
+      ...remote,
+      docRev: 2,
+      doc: { ...remote.doc, title: '다른 기기 제목' },
+    }),
+  );
+  expect(next.participants.value.find((p) => p.id === pid)?.origin).toEqual(changed);
+  expect(next.title.value).toBe(meeting.title.value);
 });
 
 it.each([

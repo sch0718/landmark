@@ -79,6 +79,38 @@ function online() {
   writeOnline(saved.id, { hostToken: token, lastRev: 1, docRev: 1, syncedDoc: state().doc });
 }
 
+it.each(['person01', 'person02'])(
+  '올리기 전 %s 출발지 수정은 원격 제목에 덮이지 않고 다음 올리기에 실린다',
+  async (pid) => {
+    online();
+    const syncedDoc = state().doc;
+    const changed = { name: '새 집', lng: 128, lat: 38 };
+    saved = {
+      ...saved,
+      participants: f(
+        saved.participants.value.map((p) => (p.id === pid ? { ...p, origin: changed } : p)),
+      ),
+    };
+    vi.mocked(meetApi.get).mockResolvedValue({
+      ok: true,
+      value: state({ docRev: 2, doc: { ...syncedDoc, title: '다른 기기 제목' } }),
+    });
+    setup();
+    await flush();
+    expect(saved.participants.value.find((p) => p.id === pid)?.origin).toEqual(changed);
+    expect(saved.title.value).toBe(syncedDoc.title);
+    await advance(1100);
+    expect(meetApi.update).toHaveBeenCalledWith(
+      saved.id,
+      expect.objectContaining({ participants: saved.participants.value }),
+      1,
+      token,
+      [],
+      expect.any(AbortSignal),
+    );
+  },
+);
+
 it('주최자 기기의 친구 화면은 동기화 기준을 지키고 다음 주최자 확인이 다른 기기의 확정을 받는다', async () => {
   const syncedDoc = state().doc;
   writeOnline(saved.id, {

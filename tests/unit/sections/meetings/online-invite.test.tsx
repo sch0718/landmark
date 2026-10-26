@@ -216,6 +216,40 @@ it.each(['get', 'reply'] as const)(
     expect(screen.getByRole('region', { name: '나는 누구?' })).toBeInTheDocument();
   },
 );
+it.each(['get', 'reply'] as const)(
+  '옛 토큰의 %s 401은 다른 탭의 새 참석자 토큰을 보존하고 새 토큰으로 이어간다',
+  async (method) => {
+    guest();
+    await setup();
+    let finish!: (value: { ok: false; error: { code: 'unauthorized' } }) => void;
+    const response = new Promise<{ ok: false; error: { code: 'unauthorized' } }>((resolve) => {
+      finish = resolve;
+    });
+    vi.mocked(meetApi[method]).mockImplementationOnce(() => response);
+    if (method === 'reply') like();
+    await advance(method === 'get' ? 10000 : 1000);
+    const newGuest = { participantId: 'person03', token: 'n'.repeat(43) };
+    const record = { ...readOnline('meeting001')!, hostToken, guest: newGuest };
+    writeOnline('meeting001', record);
+    saveMeetDraft('meeting001', { participantId: newGuest.participantId, likes: ['choice02'] });
+    await act(async () => {
+      finish({ ok: false, error: { code: 'unauthorized' } });
+    });
+    expect(readOnline('meeting001')).toEqual(record);
+    expect(meetApi.get).toHaveBeenLastCalledWith('meeting001', null, newGuest.token);
+    expect(screen.queryByRole('region', { name: '나는 누구?' })).toBeNull();
+    expect(screen.getByRole('button', { name: '시청역 좋아요' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await advance(1000);
+    expect(meetApi.reply).toHaveBeenLastCalledWith(
+      'meeting001',
+      { likes: ['choice02'] },
+      newGuest.token,
+    );
+  },
+);
 it('목록에 없는 이름은 정리해서 차지한다', async () => {
   await setup();
   fireEvent.click(screen.getByRole('button', { name: '목록에 없어요' }));

@@ -119,17 +119,25 @@ export function OnlineInviteView({ id }: { id: string }) {
     return () => clearInterval(timer);
   }, []);
 
-  function markError(failure: OnlineError, reading = false) {
+  function markError(failure: OnlineError, reading = false, failedToken: string | null = null) {
     if (!active.current) return;
     if (failure.code === 'unauthorized') {
       const record = readOnline(id);
-      if (record?.guest) {
-        delete record.guest;
-        writeOnline(id, record);
+      if (record?.guest && record.guest.token !== failedToken) {
+        const savedDraft = loadMeetDraft(id);
+        setGuest(record.guest);
+        setDraft(savedDraft?.participantId === record.guest.participantId ? savedDraft : null);
+        setState(null);
+        deferred.current = false;
+      } else {
+        if (record?.guest?.token === failedToken) {
+          delete record.guest;
+          writeOnline(id, record);
+        }
+        removeMeetDraft(id);
+        setGuest(null);
+        setDraft(null);
       }
-      removeMeetDraft(id);
-      setGuest(null);
-      setDraft(null);
       setPicking(false);
       setError(null);
     } else {
@@ -147,7 +155,7 @@ export function OnlineInviteView({ id }: { id: string }) {
     if (!active.current || latest.current.guest?.token !== current.guest.token) return false;
     if (!result.ok) {
       deferred.current = true;
-      markError(result.error);
+      markError(result.error, false, current.guest.token);
       return false;
     }
     const updatedAt = new Date().toISOString();
@@ -203,7 +211,7 @@ export function OnlineInviteView({ id }: { id: string }) {
       );
       if (!active.current || current.guest?.token !== latest.current.guest?.token) return 'error';
       if (!result.ok) {
-        markError(result.error, true);
+        markError(result.error, true, current.guest?.token ?? null);
         return 'error';
       }
       if (result.value !== 'unchanged') {
