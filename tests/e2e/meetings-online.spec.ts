@@ -94,10 +94,11 @@ test('@desktop @smoke 온라인 약속의 자동 집계·차지 충돌·확정·
     }
     await page.getByRole('button', { name: '중간 지점 찾기', exact: true }).click();
     const hubs = page.getByRole('region', { name: '번화가 역 순위' });
-    await hubs.getByRole('button', { name: '원주역 후보에 담기', exact: true }).click();
     await expect
       .poll(() => calls.filter((call) => call.mode === 'transit').length)
       .toBeGreaterThan(0);
+    await expect(page.getByRole('status').filter({ hasText: /^조회 중/ })).toHaveCount(0);
+    await hubs.getByRole('button', { name: '원주역 후보에 담기', exact: true }).click();
     const invite = await sharedLink(page, '후보 링크 보내기');
     expect(invite.pathname).toBe(`/meet/${id}`);
     expect(invite.hash).toBe('');

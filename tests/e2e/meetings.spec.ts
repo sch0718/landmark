@@ -97,7 +97,10 @@ test('@smoke 약속 만들기부터 친구 답장 반영·집계·확정 길찾�
   const hubs = page.getByRole('region', { name: '번화가 역 순위' });
   await expect(hubs.getByRole('button', { name: '원주역 후보에 담기', exact: true })).toBeEnabled();
   await expect.poll(() => calls.filter((c) => c.mode === 'transit').length).toBeGreaterThan(0);
-  await hubs.getByRole('button', { name: /^\d+\. 원주역 ·/ }).click();
+  await expect(page.getByRole('status').filter({ hasText: /^조회 중/ })).toHaveCount(0);
+  const wonju = hubs.getByRole('button', { name: /^\d+\. 원주역 ·/ });
+  await wonju.click();
+  await expect(wonju).toHaveAttribute('aria-expanded', 'true');
   const nearby = page.getByRole('region', { name: '원주역 근처 보관함 장소' });
   await nearby.getByRole('button', { name: '성수동 카페거리 후보에 담기', exact: true }).click();
   await hubs.getByRole('button', { name: '원주역 후보에 담기', exact: true }).click();
