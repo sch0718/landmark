@@ -84,13 +84,14 @@ export function MeetingResults({
     onComputeChange?.({
       times: candidateCompute.times,
       unit: candidateCompute.unit,
-      pending: candidateCompute.pending,
+      pending: candidateCompute.pending || candidateCompute.stale,
     }),
   );
   const computeKey = JSON.stringify([
     candidateCompute.times,
     candidateCompute.unit,
     candidateCompute.pending,
+    candidateCompute.stale,
   ]);
   useEffect(() => {
     reportCompute();
@@ -114,6 +115,7 @@ export function MeetingResults({
   const computeHubs = hubCompute.compute;
   const candidateFindSeq = useRef(0);
   const targetKey = JSON.stringify(meeting.candidates.value);
+  const participantKey = JSON.stringify(meeting.participants.value.map((p) => [p.id, p.origin]));
   useEffect(() => {
     const refresh = candidateFindSeq.current !== findSeq;
     candidateFindSeq.current = findSeq;
@@ -121,7 +123,14 @@ export function MeetingResults({
     const controller = new AbortController();
     void computeCandidates({ refresh, signal: controller.signal });
     return () => controller.abort();
-  }, [targetKey, meeting.candidates.value.length, computeCandidates, findSeq, departure]);
+  }, [
+    targetKey,
+    participantKey,
+    meeting.candidates.value.length,
+    computeCandidates,
+    findSeq,
+    departure,
+  ]);
   useEffect(() => {
     if (findSeq === 0) return;
     void computeHubs({ refresh: true });

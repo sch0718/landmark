@@ -1,5 +1,8 @@
 import { act, fireEvent, render, renderHook, screen } from '@testing-library/react';
 import { useState } from 'react';
+import { Effect } from 'effect';
+import * as effectRuntime from 'src/lib/effect/runtime';
+import { haversineM } from 'src/domain/trips/geo';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { toast } from 'sonner';
 import type { useLibraryAction } from 'src/stores/library-state';
@@ -942,3 +945,208 @@ it('본문과 답장 참석자의 합계 한도 초과를 안내한다', async (
   await advance(1000);
   expect(toast.error).toHaveBeenCalledWith('참석자는 10명까지예요');
 });
+
+it.each(['person02', 'person03'])(
+  '온라인 답장의 %s 출발지를 합치면 직선거리를 다시 계산할 때까지 올리지 않고 주최자 값을 지킨다',
+  async (pid) => {
+    const { MeetingResults } = await import('src/sections/meetings/MeetingResults');
+    saved = {
+      ...saved,
+      mode: f('straight'),
+      participants: f([
+        { id: 'person01', name: '나', origin: { name: '집', lng: 126.9, lat: 37.4 } },
+        { id: 'person02', name: '친구', origin: { name: '회사', lng: 127.1, lat: 37.6 } },
+      ]),
+    };
+    online();
+    let reported!: OnlineCompute;
+    const reports: OnlineCompute[] = [];
+    function Editor() {
+      const [meeting, setMeeting] = useState(saved);
+      const [computed, setComputed] = useState<OnlineCompute>({
+        times: {},
+        unit: 'm',
+        pending: true,
+      });
+      refresh = setMeeting;
+      const host = useOnlineMeeting(meeting, computed);
+      return (
+        <MeetingResults
+          meeting={meeting}
+          library={emptyLibrary()}
+          online={host}
+          onComputeChange={(value) => {
+            reported = value;
+            reports.push(value);
+            setComputed(value);
+          }}
+        />
+      );
+    }
+    render(<Editor />);
+    await flush();
+    await advance(1000);
+    const hostDistance = Math.round(haversineM([126.9, 37.4], [127, 37.5]));
+    expect(reported.times.choice01?.person01).toBe(hostDistance);
+    vi.mocked(meetApi.update).mockClear();
+    reports.length = 0;
+    const origin = { name: '새 출발', lng: 127.2, lat: 37.7 };
+    vi.mocked(meetApi.get).mockResolvedValueOnce({
+      ok: true,
+      value: state({
+        replies: [
+          {
+            participantId: pid,
+            name: '친구',
+            origin,
+            likes: [],
+            times: null,
+            updatedAt: startAt,
+          },
+        ],
+      }),
+    });
+    let finish!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    const fork = effectRuntime.forkEffect;
+    vi.spyOn(effectRuntime, 'forkEffect').mockImplementationOnce((effect) =>
+      fork(Effect.promise(() => gate).pipe(Effect.andThen(effect))),
+    );
+    try {
+      await advance(9000);
+      expect(reported.pending).toBe(true);
+      expect(reports.every((value) => value.pending)).toBe(true);
+      await advance(1000);
+      expect(meetApi.update).not.toHaveBeenCalled();
+      await act(async () => finish());
+      await advance(1000);
+      expect(meetApi.update).toHaveBeenCalledTimes(1);
+      expect(meetApi.update).toHaveBeenLastCalledWith(
+        saved.id,
+        expect.objectContaining({
+          unit: 'm',
+          times: {
+            choice01: expect.objectContaining({
+              person01: hostDistance,
+              [pid]: Math.round(haversineM([origin.lng, origin.lat], [127, 37.5])),
+            }),
+          },
+        }),
+        expect.any(Number),
+        token,
+      );
+    } finally {
+      finish();
+    }
+  },
+);
+
+it.each(['share', 'shareFinal'] as const)(
+  '%s는 확정 직후 미전송 본문을 먼저 저장하고 성공한 뒤 공유한다',
+  async (action) => {
+    online();
+    const { result } = setup();
+    await flush();
+    await edit({ decided: f('choice01', new Date().toISOString()) });
+    let finish!: (value: Awaited<ReturnType<typeof meetApi.update>>) => void;
+    vi.mocked(meetApi.update).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    let sharing!: Promise<void>;
+    act(() => {
+      sharing = result.current[action]();
+    });
+    await flush();
+    expect(meetApi.update).toHaveBeenCalledWith(
+      saved.id,
+      expect.objectContaining({ decided: 'choice01' }),
+      1,
+      token,
+    );
+    expect(shareLink).not.toHaveBeenCalled();
+    await act(async () => {
+      finish({ ok: true, value: { rev: 3, docRev: 2 } });
+      await sharing;
+    });
+    expect(shareLink).toHaveBeenCalledExactlyOnceWith(
+      expect.stringMatching(/\/meet\/meeting001$/),
+      '친구 모임',
+    );
+  },
+);
+it.each(['share', 'shareFinal'] as const)(
+  '%s는 확정 저장에 실패하면 공유하지 않고 다시 시도 안내를 띄운다',
+  async (action) => {
+    online();
+    const { result } = setup();
+    await flush();
+    await edit({ decided: f('choice01', new Date().toISOString()) });
+    vi.mocked(meetApi.update).mockResolvedValueOnce({ ok: false, error: { code: 'offline' } });
+    await act(() => result.current[action]());
+    expect(meetApi.update).toHaveBeenCalledTimes(1);
+    expect(shareLink).not.toHaveBeenCalled();
+    expect(toast.error).toHaveBeenCalledWith('지금은 보낼 수 없어요. 잠시 뒤 다시 해 주세요');
+  },
+);
+it('확정 공유는 진행 중인 올리기가 끝나면 새 본문을 다시 확인하고 겹치지 않게 저장한다', async () => {
+  online();
+  const { result } = setup();
+  await flush();
+  let finish!: (value: Awaited<ReturnType<typeof meetApi.update>>) => void;
+  vi.mocked(meetApi.update).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  await edit({ title: f('바뀐 제목') });
+  await advance(1000);
+  await edit({ decided: f('choice01', new Date().toISOString()) });
+  let sharing!: Promise<void>;
+  act(() => {
+    sharing = result.current.shareFinal();
+  });
+  await flush();
+  expect(meetApi.update).toHaveBeenCalledTimes(1);
+  expect(shareLink).not.toHaveBeenCalled();
+  await act(async () => {
+    finish({ ok: true, value: { rev: 3, docRev: 2 } });
+    await sharing;
+  });
+  expect(meetApi.update).toHaveBeenCalledTimes(2);
+  expect(meetApi.update).toHaveBeenLastCalledWith(
+    saved.id,
+    expect.objectContaining({ decided: 'choice01' }),
+    2,
+    token,
+  );
+  expect(shareLink).toHaveBeenCalledExactlyOnceWith(
+    expect.stringMatching(/\/meet\/meeting001$/),
+    '바뀐 제목',
+  );
+});
+
+it.each([
+  ['invite', 'choice01', 'd'],
+  ['final', 'choice01', 'f'],
+  ['final', null, 'd'],
+] as const)(
+  '기능 스위치가 꺼지면 %s 공유(확정 %s)는 %s 문서를 보낸다',
+  async (kind, decided, expected) => {
+    saved = { ...saved, decided: f(decided) };
+    vi.mocked(meetApi.create).mockResolvedValue({ ok: false, error: { code: 'switched-off' } });
+    const { result } = setup();
+    await act(() => (kind === 'final' ? result.current.shareFinal() : result.current.share()));
+    expect(shareMeetingDoc).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ kind: expected }),
+      '친구 모임',
+    );
+    expect(shareLink).not.toHaveBeenCalled();
+    expect(readOnline(saved.id)).toBeNull();
+  },
+);

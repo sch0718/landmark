@@ -56,7 +56,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
     latest.current = { meeting, compute, run };
   });
   const active = useRef(false);
-  const inFlight = useRef(false);
+  const inFlight = useRef<Promise<void> | null>(null);
   const creating = useRef(false);
   const hydrated = useRef(false);
   const retry = useRef(false);
@@ -245,10 +245,41 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
     markOk();
     return true;
   }
+  function beginFlight() {
+    let finish!: () => void;
+    inFlight.current = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    return () => {
+      inFlight.current = null;
+      finish();
+    };
+  }
+  async function flushUpload(): Promise<boolean> {
+    // 확인·자동 올리기가 끝나면 최신 본문을 다시 확인한다.
+    while (inFlight.current) await inFlight.current;
+    const finish = beginFlight();
+    try {
+      while (true) {
+        const current = currentRecord();
+        if (!current?.hostToken || current.ended) return false;
+        const input = latest.current;
+        if (input.compute.pending) return false;
+        const doc = docFromMeeting(input.meeting, input.compute.times, input.compute.unit);
+        if (JSON.stringify(doc) === baseline.current) return true;
+        if (!(await upload())) {
+          deferred.current = true;
+          return false;
+        }
+      }
+    } finally {
+      finish();
+    }
+  }
   async function tick(full = false): Promise<'ok' | 'error'> {
     const current = currentRecord();
     if (!current?.hostToken || current.ended || inFlight.current) return 'ok';
-    inFlight.current = true;
+    const finish = beginFlight();
     try {
       const response = await meetApi.get(
         meeting.id,
@@ -268,7 +299,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
       markOk();
       return 'ok';
     } finally {
-      inFlight.current = false;
+      finish();
     }
   }
   const initialCheck = useEffectEvent(() => tick(true));
@@ -278,11 +309,11 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
       retry.current = true;
       return;
     }
-    inFlight.current = true;
+    const finish = beginFlight();
     try {
       if (!(await upload())) deferred.current = true;
     } finally {
-      inFlight.current = false;
+      finish();
     }
   });
   useEffect(() => {
@@ -329,20 +360,18 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
     return () => clearTimeout(timer);
   }, [hostLikesJson, mode, uploaded]);
 
-  async function share() {
+  async function share(kind: 'invite' | 'final' = 'invite') {
     const current = currentRecord();
     if (current?.ended) return;
     const input = latest.current;
-    if (isLinkMeeting(input.meeting, current)) {
-      await shareMeetingDoc(
-        inviteFromMeeting(
-          input.meeting,
-          input.compute.times,
-          input.compute.unit,
-          new Date().toISOString(),
-        ),
-        input.meeting.title.value,
+    const shareFallback = (fresh: typeof input, sentAt = new Date().toISOString()) =>
+      shareMeetingDoc(
+        (kind === 'final' ? finalFromMeeting(fresh.meeting) : null) ??
+          inviteFromMeeting(fresh.meeting, fresh.compute.times, fresh.compute.unit, sentAt),
+        fresh.meeting.title.value,
       );
+    if (isLinkMeeting(input.meeting, current)) {
+      await shareFallback(input);
       return;
     }
     if (!current?.hostToken) {
@@ -366,10 +395,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
         const response = await meetApi.create(doc, turnstile);
         if (!response.ok) {
           if (response.error.code === 'switched-off') {
-            await shareMeetingDoc(
-              inviteFromMeeting(fresh.meeting, fresh.compute.times, fresh.compute.unit, sentAt),
-              fresh.meeting.title.value,
-            );
+            await shareFallback(fresh, sentAt);
           } else toast.error(errorMessage(response.error, true));
           return;
         }
@@ -385,12 +411,15 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
       } finally {
         creating.current = false;
       }
+    } else if (!(await flushUpload())) {
+      toast.error('지금은 보낼 수 없어요. 잠시 뒤 다시 해 주세요');
+      return;
     }
     await shareLink(onlineMeetingUrl(meeting.id), latest.current.meeting.title.value);
   }
   async function shareFinal() {
     if (mode === 'online' || mode === 'local') {
-      await share();
+      await share('final');
       return;
     }
     if (mode === 'link') {
