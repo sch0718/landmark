@@ -8,7 +8,12 @@ import { LIBRARY_LIMITS } from 'src/schema/library';
 import { MeetingId, type Meeting, type Origin } from 'src/schema/meeting';
 import { safeParse } from 'src/schema/parse';
 import { meetApi } from 'src/services/meet-online/client';
-import { readOnline, rememberReplyOnly, writeOnline } from 'src/services/meet-online/store';
+import {
+  readOnline,
+  rememberReplyOnly,
+  sameOnlineSync,
+  updateOnline,
+} from 'src/services/meet-online/store';
 import { OnlineInviteView } from './OnlineInviteView';
 import { useMeeting } from './use-meeting';
 import { readMeetHash } from 'src/domain/meeting/link';
@@ -88,6 +93,7 @@ function HostLink({ id, token }: { id: string; token: string }) {
   useEffect(() => {
     let active = true;
     window.history.replaceState(window.history.state, '', `${paths.meetOnline(id)}${search}`);
+    const expected = readOnline(id);
     void (async () => {
       const response = await meetApi.get(id, null, token);
       if (!active) return;
@@ -109,6 +115,7 @@ function HostLink({ id, token }: { id: string; token: string }) {
         return;
       }
       const outdated = (current = readOnline(id)) =>
+        !sameOnlineSync(current, expected) ||
         state.rev < (current?.lastRev ?? 0) ||
         (current?.hostToken !== undefined &&
           current.hostToken !== token &&
@@ -117,6 +124,7 @@ function HostLink({ id, token }: { id: string; token: string }) {
         void navigate(paths.meeting(id), { replace: true });
         return;
       }
+      let mergedRecord = readOnline(id);
       let adopted = false;
       let skipped = false;
       let addedReplyOnly: string[] = [];
@@ -130,6 +138,7 @@ function HostLink({ id, token }: { id: string; token: string }) {
           skipped = true;
           return lib;
         }
+        mergedRecord = current;
         const before = lib.meetings?.[id];
         if (!before && Object.keys(lib.meetings ?? {}).length >= LIBRARY_LIMITS.meetingsMax)
           return meetingFailure('meetings-full');
@@ -176,46 +185,55 @@ function HostLink({ id, token }: { id: string; token: string }) {
         setError('저장하지 못했어요. 다시 시도해 주세요');
         return;
       }
-      const current = readOnline(id);
-      if (skipped || outdated(current)) {
+      if (
+        skipped ||
+        outdated() ||
+        JSON.stringify(readOnline(id)) !== JSON.stringify(mergedRecord)
+      ) {
         void navigate(paths.meeting(id), { replace: true });
         return;
       }
-      const seen =
-        current?.seen === undefined && addedReplyOnly.length === 0
-          ? undefined
-          : rememberReplyOnly(current?.seen ?? [], addedReplyOnly, [
-              ...state.doc.participants.map((p) => p.id),
-              ...state.replies.map((r) => r.participantId),
-            ]);
-      const record = {
-        ...current,
-        hostToken: token,
-        lastRev: state.rev,
-        ...(replyOrigins === undefined ? {} : { replyOrigins }),
-        hostLikes: [
-          ...(hostLikes ??
-            (state.rev < (current?.hostLikesAckRev ?? 0)
-              ? (current?.hostLikes ?? [])
-              : undefined) ??
-            state.replies.find((reply) => reply.participantId === state.doc.participants[0]!.id)
-              ?.likes ??
-            []),
-        ],
-        ...(seen === undefined
-          ? {}
-          : {
-              seen,
-              seenNames: Object.fromEntries(
-                seen.filter((id) => seenNames[id] !== undefined).map((id) => [id, seenNames[id]!]),
-              ),
-            }),
-        ...(!adopted || state.docRev < (current?.docRev ?? 0)
-          ? {}
-          : { docRev: state.docRev, syncedDoc: state.doc }),
-      };
-      delete record.ended;
-      writeOnline(id, record);
+      updateOnline(id, (current) => {
+        if (outdated(current) || JSON.stringify(current) !== JSON.stringify(mergedRecord))
+          return current;
+        const seen =
+          current?.seen === undefined && addedReplyOnly.length === 0
+            ? undefined
+            : rememberReplyOnly(current?.seen ?? [], addedReplyOnly, [
+                ...state.doc.participants.map((p) => p.id),
+                ...state.replies.map((r) => r.participantId),
+              ]);
+        const record = {
+          ...current,
+          hostToken: token,
+          lastRev: state.rev,
+          ...(replyOrigins === undefined ? {} : { replyOrigins }),
+          hostLikes: [
+            ...(hostLikes ??
+              (state.rev < (current?.hostLikesAckRev ?? 0)
+                ? (current?.hostLikes ?? [])
+                : undefined) ??
+              state.replies.find((reply) => reply.participantId === state.doc.participants[0]!.id)
+                ?.likes ??
+              []),
+          ],
+          ...(seen === undefined
+            ? {}
+            : {
+                seen,
+                seenNames: Object.fromEntries(
+                  seen
+                    .filter((id) => seenNames[id] !== undefined)
+                    .map((id) => [id, seenNames[id]!]),
+                ),
+              }),
+          ...(!adopted || state.docRev < (current?.docRev ?? 0)
+            ? {}
+            : { docRev: state.docRev, syncedDoc: state.doc }),
+        };
+        delete record.ended;
+        return record;
+      });
       void navigate(paths.meeting(id), { replace: true });
     })();
     return () => {

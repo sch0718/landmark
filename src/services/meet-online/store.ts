@@ -174,14 +174,25 @@ export function createOnlineStore(storage: () => Storage = () => window.localSto
       window.removeEventListener('storage', onStorage);
     };
   }
-  function writeOnline(id: string, record: OnlineRecord): void {
-    read();
-    // 다시 쓴 기록을 마지막으로 옮겨, 별도 시각 필드 없이 오래된 기록부터 버린다.
+  /** 읽기·비교·쓰기를 한 동기 경로에 모아 늦은 응답이 최신 기록을 덮지 않게 한다. */
+  function updateOnline(
+    id: string,
+    update: (current: OnlineRecord | null) => OnlineRecord | null,
+  ): OnlineRecord | null {
+    const current = readOnline(id);
+    const next = update(current);
+    if (next === current) return current;
+    // 다시 쓴 기록을 마지막으로 옮겨 오래된 기록부터 버린다.
     memory.delete(id);
-    memory.set(id, structuredClone(record));
+    if (next !== null) memory.set(id, structuredClone(next));
     trim();
     save();
     notify(id);
+    // 구독자가 이어 쓴 값까지 화면에 돌려준다.
+    return readOnline(id);
+  }
+  function writeOnline(id: string, record: OnlineRecord): void {
+    updateOnline(id, () => record);
   }
   function removeOnline(id: string): void {
     read();
@@ -189,12 +200,21 @@ export function createOnlineStore(storage: () => Storage = () => window.localSto
     save();
     notify(id);
   }
-  return { allOnline, readOnline, writeOnline, removeOnline, subscribeOnline, subscribeAllOnline };
+  return {
+    allOnline,
+    readOnline,
+    updateOnline,
+    writeOnline,
+    removeOnline,
+    subscribeOnline,
+    subscribeAllOnline,
+  };
 }
 
 export const {
   allOnline,
   readOnline,
+  updateOnline,
   writeOnline,
   removeOnline,
   subscribeOnline,
@@ -217,4 +237,22 @@ export function rememberReplyOnly(
 export function isLinkMeeting(meeting: Meeting, record: OnlineRecord | null): boolean {
   const hostId = meeting.participants.value[0]?.id;
   return !record?.hostToken && Object.keys(meeting.replies.value).some((id) => id !== hostId);
+}
+
+/** 요청 뒤 주최자 연결이나 복구 작업이 바뀌었으면 이전 응답은 쓰지 않는다. */
+export function sameHostConnection(current: OnlineRecord | null, expected: OnlineRecord | null) {
+  return (
+    current?.hostToken === expected?.hostToken &&
+    current?.pendingHostToken === expected?.pendingHostToken &&
+    current?.ended === expected?.ended
+  );
+}
+
+/** 원격 본문을 요청할 때의 합치기 기준이 그대로인지 확인한다. */
+export function sameOnlineSync(current: OnlineRecord | null, expected: OnlineRecord | null) {
+  const fields = ['lastRev', 'docRev', 'syncedDoc', 'replyOrigins', 'seen', 'seenNames'] as const;
+  return (
+    sameHostConnection(current, expected) &&
+    fields.every((field) => JSON.stringify(current?.[field]) === JSON.stringify(expected?.[field]))
+  );
 }

@@ -186,7 +186,10 @@ it('참석자를 차지하는 동안 바뀐 주최자 기록을 다시 읽어 gu
     hostLikes: ['choice02'],
     seen: ['person04'],
   };
-  writeOnline('meeting001', hostRecord);
+  writeOnline('meeting001', {
+    ...hostRecord,
+    pendingGuest: readOnline('meeting001')?.pendingGuest,
+  });
   await act(async () => {
     finish({ ok: true, value: { participantId: 'person02', guestToken: token, rev: 8 } });
   });
@@ -1506,4 +1509,135 @@ it('다른 참석자를 고르면 대기 토큰을 새로 만들고 같은 참�
     { participantId: 'person03' },
     next?.token,
   );
+});
+
+it.each(['성공', '실패', '401'] as const)(
+  '답장 %s 응답은 다른 탭의 새 초안을 지우거나 덮지 않는다',
+  async (outcome) => {
+    guest();
+    await setup();
+    let finish!: (value: Awaited<ReturnType<typeof meetApi.reply>>) => void;
+    vi.mocked(meetApi.reply).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    like();
+    await advance(1000);
+    const fresh = { participantId: 'person02', likes: ['choice02'] };
+    saveMeetDraft('meeting001', fresh);
+    await act(async () =>
+      finish(
+        outcome === '성공'
+          ? { ok: true, value: { rev: 4 } }
+          : { ok: false, error: { code: outcome === '401' ? 'unauthorized' : 'offline' } },
+      ),
+    );
+    expect(loadMeetDraft('meeting001')).toEqual(fresh);
+  },
+);
+
+it('계산을 기다리는 동안 다른 탭이 쓴 초안을 예전 계산 결과로 덮지 않는다', async () => {
+  guest();
+  await setup();
+  like();
+  const fresh = { participantId: 'person02', likes: ['choice02'] };
+  saveMeetDraft('meeting001', fresh);
+  await advance(1000);
+  expect(loadMeetDraft('meeting001')).toEqual(fresh);
+});
+
+it.each([false, true])(
+  '지연된 claim 성공은 다른 탭의 새 선택과 복구 토큰을 지킨다(재시도=%s)',
+  async (retry) => {
+    if (retry)
+      writeOnline('meeting001', {
+        pendingGuest: { participantId: 'person02', token: 'p'.repeat(43) },
+      });
+    await setup();
+    let finish!: (value: Awaited<ReturnType<typeof meetApi.claim>>) => void;
+    vi.mocked(meetApi.claim).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: '친구' })));
+    const fresh = {
+      guest: { participantId: 'person03', token: 'b'.repeat(43) },
+      pendingGuest: { participantId: 'person02', token: 'c'.repeat(43) },
+    };
+    writeOnline('meeting001', fresh);
+    await act(async () =>
+      finish({ ok: true, value: { participantId: 'person02', guestToken: token, rev: 3 } }),
+    );
+    expect(readOnline('meeting001')).toEqual(fresh);
+  },
+);
+
+it('늦은 주최자 링크는 응답 버전이 더 커도 요청 중 교체된 토큰을 덮지 않는다', async () => {
+  writeOnline('meeting001', { hostToken, lastRev: 1 });
+  let finish!: () => void;
+  const wait = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  vi.mocked(meetApi.get).mockImplementationOnce(async () => {
+    await wait;
+    return { ok: true, value: { ...remote, rev: 9, originNames: undefined } };
+  });
+  await setup(`/meet/meeting001#h=${hostToken}`);
+  const fresh = { hostToken: 'b'.repeat(43), pendingHostToken: 'c'.repeat(43), lastRev: 2 };
+  writeOnline('meeting001', fresh);
+  await act(async () => finish());
+  expect(readOnline('meeting001')).toEqual(fresh);
+  expect(library.meetings?.meeting001).toBeUndefined();
+});
+
+it.each(['성공', '401'] as const)(
+  '답장 %s은 같은 내용으로 다시 쓴 초안의 새 버전도 지킨다',
+  async (outcome) => {
+    guest();
+    await setup();
+    let finish!: (value: Awaited<ReturnType<typeof meetApi.reply>>) => void;
+    vi.mocked(meetApi.reply).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    like();
+    await advance(1000);
+    const fresh = { participantId: 'person02', likes: ['choice01'] };
+    saveMeetDraft('meeting001', fresh);
+    await act(async () =>
+      finish(
+        outcome === '성공'
+          ? { ok: true, value: { rev: 4 } }
+          : { ok: false, error: { code: 'unauthorized' } },
+      ),
+    );
+    expect(loadMeetDraft('meeting001')).toEqual(fresh);
+  },
+);
+
+it('초안 쓰기가 막혀도 현재 화면의 답장을 보내고 실패 뒤 다시 시도한다', async () => {
+  guest();
+  await setup();
+  const setItem = Storage.prototype.setItem;
+  vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (this: Storage, key, value) {
+    if (key === 'tripmap:meet-drafts:v1') throw new Error('용량 초과');
+    setItem.call(this, key, value);
+  });
+  vi.mocked(meetApi.reply).mockResolvedValueOnce({ ok: false, error: { code: 'offline' } });
+  like();
+  await advance(1000);
+  expect(meetApi.reply).toHaveBeenCalledExactlyOnceWith(
+    'meeting001',
+    { likes: ['choice01'] },
+    token,
+  );
+  await advance(9000);
+  expect(meetApi.reply).toHaveBeenCalledTimes(2);
+  expect(meetApi.reply).toHaveBeenLastCalledWith('meeting001', { likes: ['choice01'] }, token);
 });

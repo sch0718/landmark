@@ -14,7 +14,12 @@ import type { Meeting } from 'src/schema/meeting';
 import { emptyLibrary } from 'src/schema/library';
 import { docFromMeeting, type OnlineState } from 'src/domain/meeting/online-doc';
 import { meetApi, type OnlineError } from 'src/services/meet-online/client';
-import { MEET_ONLINE_KEY, readOnline, writeOnline } from 'src/services/meet-online/store';
+import {
+  MEET_ONLINE_KEY,
+  readOnline,
+  subscribeOnline,
+  writeOnline,
+} from 'src/services/meet-online/store';
 import { getTurnstileToken } from 'src/services/meet-online/turnstile-loader';
 import { shareLink, shareMeetingDoc } from 'src/sections/meetings/share-link';
 import { useOnlineMeeting, type OnlineCompute } from 'src/sections/meetings/use-online-meeting';
@@ -2707,4 +2712,383 @@ it('답장 전용 참석자의 이름을 고치면 새 원격 본문보다 지�
     expect.any(AbortSignal),
     [],
   );
+});
+
+it('지연된 재발급 응답은 다른 탭이 복구하고 다시 발급한 토큰과 복구 토큰을 지킨다', async () => {
+  online();
+  const { result } = setup();
+  await flush();
+  let finish!: (value: Awaited<ReturnType<typeof meetApi.release>>) => void;
+  vi.mocked(meetApi.release).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  let flight!: Promise<void>;
+  await act(async () => {
+    flight = result.current.reissueHostLink();
+  });
+  const recovered = readOnline(saved.id)!.pendingHostToken!;
+  // 탭 B가 A의 복구 토큰으로 권한을 복구하고 다시 발급한다.
+  vi.mocked(meetApi.get).mockResolvedValueOnce({ ok: false, error: { code: 'unauthorized' } });
+  const second = setup();
+  await flush();
+  expect(readOnline(saved.id)?.hostToken).toBe(recovered);
+  await act(() => second.result.current.reissueHostLink());
+  expect(readOnline(saved.id)?.hostToken).not.toBe(recovered);
+  const fresh = { ...readOnline(saved.id)!, pendingHostToken: 'c'.repeat(43) };
+  await act(async () => writeOnline(saved.id, fresh));
+  await act(async () => {
+    finish({ ok: true, value: { rev: 4, hostToken: recovered } });
+    await flight;
+  });
+  expect(readOnline(saved.id)).toEqual(fresh);
+});
+
+it.each([true, false])(
+  '지연된 create 성공은 다른 탭이 복구한 기록을 덮지 않는다(created=%s)',
+  async (created) => {
+    let finish!: (value: Awaited<ReturnType<typeof meetApi.create>>) => void;
+    vi.mocked(meetApi.create).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const { result } = setup();
+    let flight!: Promise<void>;
+    await act(async () => {
+      flight = result.current.share();
+    });
+    const fresh = {
+      hostToken: 'b'.repeat(43),
+      pendingHostToken: 'c'.repeat(43),
+      lastRev: 8,
+      docRev: 4,
+      hostLikes: ['choice01'],
+    };
+    await act(async () => writeOnline(saved.id, fresh));
+    await act(async () => {
+      finish({ ok: true, value: { id: saved.id, hostToken: token, rev: 1, docRev: 1, created } });
+      await flight;
+    });
+    expect(readOnline(saved.id)).toEqual(fresh);
+  },
+);
+
+it('Turnstile 대기 중 다른 탭이 연결하면 예전 기록으로 생성하지 않는다', async () => {
+  let finish!: (value: string) => void;
+  vi.mocked(getTurnstileToken).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const { result } = setup();
+  let flight!: Promise<void>;
+  await act(async () => {
+    flight = result.current.share();
+  });
+  const fresh = { hostToken: 'b'.repeat(43), pendingHostToken: 'c'.repeat(43), lastRev: 8 };
+  await act(async () => writeOnline(saved.id, fresh));
+  await act(async () => {
+    finish('dev');
+    await flight;
+  });
+  expect(readOnline(saved.id)).toEqual(fresh);
+  expect(meetApi.create).not.toHaveBeenCalled();
+});
+
+it.each(['update', 'conflict', 'reply', 'remove', 'release', 'get', '401'] as const)(
+  '지연된 %s 응답은 요청 뒤 바뀐 주최자 연결을 덮거나 복구하지 않는다',
+  async (path) => {
+    online();
+    const { result } = setup();
+    await flush();
+    let finish!: () => void;
+    const wait = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    const fresh = {
+      ...readOnline(saved.id)!,
+      hostToken: 'b'.repeat(43),
+      pendingHostToken: 'c'.repeat(43),
+    };
+    let flight: Promise<void> | undefined;
+    if (path === 'update' || path === 'conflict') {
+      vi.mocked(meetApi.update).mockImplementationOnce(async () => {
+        await wait;
+        return path === 'update'
+          ? { ok: true, value: { rev: 3, docRev: 2 } }
+          : { ok: false, error: { code: 'conflict', docRev: 2 } };
+      });
+      await edit({ title: f('보내는 제목') });
+      await advance(1000);
+    } else if (path === 'reply') {
+      vi.mocked(meetApi.reply).mockImplementationOnce(async () => {
+        await wait;
+        return { ok: true, value: { rev: 3 } };
+      });
+      await edit({
+        replies: f({ person01: { likes: ['choice01'], sentAt: startAt, receivedAt: startAt } }),
+      });
+      await advance(1000);
+    } else if (path === 'remove') {
+      vi.mocked(meetApi.remove).mockImplementationOnce(async () => {
+        await wait;
+        return { ok: true, value: undefined };
+      });
+      await act(async () => {
+        flight = result.current.removeFromServer();
+      });
+    } else if (path === 'release') {
+      vi.mocked(meetApi.release).mockImplementationOnce(async () => {
+        await wait;
+        return { ok: false, error: { code: 'ended' } };
+      });
+      await act(async () => {
+        flight = result.current.releaseParticipant('person02');
+      });
+    } else {
+      vi.mocked(meetApi.get).mockImplementationOnce(async () => {
+        await wait;
+        return path === '401'
+          ? { ok: false, error: { code: 'unauthorized' } }
+          : { ok: true, value: state({ rev: 9 }) };
+      });
+      await advance(10000);
+    }
+    await act(async () => writeOnline(saved.id, fresh));
+    const releaseCount = vi.mocked(meetApi.release).mock.calls.length;
+    await act(async () => {
+      finish();
+      await flight;
+    });
+    expect(readOnline(saved.id)).toEqual(fresh);
+    expect(meetApi.release).toHaveBeenCalledTimes(releaseCount);
+  },
+);
+
+it('늦은 주최자 좋아요 성공은 다른 탭의 더 새 좋아요 기준을 지킨다', async () => {
+  online();
+  setup();
+  await flush();
+  let finish!: (value: Awaited<ReturnType<typeof meetApi.reply>>) => void;
+  vi.mocked(meetApi.reply).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  await edit({
+    replies: f({ person01: { likes: ['choice01'], sentAt: startAt, receivedAt: startAt } }),
+  });
+  await advance(1000);
+  const fresh = { ...readOnline(saved.id)!, hostLikes: [], hostLikesAckRev: 8 };
+  await act(async () => writeOnline(saved.id, fresh));
+  await act(async () => finish({ ok: true, value: { rev: 3 } }));
+  expect(readOnline(saved.id)).toEqual(fresh);
+});
+
+it.each(['ended', 'not-found'] as const)(
+  '현재 연결의 %s 확인은 토큰을 지우고 종료를 기록한다',
+  async (code) => {
+    online();
+    vi.mocked(meetApi.get).mockResolvedValueOnce({ ok: false, error: { code } });
+    setup();
+    await flush();
+    expect(readOnline(saved.id)?.ended).toBe(true);
+    expect(readOnline(saved.id)?.hostToken).toBeUndefined();
+  },
+);
+
+it('409 복구 GET을 기다리는 동안 바뀐 연결에는 복구한 본문을 쓰지 않는다', async () => {
+  online();
+  setup();
+  await flush();
+  let finish!: (value: Awaited<ReturnType<typeof meetApi.get>>) => void;
+  vi.mocked(meetApi.update).mockResolvedValueOnce({
+    ok: false,
+    error: { code: 'conflict', docRev: 2 },
+  });
+  vi.mocked(meetApi.get).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  await edit({ title: f('전송할 제목') });
+  await advance(1000);
+  const fresh = {
+    ...readOnline(saved.id)!,
+    hostToken: 'b'.repeat(43),
+    pendingHostToken: 'c'.repeat(43),
+  };
+  await act(async () => writeOnline(saved.id, fresh));
+  await act(async () => finish({ ok: true, value: state({ rev: 3, docRev: 2 }) }));
+  expect(readOnline(saved.id)).toEqual(fresh);
+  expect(meetApi.update).toHaveBeenCalledTimes(1);
+});
+
+it('늦은 PUT은 같은 토큰과 버전이어도 다른 탭이 바꾼 동기화 본문을 덮지 않는다', async () => {
+  online();
+  setup();
+  await flush();
+  let finish!: (value: Awaited<ReturnType<typeof meetApi.update>>) => void;
+  vi.mocked(meetApi.update).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  await edit({ title: f('전송할 제목') });
+  await advance(1000);
+  const fresh = { ...readOnline(saved.id)!, syncedDoc: { ...state().doc, title: '다른 기준' } };
+  await act(async () => writeOnline(saved.id, fresh));
+  await act(async () => finish({ ok: true, value: { rev: 3, docRev: 2 } }));
+  expect(readOnline(saved.id)).toEqual(fresh);
+});
+
+it.each(['동기화 본문', '참석자 이름'] as const)(
+  'GET 대기 중 다른 탭이 바꾼 %s 기준을 늦은 응답으로 덮지 않는다',
+  async (field) => {
+    online();
+    let finish!: (value: Awaited<ReturnType<typeof meetApi.get>>) => void;
+    vi.mocked(meetApi.get).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const late = state({ rev: 9, docRev: 2 });
+    setup();
+    const fresh = {
+      ...readOnline(saved.id)!,
+      ...(field === '동기화 본문'
+        ? { syncedDoc: { ...state().doc, title: '다른 탭의 기준' } }
+        : { seen: ['person03'], seenNames: { person03: '다른 탭의 이름' } }),
+    };
+    await act(async () => writeOnline(saved.id, fresh));
+    await act(async () => finish({ ok: true, value: late }));
+    expect(readOnline(saved.id)).toEqual(fresh);
+  },
+);
+
+it('PUT 완료는 다른 탭이 바꾼 답장 전용 참석자의 이름 기록을 지우지 않는다', async () => {
+  online();
+  writeOnline(saved.id, {
+    ...readOnline(saved.id)!,
+    seen: ['person03'],
+    seenNames: { person03: '옛 이름' },
+  });
+  setup();
+  await flush();
+  let finish!: (value: Awaited<ReturnType<typeof meetApi.update>>) => void;
+  vi.mocked(meetApi.update).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  await edit({ title: f('전송할 제목') });
+  await advance(1000);
+  await act(async () =>
+    writeOnline(saved.id, { ...readOnline(saved.id)!, seenNames: { person03: '새 이름' } }),
+  );
+  await act(async () => finish({ ok: true, value: { rev: 3, docRev: 2 } }));
+  expect(readOnline(saved.id)).toMatchObject({
+    seen: ['person03'],
+    seenNames: { person03: '새 이름' },
+  });
+});
+
+it('create 응답은 복구 토큰이 같아도 대기 중 바뀐 동기화 기준을 덮지 않는다', async () => {
+  let finish!: (value: Awaited<ReturnType<typeof meetApi.create>>) => void;
+  vi.mocked(meetApi.create).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const { result } = setup();
+  let flight!: Promise<void>;
+  await act(async () => {
+    flight = result.current.share();
+  });
+  const fresh = {
+    ...readOnline(saved.id)!,
+    lastRev: 5,
+    docRev: 2,
+    syncedDoc: { ...state().doc, title: '더 새 기준' },
+  };
+  await act(async () => writeOnline(saved.id, fresh));
+  await act(async () => {
+    finish({
+      ok: true,
+      value: { id: saved.id, hostToken: token, rev: 1, docRev: 1, created: true },
+    });
+    await flight;
+  });
+  expect(readOnline(saved.id)).toEqual(fresh);
+});
+
+it.each(['remove', 'get'] as const)(
+  '늦은 %s 종료 처리는 다른 탭이 교체한 참석자 연결을 지우지 않는다',
+  async (method) => {
+    online();
+    writeOnline(saved.id, {
+      ...readOnline(saved.id)!,
+      guest: { participantId: 'person02', token: 'old' },
+    });
+    const { result } = setup();
+    await flush();
+    let finish!: () => void;
+    const wait = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    let flight: Promise<void> | undefined;
+    if (method === 'remove') {
+      vi.mocked(meetApi.remove).mockImplementationOnce(async () => {
+        await wait;
+        return { ok: true, value: undefined };
+      });
+      await act(async () => {
+        flight = result.current.removeFromServer();
+      });
+    } else {
+      vi.mocked(meetApi.get).mockImplementationOnce(async () => {
+        await wait;
+        return { ok: false, error: { code: 'ended' } };
+      });
+      await advance(10000);
+    }
+    const fresh = { ...readOnline(saved.id)!, guest: { participantId: 'person02', token: 'new' } };
+    await act(async () => writeOnline(saved.id, fresh));
+    await act(async () => {
+      finish();
+      await flight;
+    });
+    expect(readOnline(saved.id)).toEqual(fresh);
+  },
+);
+
+it('본문 버전 복구를 합친 직후 같은 탭에서 연결이 바뀌면 이전 본문을 새 토큰으로 올리지 않는다', async () => {
+  online();
+  const record = { ...readOnline(saved.id)! };
+  delete record.docRev;
+  writeOnline(saved.id, record);
+  vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+  vi.mocked(meetApi.get).mockResolvedValueOnce({ ok: true, value: state() });
+  const unsubscribe = subscribeOnline(saved.id, (current) => {
+    if (current?.lastRev !== 2) return;
+    unsubscribe();
+    writeOnline(saved.id, { ...current, hostToken: 'b'.repeat(43) });
+  });
+  setup();
+  await edit({ title: f('아직 올리지 않은 제목') });
+  await advance(1000);
+  expect(readOnline(saved.id)?.hostToken).toBe('b'.repeat(43));
+  expect(meetApi.update).not.toHaveBeenCalled();
+  unsubscribe();
 });

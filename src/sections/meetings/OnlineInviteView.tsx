@@ -8,11 +8,17 @@ import type { OnlineState, ReplyInput } from 'src/domain/meeting/online-doc';
 import { paths } from 'src/routes/paths';
 import type { Meeting, Origin, Participant } from 'src/schema/meeting';
 import { meetApi, type OnlineError } from 'src/services/meet-online/client';
-import { readOnline, writeOnline } from 'src/services/meet-online/store';
+import { readOnline, updateOnline } from 'src/services/meet-online/store';
 import { CandidateTally } from './CandidateTally';
 import { FinalView } from './FinalView';
 import { OriginPicker } from './OriginPicker';
-import { loadMeetDraft, removeMeetDraft, saveMeetDraft, type MeetDraft } from './meet-drafts';
+import {
+  loadMeetDraftEntry,
+  removeMeetDraft,
+  saveMeetDraft,
+  type MeetDraft,
+  type MeetDraftEntry,
+} from './meet-drafts';
 import { useMeetingCompute, type MeetingTimes } from './use-meeting-compute';
 import { useOnlinePoll } from './use-online-poll';
 
@@ -39,10 +45,11 @@ function message(error: OnlineError) {
 export function OnlineInviteView({ id }: { id: string }) {
   const [guest, setGuest] = useState(() => readOnline(id)?.guest ?? null);
   const [state, setState] = useState<OnlineState | null>(null);
-  const [draft, setDraft] = useState<MeetDraft | null>(() => {
-    const saved = loadMeetDraft(id);
-    return saved?.participantId === readOnline(id)?.guest?.participantId ? saved : null;
+  const [draftEntry, setDraftEntry] = useState<MeetDraftEntry | null>(() => {
+    const saved = loadMeetDraftEntry(id);
+    return saved?.draft.participantId === readOnline(id)?.guest?.participantId ? saved : null;
   });
+  const draft = draftEntry?.draft ?? null;
   const [error, setError] = useState<string | null>(null);
   const [ended, setEnded] = useState(false);
   const [newPerson, setNewPerson] = useState(false);
@@ -112,9 +119,9 @@ export function OnlineInviteView({ id }: { id: string }) {
               : {}),
         }
       : null;
-  const latest = useRef({ guest, state, draft, input, pending });
+  const latest = useRef({ guest, state, draft, draftEntry, input, pending });
   useLayoutEffect(() => {
-    latest.current = { guest, state, draft, input, pending };
+    latest.current = { guest, state, draft, draftEntry, input, pending };
   });
   useEffect(() => {
     active.current = true;
@@ -128,24 +135,33 @@ export function OnlineInviteView({ id }: { id: string }) {
     return () => clearInterval(timer);
   }, []);
 
-  function markError(failure: OnlineError, reading = false, failedToken: string | null = null) {
+  function markError(
+    failure: OnlineError,
+    reading = false,
+    failedToken: string | null = null,
+    failedDraftVersion: string | null = null,
+  ) {
     if (!active.current) return;
     if (failure.code === 'unauthorized') {
       const record = readOnline(id);
       if (record?.guest && record.guest.token !== failedToken) {
-        const savedDraft = loadMeetDraft(id);
+        const savedDraft = loadMeetDraftEntry(id);
         setGuest(record.guest);
-        setDraft(savedDraft?.participantId === record.guest.participantId ? savedDraft : null);
+        setDraftEntry(
+          savedDraft?.draft.participantId === record.guest.participantId ? savedDraft : null,
+        );
         setState(null);
         deferred.current = false;
       } else {
-        if (record?.guest?.token === failedToken) {
-          delete record.guest;
-          writeOnline(id, record);
-        }
-        removeMeetDraft(id);
-        setGuest(null);
-        setDraft(null);
+        const fresh = updateOnline(id, (current) => {
+          if (!current?.guest || current.guest.token !== failedToken) return current;
+          const next = { ...current };
+          delete next.guest;
+          return next;
+        });
+        removeMeetDraft(id, failedDraftVersion);
+        setGuest(fresh?.guest ?? null);
+        setDraftEntry(null);
       }
       setPicking(false);
       setError(null);
@@ -158,13 +174,34 @@ export function OnlineInviteView({ id }: { id: string }) {
     const current = latest.current;
     if (!current.guest || !current.input || current.pending || needsFreshDoc.current) return true;
     const sent = current.input;
-    // 계산한 내 줄도 함께 남겨 새로고침 뒤 재시도할 수 있게 한다.
-    saveMeetDraft(id, { participantId: current.guest.participantId, ...sent });
+    // 계산을 기다리는 동안 바뀐 다른 탭의 초안과 신원도 먼저 확인한다.
+    const storedGuest = readOnline(id)?.guest;
+    if (storedGuest?.token !== current.guest.token) {
+      setGuest(storedGuest ?? null);
+      const entry = loadMeetDraftEntry(id);
+      setDraftEntry(entry?.draft.participantId === storedGuest?.participantId ? entry : null);
+      setState(null);
+      return false;
+    }
+    const sentDraft = { participantId: current.guest.participantId, ...sent };
+    const sentVersion = saveMeetDraft(
+      id,
+      sentDraft,
+      undefined,
+      current.draftEntry?.version ?? null,
+    );
+    if (sentVersion === undefined) {
+      const entry = loadMeetDraftEntry(id);
+      setDraftEntry(entry?.draft.participantId === current.guest.participantId ? entry : null);
+      return false;
+    }
+    // 계산한 내 줄도 같은 버전으로 남겨 새로고침 뒤 재시도한다.
+    setDraftEntry({ draft: sentDraft, version: sentVersion });
     const result = await meetApi.reply(id, sent, current.guest.token);
     if (!active.current || latest.current.guest?.token !== current.guest.token) return false;
     if (!result.ok) {
       deferred.current = true;
-      markError(result.error, false, current.guest.token);
+      markError(result.error, false, current.guest.token, sentVersion);
       return false;
     }
     const updatedAt = new Date().toISOString();
@@ -194,8 +231,9 @@ export function OnlineInviteView({ id }: { id: string }) {
       };
     });
     if (JSON.stringify(latest.current.input) === JSON.stringify(sent)) {
-      removeMeetDraft(id);
-      setDraft(null);
+      const removed = removeMeetDraft(id, sentVersion);
+      const entry = removed ? null : loadMeetDraftEntry(id);
+      setDraftEntry(entry?.draft.participantId === current.guest.participantId ? entry : null);
     }
     needsFreshDoc.current = result.value.timesDropped === true;
     deferred.current = needsFreshDoc.current;
@@ -232,7 +270,12 @@ export function OnlineInviteView({ id }: { id: string }) {
       );
       if (!active.current || current.guest?.token !== latest.current.guest?.token) return 'error';
       if (!result.ok) {
-        markError(result.error, true, current.guest?.token ?? null);
+        markError(
+          result.error,
+          true,
+          current.guest?.token ?? null,
+          current.draftEntry?.version ?? null,
+        );
         return 'error';
       }
       if (result.value !== 'unchanged') {
@@ -287,8 +330,8 @@ export function OnlineInviteView({ id }: { id: string }) {
   function edit(patch: Partial<ReplyInput>) {
     if (!guest) return;
     const next: MeetDraft = { participantId: guest.participantId, ...draft, likes, ...patch };
-    saveMeetDraft(id, next);
-    setDraft(next);
+    const version = saveMeetDraft(id, next);
+    if (version !== undefined) setDraftEntry({ draft: next, version });
     deferred.current = false;
   }
   async function claim(who: { participantId: string } | { newName: string }) {
@@ -302,7 +345,7 @@ export function OnlineInviteView({ id }: { id: string }) {
         ? pending.participantId === who.participantId
         : pending.newName === who.newName);
     const guestToken = sameChoice ? pending.token : newGuestToken();
-    writeOnline(id, { ...current, pendingGuest: { ...who, token: guestToken } });
+    updateOnline(id, (fresh) => ({ ...fresh, pendingGuest: { ...who, token: guestToken } }));
     const result = await meetApi.claim(id, who, guestToken);
     if (!active.current) return;
     if (!result.ok && (result.error.code === 'not-found' || result.error.code === 'ended')) {
@@ -325,11 +368,22 @@ export function OnlineInviteView({ id }: { id: string }) {
       return;
     }
     const next = { participantId: result.value.participantId, token: result.value.guestToken };
-    const record = { ...readOnline(id), guest: next };
-    delete record.pendingGuest;
-    writeOnline(id, record);
-    setGuest(next);
-    setDraft(null);
+    let applied = false;
+    const record = updateOnline(id, (fresh) => {
+      if (
+        fresh?.pendingGuest?.token !== guestToken ||
+        fresh.guest?.token !== current?.guest?.token ||
+        fresh.ended
+      )
+        return fresh;
+      const record = { ...fresh, guest: next };
+      delete record.pendingGuest;
+      applied = true;
+      return record;
+    });
+    setGuest(record?.guest ?? null);
+    const entry = applied ? null : loadMeetDraftEntry(id);
+    setDraftEntry(entry?.draft.participantId === record?.guest?.participantId ? entry : null);
     setError(null);
   }
   if (ended)

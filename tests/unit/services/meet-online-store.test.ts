@@ -411,3 +411,49 @@ it.each([
   );
   expect(createOnlineStore(() => storage).allOnline()).toEqual({ meeting002: { lastRev: 1 } });
 });
+
+it('updateOnline은 최신 기록을 읽어 조건이 맞을 때만 쓰고 같은 탭 구독의 후속 변경도 지킨다', async () => {
+  // 두 탭이 같은 저장소를 공유한다.
+  const storage = createMemoryStorage();
+  const first = createOnlineStore(() => storage);
+  const second = createOnlineStore(() => storage);
+  expect(first).toHaveProperty('updateOnline', expect.any(Function));
+  const update = first.updateOnline;
+  first.writeOnline('meeting001', { hostToken: 'old' });
+  second.writeOnline('meeting001', { hostToken: 'new', pendingHostToken: 'p'.repeat(43) });
+  const listener = vi.fn();
+  const unsubscribe = first.subscribeOnline('meeting001', listener);
+  update('meeting001', (current) =>
+    current?.hostToken === 'old' ? { ...current, hostToken: 'stale' } : current,
+  );
+  expect(first.readOnline('meeting001')?.hostToken).toBe('new');
+  expect(listener).not.toHaveBeenCalled();
+  update('meeting001', (current) => ({ ...current, lastRev: 2 }));
+  expect(second.readOnline('meeting001')).toEqual({
+    hostToken: 'new',
+    pendingHostToken: 'p'.repeat(43),
+    lastRev: 2,
+  });
+  expect(listener).toHaveBeenCalledTimes(1);
+  unsubscribe();
+});
+
+it('updateOnline의 구독자가 같은 탭에서 이어 쓴 결과를 돌려주고 보존한다', () => {
+  const storage = createMemoryStorage();
+  const store = createOnlineStore(() => storage);
+  store.writeOnline('meeting001', { hostToken: 'old' });
+  const unsubscribe = store.subscribeOnline('meeting001', () => {
+    unsubscribe();
+    store.updateOnline('meeting001', (current) => ({
+      ...current,
+      pendingHostToken: 'p'.repeat(43),
+    }));
+  });
+  expect(store.updateOnline('meeting001', (current) => ({ ...current, hostToken: 'new' }))).toEqual(
+    { hostToken: 'new', pendingHostToken: 'p'.repeat(43) },
+  );
+  expect(store.readOnline('meeting001')).toEqual({
+    hostToken: 'new',
+    pendingHostToken: 'p'.repeat(43),
+  });
+});
