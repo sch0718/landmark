@@ -119,11 +119,11 @@ it.each([false, true])(
   },
 );
 
-it('본문을 받을 때도 같은 출발지의 새 좋아요 답장으로 원격 출발지를 덮지 않는다', () => {
+it('주최자가 출발지를 고쳐 답장 출발지가 비워진 본문을 받으면 원격 출발지를 유지한다', () => {
   const seenOrigin = { name: '친구 집 B', lng: 128, lat: 38 };
   const remoteOrigin = { name: '다른 기기 집 C', lng: 127.5, lat: 37.6 };
   const first = merge(library(), state([reply({ origin: seenOrigin })]));
-  const remote = state([reply({ origin: seenOrigin, likes: [], updatedAt: now })]);
+  const remote = state([reply({ origin: null, likes: [], updatedAt: now })]);
   const next = mergedMeeting(
     merge(
       first,
@@ -145,6 +145,45 @@ it('본문을 받을 때도 같은 출발지의 새 좋아요 답장으로 원�
   expect(next.participants.value[1]?.origin).toEqual(remoteOrigin);
   expect(next.replies.value.person01?.likes).toEqual([]);
 });
+
+it.each([false, true])(
+  '제목만 바뀐 본문을 받을 때 이미 본 답장 출발지를 다시 적용한다: 새 좋아요=%s',
+  (newLikes) => {
+    const seenOrigin = { name: '친구 집 B', lng: 128, lat: 38 };
+    const syncedDoc = docFromMeeting(meeting, {}, 'min');
+    const first = merge(library(), state([reply({ origin: seenOrigin })]));
+    const remote = state([
+      reply({
+        origin: seenOrigin,
+        ...(newLikes ? { likes: [], updatedAt: now } : {}),
+      }),
+    ]);
+    const result = mergeOnline(
+      first,
+      meeting.id,
+      { ...remote, docRev: 2, doc: { ...syncedDoc, title: '다른 기기 제목' } },
+      ctx,
+      {
+        syncedDoc,
+        docRev: 1,
+        seen: [],
+        hostLikes: null,
+        hostLikesAckRev: null,
+        replyOrigins: { person01: seenOrigin },
+      },
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const next = mergedMeeting(result.lib);
+    expect(next.title.value).toBe('다른 기기 제목');
+    expect(next.participants.value[1]?.origin).toEqual(seenOrigin);
+    expect(next.replies.value.person01?.likes).toEqual(newLikes ? [] : ['choice01']);
+    expect(result.replyOrigins).toEqual({ person01: seenOrigin });
+    expect(
+      hostEdits(next, { ...remote.doc, title: next.title.value }, [], result.replyOrigins),
+    ).toBe(false);
+  },
+);
 
 it('본문 출발지로 되돌려도 마지막으로 본 답장 출발지를 덮어쓰면 주최자 수정이다', () => {
   expect(
@@ -407,7 +446,7 @@ describe('온라인 상태를 보관한 약속에 합친다', () => {
     }
   });
 
-  it('서버 본문을 받으면 이미 본 같은 답장 출발지는 다시 적용하지 않는다', () => {
+  it('서버 본문을 받으면 이미 본 같은 답장 출발지도 다시 적용한다', () => {
     const changed = { name: '회사', lng: 128, lat: 38 };
     const remote = state([reply({ origin: changed })]);
     const first = merge(library(), remote);
@@ -416,7 +455,7 @@ describe('온라인 상태를 보관한 약속에 합친다', () => {
     const next = mergedMeeting(
       merge(first, { ...remote, docRev: 2 }, remote.doc, 1, { person01: changed }),
     );
-    expect(next.participants.value[1]?.origin).toEqual(origin);
+    expect(next.participants.value[1]?.origin).toEqual(changed);
     expect(next.replies.value.person01).toEqual(mergedMeeting(first).replies.value.person01);
   });
 
@@ -432,6 +471,7 @@ describe('온라인 상태를 보관한 약속에 합친다', () => {
             ...remote,
             rev: 2,
             docRev: 2,
+            replies: [reply({ origin: null })],
             doc: {
               ...remote.doc,
               participants: remote.doc.participants.map((p) =>

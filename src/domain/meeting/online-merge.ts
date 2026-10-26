@@ -148,9 +148,10 @@ export function mergeOnline(
     const previous = next.replies.value[pid];
     const fresh = previous === undefined || previous.sentAt !== reply.updatedAt;
     const participant = next.participants.value.find((p) => p.id === pid);
-    // 답장 시각은 좋아요에만 쓴다. 출발지는 이 기기가 마지막으로 본 값과 비교한다.
+    // 본문을 받으면 살아 있는 답장 출발지를 다시 적용하고, 일반 합치기는 마지막으로 본 값과 비교한다.
     const applyOrigin =
-      reply.origin !== null && JSON.stringify(reply.origin) !== JSON.stringify(replyOrigins[pid]);
+      reply.origin !== null &&
+      (adopt || JSON.stringify(reply.origin) !== JSON.stringify(replyOrigins[pid]));
     if (participant === undefined) {
       if (state.doc.participants.some((p) => p.id === pid)) continue;
       if (next.participants.value.length >= LIBRARY_LIMITS.meetingParticipantsMax) continue;

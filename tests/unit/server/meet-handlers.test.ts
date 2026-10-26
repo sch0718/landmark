@@ -1,6 +1,8 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { docFromMeeting, type MeetingDoc, type OnlineState } from 'src/domain/meeting/online-doc';
+import { mergeOnline, overriddenReplyOrigins } from 'src/domain/meeting/online-merge';
+import { emptyLibrary } from 'src/schema/library';
 import { safeParse } from 'src/schema/parse';
 import { OnlineStateSchema } from 'src/domain/meeting/online-doc';
 import { ensureSchema } from 'src/server/meet/db';
@@ -641,6 +643,95 @@ describe('약속 읽기와 좌표 가리기', () => {
 });
 
 describe('약속 고치기와 지우기', () => {
+  it('다른 기기의 제목만 바뀐 본문을 받아도 친구 출발지와 다음 제목 갱신의 답장 출발지를 보존한다', async () => {
+    const token = await seed();
+    const guestToken = await addReply('person02', work);
+    const originalDoc = doc();
+    const local = buildMeeting({
+      participants: { value: originalDoc.participants, updatedAt: NOW.toISOString() },
+    });
+    const sync = {
+      syncedDoc: originalDoc,
+      docRev: 1,
+      seen: [],
+      hostLikes: null,
+      hostLikesAckRev: null,
+      replyOrigins: { person02: work },
+    };
+    const ctx = { now: NOW.toISOString(), newId: newToken };
+    expect(
+      (
+        await handleReply(
+          context(
+            'PUT',
+            { origin: changed, likes: ['choice01'], times: { choice01: 25 }, docRev: 1 },
+            { token: guestToken },
+          ),
+          deps,
+        )
+      ).status,
+    ).toBe(200);
+    const firstResponse = await handleGet(context('GET', undefined, { token }), deps);
+    expect(firstResponse.status).toBe(200);
+    const firstState = (await firstResponse.json()) as OnlineState;
+    const first = mergeOnline(
+      { ...emptyLibrary(), meetings: { [local.id]: local } },
+      local.id,
+      firstState,
+      ctx,
+      sync,
+    );
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    expect(first.lib.meetings![local.id]!.participants.value[1]?.origin).toEqual(changed);
+
+    // 다른 기기는 친구의 새 출발지를 아직 본문에 반영하지 않았다.
+    const remoteDoc = { ...originalDoc, title: '다른 기기 제목' };
+    expect(
+      (await handleUpdate(context('PUT', { doc: remoteDoc, baseRev: 1 }, { token }), deps)).status,
+    ).toBe(200);
+    const remoteResponse = await handleGet(context('GET', undefined, { token }), deps);
+    expect(remoteResponse.status).toBe(200);
+    const remoteState = (await remoteResponse.json()) as OnlineState;
+    expect(remoteState.doc.participants[1]?.origin).toEqual(work);
+    expect(remoteState.replies.find((r) => r.participantId === 'person02')?.origin).toEqual(
+      changed,
+    );
+    const merged = mergeOnline(first.lib, local.id, remoteState, ctx, {
+      ...sync,
+      replyOrigins: first.replyOrigins,
+    });
+    expect(merged.ok).toBe(true);
+    if (!merged.ok) return;
+    const next = merged.lib.meetings![local.id]!;
+    expect(next.title.value).toBe(remoteDoc.title);
+    expect(next.participants.value[1]?.origin).toEqual(changed);
+    expect(merged.replyOrigins).toEqual({ person02: changed });
+    const clearReplyOrigins = overriddenReplyOrigins(next.participants.value, merged.replyOrigins);
+    expect(clearReplyOrigins).toEqual([]);
+    // 본문 출발지가 그대로인 다음 갱신에 잘못된 답장 삭제가 실리지 않아야 한다.
+    expect(
+      (
+        await handleUpdate(
+          context(
+            'PUT',
+            {
+              doc: { ...remoteState.doc, title: '다음 제목' },
+              baseRev: remoteState.docRev,
+              clearReplyOrigins,
+            },
+            { token },
+          ),
+          deps,
+        )
+      ).status,
+    ).toBe(200);
+    const finalResponse = await handleGet(context('GET', undefined, { token }), deps);
+    expect(finalResponse.status).toBe(200);
+    const finalState = (await finalResponse.json()) as OnlineState;
+    expect(finalState.replies.find((r) => r.participantId === 'person02')?.origin).toEqual(changed);
+  });
+
   it.each([home, null])(
     '본문에서 출발지를 %j로 고친 참석자의 답장 출발지와 시간만 비운다',
     async (origin) => {
