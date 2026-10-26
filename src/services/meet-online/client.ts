@@ -5,7 +5,7 @@ import {
   type OnlineState,
   type ReplyInput,
 } from 'src/domain/meeting/online-doc';
-import { MeetingId, MeetingMemberId } from 'src/schema/meeting';
+import { MeetingId, MeetingMemberId, type Origin } from 'src/schema/meeting';
 import { safeParse } from 'src/schema/parse';
 
 export type OnlineError = {
@@ -159,7 +159,7 @@ export const meetApi = {
     hostToken: string,
     removed?: string[],
     signal?: AbortSignal,
-    clearReplyOrigins?: string[],
+    clearReplyOrigins?: Array<{ participantId: string; origin: Origin }>,
   ) {
     return request(pathFor(id), 'PUT', updateSchema, {
       body: {

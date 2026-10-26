@@ -124,7 +124,7 @@ CREATE TABLE schema_meta (version INTEGER NOT NULL);  -- 1
 | 요청 | 하는 일 | 권한 | 성공 |
 |---|---|---|---|
 | `POST /api/meet` | 본문 올리기(`{ doc, turnstile }`) | 출처 + Turnstile + 한도 | `201 { id, rev, hostToken }` |
-| `PUT /api/meet/:id` | 본문 바꾸기·확정·확정 취소(`{ doc, baseRev }`, `baseRev`는 본문 버전) | 주최자 | `200 { rev, docRev }`, `doc_rev`가 다르면 `409 { docRev }` |
+| `PUT /api/meet/:id` | 본문 바꾸기·확정·확정 취소(`{ doc, baseRev, removed?, clearReplyOrigins? }`, `baseRev`는 본문 버전, `clearReplyOrigins?`는 `Array<{ participantId, origin: Origin }>`·최대 10명) | 주최자 | `200 { rev, docRev }`, `doc_rev`가 다르면 `409 { docRev }` |
 | `GET /api/meet/:id?since=<rev>` | 본문 + 답장 전체 | 링크 소지자(주최자면 원래 좌표 포함) | `200 { rev, doc, replies }`, 안 바뀌었으면 `304` |
 | `POST /api/meet/:id/claim` | 참석자 고르기(`{ participantId }` 또는 `{ newName }`) | 링크 소지자 + 한도 | `200 { participantId, guestToken, rev }`, 이미 차지됐으면 `409` |
 | `PUT /api/meet/:id/reply` | 내 좋아요·출발지·소요시간 줄 저장 | 참석자·주최자 | `200 { rev, timesDropped? }` |
@@ -135,7 +135,7 @@ CREATE TABLE schema_meta (version INTEGER NOT NULL);  -- 1
 - 만료 정리: `POST /api/meet` 때 만료된 약속을 최대 20개 지운다(답장·토큰 포함, D1 `batch`로 한 번에).
 - 요청 본문의 `participantId`는 권한 증거로 쓰지 않는다. 친구 답장은 토큰의 참석자 줄만, 주최자 답장은 본문 첫 참석자 줄의 좋아요만 쓴다(이름은 본문, `origin`·`times`는 무시). 주최자 좋아요도 1초 모아 저장하고 첫 생성 직후 기존 좋아요를 보내며, 실패하면 다음 확인 때 재시도한다.
 - 친구 답장의 `times`에는 계산에 쓴 본문 `docRev`(정수 ≥1)를 함께 보낸다. 버전이 없거나 현재 `doc_rev`와 다르면 시간만 `NULL`로 저장하고 `timesDropped: true`를 돌려준다. 좋아요·출발지는 저장하며 다음 확인에서 다시 계산한다.
-- 본문의 이동수단·일시·후보 id별 좌표(추가·삭제 포함)가 바뀌면 `doc_rev` 조건을 지키는 같은 배치에서 모든 답장의 `times`를 `NULL`로 비운다. 제목·후보 이름·순서만 바뀌면 보존한다.
+- 본문의 이동수단·일시·후보 id별 좌표(추가·삭제 포함)가 바뀌면 `doc_rev` 조건을 지키는 같은 배치에서 모든 답장의 `times`만 `NULL`로 비우고 출발지는 보존한다. 제목·후보 이름·순서만 바뀌면 보존한다.
 - 친구에게 주는 `GET` 응답은 다른 참석자의 원래 좌표(`origin.lng/lat`)를 빼고 이름·출발지 이름·소요시간만 준다. 주최자 토큰이 있으면 전부 준다.
   지금 후보 링크는 참석자 좌표를 모두 담으므로, 서버 방식이 노출이 더 적다.
 - 오류 코드는 기존 `ApiErrorCode`에 `UNAUTHORIZED`(401)·`CONFLICT`(409)·`ENDED`(410)·`RATE_LIMITED`(429)를 더한다.
@@ -148,9 +148,10 @@ CREATE TABLE schema_meta (version INTEGER NOT NULL);  -- 1
 - 올리지 않은 주최자 수정은 마지막으로 맞춘 본문(`syncedDoc`)과의 내용 비교로 판정한다. 제목·일시·이동수단·후보 전체·확정과 참석자 `[id, name]` 목록을 비교한다. 참석자는 마지막 본문에 있던 사람과 주최자가 직접 더한 사람(`syncedDoc`에도 `seen`에도 없는 id)을 포함하고, 답장 전용 참석자는 제외한다. 출발지가 `syncedDoc`과도 `replyOrigins[id]`와도 다르거나 아래 덮어쓰기 조건이면 주최자 수정이다. 수정이 없고 `docRev`가 다르거나 기록이 없으면 서버 본문 전체를 받는다(`syncedDoc: null`인 첫 기기는 수정 없음). `syncedDoc`·`docRev`를 받은 본문·버전으로 맞추고, 받은 필드 시각은 확인 시각으로 쓴다. 미전송 수정이 있으면 본문과 두 기록을 유지하고 답장만 합친다.
 - `syncedDoc`는 64KB 한도의 `MeetingDoc`로 별도 온라인 기록에 둔다. 올리기 성공 때는 보낸 본문, 서버 본문을 받을 때와 주최자 링크로 처음 담을 때는 받은 본문을 저장한다. 첫 올리기 시도 전에 최초 본문을 저장해 응답 유실 뒤 `created: false`로 복구해도 그 뒤의 수정을 구분한다. 받은 본문의 답장 출발지 재적용도 아래 마지막 수신값 비교 규칙을 따른다.
 - `replyOrigins[id]`는 이 기기가 마지막으로 받은 그 참석자의 답장 출발지다. 병합·본문 수신 모두 null이 아니고 기록과 다른 출발지만 적용하고 기록을 바꾼다. 같은 출발지의 좋아요 답장은 출발지를 건드리지 않는다.
-- 보관함 출발지가 `replyOrigins[id]`(있을 때)와 다르면 주최자 덮어쓰기다. 본문이 `baseline`과 같아도 PUT에 `clearReplyOrigins: [id, …]`(참석자 id 최대 10명, 주최자 id 무시)를 보내며, 같은 배치·버전 조건 안에서 답장 `origin`·`times`를 `NULL`로 비운다. 성공한 id의 기록만 지우되 전송 중 새로 받은 출발지 기록은 보존한다.
+- 보관함 출발지가 `replyOrigins[id]`(있을 때)와 다르면 주최자의 명시적 덮어쓰기다. 본문이 `baseline`과 같아도 PUT에 `clearReplyOrigins: [{ participantId, origin }]`(최대 10명, 주최자 id 무시)를 보낸다. `origin`은 주최자가 본 답장 출발지(`replyOrigins[id]`)다. 서버는 같은 배치·버전 조건 안에서 현재 답장 출발지가 보낸 값과 같을 때만 답장 `origin`·`times`를 `NULL`로 비운다. 그 뒤 친구가 새로 고른 출발지는 보존하고, 본문 출발지 변경만으로 답장 출발지를 비우지 않는다. 성공한 id의 기록만 지우되 전송 중 새로 받은 출발지 기록은 보존한다.
 - 답장 시각은 매 시도(충돌 재시도 포함)에서 `max(서버 현재 시각, 그 참석자의 기존 updated_at + 1ms)`로 저장한다(기존 줄이 없으면 현재 시각). 클라이언트는 받은 `updatedAt`이 보관함 `sentAt`과 다르면 작거나 커도 좋아요를 반영한다.
 - 주최자 본문 저장이 `409`면 서버 본문을 받아 보관함과 합친 뒤(서버의 새 참석자·답장 반영) 다시 올린다. 본문은 주최자만 고치므로 충돌은 주최자의 두 기기 사이에서만 생긴다.
+- 친구 자동 저장이 진행 중인 확인 때문에 건너뛰면 다시 저장할 표시를 남긴다. 확인이 성공·304·실패 중 어느 결과로 끝나든 표시가 있으면 반영된 본문의 최신 입력으로 바로 재시도하고, 화면이 숨겨질 때도 남은 저장을 한 번 시도한다.
 - 친구 답장 저장 실패는 이 기기 초안(`tripmap:meet-drafts:v1`, 지금 있음)에 남기고 다음 확인 때 다시 보낸다.
 
 ## 오류·장애

@@ -128,7 +128,7 @@ it.each(['성공', '실패', '전송 중 새 출발지'] as const)(
       token,
       [],
       expect.any(AbortSignal),
-      ['person02'],
+      [{ participantId: 'person02', origin: originB }],
     );
     if (outcome === '전송 중 새 출발지')
       writeOnline(saved.id, {

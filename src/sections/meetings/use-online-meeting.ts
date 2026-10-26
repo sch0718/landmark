@@ -297,8 +297,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
       }
     }
     let removed = removedReplyOnly(doc, current);
-    let sentReplyOrigins = current.replyOrigins;
-    let clearReplyOrigins = overriddenReplyOrigins(doc.participants, sentReplyOrigins);
+    let clearReplyOrigins = overriddenReplyOrigins(doc.participants, current.replyOrigins);
     let response = await meetApi.update(
       meeting.id,
       doc,
@@ -342,8 +341,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
       }
       doc = docFromMeeting(merged, latest.current.compute.times, latest.current.compute.unit);
       removed = removedReplyOnly(doc, current);
-      sentReplyOrigins = current.replyOrigins;
-      clearReplyOrigins = overriddenReplyOrigins(doc.participants, sentReplyOrigins);
+      clearReplyOrigins = overriddenReplyOrigins(doc.participants, current.replyOrigins);
       response = await meetApi.update(
         meeting.id,
         doc,
@@ -372,8 +370,11 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
             replyOrigins: Object.fromEntries(
               Object.entries(fresh.replyOrigins).filter(
                 ([pid, origin]) =>
-                  !clearReplyOrigins.includes(pid) ||
-                  JSON.stringify(origin) !== JSON.stringify(sentReplyOrigins?.[pid]),
+                  !clearReplyOrigins.some(
+                    (sent) =>
+                      sent.participantId === pid &&
+                      JSON.stringify(origin) === JSON.stringify(sent.origin),
+                  ),
               ),
             ),
           }),

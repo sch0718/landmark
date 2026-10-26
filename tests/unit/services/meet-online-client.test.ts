@@ -16,16 +16,19 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('온라인 약속 API', () => {
-  it('주최자가 덮어쓴 답장 출발지 id를 PUT 본문에 보낸다', async () => {
+  it('주최자가 덮어쓴 답장 출발지 id와 본 값을 PUT 본문에 보낸다', async () => {
     respond({ rev: 8, docRev: 3 });
     const signal = new AbortController().signal;
-    await meetApi.update(doc.meetingId, doc, 2, token, [], signal, ['person02']);
+    const clearReplyOrigins = [
+      { participantId: 'person02', origin: { name: '친구 B', lng: 127, lat: 37.5 } },
+    ];
+    await meetApi.update(doc.meetingId, doc, 2, token, [], signal, clearReplyOrigins);
     const input = fetchMock.mock.calls[0]![1]!;
     expect(JSON.parse(input.body as string)).toEqual({
       doc,
       baseRev: 2,
       removed: [],
-      clearReplyOrigins: ['person02'],
+      clearReplyOrigins,
     });
     expect(input.signal).toBe(signal);
   });

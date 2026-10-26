@@ -46,9 +46,11 @@ export function OnlineInviteView({ id }: { id: string }) {
   const [lastOkAt, setLastOkAt] = useState<number | null>(null);
   const [clockNow, setClockNow] = useState(() => Date.now());
   const [saved, setSaved] = useState(0);
+  const [saveAttempt, setSaveAttempt] = useState(0);
   const active = useRef(false);
   const inFlight = useRef(false);
   const needsFull = useRef(false);
+  const needsSave = useRef(false);
   const deferred = useRef(false);
   const needsFreshDoc = useRef(false);
   const pid = guest?.participantId;
@@ -195,6 +197,18 @@ export function OnlineInviteView({ id }: { id: string }) {
     setLastOkAt(Date.now());
     return true;
   }
+  function finishFlight() {
+    inFlight.current = false;
+    if (!active.current) return;
+    if (needsFull.current) {
+      needsFull.current = false;
+      void refresh(true);
+    } else if (needsSave.current) {
+      needsSave.current = false;
+      // 수신한 본문이 화면에 반영된 뒤 최신 입력으로 바로 저장한다.
+      setSaveAttempt((count) => count + 1);
+    }
+  }
   async function refresh(full = false): Promise<'ok' | 'error'> {
     if (inFlight.current) {
       if (full) needsFull.current = true;
@@ -223,11 +237,7 @@ export function OnlineInviteView({ id }: { id: string }) {
       setLastOkAt(Date.now());
       return sent ? 'ok' : 'error';
     } finally {
-      inFlight.current = false;
-      if (active.current && needsFull.current) {
-        needsFull.current = false;
-        void refresh(true);
-      }
+      finishFlight();
     }
   }
   const initialCheck = useEffectEvent(() => refresh(true));
@@ -236,15 +246,29 @@ export function OnlineInviteView({ id }: { id: string }) {
   }, [id, guest?.token]);
   useOnlinePoll({ enabled: !ended, tick: () => refresh() });
   const inputKey = JSON.stringify(input);
-  const autoSave = useEffectEvent(async () => {
-    if (inFlight.current || deferred.current || !navigator.onLine) return;
+  const autoSave = useEffectEvent(async (retry = false) => {
+    if (inFlight.current) {
+      needsSave.current = true;
+      return;
+    }
+    if ((!retry && deferred.current) || !navigator.onLine) return;
     inFlight.current = true;
     try {
       await sendDraft();
     } finally {
-      inFlight.current = false;
+      finishFlight();
     }
   });
+  useEffect(() => {
+    if (saveAttempt > 0) void autoSave(true);
+  }, [saveAttempt]);
+  useEffect(() => {
+    const flushHidden = () => {
+      if (document.visibilityState === 'hidden') void autoSave(true);
+    };
+    document.addEventListener('visibilitychange', flushHidden);
+    return () => document.removeEventListener('visibilitychange', flushHidden);
+  }, []);
   useEffect(() => {
     if (!inputKey || inputKey === 'null' || pending) return;
     const timer = setTimeout(() => {

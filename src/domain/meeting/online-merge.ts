@@ -25,7 +25,7 @@ type OnlineMergeResult =
 export function overriddenReplyOrigins(
   participants: MeetingDoc['participants'],
   replyOrigins: Record<string, Origin> = {},
-): string[] {
+): Array<{ participantId: string; origin: Origin }> {
   const hostId = participants[0]?.id;
   return participants
     .filter(
@@ -34,7 +34,7 @@ export function overriddenReplyOrigins(
         replyOrigins[p.id] !== undefined &&
         JSON.stringify(p.origin) !== JSON.stringify(replyOrigins[p.id]),
     )
-    .map((p) => p.id);
+    .map((p) => ({ participantId: p.id, origin: replyOrigins[p.id]! }));
 }
 
 /** 친구가 고른 출발지·답장 전용 참석자를 빼고 주최자가 고친 본문을 비교한다. */

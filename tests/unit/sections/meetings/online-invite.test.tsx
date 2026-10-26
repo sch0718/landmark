@@ -292,6 +292,85 @@ it('좋아요 두 번을 1초 모아 한 번 보내고 저장한 초안은 지�
   );
   expect(loadMeetDraft('meeting001')).toBeNull();
 });
+it.each(['304', '성공', '실패'] as const)(
+  '확인 중 건너뛴 좋아요 저장은 GET 결과가 %s이면 바로 다시 보낸다',
+  async (outcome) => {
+    guest();
+    await setup();
+    let finish!: (value: Awaited<ReturnType<typeof meetApi.get>>) => void;
+    vi.mocked(meetApi.get).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    await advance(10000);
+    like();
+    await advance(1000);
+    expect(meetApi.reply).not.toHaveBeenCalled();
+    await act(async () => {
+      finish(
+        outcome === '실패'
+          ? { ok: false, error: { code: 'offline' } }
+          : { ok: true, value: outcome === '304' ? 'unchanged' : { ...remote, rev: 3 } },
+      );
+    });
+    expect(meetApi.reply).toHaveBeenCalledExactlyOnceWith(
+      'meeting001',
+      { likes: ['choice01'] },
+      token,
+    );
+    expect(loadMeetDraft('meeting001')).toBeNull();
+    await advance(1000);
+    expect(meetApi.reply).toHaveBeenCalledTimes(1);
+  },
+);
+
+it('화면이 숨겨지면 1초를 기다리던 남은 좋아요를 바로 보낸다', async () => {
+  guest();
+  await setup();
+  like();
+  await advance(500);
+  expect(meetApi.reply).not.toHaveBeenCalled();
+  vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+  await act(async () => {
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  expect(meetApi.reply).toHaveBeenCalledExactlyOnceWith(
+    'meeting001',
+    { likes: ['choice01'] },
+    token,
+  );
+  expect(loadMeetDraft('meeting001')).toBeNull();
+});
+
+it('확인 중 숨겨져도 남은 좋아요를 확인 완료 직후 보낸다', async () => {
+  guest();
+  await setup();
+  let finish!: (value: Awaited<ReturnType<typeof meetApi.get>>) => void;
+  vi.mocked(meetApi.get).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  await advance(10000);
+  like();
+  vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+  await act(async () => {
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  expect(meetApi.reply).not.toHaveBeenCalled();
+  await act(async () => {
+    finish({ ok: true, value: 'unchanged' });
+  });
+  expect(meetApi.reply).toHaveBeenCalledExactlyOnceWith(
+    'meeting001',
+    { likes: ['choice01'] },
+    token,
+  );
+});
+
 it('실패한 답장 초안을 남겼다가 다음 확인에 다시 보낸다', async () => {
   guest();
   vi.mocked(meetApi.reply).mockResolvedValueOnce({ ok: false, error: { code: 'offline' } });
@@ -476,7 +555,7 @@ it('철회된 주최자 링크는 안내하고 보관함과 토큰을 저장하�
   expect(readOnline('meeting001')).toBeNull();
 });
 
-it('답장을 보내는 동안 더 고친 좋아요도 앞 요청 뒤에 이어서 저장한다', async () => {
+it('답장 전송 중 건너뛴 새 좋아요도 앞 요청 완료 직후 저장한다', async () => {
   guest();
   let finish!: (value: Awaited<ReturnType<typeof meetApi.reply>>) => void;
   vi.mocked(meetApi.reply).mockImplementationOnce(
@@ -490,11 +569,11 @@ it('답장을 보내는 동안 더 고친 좋아요도 앞 요청 뒤에 이어�
   await advance(1000);
   like('시청역');
   await advance(1000);
+  expect(loadMeetDraft('meeting001')?.likes).toEqual(['choice01', 'choice02']);
   await act(async () => {
     finish({ ok: true, value: { rev: 4 } });
   });
-  expect(loadMeetDraft('meeting001')?.likes).toEqual(['choice01', 'choice02']);
-  await advance(1000);
+  expect(loadMeetDraft('meeting001')).toBeNull();
   expect(meetApi.reply).toHaveBeenCalledTimes(2);
   expect(meetApi.reply).toHaveBeenLastCalledWith(
     'meeting001',

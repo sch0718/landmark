@@ -119,7 +119,7 @@ it.each([false, true])(
   },
 );
 
-it('주최자가 출발지를 고쳐 답장 출발지가 비워진 본문을 받으면 원격 출발지를 유지한다', () => {
+it('주최자가 명시적으로 덮어써 답장 출발지가 비워진 본문을 받으면 원격 출발지를 유지한다', () => {
   const seenOrigin = { name: '친구 집 B', lng: 128, lat: 38 };
   const remoteOrigin = { name: '다른 기기 집 C', lng: 127.5, lat: 37.6 };
   const first = merge(library(), state([reply({ origin: seenOrigin })]));
@@ -460,7 +460,7 @@ describe('온라인 상태를 보관한 약속에 합친다', () => {
   });
 
   it.each([{ name: '주최자가 고친 집', lng: 127.5, lat: 37.6 }, null])(
-    '다른 기기 본문에서 고친 출발지 %j를 이미 합친 옛 답장으로 되돌리지 않는다',
+    '다른 기기가 명시적으로 덮어쓰고 옛 답장을 비운 출발지 %j를 유지한다',
     (changed) => {
       const remote = state([reply({ origin: { name: '친구 집', lng: 128, lat: 38 } })]);
       const first = merge(library(), remote);
@@ -490,7 +490,7 @@ describe('온라인 상태를 보관한 약속에 합친다', () => {
   );
 
   it.each([updatedAt, now])(
-    '서버가 옛 답장 출발지를 비워도 이미 합친 출발지를 미전송 수정으로 보지 않는다: %s',
+    '명시적 덮어쓰기로 서버가 옛 답장 출발지를 비워도 이미 합친 출발지를 미전송 수정으로 보지 않는다: %s',
     (replyAt) => {
       const remote = state([reply({ origin: { name: '친구 집', lng: 128, lat: 38 } })]);
       const first = merge(library(), remote);

@@ -101,6 +101,140 @@ async function seed() {
   return body.hostToken;
 }
 
+it('친구 B를 받은 주최자의 자동 저장 전에 친구가 C를 고르면 본문 B를 올려도 답장 C를 보존한다', async () => {
+  const token = await seed();
+  const guestToken = await addReply('person02', home);
+  const received = (await (
+    await handleGet(context('GET', undefined, { token }), deps)
+  ).json()) as OnlineState;
+  const originB = received.replies[0]!.origin!;
+  expect(
+    (
+      await handleReply(
+        context(
+          'PUT',
+          { origin: changed, likes: ['choice01'], times: { choice01: 30 }, docRev: 1 },
+          { token: guestToken },
+        ),
+        deps,
+      )
+    ).status,
+  ).toBe(200);
+  const next = doc({
+    participants: doc().participants.map((p) =>
+      p.id === 'person02' ? { ...p, origin: originB } : p,
+    ),
+  });
+  expect(
+    (await handleUpdate(context('PUT', { doc: next, baseRev: 1 }, { token }), deps)).status,
+  ).toBe(200);
+  expect(await db.prepare('SELECT origin, times FROM meeting_replies').first()).toEqual({
+    origin: JSON.stringify(changed),
+    times: '{"choice01":30}',
+  });
+});
+
+it.each(['요청 전', '배치 직전'] as const)(
+  '명시적 덮어쓰기 대상 B와 다른 친구 D가 %s 도착하면 D를 보존한다',
+  async (timing) => {
+    const token = await seed();
+    const guestToken = await addReply('person02', work);
+    const reply = async () => {
+      expect(
+        (
+          await handleReply(
+            context(
+              'PUT',
+              { origin: changed, likes: ['choice01'], times: { choice01: 30 }, docRev: 1 },
+              { token: guestToken },
+            ),
+            deps,
+          )
+        ).status,
+      ).toBe(200);
+    };
+    if (timing === '요청 전') await reply();
+    else {
+      const batch = db.batch.bind(db);
+      vi.spyOn(db, 'batch').mockImplementationOnce(async (statements) => {
+        await reply();
+        return batch(statements);
+      });
+    }
+    const next = doc({
+      participants: doc().participants.map((p) =>
+        p.id === 'person02' ? { ...p, origin: home } : p,
+      ),
+    });
+    expect(
+      (
+        await handleUpdate(
+          context(
+            'PUT',
+            {
+              doc: next,
+              baseRev: 1,
+              clearReplyOrigins: [{ participantId: 'person02', origin: work }],
+            },
+            { token },
+          ),
+          deps,
+        )
+      ).status,
+    ).toBe(200);
+    expect(await db.prepare('SELECT origin, times FROM meeting_replies').first()).toEqual({
+      origin: JSON.stringify(changed),
+      times: '{"choice01":30}',
+    });
+  },
+);
+
+it('기기 A가 답장 B를 C로 명시적으로 덮어쓰면 기기 B도 본문 C를 유지한다', async () => {
+  const token = await seed();
+  await addReply('person02', work);
+  const originalDoc = doc();
+  const local = buildMeeting({
+    participants: { value: originalDoc.participants, updatedAt: NOW.toISOString() },
+  });
+  const sync = {
+    syncedDoc: originalDoc,
+    docRev: 1,
+    seen: [],
+    hostLikes: null,
+    hostLikesAckRev: null,
+    replyOrigins: { person02: work },
+  };
+  const next = doc({
+    participants: originalDoc.participants.map((p) =>
+      p.id === 'person02' ? { ...p, origin: changed } : p,
+    ),
+  });
+  const clearReplyOrigins = overriddenReplyOrigins(next.participants, sync.replyOrigins);
+  expect(clearReplyOrigins).toEqual([{ participantId: 'person02', origin: work }]);
+  expect(
+    (
+      await handleUpdate(
+        context('PUT', { doc: next, baseRev: 1, clearReplyOrigins }, { token }),
+        deps,
+      )
+    ).status,
+  ).toBe(200);
+  const remote = (await (
+    await handleGet(context('GET', undefined, { token }), deps)
+  ).json()) as OnlineState;
+  expect(remote.replies[0]).toMatchObject({ origin: null, times: null });
+  const merged = mergeOnline(
+    { ...emptyLibrary(), meetings: { [local.id]: local } },
+    local.id,
+    remote,
+    { now: NOW.toISOString(), newId: newToken },
+    sync,
+  );
+  expect(merged.ok).toBe(true);
+  if (merged.ok)
+    expect(merged.lib.meetings![local.id]!.participants.value[1]?.origin).toEqual(changed);
+});
+
 it('본문이 같아도 지정한 답장 출발지와 시간만 비우고 주최자 id는 무시한다', async () => {
   const token = await seed();
   await addReply();
@@ -112,7 +246,10 @@ it('본문이 같아도 지정한 답장 출발지와 시간만 비우고 주최
       {
         doc: doc(),
         baseRev: 1,
-        clearReplyOrigins: ['person01', 'person02'],
+        clearReplyOrigins: [
+          { participantId: 'person01', origin: changed },
+          { participantId: 'person02', origin: changed },
+        ],
       },
       { token },
     ),
@@ -152,7 +289,7 @@ it('출발지 비우기도 같은 batch의 버전 조건 안에서만 적용한�
           {
             doc: doc(),
             baseRev: 1,
-            clearReplyOrigins: ['person02'],
+            clearReplyOrigins: [{ participantId: 'person02', origin: changed }],
           },
           { token },
         ),
@@ -167,21 +304,31 @@ it('출발지 비우기도 같은 batch의 버전 조건 안에서만 적용한�
 });
 
 it.each([
-  { clearReplyOrigins: ['wrong'] },
+  { clearReplyOrigins: ['person02'] },
+  { clearReplyOrigins: [{ participantId: 'wrong', origin: changed }] },
+  { clearReplyOrigins: [{ participantId: 'person02' }] },
+  { clearReplyOrigins: [{ participantId: 'person02', origin: null }] },
+  { clearReplyOrigins: [{ participantId: 'person02', origin: { ...changed, lat: 90 } }] },
   {
-    clearReplyOrigins: Array.from({ length: 11 }, (_, i) => `person${String(i).padStart(2, '0')}`),
+    clearReplyOrigins: Array.from({ length: 11 }, (_, i) => ({
+      participantId: `person${String(i).padStart(2, '0')}`,
+      origin: changed,
+    })),
   },
-])('답장 출발지를 비울 id 형식과 최대 10명 제한을 검사한다: %j', async ({ clearReplyOrigins }) => {
-  const token = await seed();
-  expect(
-    (
-      await handleUpdate(
-        context('PUT', { doc: doc(), baseRev: 1, clearReplyOrigins }, { token }),
-        deps,
-      )
-    ).status,
-  ).toBe(400);
-});
+])(
+  '답장 출발지를 비울 id·출발지 형식과 최대 10명 제한을 검사한다: %j',
+  async ({ clearReplyOrigins }) => {
+    const token = await seed();
+    expect(
+      (
+        await handleUpdate(
+          context('PUT', { doc: doc(), baseRev: 1, clearReplyOrigins }, { token }),
+          deps,
+        )
+      ).status,
+    ).toBe(400);
+  },
+);
 
 async function addReply(
   pid = 'person02',
@@ -733,7 +880,7 @@ describe('약속 고치기와 지우기', () => {
   });
 
   it.each([home, null])(
-    '본문에서 출발지를 %j로 고친 참석자의 답장 출발지와 시간만 비운다',
+    '출발지를 %j로 명시적으로 덮어쓴 참석자의 일치하는 답장 출발지와 시간만 비운다',
     async (origin) => {
       const token = await seed();
       const guestToken = await addReply();
@@ -743,7 +890,15 @@ describe('약속 고치기와 지우기', () => {
         participants: doc().participants.map((p) => (p.id === 'person02' ? { ...p, origin } : p)),
       });
       const response = await handleUpdate(
-        context('PUT', { doc: next, baseRev: 1 }, { token }),
+        context(
+          'PUT',
+          {
+            doc: next,
+            baseRev: 1,
+            clearReplyOrigins: [{ participantId: 'person02', origin: changed }],
+          },
+          { token },
+        ),
         deps,
       );
       expect(response.status).toBe(200);
@@ -810,7 +965,20 @@ describe('약속 고치기와 지우기', () => {
       ),
     });
     expect(
-      (await handleUpdate(context('PUT', { doc: next, baseRev: 1 }, { token }), deps)).status,
+      (
+        await handleUpdate(
+          context(
+            'PUT',
+            {
+              doc: next,
+              baseRev: 1,
+              clearReplyOrigins: [{ participantId: 'person02', origin: changed }],
+            },
+            { token },
+          ),
+          deps,
+        )
+      ).status,
     ).toBe(409);
     expect(await db.prepare('SELECT origin, times FROM meeting_replies').first()).toEqual({
       origin: JSON.stringify(changed),

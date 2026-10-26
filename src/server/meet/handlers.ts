@@ -7,7 +7,7 @@ import {
   type OnlineReply,
   type OnlineState,
 } from '../../domain/meeting/online-doc';
-import { MeetingId, MeetingMemberId, MeetingName } from '../../schema/meeting';
+import { MeetingId, MeetingMemberId, MeetingName, OriginSchema } from '../../schema/meeting';
 import { LIBRARY_LIMITS } from '../../schema/library-base';
 import { safeParse } from '../../schema/parse';
 import { requestOrigin } from '../handler';
@@ -49,7 +49,9 @@ const updateSchema = Schema.Struct({
     Schema.Array(MeetingMemberId).check(Schema.isMaxLength(LIBRARY_LIMITS.meetingParticipantsMax)),
   ),
   clearReplyOrigins: Schema.optionalKey(
-    Schema.Array(MeetingMemberId).check(Schema.isMaxLength(LIBRARY_LIMITS.meetingParticipantsMax)),
+    Schema.Array(Schema.Struct({ participantId: MeetingMemberId, origin: OriginSchema })).check(
+      Schema.isMaxLength(LIBRARY_LIMITS.meetingParticipantsMax),
+    ),
   ),
 });
 
@@ -390,25 +392,15 @@ export function handleUpdate(ctx: MeetContext, deps: MeetDeps): Promise<Response
           )
           .bind(id, pid, id, baseRev, row.rev),
       ]);
-      const clearOrigins = new Set(clearReplyOrigins.filter((pid) => pid !== hostId));
-      for (const participant of doc.participants) {
-        const previous = old.participants.find((p) => p.id === participant.id);
-        if (
-          participant.id !== hostId &&
-          previous &&
-          JSON.stringify(previous.origin) !== JSON.stringify(participant.origin)
-        ) {
-          clearOrigins.add(participant.id);
-        }
-      }
-      for (const pid of clearOrigins) {
-        // 주최자가 고친 출발지를 쓰도록 옛 답장과 그 출발지의 시간을 함께 비운다.
+      for (const { participantId, origin: replyOrigin } of clearReplyOrigins) {
+        if (participantId === hostId) continue;
+        // 주최자가 본 답장만 비운다. 그 뒤 친구가 고른 출발지와 시간은 보존한다.
         cleanup.push(
           db
             .prepare(
-              `UPDATE meeting_replies SET origin = NULL, times = NULL WHERE meeting_id = ? AND participant_id = ? AND ${guard}`,
+              `UPDATE meeting_replies SET origin = NULL, times = NULL WHERE meeting_id = ? AND participant_id = ? AND origin = ? AND ${guard}`,
             )
-            .bind(id, pid, id, baseRev, row.rev),
+            .bind(id, participantId, JSON.stringify(replyOrigin), id, baseRev, row.rev),
         );
       }
       const oldCandidates = new Map(old.candidates.map((c) => [c.id, c]));

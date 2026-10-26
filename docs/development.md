@@ -103,7 +103,7 @@ curl -H 'Origin: http://localhost:8788' 'http://localhost:8788/api/place?url=htt
 | --- | --- | --- |
 | `POST /api/meet` | `{ doc, turnstile, hostToken }`(토큰은 브라우저가 만듦) 올리기 → `201 { id, rev, docRev, hostToken, created: true }`, 같은 토큰 재시도 → 현재 버전의 `200 { id, rev, docRev, hostToken, created: false }`(처음 본문 보존, 다른 토큰은 `409`) | 출처·Turnstile·일 한도 |
 | `GET /api/meet/:id?since=<rev>` | `200 { rev, docRev, doc, replies, originNames? }`, 버전이 같으면 본문 없는 `304` | 링크 소지자 |
-| `PUT /api/meet/:id` | `{ doc, baseRev, removed?, clearReplyOrigins? }` 갱신·확정·확정 취소 → `200 { rev, docRev }`. `removed?`: 지운 답장 전용 참석자 id 배열(최대 10명) | 주최자 |
+| `PUT /api/meet/:id` | `{ doc, baseRev, removed?, clearReplyOrigins? }` 갱신·확정·확정 취소 → `200 { rev, docRev }`. `removed?`: 지운 답장 전용 참석자 id 배열(최대 10명). `clearReplyOrigins?`: `Array<{ participantId, origin: Origin }>`(최대 10명), 주최자가 본 답장 출발지 | 주최자 |
 | `DELETE /api/meet/:id` | 서버 사본·답장·토큰 삭제 → `204` | 주최자 |
 | `POST /api/meet/:id/claim` | `{ participantId }` 또는 `{ newName }`로 참석자 차지 → `200 { participantId, guestToken, rev }` | 링크 소지자·일 한도 |
 | `PUT /api/meet/:id/reply` | `{ likes, origin?, times?, docRev? }` 저장 → `200 { rev, timesDropped? }` | 해당 참석자·주최자 |
@@ -116,15 +116,15 @@ curl -H 'Origin: http://localhost:8788' 'http://localhost:8788/api/place?url=htt
 - 모든 약속 API 응답은 `Cache-Control: private, no-store`이며 기존 Cache API에 넣지 않습니다. 토큰은 `Authorization: Bearer …`로 보내고 DB에는 SHA-256 해시만 둡니다. 주최자 링크는 `/meet/<id>#h=<토큰>`이며 해시를 읽은 뒤 `history.replaceState`로 지웁니다. 토큰·IP 원문을 로그·DB·URL 질의 문자열에 남기지 않습니다.
 - 첫 올리기 전에 `pendingHostToken`과 처음 시도한 본문을 `syncedDoc`에 저장합니다. `created: false`로 복구하면 처음 본문을 기준으로 두고 그 뒤 고친 내용은 자동 갱신으로 올립니다. 주최자 재발급은 `syncedDoc`를 바꾸지 않고 새 토큰을 `pendingHostToken`에 먼저 저장하며, 응답 유실 뒤 다시 발급하거나 확인에서 401을 받으면 같은 토큰으로 한 번 재시도합니다. 성공하면 대기 토큰을 주최자 토큰으로 옮깁니다.
 - 약속 읽기에서 틀린 토큰은 `401 UNAUTHORIZED`이며, 토큰 헤더가 없으면 링크 소지자용으로 좌표를 가린 응답을 줍니다.
-- 본문의 이동수단·일시·후보 id별 좌표(추가·삭제 포함)가 바뀌면 같은 `doc_rev` 조건의 배치에서 답장 `times`를 `NULL`로 비웁니다. 친구 화면은 어느 줄이든 답장 `times`가 있으면 쓰고 `null`이면 본문 시간을 씁니다. 자기 답장에 출발지가 있으면 초안 없이도 자기 줄을 재계산해 표시하고 값이 다르면 자동 저장합니다. 답장 `times`에는 계산에 쓴 `docRev`를 보내며, 없거나 현재 버전과 다르면 시간만 버리고 `timesDropped: true`를 돌려줍니다(다음 확인 뒤 재계산). 출발지는 새로 고를 수만 있고 되돌리기나 `origin: null` 전송은 없습니다.
+- 본문의 이동수단·일시·후보 id별 좌표(추가·삭제 포함)가 바뀌면 같은 `doc_rev` 조건의 배치에서 답장 `times`만 `NULL`로 비우고 출발지는 보존합니다. 친구 화면은 어느 줄이든 답장 `times`가 있으면 쓰고 `null`이면 본문 시간을 씁니다. 자기 답장에 출발지가 있으면 초안 없이도 자기 줄을 재계산해 표시하고 값이 다르면 자동 저장합니다. 답장 `times`에는 계산에 쓴 `docRev`를 보내며, 없거나 현재 버전과 다르면 시간만 버리고 `timesDropped: true`를 돌려줍니다(다음 확인 뒤 재계산). 출발지는 새로 고를 수만 있고 되돌리기나 `origin: null` 전송은 없습니다.
 - `replyOrigins[id]`는 이 기기가 마지막으로 받은 그 참석자의 답장 출발지입니다. 병합·본문 수신 모두 null이 아니고 이 기록과 다른 답장 출발지만 적용하고 기록을 바꿉니다. 같은 출발지의 좋아요 답장은 출발지를 건드리지 않습니다.
-- 보관함 출발지가 `replyOrigins[id]`(있을 때)와 다르면 주최자의 덮어쓰기입니다. 본문이 `baseline`과 같아도 `clearReplyOrigins: [id, …]`(최대 10명, 주최자 id 제외)를 PUT에 보내며, 서버는 같은 배치·버전 조건에서 답장 `origin`·`times`를 `NULL`로 비웁니다. 성공한 id의 기록만 지우되 전송 중 새로 받은 출발지 기록은 보존합니다.
+- 보관함 출발지가 `replyOrigins[id]`(있을 때)와 다르면 주최자의 명시적 덮어쓰기입니다. 본문이 `baseline`과 같아도 `clearReplyOrigins: [{ participantId, origin }]`(최대 10명, 주최자 id 무시)를 PUT에 보냅니다. `origin`은 주최자가 본 답장 출발지(`replyOrigins[id]`)입니다. 서버는 같은 배치·버전 조건에서 현재 답장 출발지가 이 값과 같을 때만 답장 `origin`·`times`를 `NULL`로 비웁니다. 친구가 그 뒤 새로 고른 출발지는 보존하며, 본문의 출발지가 바뀌었다는 이유만으로 답장 출발지를 비우지 않습니다. 성공한 id의 기록만 지우되 전송 중 새로 받은 출발지 기록은 보존합니다.
 - 답장 `updated_at`은 매 시도에서 `max(서버 현재 시각, 그 참석자의 기존 시각 + 1ms)`로 저장합니다(기존 줄이 없으면 현재 시각). 주최자 기기는 받은 답장 시각이 보관함 `sentAt`과 다르면 크고 작음과 무관하게 좋아요를 반영합니다.
 - 주최자 좋아요도 1초 모아 `reply`로 보내고 첫 생성 직후 기존 좋아요를 전송하며, 실패하면 다음 확인 때 다시 보냅니다. 주최자 토큰은 본문 첫 참석자의 이름·좋아요 줄만 쓰며 `origin`·`times`는 무시합니다.
 - 친구 응답에서는 남의 본문·답장 출발지 좌표를 `null`로 가리고, 출발지 이름은 `originNames`, 소요시간은 `times`로 줍니다. 참석자 자신의 좌표는 남기고, 주최자는 전체를 받습니다.
 - UTC 날짜·IP 해시별 일 한도는 올리기 20, 참석자 고르기 60, 답장 저장 600, 본문 바꾸기 300입니다. 읽기는 없는 약속(`404`)·만료된 약속(`410`)만 5,000번까지 세고, 정상 읽기·`304`는 카운터를 쓰지 않습니다. 초과하면 `429 RATE_LIMITED`입니다.
 - 서버 사본은 `max(약속 일시(한국 시각), 마지막 변경) + 30일`에 만료됩니다. 읽을 때 만료를 판단하고, 새 약속 올리기 요청에서 만료 사본을 최대 20개씩 답장·토큰과 함께 지웁니다. 주최자가 먼저 지우면 화면은 `공유 끝남`이 됩니다. 보관함 약속과 이미 받은 답장은 남습니다.
-- 화면이 보이고 온라인일 때 10초마다 확인합니다. 숨김·오프라인에서는 멈추며 복귀하면 바로 확인하고, 실패가 이어지면 간격을 30초·60초로 늘립니다. 친구의 변경은 1초 모아 자동 저장하며, 실패한 초안은 다음 확인 때 다시 보냅니다.
+- 화면이 보이고 온라인일 때 10초마다 확인합니다. 숨김·오프라인에서는 멈추며 복귀하면 바로 확인하고, 실패가 이어지면 간격을 30초·60초로 늘립니다. 친구의 변경은 1초 모아 자동 저장하며, 확인 중 건너뛴 저장은 표시를 남겼다가 확인 완료(성공·304·실패) 직후 최신 입력으로 다시 시도합니다. 화면이 숨겨질 때도 남은 저장을 한 번 시도합니다. 실패한 초안은 다음 확인 때 다시 보냅니다.
 - 보관함·백업 형식은 그대로입니다. 토큰과 마지막 확인 버전·본문 버전·마지막 동기화 본문(64KB 이내)은 별도 키 `tripmap:meet-online:v1`에 두며 백업에 넣지 않습니다. 다른 기기의 주최자 연결은 메뉴의 `다른 기기에서 열기`로 링크를 공유·복사합니다. 다시 발급하면 이전 주최자 링크는 철회됩니다.
 - 온라인 코드와 Turnstile 로더는 지연 로딩되는 약속 화면에서만 가져옵니다. Turnstile은 처음 올릴 때 불러오며, `yarn size --require-lazy …`로 첫 로딩 예산을 확인합니다.
 
