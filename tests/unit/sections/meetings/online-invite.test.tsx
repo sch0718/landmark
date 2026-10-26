@@ -1210,6 +1210,43 @@ it.each(['ended', 'not-found'] as const)(
   },
 );
 
+it('주최자 링크의 옛 확인도 저장 완료한 주최자 좋아요 기준을 되돌리지 않는다', async () => {
+  const meeting = buildMeeting({
+    replies: f({ person01: { likes: ['choice01'], sentAt: now, receivedAt: now } }),
+  });
+  library = { ...library, meetings: { meeting001: meeting } };
+  writeOnline('meeting001', {
+    hostToken,
+    lastRev: 1,
+    docRev: 1,
+    syncedDoc: docFromMeeting(meeting, {}, 'min'),
+    hostLikes: ['choice01'],
+    hostLikesAckRev: 3,
+  });
+  remote = {
+    doc: remote.doc,
+    docRev: remote.docRev,
+    rev: 2,
+    replies: [
+      {
+        participantId: 'person01',
+        name: '주최자',
+        origin: null,
+        likes: [],
+        times: null,
+        updatedAt: now,
+      },
+    ],
+  };
+  await setup(`/meet/meeting001#h=${hostToken}`);
+  expect(library.meetings?.meeting001?.replies.value.person01?.likes).toEqual(['choice01']);
+  expect(readOnline('meeting001')).toMatchObject({
+    hostLikes: ['choice01'],
+    hostLikesAckRev: 3,
+    lastRev: 2,
+  });
+});
+
 it('주최자 링크에서 미전송 좋아요를 보존해도 서버 좋아요 기준을 남긴다', async () => {
   library = {
     ...library,

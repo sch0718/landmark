@@ -15,6 +15,7 @@ export type OnlineRecord = {
   hostToken?: string;
   pendingHostToken?: string;
   hostLikes?: string[];
+  hostLikesAckRev?: number;
   guest?: { participantId: string; token: string };
   // 주최자 동기화 기준은 참석자 전용 기록에는 두지 않는다.
   lastRev?: number;
@@ -37,6 +38,9 @@ const recordSchema = Schema.Struct({
     ),
   ),
   guest: Schema.optionalKey(Schema.Struct({ participantId: MeetingMemberId, token: nonempty })),
+  hostLikesAckRev: Schema.optionalKey(
+    Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(1)),
+  ),
   lastRev: Schema.optionalKey(
     Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0)),
   ),

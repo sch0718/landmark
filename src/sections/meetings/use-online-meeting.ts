@@ -40,6 +40,17 @@ function removedReplyOnly(doc: MeetingDoc, record: OnlineRecord): string[] {
   return (record.seen ?? []).filter((id) => !remaining.has(id));
 }
 
+function computeConditions(meeting: Meeting): string {
+  return JSON.stringify({
+    origins: meeting.participants.value
+      .filter((p) => p.origin !== null)
+      .map((p) => [p.id, p.origin]),
+    candidates: meeting.candidates.value,
+    mode: meeting.mode.value,
+    at: meeting.at.value,
+  });
+}
+
 /** 비동기 준비로 사용자 동작이 끊기면 새 동작에서 같은 링크를 보낸다. */
 async function shareOnlineLink(url: string, title: string) {
   if ((await shareLink(url, title, { quietFailure: true })) === 'failed')
@@ -95,6 +106,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
   const retry = useRef(false);
   const unauthorizedNotified = useRef(false);
   const deferred = useRef(false);
+  const awaitingCompute = useRef(false);
   const baseline = useRef<string | null>(null);
   const hostReplyInFlight = useRef(false);
   const hostReplyDeferred = useRef(false);
@@ -175,7 +187,12 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
         return false;
       }
       const fresh = currentRecord();
-      if (fresh && !fresh.ended) save({ ...fresh, hostLikes: [...likes] });
+      if (fresh && !fresh.ended)
+        save({
+          ...fresh,
+          hostLikes: [...likes],
+          hostLikesAckRev: Math.max(fresh.hostLikesAckRev ?? 0, response.value.rev),
+        });
       hostReplyRetry.current = false;
       hostReplyDeferred.current = false;
       if (active.current) setUploaded((count) => count + 1);
@@ -205,6 +222,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
         docRev: current?.docRev ?? null,
         seen: current?.seen ?? [],
         hostLikes: current?.hostLikes ?? null,
+        hostLikesAckRev: current?.hostLikesAckRev ?? null,
         replyOrigins: current?.replyOrigins,
       };
       const before = lib.meetings?.[meeting.id];
@@ -254,6 +272,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
     if (!needsUpload(doc, current)) {
       retry.current = false;
       deferred.current = false;
+      awaitingCompute.current = false;
       return true;
     }
     retry.current = true;
@@ -273,6 +292,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
       if (!needsUpload(doc, current)) {
         retry.current = false;
         deferred.current = false;
+        awaitingCompute.current = false;
         return true;
       }
     }
@@ -313,6 +333,13 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
         return false;
       }
       current = currentRecord()!;
+      if (computeConditions(input.meeting) !== computeConditions(merged)) {
+        // 새 출발지의 계산이 끝난 뒤 받은 본문 버전으로 이어 올린다.
+        save({ ...current, docRev: Math.max(current.docRev ?? 0, remote.value.docRev) });
+        awaitingCompute.current = true;
+        retry.current = true;
+        return false;
+      }
       doc = docFromMeeting(merged, latest.current.compute.times, latest.current.compute.unit);
       removed = removedReplyOnly(doc, current);
       sentReplyOrigins = current.replyOrigins;
@@ -357,6 +384,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
     baseline.current = JSON.stringify(doc);
     retry.current = false;
     deferred.current = false;
+    awaitingCompute.current = false;
     if (active.current) setUploaded((count) => count + 1);
     markOk();
     return true;
@@ -446,7 +474,11 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
   const autoUpload = useEffectEvent(async () => {
     const signal = lifecycle.current?.signal;
     if (!isCurrent(signal)) return;
-    if (deferred.current) return;
+    if (deferred.current) {
+      if (!awaitingCompute.current || latest.current.compute.pending) return;
+      awaitingCompute.current = false;
+      deferred.current = false;
+    }
     if (inFlight.current) {
       retry.current = true;
       return;

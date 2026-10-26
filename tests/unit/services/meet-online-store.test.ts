@@ -70,6 +70,7 @@ describe('온라인 약속 연결 기록', () => {
       hostToken: 'host',
       pendingHostToken: 'p'.repeat(43),
       hostLikes: ['choice01'],
+      hostLikesAckRev: 8,
       guest: { participantId: 'person02', token: 'guest' },
       lastRev: 7,
       docRev: 3,

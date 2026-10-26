@@ -10,6 +10,7 @@ type OnlineSync = {
   docRev: number | null;
   seen: readonly string[];
   hostLikes: readonly string[] | null;
+  hostLikesAckRev: number | null;
   replyOrigins?: Record<string, Origin>;
 };
 type OnlineMergeResult =
@@ -120,6 +121,7 @@ export function mergeOnline(
     // 아직 올리지 않은 삭제는 다른 기기 본문과 답장으로 되살리지 않는다.
     if (locallyRemoved.has(pid)) continue;
     if (pid === hostId) {
+      if (sync.hostLikesAckRev !== null && state.rev < sync.hostLikesAckRev) continue;
       const previous = next.replies.value[pid];
       if (
         previous === undefined ||

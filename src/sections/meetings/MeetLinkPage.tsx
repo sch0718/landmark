@@ -150,12 +150,13 @@ function HostLink({ id, token }: { id: string; token: string }) {
         const stored = storeMeeting(lib, meeting);
         if (!stored.ok) return stored;
         const sync = restored
-          ? { syncedDoc: null, docRev: null, seen: [], hostLikes: null }
+          ? { syncedDoc: null, docRev: null, seen: [], hostLikes: null, hostLikesAckRev: null }
           : {
               syncedDoc: current?.syncedDoc ?? null,
               docRev: current?.docRev ?? null,
               seen: current?.seen ?? [],
               hostLikes: current?.hostLikes ?? null,
+              hostLikesAckRev: current?.hostLikesAckRev ?? null,
               replyOrigins: current?.replyOrigins,
             };
         if (shouldAdoptRemoteDoc(meeting, state, sync)) adopted = true;
@@ -184,6 +185,9 @@ function HostLink({ id, token }: { id: string; token: string }) {
         ...(replyOrigins === undefined ? {} : { replyOrigins }),
         hostLikes: [
           ...(hostLikes ??
+            (state.rev < (current?.hostLikesAckRev ?? 0)
+              ? (current?.hostLikes ?? [])
+              : undefined) ??
             state.replies.find((reply) => reply.participantId === state.doc.participants[0]!.id)
               ?.likes ??
             []),

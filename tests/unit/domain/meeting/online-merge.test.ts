@@ -62,6 +62,7 @@ const merge = (
     docRev,
     replyOrigins,
     hostLikes: null,
+    hostLikesAckRev: null,
     seen: [],
   });
   expect(JSON.stringify(lib)).toBe(original);
@@ -104,6 +105,7 @@ it.each([false, true])(
         docRev: 1,
         seen: [],
         hostLikes: null,
+        hostLikesAckRev: null,
         replyOrigins: { person01: seenOrigin },
       },
     );
@@ -180,6 +182,7 @@ it('친구 출발지를 합친 뒤에도 다른 주최자 기기의 확정을 �
       docRev: 1,
       seen: [],
       hostLikes: null,
+      hostLikesAckRev: null,
       replyOrigins: { person01: changed },
     },
   );
@@ -245,10 +248,49 @@ it.each([
     meeting.id,
     state([reply({ participantId: 'host0001', likes: remote })]),
     ctx,
-    { syncedDoc: docFromMeeting(meeting, {}, 'min'), docRev: 1, seen: [], hostLikes: baseline },
+    {
+      syncedDoc: docFromMeeting(meeting, {}, 'min'),
+      docRev: 1,
+      seen: [],
+      hostLikes: baseline,
+      hostLikesAckRev: null,
+    },
   );
   expect(result.ok).toBe(true);
   if (result.ok) expect(mergedMeeting(result.lib).replies.value.host0001?.likes).toEqual(expected);
+});
+
+it.each([2, 3])('저장 확인 rev 3보다 오래된 상태에서만 주최자 좋아요를 건너뛴다: rev %s', (rev) => {
+  const local = buildMeeting({
+    ...meeting,
+    replies: {
+      value: { host0001: { likes: ['choice01'], sentAt: updatedAt, receivedAt: updatedAt } },
+      updatedAt,
+    },
+  });
+  const result = mergeOnline(
+    library(local),
+    meeting.id,
+    {
+      ...state([reply({ participantId: 'host0001', likes: [] }), reply()]),
+      rev,
+    },
+    ctx,
+    {
+      syncedDoc: docFromMeeting(local, {}, 'min'),
+      docRev: 1,
+      seen: [],
+      hostLikes: ['choice01'],
+      hostLikesAckRev: 3,
+    },
+  );
+  expect(result.ok).toBe(true);
+  if (!result.ok) return;
+  expect(mergedMeeting(result.lib).replies.value.host0001?.likes).toEqual(
+    rev < 3 ? ['choice01'] : [],
+  );
+  expect(mergedMeeting(result.lib).replies.value.person01?.likes).toEqual(['choice01']);
+  expect(result.hostLikes).toEqual(rev < 3 ? undefined : []);
 });
 
 describe('온라인 상태를 보관한 약속에 합친다', () => {
@@ -259,6 +301,7 @@ describe('온라인 상태를 보관한 약속에 합친다', () => {
           syncedDoc: docFromMeeting(meeting, {}, 'min'),
           docRev: 1,
           hostLikes: null,
+          hostLikesAckRev: null,
           seen: [],
         }),
       ).toEqual({
@@ -348,7 +391,13 @@ describe('온라인 상태를 보관한 약속에 합친다', () => {
       meeting.id,
       state([reply({ origin, likes: [] })]),
       { ...ctx, now: '2026-10-27T00:00:00.000Z' },
-      { syncedDoc: docFromMeeting(meeting, {}, 'min'), docRev: 1, hostLikes: null, seen: [] },
+      {
+        syncedDoc: docFromMeeting(meeting, {}, 'min'),
+        docRev: 1,
+        hostLikes: null,
+        hostLikesAckRev: null,
+        seen: [],
+      },
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -598,6 +647,7 @@ it('원격 후보 추가와 확정, 새 답장을 한 번에 반영한다', () =
     syncedDoc: docFromMeeting(meeting, {}, 'min'),
     docRev: null,
     hostLikes: null,
+    hostLikesAckRev: null,
     seen: [],
   });
   expect(result.ok).toBe(true);
@@ -625,6 +675,7 @@ it.each(['title', 'at', 'mode', 'participants', 'candidates', 'decided'] as cons
     const remote = { ...initial, doc: { ...initial.doc, title: '원격 제목' } };
     const result = mergeOnline(library(local), meeting.id, remote, ctx, {
       hostLikes: null,
+      hostLikesAckRev: null,
       seen: [],
       syncedDoc: docFromMeeting(meeting, {}, 'min'),
       docRev: null,
@@ -646,6 +697,7 @@ it('지금 후보에 없는 확정과 기존 답장 좋아요를 저장 전에 �
   };
   const result = mergeOnline(library(local), meeting.id, state([]), ctx, {
     hostLikes: null,
+    hostLikesAckRev: null,
     seen: [],
     syncedDoc: docFromMeeting(meeting, {}, 'min'),
     docRev: 1,
@@ -680,6 +732,7 @@ it('서버 본문을 받을 때 이미 받은 답장 전용 참석자도 보존�
   const first = merge(library(), remote);
   const result = mergeOnline(first, meeting.id, { ...remote, docRev: 2 }, ctx, {
     hostLikes: null,
+    hostLikesAckRev: null,
     seen: ['new00001'],
     syncedDoc: docFromMeeting(meeting, {}, 'min'),
     docRev: 1,
@@ -711,6 +764,7 @@ it('서버 본문을 받으며 복원하는 답장 전용 참석자도 같은 �
     docRev: 1,
     seen: ['new00001'],
     hostLikes: null,
+    hostLikesAckRev: null,
   });
   expect(result.ok).toBe(true);
   if (!result.ok) return;
@@ -774,6 +828,7 @@ it('이미 합친 뒤 지운 답장 전용 참석자와 답장을 되살리지 �
     syncedDoc: docFromMeeting(meeting, {}, 'min'),
     docRev: 1,
     hostLikes: null,
+    hostLikesAckRev: null,
     seen: ['new00001'],
   });
   expect(result.ok).toBe(true);
@@ -792,6 +847,7 @@ it('처음 보는 답장 전용 참석자를 더하고 id를 결과로 알린다
       syncedDoc: docFromMeeting(meeting, {}, 'min'),
       docRev: 1,
       hostLikes: null,
+      hostLikesAckRev: null,
       seen: [],
     },
   );
@@ -818,7 +874,13 @@ it('다른 기기 본문에 포함돼도 올리기 전 지운 답장 전용 참�
       doc: { ...remote.doc, title: '다른 기기 제목', participants: first.participants.value },
     },
     ctx,
-    { syncedDoc: remote.doc, docRev: 1, seen: ['new00001'], hostLikes: null },
+    {
+      syncedDoc: remote.doc,
+      docRev: 1,
+      seen: ['new00001'],
+      hostLikes: null,
+      hostLikesAckRev: null,
+    },
   );
   expect(result.ok).toBe(true);
   if (!result.ok) return;
@@ -843,6 +905,7 @@ it('답장 출발지를 적용한 참석자별로 기록하고 없어진 참석�
     syncedDoc: docFromMeeting(meeting, {}, 'min'),
     docRev: 1,
     hostLikes: null,
+    hostLikesAckRev: null,
     seen: [],
     replyOrigins: { removed1: origin },
   });
