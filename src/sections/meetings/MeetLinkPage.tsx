@@ -108,10 +108,26 @@ function HostLink({ id, token }: { id: string; token: string }) {
         setError('주최자 링크가 더 이상 쓸 수 없어요');
         return;
       }
+      const outdated = (current = readOnline(id)) =>
+        state.rev < (current?.lastRev ?? 0) ||
+        (current?.hostToken !== undefined &&
+          current.hostToken !== token &&
+          (current.lastRev ?? 0) >= state.rev);
+      if (outdated()) {
+        void navigate(paths.meeting(id), { replace: true });
+        return;
+      }
       let adopted = false;
+      let skipped = false;
       let addedReplyOnly: string[] = [];
       let hostLikes: string[] | undefined;
       const result = await run((lib, ctx) => {
+        const current = readOnline(id);
+        // 보관함 연산을 기다리는 동안 갱신된 기록과 새 토큰도 지킨다.
+        if (!active || outdated(current)) {
+          skipped = true;
+          return lib;
+        }
         const before = lib.meetings?.[id];
         if (!before && Object.keys(lib.meetings ?? {}).length >= LIBRARY_LIMITS.meetingsMax)
           return meetingFailure('meetings-full');
@@ -132,7 +148,6 @@ function HostLink({ id, token }: { id: string; token: string }) {
         };
         const stored = storeMeeting(lib, meeting);
         if (!stored.ok) return stored;
-        const current = readOnline(id);
         const sync = restored
           ? { syncedDoc: null, docRev: null, seen: [], hostLikes: null }
           : {
@@ -154,8 +169,13 @@ function HostLink({ id, token }: { id: string; token: string }) {
         setError('저장하지 못했어요. 다시 시도해 주세요');
         return;
       }
+      const current = readOnline(id);
+      if (skipped || outdated(current)) {
+        void navigate(paths.meeting(id), { replace: true });
+        return;
+      }
       const record = {
-        ...readOnline(id),
+        ...current,
         hostToken: token,
         lastRev: state.rev,
         hostLikes: [
@@ -167,12 +187,14 @@ function HostLink({ id, token }: { id: string; token: string }) {
         ...(addedReplyOnly.length === 0
           ? {}
           : {
-              seen: rememberReplyOnly(readOnline(id)?.seen ?? [], addedReplyOnly, [
+              seen: rememberReplyOnly(current?.seen ?? [], addedReplyOnly, [
                 ...state.doc.participants.map((p) => p.id),
                 ...state.replies.map((r) => r.participantId),
               ]),
             }),
-        ...(!adopted ? {} : { docRev: state.docRev, syncedDoc: state.doc }),
+        ...(!adopted || state.docRev < (current?.docRev ?? 0)
+          ? {}
+          : { docRev: state.docRev, syncedDoc: state.doc }),
       };
       delete record.ended;
       writeOnline(id, record);

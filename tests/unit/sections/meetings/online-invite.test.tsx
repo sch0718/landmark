@@ -16,6 +16,7 @@ import { buildMeeting } from '../../../fixtures/builders';
 type LibraryOp = Parameters<ReturnType<typeof useLibraryAction>['run']>[0];
 let library: Library;
 let remote: OnlineState;
+let runWait: { before?: Promise<void>; after?: Promise<void> };
 const now = '2026-10-26T01:00:00.000Z';
 const token = 'g'.repeat(43);
 const hostToken = 'h'.repeat(43);
@@ -52,6 +53,7 @@ vi.mock('src/services/meet-online/client', () => ({
 vi.mock('src/sections/meetings/use-meeting', () => ({
   useMeeting: () => ({
     run: async (op: LibraryOp) => {
+      if (runWait.before) await runWait.before;
       const out = op(library, {
         now,
         newId: () => {
@@ -60,6 +62,7 @@ vi.mock('src/sections/meetings/use-meeting', () => ({
       });
       if ('ok' in out && !out.ok) return out;
       library = 'ok' in out ? out.lib : out;
+      if (runWait.after) await runWait.after;
       return { ok: true };
     },
   }),
@@ -94,6 +97,7 @@ beforeEach(() => {
   vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
   vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(true);
   library = emptyLibrary();
+  runWait = {};
   const meeting = buildMeeting({
     participants: f([
       { id: 'person01', name: '주최자', origin: null },
@@ -994,6 +998,69 @@ it('주최자 링크 재연결도 올리지 않은 로컬 본문과 버전을 �
   expect(library.meetings?.meeting001?.title.value).toBe('미전송 제목');
   expect(readOnline('meeting001')).toMatchObject({ docRev: 1, syncedDoc, lastRev: 3 });
 });
+
+it.each([
+  ...['응답', '보관함 연산', '저장 완료'].flatMap((stage) => [
+    { stage, lastRev: 5, savedToken: 'n'.repeat(43) },
+    { stage, lastRev: 5, savedToken: hostToken },
+    { stage, lastRev: 2, savedToken: 'n'.repeat(43) },
+  ]),
+])(
+  '늦은 주최자 링크 응답은 더 새 기록과 같은 버전의 새 토큰을 지킨다: %j',
+  async ({ stage, lastRev, savedToken }) => {
+    const syncedDoc = remote.doc;
+    writeOnline('meeting001', { hostToken, lastRev: 1, docRev: 1, syncedDoc });
+    const late: OnlineState = {
+      rev: 2,
+      docRev: 1,
+      doc: syncedDoc,
+      replies: [
+        {
+          participantId: 'person01',
+          name: '주최자',
+          origin: null,
+          likes: ['choice02'],
+          times: null,
+          updatedAt: now,
+        },
+      ],
+    };
+    let finish!: () => void;
+    const waiting = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    if (stage === '보관함 연산') runWait.before = waiting;
+    if (stage === '저장 완료') runWait.after = waiting;
+    vi.mocked(meetApi.get).mockImplementationOnce(async () => {
+      if (stage === '응답') await waiting;
+      return { ok: true, value: late };
+    });
+    const router = await setup(`/meet/meeting001#h=${hostToken}`);
+    const latestMeeting = buildMeeting({
+      participants: f(syncedDoc.participants),
+      candidates: f(syncedDoc.candidates),
+      replies: f({ person01: { likes: ['choice01'], sentAt: now, receivedAt: now } }),
+    });
+    library = { ...library, meetings: { meeting001: latestMeeting } };
+    const latestLibrary = library;
+    const record = {
+      hostToken: savedToken,
+      lastRev,
+      docRev: 1,
+      syncedDoc,
+      hostLikes: ['choice01'],
+    };
+    // 링크 조회를 기다리는 동안 다른 탭에서 동기화하고 토큰을 다시 발급한 상태다.
+    writeOnline('meeting001', record);
+    await act(async () => {
+      finish();
+    });
+    expect(router.state.location.pathname).toBe('/meetings/meeting001');
+    expect(library).toBe(latestLibrary);
+    expect(library.meetings?.meeting001?.replies.value.person01?.likes).toEqual(['choice01']);
+    expect(readOnline('meeting001')).toEqual(record);
+  },
+);
 
 it('보관함에서 지운 약속도 유효한 주최자 링크로 다시 담는다', async () => {
   library = { ...library, meetings: { meeting001: buildMeeting({ deletedAt: now }) } };

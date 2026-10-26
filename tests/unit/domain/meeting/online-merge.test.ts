@@ -275,6 +275,77 @@ describe('온라인 상태를 보관한 약속에 합친다', () => {
     expect(next.replies.value.person01).toEqual(mergedMeeting(first).replies.value.person01);
   });
 
+  it.each([{ name: '주최자가 고친 집', lng: 127.5, lat: 37.6 }, null])(
+    '다른 기기 본문에서 고친 출발지 %j를 이미 합친 옛 답장으로 되돌리지 않는다',
+    (changed) => {
+      const remote = state([reply({ origin: { name: '친구 집', lng: 128, lat: 38 } })]);
+      const first = merge(library(), remote);
+      const next = mergedMeeting(
+        merge(first, {
+          ...remote,
+          rev: 2,
+          docRev: 2,
+          doc: {
+            ...remote.doc,
+            participants: remote.doc.participants.map((p) =>
+              p.id === 'person01' ? { ...p, origin: changed } : p,
+            ),
+          },
+        }),
+      );
+      expect(next.participants.value[1]?.origin).toEqual(changed);
+      expect(next.replies.value.person01).toEqual(mergedMeeting(first).replies.value.person01);
+    },
+  );
+
+  it.each([updatedAt, now])(
+    '서버가 옛 답장 출발지를 비워도 이미 합친 출발지를 미전송 수정으로 보지 않는다: %s',
+    (replyAt) => {
+      const remote = state([reply({ origin: { name: '친구 집', lng: 128, lat: 38 } })]);
+      const first = merge(library(), remote);
+      const changed = { name: '주최자가 고친 집', lng: 127.5, lat: 37.6 };
+      const next = mergedMeeting(
+        merge(first, {
+          ...remote,
+          rev: 2,
+          docRev: 2,
+          replies: [reply({ origin: null, updatedAt: replyAt })],
+          doc: {
+            ...remote.doc,
+            participants: remote.doc.participants.map((p) =>
+              p.id === 'person01' ? { ...p, origin: changed } : p,
+            ),
+          },
+        }),
+      );
+      expect(next.participants.value[1]?.origin).toEqual(changed);
+    },
+  );
+
+  it('답장 출발지를 합친 뒤 주최자가 직접 고친 출발지는 서버가 답장 출발지를 비워도 보존한다', () => {
+    const remote = state([reply({ origin: { name: '친구 집', lng: 128, lat: 38 } })]);
+    const first = mergedMeeting(merge(library(), remote));
+    const localOrigin = { name: '미전송 집', lng: 127.5, lat: 37.6 };
+    const local = {
+      ...first,
+      participants: {
+        value: first.participants.value.map((p) =>
+          p.id === 'person01' ? { ...p, origin: localOrigin } : p,
+        ),
+        updatedAt: '2026-10-27T00:00:00.000Z',
+      },
+    };
+    const next = mergedMeeting(
+      merge(library(local), {
+        ...remote,
+        rev: 2,
+        docRev: 2,
+        replies: [reply({ origin: null })],
+      }),
+    );
+    expect(next.participants.value[1]?.origin).toEqual(localOrigin);
+  });
+
   it('더 작은 시각이라도 다른 서버 답장은 출발지까지 반영한다', () => {
     const first = merge(library());
     const origin = { name: '옛집', lng: 128, lat: 38 };

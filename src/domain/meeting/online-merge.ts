@@ -29,6 +29,10 @@ export function hostEdits(
     if (!synced || JSON.stringify(p.origin) === JSON.stringify(synced.origin)) return false;
     if (p.id === hostId) return true;
     const reply = replies.find((r) => r.participantId === p.id);
+    const imported = meeting.replies.value[p.id];
+    // 서버가 비운 옛 답장과 동시에 반영했던 출발지는 주최자 수정이 아니다.
+    if (reply?.origin === null && meeting.participants.updatedAt === imported?.receivedAt)
+      return false;
     // null은 출발지를 지운 답장이 아니라 본문 출발지를 그대로 쓴다는 뜻이다.
     return reply?.origin == null || JSON.stringify(p.origin) !== JSON.stringify(reply.origin);
   });
@@ -124,9 +128,15 @@ export function mergeOnline(
     }
     const previous = next.replies.value[pid];
     const fresh = previous === undefined || previous.sentAt !== reply.updatedAt;
-    // 서버 본문보다 답장에 담긴 출발지가 최신이며, 이미 받은 답장에도 적용한다.
-    const applyOrigin = (adopt || fresh) && reply.origin !== null;
     const participant = next.participants.value.find((p) => p.id === pid);
+    const syncedParticipant = sync.syncedDoc?.participants.find((p) => p.id === pid);
+    // 본문 출발지가 그대로면 옛 답장도 복원하되, 다른 기기가 고친 출발지는 되돌리지 않는다.
+    const changedOrigin =
+      adopt &&
+      participant !== undefined &&
+      JSON.stringify(participant.origin) !== JSON.stringify(syncedParticipant?.origin) &&
+      JSON.stringify(participant.origin) !== JSON.stringify(reply.origin);
+    const applyOrigin = (fresh || (adopt && !changedOrigin)) && reply.origin !== null;
     if (participant === undefined) {
       if (state.doc.participants.some((p) => p.id === pid)) continue;
       if (next.participants.value.length >= LIBRARY_LIMITS.meetingParticipantsMax) continue;

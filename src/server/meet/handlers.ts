@@ -386,6 +386,19 @@ export function handleUpdate(ctx: MeetContext, deps: MeetDeps): Promise<Response
           )
           .bind(id, pid, id, baseRev, row.rev),
       ]);
+      for (const participant of doc.participants) {
+        const previous = old.participants.find((p) => p.id === participant.id);
+        if (previous && JSON.stringify(previous.origin) !== JSON.stringify(participant.origin)) {
+          // 주최자가 고친 출발지를 쓰도록 옛 답장과 그 출발지의 시간을 함께 비운다.
+          cleanup.push(
+            db
+              .prepare(
+                `UPDATE meeting_replies SET origin = NULL, times = NULL WHERE meeting_id = ? AND participant_id = ? AND ${guard}`,
+              )
+              .bind(id, participant.id, id, baseRev, row.rev),
+          );
+        }
+      }
       const oldCandidates = new Map(old.candidates.map((c) => [c.id, c]));
       const changedConditions =
         doc.mode !== old.mode ||
