@@ -114,6 +114,35 @@ describe('온라인 약속 연결 기록', () => {
   });
 
   it.each([
+    { hostToken: 'host' },
+    { guest: { participantId: 'person02', token: 'guest' } },
+    { pendingHostToken: 'p'.repeat(43) },
+  ])('토큰 기록 %j는 남기고 오래된 토큰 없는 기록부터 정리한다', (token) => {
+    const storage = createMemoryStorage();
+    const store = createOnlineStore(() => storage);
+    const record = { ...token, lastRev: 1 };
+    store.writeOnline('meeting001', record);
+    for (let i = 0; i < 250; i++)
+      store.writeOnline(`m${String(i).padStart(9, '0')}`, { lastRev: i });
+    expect(store.readOnline('meeting001')).toEqual(record);
+    expect(Object.keys(store.allOnline())).toHaveLength(200);
+    expect(store.readOnline('m000000050')).toBeNull();
+    expect(store.readOnline('m000000051')).toEqual({ lastRev: 51 });
+    expect(createOnlineStore(() => storage).readOnline('meeting001')).toEqual(record);
+  });
+
+  it('살아 있는 토큰 기록만 200개를 넘어도 모두 보존하고 끝난 기록만 지운다', () => {
+    const storage = createMemoryStorage();
+    const store = createOnlineStore(() => storage);
+    store.writeOnline('meeting001', { hostToken: 'ended', lastRev: 1, ended: true });
+    for (let i = 0; i < 201; i++)
+      store.writeOnline(`m${String(i).padStart(9, '0')}`, { hostToken: 'host', lastRev: i });
+    expect(store.readOnline('meeting001')).toBeNull();
+    expect(Object.keys(store.allOnline())).toHaveLength(201);
+    expect(Object.keys(createOnlineStore(() => storage).allOnline())).toHaveLength(201);
+  });
+
+  it.each([
     [null, {}, false],
     [null, { person01: { likes: [], sentAt: '', receivedAt: '' } }, false],
     [null, { person02: { likes: [], sentAt: '', receivedAt: '' } }, true],

@@ -915,36 +915,46 @@ it('다시 열 때 전체 상태를 읽어 이미 받은 친구 소요시간도 
   await advance(10000);
   expect(meetApi.get).toHaveBeenLastCalledWith(saved.id, 2, token);
 });
-it('주최자가 친구 출발지를 바꾸면 이전 답장의 시간을 덮어쓰지 않는다', async () => {
-  online();
-  const origin = { name: '집', lng: 127, lat: 37.5 };
-  vi.mocked(meetApi.get).mockResolvedValue({
-    ok: true,
-    value: state({
-      replies: [
-        {
-          participantId: 'person02',
-          name: '친구',
-          origin,
-          likes: [],
-          times: { choice01: 12 },
-          updatedAt: startAt,
-        },
-      ],
-    }),
-  });
-  const { result } = setup();
-  await flush();
-  expect(result.current.replyTimes.choice01?.person02).toBe(12);
-  await edit({
-    participants: f(
-      saved.participants.value.map((p) =>
-        p.id === 'person02' ? { ...p, origin: { name: '회사', lng: 128, lat: 36 } } : p,
-      ),
-    ),
-  });
-  expect(result.current.replyTimes.choice01?.person02).toBeUndefined();
-});
+it.each(['mode', 'at', 'candidate', 'origin'] as const)(
+  '주최자가 %s 계산 조건을 바꾸면 이전 답장의 시간을 덮어쓰지 않는다',
+  async (condition) => {
+    online();
+    const origin = { name: '집', lng: 127, lat: 37.5 };
+    vi.mocked(meetApi.get).mockResolvedValue({
+      ok: true,
+      value: state({
+        replies: [
+          {
+            participantId: 'person02',
+            name: '친구',
+            origin,
+            likes: [],
+            times: { choice01: 12 },
+            updatedAt: startAt,
+          },
+        ],
+      }),
+    });
+    const { result } = setup();
+    await flush();
+    expect(result.current.replyTimes.choice01?.person02).toBe(12);
+    if (condition === 'mode') await edit({ mode: f('car') });
+    else if (condition === 'at') await edit({ at: f({ date: '2026-10-27', time: '12:00' }) });
+    else if (condition === 'candidate')
+      await edit({
+        candidates: f(saved.candidates.value.map((c) => ({ ...c, lng: c.lng + 0.1 }))),
+      });
+    else
+      await edit({
+        participants: f(
+          saved.participants.value.map((p) =>
+            p.id === 'person02' ? { ...p, origin: { name: '회사', lng: 128, lat: 36 } } : p,
+          ),
+        ),
+      });
+    expect(result.current.replyTimes.choice01?.person02).toBeUndefined();
+  },
+);
 
 it('계산 조건이 바뀌어도 부모에 같은 계산 결과를 되풀이 보고하지 않는다', async () => {
   const { MeetingResults } = await import('src/sections/meetings/MeetingResults');
@@ -1082,7 +1092,7 @@ it('실패한 수정을 원래대로 돌리면 다음 확인 뒤 새 수정을 �
 });
 
 it.each(['mode', 'origin'] as const)(
-  '다시 올린 뒤 확인해도 예전 %s 조건의 답장 시간을 되살리지 않는다',
+  '다시 올린 뒤에도 %s 조건에 맞는 서버 답장만 쓴다',
   async (condition) => {
     online();
     const reply = {
@@ -1113,12 +1123,15 @@ it.each(['mode', 'origin'] as const)(
     const remote = state({
       rev: 4,
       docRev: 2,
-      replies: [reply],
+      // 서버는 이동수단 변경 때 시간을 비우고, 본문 출발지 변경 때는 보존한다.
+      replies: [{ ...reply, times: condition === 'mode' ? null : reply.times }],
       doc: docFromMeeting(saved, {}, saved.mode.value === 'straight' ? 'm' : 'min'),
     });
     vi.mocked(meetApi.get).mockResolvedValue({ ok: true, value: remote });
     await advance(7000);
-    expect(result.current.replyTimes.choice01?.person02).toBeUndefined();
+    expect(result.current.replyTimes.choice01?.person02).toBe(
+      condition === 'mode' ? undefined : 12,
+    );
   },
 );
 

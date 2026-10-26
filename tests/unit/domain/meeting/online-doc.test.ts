@@ -65,6 +65,7 @@ describe('온라인 약속 문서', () => {
   });
 
   it.each([
+    ['참석자 없음', () => ({ ...doc(), participants: [], times: {} })],
     ['없는 확정 후보', () => ({ ...doc(), decided: 'missing1' })],
     [
       '참석자 중복',

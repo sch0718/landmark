@@ -19,7 +19,7 @@ export const MeetingDocSchema = Schema.Struct({
   title,
   at,
   mode,
-  participants,
+  participants: participants.check(Schema.isMinLength(1)),
   candidates,
   times,
   unit,

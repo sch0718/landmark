@@ -72,7 +72,11 @@ export function createOnlineStore(storage: () => Storage = () => window.localSto
     return memory;
   }
   function trim() {
-    while (memory.size > 200) memory.delete(memory.keys().next().value!);
+    for (const [id, record] of memory) {
+      if (memory.size <= 200) break;
+      if (record.ended || (!record.hostToken && !record.guest && !record.pendingHostToken))
+        memory.delete(id);
+    }
   }
   function save() {
     if (memoryOnly) return;

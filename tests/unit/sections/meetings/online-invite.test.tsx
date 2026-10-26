@@ -64,11 +64,11 @@ vi.mock('src/sections/meetings/use-meeting', () => ({
     },
   }),
 }));
-async function setup(path = '/meet/meeting001') {
+async function setup(path = '/meet/meeting001', hostView = <h1>주최자 화면</h1>) {
   const router = createMemoryRouter(
     [
       { path: '/meet/:id', element: <MeetLinkPage /> },
-      { path: '/meetings/:id', element: <h1>주최자 화면</h1> },
+      { path: '/meetings/:id', element: hostView },
     ],
     { initialEntries: [path] },
   );
@@ -137,6 +137,14 @@ it('첫 전체 조회 후 주최자를 뺀 나는 누구와 후보 지도를 보
   expect(screen.getByRole('button', { name: '친구' })).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: '주최자' })).not.toBeInTheDocument();
   expect(screen.getByRole('region', { name: '후보 지도' })).toBeInTheDocument();
+});
+it('참석자를 고르기 전에는 기록을 쓰지 않고 화면의 버전으로 계속 확인한다', async () => {
+  const writes = vi.spyOn(Storage.prototype, 'setItem');
+  await setup();
+  await advance(10000);
+  expect(meetApi.get).toHaveBeenLastCalledWith('meeting001', remote.rev, null);
+  expect(readOnline('meeting001')).toBeNull();
+  expect(writes).not.toHaveBeenCalled();
 });
 it('고르면 기록을 저장하고 내 답장 화면을 연다', async () => {
   await setup();
@@ -697,6 +705,37 @@ it('새 기기에서 주최자 링크를 담으면 서버 주최자 좋아요도
   expect(meetApi.reply).not.toHaveBeenCalled();
 });
 
+it.each([null, { name: '내 회사', lng: 128, lat: 36 }])(
+  '주최자 링크로 담은 직후 시각만 새로 붙은 본문에서도 답장 출발지 %j의 23분을 표시한다',
+  async (origin) => {
+    const { useOnlineMeeting } = await import('src/sections/meetings/use-online-meeting');
+    const { MeetingResults } = await import('src/sections/meetings/MeetingResults');
+    remote = {
+      rev: remote.rev,
+      docRev: remote.docRev,
+      doc: remote.doc,
+      replies: [
+        {
+          participantId: 'person02',
+          name: '친구',
+          origin,
+          likes: [],
+          times: { choice01: 23 },
+          updatedAt: '2026-10-26T00:00:00.000Z',
+        },
+      ],
+    };
+    function HostResults() {
+      const meeting = library.meetings!.meeting001!;
+      const online = useOnlineMeeting(meeting, { times: {}, unit: 'min', pending: false });
+      return <MeetingResults meeting={meeting} library={library} online={online} />;
+    }
+    await setup(`/meet/meeting001#h=${hostToken}`, <HostResults />);
+    expect(library.meetings!.meeting001!.mode.updatedAt).toBe(now);
+    expect(screen.getByText('23분')).toBeInTheDocument();
+  },
+);
+
 it('내 소요시간에는 계산한 본문 버전을 붙인다', async () => {
   guest();
   remote = { ...remote, docRev: 5 };
@@ -983,6 +1022,7 @@ it('지워진 참석자를 고르면 목록을 다시 읽어 안내하고 확인
   expect(meetApi.get).toHaveBeenLastCalledWith('meeting001', null, null);
   expect(screen.queryByRole('button', { name: '친구' })).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: '다른 친구' })).toBeEnabled();
+  expect(readOnline('meeting001')).toBeNull();
   expect(screen.queryByText('끝난 약속이에요')).not.toBeInTheDocument();
   const reads = vi.mocked(meetApi.get).mock.calls.length;
   await advance(10000);

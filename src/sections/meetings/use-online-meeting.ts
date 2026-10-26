@@ -576,14 +576,6 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
     JSON.stringify(replyState.doc.at) === JSON.stringify(meeting.at.value)
   ) {
     for (const reply of replyState.replies) {
-      const conditions = [
-        meeting.mode.updatedAt,
-        meeting.at.updatedAt,
-        meeting.candidates.updatedAt,
-      ];
-      // 본문 출발지를 쓰는 답장은 그 뒤의 참석자 수정에도 예전 시간을 재사용하지 않는다.
-      if (reply.origin === null) conditions.push(meeting.participants.updatedAt);
-      if (conditions.some((at) => at > reply.updatedAt)) continue;
       const origin =
         reply.origin ??
         replyState.doc.participants.find((p) => p.id === reply.participantId)?.origin;

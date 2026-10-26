@@ -261,6 +261,14 @@ describe('약속 올리기', () => {
     expect(await count('meeting_tokens')).toBe(1);
   });
   it.each([
+    [
+      '참석자 없음',
+      () => ({
+        doc: doc({ participants: [], times: {} }),
+        turnstile: 'dev',
+        hostToken: newToken(),
+      }),
+    ],
     ['빈 제목', () => ({ doc: doc({ title: '' }), turnstile: 'dev', hostToken: newToken() })],
     [
       '잘못된 참조',
@@ -815,6 +823,7 @@ describe('약속 고치기와 지우기', () => {
     expect(await db.prepare('SELECT rev FROM meetings').first()).toEqual({ rev: 2 });
   });
   it.each([
+    ['참석자 없음', () => ({ doc: doc({ participants: [], times: {} }), baseRev: 1 })],
     ['다른 약속 id', () => ({ doc: doc({ meetingId: 'another001' }), baseRev: 1 })],
     ['스키마 오류', () => ({ doc: doc({ title: '' }), baseRev: 1 })],
     ['남는 키', () => ({ doc: doc(), baseRev: 1, extra: true })],

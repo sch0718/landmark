@@ -135,6 +135,12 @@ export function OnlineInviteView({ id }: { id: string }) {
       if (reading && (failure.code === 'ended' || failure.code === 'not-found')) setEnded(true);
     }
   }
+  function rememberRevision(state: OnlineState) {
+    const record = readOnline(id);
+    // 읽기만 한 약속의 버전은 화면 메모리로 충분하다.
+    if (record?.hostToken || record?.guest || record?.pendingHostToken)
+      writeOnline(id, { ...record, lastRev: state.rev, docRev: state.docRev });
+  }
   async function sendDraft(): Promise<boolean> {
     const current = latest.current;
     if (!current.guest || !current.input || current.pending || needsFreshDoc.current) return true;
@@ -208,11 +214,7 @@ export function OnlineInviteView({ id }: { id: string }) {
         needsFreshDoc.current = false;
         deferred.current = false;
         setState(result.value);
-        writeOnline(id, {
-          ...readOnline(id),
-          lastRev: result.value.rev,
-          docRev: result.value.docRev,
-        });
+        rememberRevision(result.value);
       }
       if (sent) setError(null);
       setLastOkAt(Date.now());
@@ -270,11 +272,7 @@ export function OnlineInviteView({ id }: { id: string }) {
       }
       if (refreshed.value !== 'unchanged') {
         setState(refreshed.value);
-        writeOnline(id, {
-          ...readOnline(id),
-          lastRev: refreshed.value.rev,
-          docRev: refreshed.value.docRev,
-        });
+        rememberRevision(refreshed.value);
       }
       setError('그 참석자는 이제 목록에 없어요. 다시 골라 주세요');
       return;
