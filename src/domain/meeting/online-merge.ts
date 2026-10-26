@@ -9,6 +9,7 @@ type OnlineSync = {
   syncedDoc: MeetingDoc | null;
   docRev: number | null;
   seen: readonly string[];
+  seenNames?: Record<string, string>;
   hostLikes: readonly string[] | null;
   hostLikesAckRev: number | null;
   replyOrigins?: Record<string, Origin>;
@@ -17,6 +18,7 @@ type OnlineMergeResult =
   | Extract<OpResult, { ok: false }>
   | (Extract<OpResult, { ok: true }> & {
       addedReplyOnly: string[];
+      seenNames: Record<string, string>;
       hostLikes?: string[];
       replyOrigins?: Record<string, Origin>;
     });
@@ -37,12 +39,13 @@ export function overriddenReplyOrigins(
     .map((p) => ({ participantId: p.id, origin: replyOrigins[p.id]! }));
 }
 
-/** 친구가 고른 출발지·답장 전용 참석자를 빼고 주최자가 고친 본문을 비교한다. */
+/** 친구 출발지와 이름이 그대로인 답장 전용 참석자를 빼고 주최자 수정을 비교한다. */
 export function hostEdits(
   meeting: Meeting,
   syncedDoc: MeetingDoc,
   seen: readonly string[] = [],
   replyOrigins: Record<string, Origin> = {},
+  seenNames: Record<string, string> = {},
 ): boolean {
   const syncedIds = new Set(syncedDoc.participants.map((p) => p.id));
   const hostId = meeting.participants.value[0]?.id;
@@ -61,7 +64,7 @@ export function hostEdits(
     candidates: doc.candidates,
     decided: doc.decided,
     participants: doc.participants
-      .filter((p) => syncedIds.has(p.id) || !seen.includes(p.id))
+      .filter((p) => syncedIds.has(p.id) || !seen.includes(p.id) || p.name !== seenNames[p.id])
       .map((p) => [p.id, p.name]),
   });
   return (
@@ -80,7 +83,8 @@ export function shouldAdoptRemoteDoc(
   sync: OnlineSync,
 ): boolean {
   const dirty =
-    sync.syncedDoc !== null && hostEdits(meeting, sync.syncedDoc, sync.seen, sync.replyOrigins);
+    sync.syncedDoc !== null &&
+    hostEdits(meeting, sync.syncedDoc, sync.seen, sync.replyOrigins, sync.seenNames);
   return (sync.docRev === null || state.docRev > sync.docRev) && !dirty;
 }
 
@@ -99,6 +103,7 @@ export function mergeOnline(
   );
   let next = meeting;
   const replyOrigins = { ...sync.replyOrigins };
+  const seenNames = { ...sync.seenNames };
   let hostLikes: string[] | undefined;
   const addedReplyOnly: string[] = [];
   const adopt = shouldAdoptRemoteDoc(meeting, state, sync);
@@ -113,6 +118,10 @@ export function mergeOnline(
       candidates: field(state.doc.candidates),
       decided: field(state.doc.decided),
     };
+  }
+  if (adopt) {
+    for (const participant of next.participants.value)
+      if (sync.seen.includes(participant.id)) seenNames[participant.id] = participant.name;
   }
   const hostId = next.participants.value[0]?.id;
   const candidates = new Set(next.candidates.value.map((c) => c.id));
@@ -171,6 +180,7 @@ export function mergeOnline(
         ctx.now,
       );
       addedReplyOnly.push(pid);
+      seenNames[pid] = reply.name;
     } else if (applyOrigin) {
       next = meetingField(
         next,
@@ -216,6 +226,7 @@ export function mergeOnline(
     ? {
         ...result,
         addedReplyOnly,
+        seenNames,
         ...(hostLikes === undefined ? {} : { hostLikes }),
         ...(sync.replyOrigins === undefined && Object.keys(replyOrigins).length === 0
           ? {}

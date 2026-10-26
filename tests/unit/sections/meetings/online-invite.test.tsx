@@ -155,7 +155,11 @@ it('고르면 기록을 저장하고 내 답장 화면을 연다', async () => {
   await act(async () => {
     fireEvent.click(screen.getByRole('button', { name: '친구' }));
   });
-  expect(meetApi.claim).toHaveBeenCalledWith('meeting001', { participantId: 'person02' });
+  expect(meetApi.claim).toHaveBeenCalledWith(
+    'meeting001',
+    { participantId: 'person02' },
+    expect.stringMatching(/^[A-Za-z0-9_-]{43}$/),
+  );
   expect(readOnline('meeting001')?.guest).toEqual({ participantId: 'person02', token });
   expect(readOnline('meeting001')).toEqual({ guest: { participantId: 'person02', token } });
   expect(screen.getByRole('button', { name: '강남역 좋아요' })).toBeEnabled();
@@ -263,7 +267,11 @@ it('목록에 없는 이름은 정리해서 차지한다', async () => {
   await act(async () => {
     fireEvent.click(screen.getByRole('button', { name: '참석하기' }));
   });
-  expect(meetApi.claim).toHaveBeenCalledWith('meeting001', { newName: '새 친구' });
+  expect(meetApi.claim).toHaveBeenCalledWith(
+    'meeting001',
+    { newName: '새 친구' },
+    expect.stringMatching(/^[A-Za-z0-9_-]{43}$/),
+  );
 });
 it.each([
   ['taken', '다른 기기에서 이미 답했어요. 주최자에게 풀어 달라고 하세요'],
@@ -429,7 +437,11 @@ it('차지가 풀린 토큰은 정기 확인의 401 뒤 토큰 없이 읽고 참
   await act(async () => {
     fireEvent.click(screen.getByRole('button', { name: '친구' }));
   });
-  expect(meetApi.claim).toHaveBeenCalledWith('meeting001', { participantId: 'person02' });
+  expect(meetApi.claim).toHaveBeenCalledWith(
+    'meeting001',
+    { participantId: 'person02' },
+    expect.stringMatching(/^[A-Za-z0-9_-]{43}$/),
+  );
   expect(meetApi.get).toHaveBeenLastCalledWith('meeting001', null, token);
   expect(screen.queryByRole('region', { name: '나는 누구?' })).toBeNull();
 });
@@ -1051,7 +1063,11 @@ it('확정된 약속을 처음 열어도 참석자를 고른 뒤 자기 출발 �
   await act(async () => {
     fireEvent.click(screen.getByRole('button', { name: '친구' }));
   });
-  expect(meetApi.claim).toHaveBeenCalledWith('meeting001', { participantId: 'person02' });
+  expect(meetApi.claim).toHaveBeenCalledWith(
+    'meeting001',
+    { participantId: 'person02' },
+    expect.stringMatching(/^[A-Za-z0-9_-]{43}$/),
+  );
   expect(screen.queryByRole('region', { name: '나는 누구?' })).toBeNull();
   expect(screen.getByRole('link', { name: '친구 출발 길찾기' })).toBeInTheDocument();
 });
@@ -1266,7 +1282,11 @@ it('지워진 참석자를 고르면 목록을 다시 읽어 안내하고 확인
   expect(meetApi.get).toHaveBeenLastCalledWith('meeting001', null, null);
   expect(screen.queryByRole('button', { name: '친구' })).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: '다른 친구' })).toBeEnabled();
-  expect(readOnline('meeting001')).toBeNull();
+  expect(readOnline('meeting001')?.pendingGuest).toEqual({
+    participantId: 'person02',
+    token: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/),
+  });
+  expect(readOnline('meeting001')?.guest).toBeUndefined();
   expect(screen.queryByText('끝난 약속이에요')).not.toBeInTheDocument();
   const reads = vi.mocked(meetApi.get).mock.calls.length;
   await advance(10000);
@@ -1353,4 +1373,137 @@ it('주최자 링크에서 미전송 좋아요를 보존해도 서버 좋아요 
   await setup(`/meet/meeting001#h=${hostToken}`);
   expect(library.meetings?.meeting001?.replies.value.person01?.likes).toEqual(['choice01']);
   expect(readOnline('meeting001')?.hostLikes).toEqual(['choice02']);
+});
+
+it.each(['기존 참석자', '새 이름'] as const)(
+  '응답 유실 뒤 같은 선택은 저장한 토큰으로 재시도해 좋아요 화면을 연다: %s',
+  async (choice) => {
+    const { webcrypto } = await import('node:crypto');
+    const { createSqliteD1 } = await import('../../../helpers/sqlite-d1');
+    const { handleCreate, handleClaim } = await import('src/server/meet/handlers');
+    const { meetApi: actualApi } = await vi.importActual<
+      typeof import('src/services/meet-online/client')
+    >('src/services/meet-online/client');
+    vi.stubGlobal('crypto', webcrypto);
+    const db = createSqliteD1();
+    const pending: Promise<unknown>[] = [];
+    const newPerson = choice === '새 이름';
+    const who = newPerson ? { newName: '새 친구' } : { participantId: 'person02' };
+    const sentTokens: string[] = [];
+    const storedBeforeRequest: boolean[] = [];
+    const statuses: number[] = [];
+    const ctx = (request: Request) => ({
+      request,
+      env: { DB: db },
+      params: { id: 'meeting001' },
+      waitUntil: (p: Promise<unknown>) => {
+        pending.push(p);
+      },
+    });
+    const fetchMock = vi.fn<typeof fetch>(async (_url, init) => {
+      const body = JSON.parse(init!.body as string);
+      sentTokens.push(body.guestToken);
+      storedBeforeRequest.push(
+        JSON.stringify(readOnline('meeting001')?.pendingGuest) ===
+          JSON.stringify({ ...who, token: body.guestToken }),
+      );
+      const response = await handleClaim(
+        ctx(
+          new Request('http://localhost:8788/api/meet/meeting001/claim', {
+            ...init,
+            headers: { Origin: 'http://localhost:8788' },
+          }),
+        ),
+        { now: () => new Date(), fetch: fetchMock },
+      );
+      statuses.push(response.status);
+      await Promise.all(pending);
+      if (sentTokens.length === 1) throw new TypeError('응답 유실');
+      return response;
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    let claimFlight: ReturnType<typeof actualApi.claim> | undefined;
+    vi.mocked(meetApi.claim).mockImplementation((...args) => {
+      claimFlight = actualApi.claim(...args);
+      return claimFlight;
+    });
+    try {
+      const created = await handleCreate(
+        ctx(
+          new Request('http://localhost:8788/api/meet', {
+            method: 'POST',
+            headers: { Origin: 'http://localhost:8788' },
+            body: JSON.stringify({ doc: remote.doc, hostToken, turnstile: 'dev' }),
+          }),
+        ),
+        { now: () => new Date(), fetch: fetchMock },
+      );
+      expect(created.status).toBe(201);
+      await setup();
+      if (newPerson) {
+        fireEvent.click(screen.getByRole('button', { name: '목록에 없어요' }));
+        fireEvent.change(screen.getByRole('textbox', { name: '내 이름' }), {
+          target: { value: '새 친구' },
+        });
+      }
+      const choose = async () =>
+        act(async () => {
+          fireEvent.click(screen.getByRole('button', { name: newPerson ? '참석하기' : '친구' }));
+          await claimFlight;
+        });
+      await choose();
+      expect(statuses).toEqual([200]);
+      expect(sentTokens[0]).toMatch(/^[A-Za-z0-9_-]{43}$/);
+      expect(readOnline('meeting001')?.pendingGuest).toEqual({ ...who, token: sentTokens[0] });
+      expect(readOnline('meeting001')?.guest).toBeUndefined();
+      expect(screen.getByText('나는 누구?')).toBeInTheDocument();
+      await choose();
+      expect(statuses).toEqual([200, 200]);
+      expect(storedBeforeRequest).toEqual([true, true]);
+      expect(sentTokens).toEqual([sentTokens[0], sentTokens[0]]);
+      expect(readOnline('meeting001')?.pendingGuest).toBeUndefined();
+      expect(readOnline('meeting001')?.guest?.token).toBe(sentTokens[0]);
+      expect(
+        await db
+          .prepare("SELECT COUNT(*) AS count FROM meeting_tokens WHERE kind = 'guest'")
+          .first(),
+      ).toEqual({ count: 1 });
+      expect(await db.prepare('SELECT COUNT(*) AS count FROM meeting_replies').first()).toEqual({
+        count: newPerson ? 1 : 0,
+      });
+      expect(screen.queryByText('나는 누구?')).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '강남역 좋아요' })).toBeEnabled();
+    } finally {
+      await Promise.all(pending);
+      db.close();
+      vi.unstubAllGlobals();
+    }
+  },
+);
+
+it('다른 참석자를 고르면 대기 토큰을 새로 만들고 같은 참석자는 복원한 토큰으로 다시 고른다', async () => {
+  const pendingGuest = { participantId: 'person02', token };
+  writeOnline('meeting001', { pendingGuest });
+  vi.mocked(meetApi.claim).mockResolvedValue({ ok: false, error: { code: 'offline' } });
+  await setup();
+  await act(async () => {
+    fireEvent.click(screen.getByRole('button', { name: '친구' }));
+  });
+  expect(meetApi.claim).toHaveBeenLastCalledWith(
+    'meeting001',
+    { participantId: 'person02' },
+    token,
+  );
+  await act(async () => {
+    fireEvent.click(screen.getByRole('button', { name: '다른 친구' }));
+  });
+  const next = readOnline('meeting001')?.pendingGuest;
+  expect(next?.participantId).toBe('person03');
+  expect(next?.token).toMatch(/^[A-Za-z0-9_-]{43}$/);
+  expect(next?.token).not.toBe(token);
+  expect(meetApi.claim).toHaveBeenLastCalledWith(
+    'meeting001',
+    { participantId: 'person03' },
+    next?.token,
+  );
 });

@@ -90,6 +90,9 @@ function context(
     },
   };
 }
+function claimContext(method: string, body?: unknown, options?: Parameters<typeof context>[2]) {
+  return context(method, { guestToken: newToken(), ...(body as Record<string, unknown>) }, options);
+}
 async function create(current = doc(), hostToken = newToken()) {
   return handleCreate(context('POST', { doc: current, turnstile: 'dev', hostToken }), deps);
 }
@@ -1440,8 +1443,65 @@ describe('Turnstile 검증', () => {
 });
 
 describe('참석자 고르기', () => {
+  it.each([false, true])(
+    '같은 참석자 토큰의 재시도는 rev와 토큰을 늘리지 않는다 (동시: %s)',
+    async (concurrent) => {
+      await seed();
+      const guestToken = newToken();
+      const request = () =>
+        handleClaim(claimContext('POST', { participantId: 'person02', guestToken }), deps);
+      const responses = concurrent
+        ? await Promise.all([request(), request()])
+        : [await request(), await request()];
+      expect(responses.map((r) => r.status)).toEqual([200, 200]);
+      const bodies = await Promise.all(responses.map((r) => r.json()));
+      expect(bodies).toEqual([
+        { participantId: 'person02', guestToken, rev: 2 },
+        { participantId: 'person02', guestToken, rev: 2 },
+      ]);
+      expect(await count('meeting_tokens')).toBe(2);
+      const other = await handleClaim(
+        claimContext('POST', { participantId: 'person02', guestToken: newToken() }),
+        deps,
+      );
+      await expectError(other, 409, 'CONFLICT');
+      expect(await db.prepare('SELECT rev FROM meetings').first()).toEqual({ rev: 2 });
+    },
+  );
+  it.each([false, true])(
+    '새 이름도 같은 토큰으로 재시도하면 참석자 하나만 만든다 (동시: %s)',
+    async (concurrent) => {
+      await seed();
+      const guestToken = newToken();
+      const request = (newName: string) =>
+        handleClaim(claimContext('POST', { newName, guestToken }), deps);
+      const responses = concurrent
+        ? await Promise.all([request('새 친구'), request('바뀐 이름')])
+        : [await request('새 친구'), await request('바뀐 이름')];
+      expect(responses.map((r) => r.status)).toEqual([200, 200]);
+      const bodies = await Promise.all(responses.map((r) => r.json()));
+      expect(bodies[1]).toEqual(bodies[0]);
+      expect(bodies[0]).toMatchObject({ guestToken, rev: 2 });
+      expect(await count('meeting_replies')).toBe(1);
+      expect(await count('meeting_tokens')).toBe(2);
+      expect(await db.prepare('SELECT rev FROM meetings').first()).toEqual({ rev: 2 });
+    },
+  );
+
+  it.each([undefined, '', 'short', '가'.repeat(43), 'g'.repeat(44)])(
+    '고르기 토큰 %j는 400이고 토큰을 남기지 않는다',
+    async (guestToken) => {
+      await seed();
+      await expectError(
+        await handleClaim(context('POST', { participantId: 'person02', guestToken }), deps),
+        400,
+        'BAD_REQUEST',
+      );
+      expect(await count('meeting_tokens')).toBe(1);
+    },
+  );
   async function claim(body: unknown) {
-    return handleClaim(context('POST', body), deps);
+    return handleClaim(claimContext('POST', body), deps);
   }
   async function conflict(body: unknown, reason: string) {
     const response = await claim(body);
@@ -1614,7 +1674,7 @@ describe('참석자 고르기', () => {
 
 describe('참석자 답장', () => {
   async function guest() {
-    const response = await handleClaim(context('POST', { participantId: 'person02' }), deps);
+    const response = await handleClaim(claimContext('POST', { participantId: 'person02' }), deps);
     expect(response.status).toBe(200);
     return (await response.json()).guestToken as string;
   }
@@ -1812,7 +1872,7 @@ describe('참석자 답장', () => {
   });
   it('새 참석자는 claim 이름을 보존하고 두 번째 답장은 같은 줄을 덮는다', async () => {
     await seed();
-    const response = await handleClaim(context('POST', { newName: '새 친구' }), deps);
+    const response = await handleClaim(claimContext('POST', { newName: '새 친구' }), deps);
     const { guestToken: token, participantId } = await response.json();
     expect(
       (
@@ -1935,7 +1995,7 @@ describe('참석자 풀기와 주최자 재발급', () => {
       401,
       'UNAUTHORIZED',
     );
-    const claimed = await handleClaim(context('POST', { participantId: 'person02' }), deps);
+    const claimed = await handleClaim(claimContext('POST', { participantId: 'person02' }), deps);
     expect(claimed.status).toBe(200);
     expect((await claimed.json()).guestToken).not.toBe(old);
     expect(await db.prepare('SELECT rev, doc_rev FROM meetings').first()).toEqual({
@@ -1945,7 +2005,7 @@ describe('참석자 풀기와 주최자 재발급', () => {
   });
   it('본문에 없는 새 참석자도 이름으로 다시 고르고 기존 답장은 남긴다', async () => {
     const host = await seed();
-    const first = await handleClaim(context('POST', { newName: '새 친구' }), deps);
+    const first = await handleClaim(claimContext('POST', { newName: '새 친구' }), deps);
     const { participantId, guestToken } = await first.json();
     expect(
       (await handleReply(context('PUT', { likes: ['choice01'] }, { token: guestToken }), deps))
@@ -1954,7 +2014,7 @@ describe('참석자 풀기와 주최자 재발급', () => {
     expect(
       (await handleRelease(context('POST', { participantId }, { token: host }), deps)).status,
     ).toBe(200);
-    const next = await handleClaim(context('POST', { newName: ' 새 친구 ' }), deps);
+    const next = await handleClaim(claimContext('POST', { newName: ' 새 친구 ' }), deps);
     expect(next.status).toBe(200);
     expect(await next.json()).toMatchObject({ participantId });
     expect(await db.prepare('SELECT likes FROM meeting_replies').first()).toEqual({
@@ -2093,7 +2153,7 @@ describe('고르기·답장·풀기 공통 검사', () => {
   it('기능 스위치가 꺼져도 기존 약속의 고르기·답장·풀기는 허용한다', async () => {
     const host = await seed();
     env.MEET_ONLINE = 'off';
-    const response = await handleClaim(context('POST', { participantId: 'person02' }), deps);
+    const response = await handleClaim(claimContext('POST', { participantId: 'person02' }), deps);
     expect(response.status).toBe(200);
     const { guestToken: token } = await response.json();
     expect((await handleReply(context('PUT', { likes: [] }, { token }), deps)).status).toBe(200);
@@ -2108,7 +2168,7 @@ it.each([undefined, 1, 2])(
   '소요시간 본문 버전 %s를 현재 버전과 비교해 시간만 저장하거나 버린다',
   async (docRev) => {
     const host = await seed();
-    const claim = await handleClaim(context('POST', { participantId: 'person02' }), deps);
+    const claim = await handleClaim(claimContext('POST', { participantId: 'person02' }), deps);
     const { guestToken: token } = await claim.json();
     expect(
       (
@@ -2159,7 +2219,7 @@ it.each([false, true])(
       ],
     });
     const add = async () => {
-      const result = await handleClaim(context('POST', { newName: '답장 전용' }), deps);
+      const result = await handleClaim(claimContext('POST', { newName: '답장 전용' }), deps);
       expect(result.status).toBe(200);
     };
     if (racing) {

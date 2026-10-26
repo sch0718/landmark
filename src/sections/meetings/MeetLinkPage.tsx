@@ -120,6 +120,7 @@ function HostLink({ id, token }: { id: string; token: string }) {
       let adopted = false;
       let skipped = false;
       let addedReplyOnly: string[] = [];
+      let seenNames: Record<string, string> = {};
       let hostLikes: string[] | undefined;
       let replyOrigins: Record<string, Origin> | undefined;
       const result = await run((lib, ctx) => {
@@ -155,6 +156,7 @@ function HostLink({ id, token }: { id: string; token: string }) {
               syncedDoc: current?.syncedDoc ?? null,
               docRev: current?.docRev ?? null,
               seen: current?.seen ?? [],
+              seenNames: current?.seenNames,
               hostLikes: current?.hostLikes ?? null,
               hostLikesAckRev: current?.hostLikesAckRev ?? null,
               replyOrigins: current?.replyOrigins,
@@ -163,6 +165,7 @@ function HostLink({ id, token }: { id: string; token: string }) {
         const out = mergeOnline(stored.lib, id, state, ctx, sync);
         if (out.ok) {
           addedReplyOnly = out.addedReplyOnly;
+          seenNames = out.seenNames;
           hostLikes = out.hostLikes;
           replyOrigins = out.replyOrigins;
         }
@@ -178,6 +181,13 @@ function HostLink({ id, token }: { id: string; token: string }) {
         void navigate(paths.meeting(id), { replace: true });
         return;
       }
+      const seen =
+        current?.seen === undefined && addedReplyOnly.length === 0
+          ? undefined
+          : rememberReplyOnly(current?.seen ?? [], addedReplyOnly, [
+              ...state.doc.participants.map((p) => p.id),
+              ...state.replies.map((r) => r.participantId),
+            ]);
       const record = {
         ...current,
         hostToken: token,
@@ -192,13 +202,13 @@ function HostLink({ id, token }: { id: string; token: string }) {
               ?.likes ??
             []),
         ],
-        ...(addedReplyOnly.length === 0
+        ...(seen === undefined
           ? {}
           : {
-              seen: rememberReplyOnly(current?.seen ?? [], addedReplyOnly, [
-                ...state.doc.participants.map((p) => p.id),
-                ...state.replies.map((r) => r.participantId),
-              ]),
+              seen,
+              seenNames: Object.fromEntries(
+                seen.filter((id) => seenNames[id] !== undefined).map((id) => [id, seenNames[id]!]),
+              ),
             }),
         ...(!adopted || state.docRev < (current?.docRev ?? 0)
           ? {}

@@ -3,6 +3,7 @@ import { MeetingDocSchema, type MeetingDoc } from 'src/domain/meeting/online-doc
 import {
   MeetingId,
   MeetingMemberId,
+  MeetingName,
   OriginSchema,
   type Meeting,
   type Origin,
@@ -17,6 +18,7 @@ export type OnlineRecord = {
   hostLikes?: string[];
   hostLikesAckRev?: number;
   guest?: { participantId: string; token: string };
+  pendingGuest?: { participantId?: string; newName?: string; token: string };
   // 주최자 동기화 기준은 참석자 전용 기록에는 두지 않는다.
   lastRev?: number;
   docRev?: number;
@@ -24,20 +26,32 @@ export type OnlineRecord = {
   // 이 기기가 마지막으로 받은 각 참석자의 답장 출발지다.
   replyOrigins?: Record<string, Origin>;
   seen?: string[];
+  seenNames?: Record<string, string>;
   ended?: true;
 };
 const nonempty = Schema.String.check(Schema.isMinLength(1));
+const generatedToken = Schema.String.check(Schema.isPattern(/^[A-Za-z0-9_-]{43}$/));
 const recordSchema = Schema.Struct({
   hostToken: Schema.optionalKey(nonempty),
-  pendingHostToken: Schema.optionalKey(
-    Schema.String.check(Schema.isPattern(/^[A-Za-z0-9_-]{43}$/)),
-  ),
+  pendingHostToken: Schema.optionalKey(generatedToken),
   hostLikes: Schema.optionalKey(
     Schema.mutable(Schema.Array(MeetingMemberId)).check(
       Schema.isMaxLength(LIBRARY_LIMITS.meetingCandidatesMax),
     ),
   ),
   guest: Schema.optionalKey(Schema.Struct({ participantId: MeetingMemberId, token: nonempty })),
+  pendingGuest: Schema.optionalKey(
+    Schema.Struct({
+      participantId: Schema.optionalKey(MeetingMemberId),
+      newName: Schema.optionalKey(MeetingName),
+      token: generatedToken,
+    }).check(
+      Schema.makeFilter(
+        (pending) => (pending.participantId !== undefined) !== (pending.newName !== undefined),
+        { message: '참석자나 새 이름 중 하나를 골라야 합니다' },
+      ),
+    ),
+  ),
   hostLikesAckRev: Schema.optionalKey(
     Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(1)),
   ),
@@ -59,6 +73,16 @@ const recordSchema = Schema.Struct({
   seen: Schema.optionalKey(
     Schema.mutable(Schema.Array(MeetingMemberId)).check(
       Schema.isMaxLength(LIBRARY_LIMITS.meetingParticipantsMax),
+    ),
+  ),
+  seenNames: Schema.optionalKey(
+    Schema.Record(Schema.String, MeetingName).check(
+      Schema.makeFilter(
+        (names) =>
+          Object.keys(names).length <= LIBRARY_LIMITS.meetingParticipantsMax &&
+          Object.keys(names).every(Schema.is(MeetingMemberId)),
+        { message: '답장 참석자 이름의 id나 개수가 올바르지 않습니다' },
+      ),
     ),
   ),
   ended: Schema.optionalKey(Schema.Literal(true)),
@@ -98,7 +122,10 @@ export function createOnlineStore(storage: () => Storage = () => window.localSto
   function trim() {
     for (const [id, record] of memory) {
       if (memory.size <= 200) break;
-      if (record.ended || (!record.hostToken && !record.guest && !record.pendingHostToken))
+      if (
+        record.ended ||
+        (!record.hostToken && !record.guest && !record.pendingGuest && !record.pendingHostToken)
+      )
         memory.delete(id);
     }
   }

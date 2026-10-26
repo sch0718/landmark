@@ -211,6 +211,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
     let merged: Meeting | null = null;
     let adopted = false;
     let addedReplyOnly: string[] = [];
+    let seenNames: Record<string, string> = {};
     let hostLikes: string[] | undefined;
     let replyOrigins: Record<string, Origin> | undefined;
     const result = await latest.current.run((lib, ctx) => {
@@ -221,6 +222,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
         syncedDoc: current?.syncedDoc ?? null,
         docRev: current?.docRev ?? null,
         seen: current?.seen ?? [],
+        seenNames: current?.seenNames,
         hostLikes: current?.hostLikes ?? null,
         hostLikesAckRev: current?.hostLikesAckRev ?? null,
         replyOrigins: current?.replyOrigins,
@@ -231,6 +233,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
       if (out.ok) {
         merged = out.lib.meetings![meeting.id]!;
         addedReplyOnly = out.addedReplyOnly;
+        seenNames = out.seenNames;
         hostLikes = out.hostLikes;
         replyOrigins = out.replyOrigins;
       }
@@ -239,19 +242,26 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
     if (!result.ok || !merged || !isCurrent(signal)) return null;
     const current = currentRecord();
     if (state.rev < (current?.lastRev ?? 0)) return null;
+    const seen =
+      current?.seen === undefined && addedReplyOnly.length === 0
+        ? undefined
+        : rememberReplyOnly(current?.seen ?? [], addedReplyOnly, [
+            ...state.doc.participants.map((p) => p.id),
+            ...state.replies.map((r) => r.participantId),
+          ]);
     if (current && !current.ended)
       save({
         ...current,
         lastRev: state.rev,
         ...(replyOrigins === undefined ? {} : { replyOrigins }),
         ...(hostLikes === undefined || hostReplyInFlight.current ? {} : { hostLikes }),
-        ...(addedReplyOnly.length === 0
+        ...(seen === undefined
           ? {}
           : {
-              seen: rememberReplyOnly(current.seen ?? [], addedReplyOnly, [
-                ...state.doc.participants.map((p) => p.id),
-                ...state.replies.map((r) => r.participantId),
-              ]),
+              seen,
+              seenNames: Object.fromEntries(
+                seen.filter((id) => seenNames[id] !== undefined).map((id) => [id, seenNames[id]!]),
+              ),
             }),
         ...(!adopted || state.docRev < (current.docRev ?? 0)
           ? {}
@@ -381,6 +391,13 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
       ...(fresh.seen === undefined
         ? {}
         : { seen: fresh.seen.filter((id) => !removed.includes(id)) }),
+      ...(fresh.seenNames === undefined
+        ? {}
+        : {
+            seenNames: Object.fromEntries(
+              Object.entries(fresh.seenNames).filter(([id]) => !removed.includes(id)),
+            ),
+          }),
     });
     baseline.current = JSON.stringify(doc);
     retry.current = false;
@@ -508,7 +525,13 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
       const current = readOnline(meeting.id);
       const dirty =
         current?.syncedDoc != null &&
-        hostEdits(meeting, current.syncedDoc, current.seen, current.replyOrigins);
+        hostEdits(
+          meeting,
+          current.syncedDoc,
+          current.seen,
+          current.replyOrigins,
+          current.seenNames,
+        );
       baseline.current = dirty ? '' : json;
     }
     if (document.visibilityState === 'visible' && navigator.onLine) void initialCheck();

@@ -86,20 +86,20 @@ describe('온라인 약속 API', () => {
     ],
     [
       '참석자 고르기',
-      () => meetApi.claim(doc.meetingId, { participantId: 'person02' }),
+      () => meetApi.claim(doc.meetingId, { participantId: 'person02' }, token),
       '/api/meet/meeting001/claim',
       'POST',
-      { participantId: 'person02' },
+      { participantId: 'person02', guestToken: token },
       null,
       { participantId: 'person02', guestToken: token, rev: 8 },
       200,
     ],
     [
       '새 이름 고르기',
-      () => meetApi.claim(doc.meetingId, { newName: '친구' }),
+      () => meetApi.claim(doc.meetingId, { newName: '친구' }, token),
       '/api/meet/meeting001/claim',
       'POST',
-      { newName: '친구' },
+      { newName: '친구', guestToken: token },
       null,
       { participantId: 'person02', guestToken: token, rev: 8 },
       200,
@@ -197,7 +197,7 @@ describe('온라인 약속 API', () => {
 
   it('오류 안에 잘못 중첩된 reason·rev는 쓰지 않는다', async () => {
     respond({ error: { code: 'CONFLICT', message: '바뀜', reason: 'taken', rev: 9 } }, 409);
-    expect(await meetApi.claim(doc.meetingId, { participantId: 'person02' })).toEqual({
+    expect(await meetApi.claim(doc.meetingId, { participantId: 'person02' }, token)).toEqual({
       ok: false,
       error: { code: 'conflict' },
     });

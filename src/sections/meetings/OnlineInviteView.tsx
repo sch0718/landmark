@@ -16,6 +16,13 @@ import { loadMeetDraft, removeMeetDraft, saveMeetDraft, type MeetDraft } from '.
 import { useMeetingCompute, type MeetingTimes } from './use-meeting-compute';
 import { useOnlinePoll } from './use-online-poll';
 
+function newGuestToken(): string {
+  return btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+}
+
 const MODE_LABEL = { transit: '대중교통', car: '자동차', straight: '직선거리' };
 function message(error: OnlineError) {
   switch (error.code) {
@@ -287,7 +294,16 @@ export function OnlineInviteView({ id }: { id: string }) {
   async function claim(who: { participantId: string } | { newName: string }) {
     if (claiming) return;
     setClaiming(true);
-    const result = await meetApi.claim(id, who);
+    const current = readOnline(id);
+    const pending = current?.pendingGuest;
+    const sameChoice =
+      pending &&
+      ('participantId' in who
+        ? pending.participantId === who.participantId
+        : pending.newName === who.newName);
+    const guestToken = sameChoice ? pending.token : newGuestToken();
+    writeOnline(id, { ...current, pendingGuest: { ...who, token: guestToken } });
+    const result = await meetApi.claim(id, who, guestToken);
     if (!active.current) return;
     if (!result.ok && (result.error.code === 'not-found' || result.error.code === 'ended')) {
       const refreshed = await meetApi.get(id, null, null);
@@ -309,7 +325,9 @@ export function OnlineInviteView({ id }: { id: string }) {
       return;
     }
     const next = { participantId: result.value.participantId, token: result.value.guestToken };
-    writeOnline(id, { ...readOnline(id), guest: next });
+    const record = { ...readOnline(id), guest: next };
+    delete record.pendingGuest;
+    writeOnline(id, record);
     setGuest(next);
     setDraft(null);
     setError(null);

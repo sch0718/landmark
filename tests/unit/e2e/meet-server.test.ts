@@ -78,10 +78,14 @@ it('5175 출처를 정규화하고 네 문맥이 같은 DB에서 올리기·답�
   expect(created.headers.get('Cache-Control')).toBe('private, no-store');
   const { hostToken } = await created.json();
   const path = `/api/meet/${doc.meetingId}`;
-  const claim = (await friend(`${path}/claim`, 'POST', { participantId: 'person02' })).response!;
+  const claim = (
+    await friend(`${path}/claim`, 'POST', { participantId: 'person02', guestToken: newToken() })
+  ).response!;
   expect(claim.status).toBe(200);
   const { guestToken } = await claim.json();
-  const taken = (await rival(`${path}/claim`, 'POST', { participantId: 'person02' })).response!;
+  const taken = (
+    await rival(`${path}/claim`, 'POST', { participantId: 'person02', guestToken: newToken() })
+  ).response!;
   expect(taken.status).toBe(409);
   expect(await taken.json()).toMatchObject({ reason: 'taken' });
   expect(
@@ -114,7 +118,8 @@ it('5175 출처를 정규화하고 네 문맥이 같은 DB에서 올리기·답�
     401,
   );
   expect(
-    (await rival(`${path}/claim`, 'POST', { participantId: 'person02' })).response!.status,
+    (await rival(`${path}/claim`, 'POST', { participantId: 'person02', guestToken: newToken() }))
+      .response!.status,
   ).toBe(200);
   const removed = (await host(path, 'DELETE', undefined, hostToken)).response!;
   expect(removed.status).toBe(204);

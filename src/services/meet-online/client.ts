@@ -178,8 +178,8 @@ export const meetApi = {
       noBody: { status: 204, value: undefined },
     });
   },
-  claim(id: string, who: { participantId: string } | { newName: string }) {
-    return request(`${pathFor(id)}/claim`, 'POST', claimSchema, { body: who });
+  claim(id: string, who: { participantId: string } | { newName: string }, guestToken: string) {
+    return request(`${pathFor(id)}/claim`, 'POST', claimSchema, { body: { ...who, guestToken } });
   },
   reply(id: string, input: ReplyInput, token: string) {
     return request(`${pathFor(id)}/reply`, 'PUT', replySchema, { body: input, token });

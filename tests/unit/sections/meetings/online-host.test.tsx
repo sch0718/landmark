@@ -2269,6 +2269,7 @@ it.each(['성공', '실패 후 재시도', '충돌 재시도'] as const)(
     await flush();
     expect(saved.participants.value.some((p) => p.id === 'person03')).toBe(true);
     expect(readOnline(saved.id)?.seen).toEqual(['person03']);
+    expect(readOnline(saved.id)?.seenNames).toEqual({ person03: '새 친구' });
     await advance(100);
     await edit({
       participants: f(
@@ -2308,6 +2309,7 @@ it.each(['성공', '실패 후 재시도', '충돌 재시도'] as const)(
       expect(meetApi.update).toHaveBeenCalledTimes(2);
     }
     expect(readOnline(saved.id)?.seen).toEqual([]);
+    expect(readOnline(saved.id)?.seenNames).toEqual({});
     expect(saved.participants.value.some((p) => p.id === 'person03')).toBe(false);
     vi.mocked(meetApi.get).mockResolvedValue({
       ok: true,
@@ -2658,4 +2660,51 @@ it.each([
     docRev: 3,
     syncedDoc: newDoc,
   });
+});
+
+it('답장 전용 참석자의 이름을 고치면 새 원격 본문보다 지키고 다음 저장에 싣는다', async () => {
+  online();
+  const remote = state({
+    replies: [
+      {
+        participantId: 'person03',
+        name: 'X',
+        origin: null,
+        likes: [],
+        times: null,
+        updatedAt: startAt,
+      },
+    ],
+  });
+  vi.mocked(meetApi.get).mockResolvedValue({ ok: true, value: remote });
+  const inputCompute = { ...compute, pending: true };
+  const { rerender } = setup(inputCompute);
+  await flush();
+  await edit({
+    participants: f(
+      saved.participants.value.map((p) => (p.id === 'person03' ? { ...p, name: 'Y' } : p)),
+    ),
+  });
+  vi.mocked(meetApi.get).mockResolvedValue({
+    ok: true,
+    value: { ...remote, rev: 3, docRev: 2, doc: { ...remote.doc, title: '다른 기기 제목' } },
+  });
+  await advance(10000);
+  expect(saved.participants.value.find((p) => p.id === 'person03')?.name).toBe('Y');
+  expect(saved.title.value).toBe(remote.doc.title);
+  expect(readOnline(saved.id)?.seenNames).toEqual({ person03: 'X' });
+  inputCompute.pending = false;
+  rerender();
+  await advance(1000);
+  expect(meetApi.update).toHaveBeenCalledWith(
+    saved.id,
+    expect.objectContaining({
+      participants: expect.arrayContaining([{ id: 'person03', name: 'Y', origin: null }]),
+    }),
+    1,
+    token,
+    [],
+    expect.any(AbortSignal),
+    [],
+  );
 });

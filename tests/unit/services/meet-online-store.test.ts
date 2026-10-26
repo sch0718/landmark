@@ -168,6 +168,7 @@ describe('온라인 약속 연결 기록', () => {
     { hostToken: 'host' },
     { guest: { participantId: 'person02', token: 'guest' } },
     { pendingHostToken: 'p'.repeat(43) },
+    { pendingGuest: { participantId: 'person02', token: 'g'.repeat(43) } },
   ])('토큰 기록 %j는 남기고 오래된 토큰 없는 기록부터 정리한다', (token) => {
     const storage = createMemoryStorage();
     const store = createOnlineStore(() => storage);
@@ -353,6 +354,60 @@ it.each([
       meeting001: { hostToken: 'host', replyOrigins },
       meeting002: { lastRev: 1 },
     }),
+  );
+  expect(createOnlineStore(() => storage).allOnline()).toEqual({ meeting002: { lastRev: 1 } });
+});
+
+it('답장 전용 참석자의 기준 이름을 seen과 함께 복원한다', () => {
+  const storage = createMemoryStorage();
+  const record = { seen: ['person03'], seenNames: { person03: '친구' } };
+  createOnlineStore(() => storage).writeOnline('meeting001', record);
+  expect(createOnlineStore(() => storage).readOnline('meeting001')).toEqual(record);
+});
+
+it.each([
+  null,
+  [],
+  { bad: '친구' },
+  { person03: '' },
+  { person03: 3 },
+  { person03: '가'.repeat(21) },
+  Object.fromEntries(
+    Array.from({ length: 11 }, (_, i) => [`person${String(i).padStart(2, '0')}`, '친구']),
+  ),
+])('깨진 seenNames %j의 기록만 버린다', (seenNames) => {
+  const storage = createMemoryStorage();
+  storage.setItem(
+    MEET_ONLINE_KEY,
+    JSON.stringify({ meeting001: { seenNames }, meeting002: { lastRev: 1 } }),
+  );
+  expect(createOnlineStore(() => storage).allOnline()).toEqual({ meeting002: { lastRev: 1 } });
+});
+
+it.each([
+  { participantId: 'person02', token: 'g'.repeat(43) },
+  { newName: '새 친구', token: 'g'.repeat(43) },
+])('고르기 대기 기록 %j를 복원한다', (pendingGuest) => {
+  const storage = createMemoryStorage();
+  const record = { pendingGuest };
+  createOnlineStore(() => storage).writeOnline('meeting001', record);
+  expect(createOnlineStore(() => storage).readOnline('meeting001')).toEqual(record);
+});
+
+it.each([
+  null,
+  {},
+  { token: 'g'.repeat(43) },
+  { participantId: 'bad', token: 'g'.repeat(43) },
+  { participantId: 'person02', token: 'short' },
+  { newName: '', token: 'g'.repeat(43) },
+  { newName: '가'.repeat(21), token: 'g'.repeat(43) },
+  { participantId: 'person02', newName: '친구', token: 'g'.repeat(43) },
+])('깨진 pendingGuest %j의 기록만 버린다', (pendingGuest) => {
+  const storage = createMemoryStorage();
+  storage.setItem(
+    MEET_ONLINE_KEY,
+    JSON.stringify({ meeting001: { pendingGuest }, meeting002: { lastRev: 1 } }),
   );
   expect(createOnlineStore(() => storage).allOnline()).toEqual({ meeting002: { lastRev: 1 } });
 });

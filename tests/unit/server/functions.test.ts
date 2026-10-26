@@ -802,9 +802,13 @@ describe('온라인 약속 Pages 진입점', () => {
       else if (action === '지우기')
         response = await item.onRequestDelete(ctx(method, undefined, hostToken));
       else if (action === '고르기')
-        response = await claim(ctx(method, { participantId: 'person02' }));
+        response = await claim(
+          ctx(method, { participantId: 'person02', guestToken: 'g'.repeat(43) }),
+        );
       else if (action === '답장') {
-        const claimed = await claim(ctx('POST', { participantId: 'person02' }));
+        const claimed = await claim(
+          ctx('POST', { participantId: 'person02', guestToken: 'g'.repeat(43) }),
+        );
         const { guestToken } = await claimed.json();
         response = await reply(ctx(method, { likes: ['choice01'] }, guestToken));
       } else

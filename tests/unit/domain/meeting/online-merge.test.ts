@@ -720,7 +720,7 @@ it.each(['title', 'at', 'mode', 'participants', 'candidates', 'decided'] as cons
       syncedDoc: docFromMeeting(meeting, {}, 'min'),
       docRev: null,
     });
-    expect(result).toEqual({ ok: true, lib: library(local), addedReplyOnly: [] });
+    expect(result).toEqual({ ok: true, lib: library(local), addedReplyOnly: [], seenNames: {} });
   },
 );
 
@@ -774,6 +774,7 @@ it('서버 본문을 받을 때 이미 받은 답장 전용 참석자도 보존�
     hostLikes: null,
     hostLikesAckRev: null,
     seen: ['new00001'],
+    seenNames: { new00001: '친구' },
     syncedDoc: docFromMeeting(meeting, {}, 'min'),
     docRev: 1,
   });
@@ -803,6 +804,7 @@ it('서버 본문을 받으며 복원하는 답장 전용 참석자도 같은 �
     syncedDoc: remote.doc,
     docRev: 1,
     seen: ['new00001'],
+    seenNames: { new00001: '친구' },
     hostLikes: null,
     hostLikesAckRev: null,
   });
@@ -849,7 +851,7 @@ it('seen에 있어도 마지막 본문에 포함된 참석자 이름은 비교�
   expect(hostEdits(local, docFromMeeting(meeting, {}, 'min'), ['person01'])).toBe(true);
 });
 
-it('답장 전용 참석자의 추가·변경·삭제는 주최자 수정에서 뺀다', () => {
+it('답장 전용 참석자의 자동 추가·출발지·삭제는 빼고 이름 수정은 비교한다', () => {
   const syncedDoc = docFromMeeting(meeting, {}, 'min');
   const local = {
     ...meeting,
@@ -858,7 +860,9 @@ it('답장 전용 참석자의 추가·변경·삭제는 주최자 수정에서 
       value: [...meeting.participants.value, { id: 'person03', name: '새 친구', origin }],
     },
   };
-  expect(hostEdits(local, syncedDoc, ['person03'])).toBe(false);
+  expect(hostEdits(local, syncedDoc, ['person03'], {}, { person03: '새 친구' })).toBe(false);
+  expect(hostEdits(local, syncedDoc, ['person03'], {}, { person03: '옛 이름' })).toBe(true);
+  expect(hostEdits(local, syncedDoc, ['person03'])).toBe(true);
   expect(hostEdits(meeting, syncedDoc, ['person03'])).toBe(false);
 });
 
@@ -970,5 +974,41 @@ it.each(['host0001', 'person01'])(
     const syncedDoc = docFromMeeting(meeting, {}, 'min');
     expect(hostEdits(local, syncedDoc, [], { [pid]: origin })).toBe(true);
     expect(hostEdits(local, syncedDoc, [], { [pid]: imported })).toBe(pid === 'host0001');
+  },
+);
+
+it.each([false, true])(
+  '수정 없는 답장 전용 참석자는 새 본문을 받고 기준 이름도 받은 값으로 맞춘다 (본문 포함: %s)',
+  (inDoc) => {
+    const remote = state([reply({ participantId: 'new00001', name: 'X' })]);
+    const first = merge(library(), remote);
+    const next = {
+      ...remote,
+      rev: 3,
+      docRev: 2,
+      doc: {
+        ...remote.doc,
+        title: '새 제목',
+        participants: inDoc
+          ? [...remote.doc.participants, { id: 'new00001', name: 'Y', origin: null }]
+          : remote.doc.participants,
+      },
+      replies: [reply({ participantId: 'new00001', name: 'Y' })],
+    };
+    const out = mergeOnline(first, meeting.id, next, ctx, {
+      syncedDoc: remote.doc,
+      docRev: 1,
+      seen: ['new00001'],
+      seenNames: { new00001: 'X' },
+      hostLikes: null,
+      hostLikesAckRev: null,
+    });
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(mergedMeeting(out.lib).title.value).toBe('새 제목');
+    expect(mergedMeeting(out.lib).participants.value.find((p) => p.id === 'new00001')?.name).toBe(
+      'Y',
+    );
+    expect(out.seenNames).toEqual({ new00001: 'Y' });
   },
 );

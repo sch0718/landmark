@@ -15,7 +15,7 @@ import { ApiError, errorResponse, isAllowedOrigin, jsonResponse, type ApiErrorCo
 import { ensureSchema, type MeetDb, type MeetStatement } from './db';
 import type { MeetContext } from './env';
 import { consumeLimit, pruneLimits, type LimitAction } from './limits';
-import { hashIp, hashToken, newToken } from './tokens';
+import { hashIp, hashToken } from './tokens';
 import { verifyTurnstile } from './turnstile';
 
 export type MeetDeps = { fetch: typeof fetch; now(): Date };
@@ -456,8 +456,8 @@ export function handleDelete(ctx: MeetContext, deps: MeetDeps): Promise<Response
 }
 
 const claimSchema = Schema.Union([
-  Schema.Struct({ participantId: MeetingMemberId }),
-  Schema.Struct({ newName: Schema.String }),
+  Schema.Struct({ participantId: MeetingMemberId, guestToken: createSchema.fields.hostToken }),
+  Schema.Struct({ newName: Schema.String, guestToken: createSchema.fields.hostToken }),
 ]);
 const releaseSchema = Schema.Union([
   Schema.Struct({ participantId: MeetingMemberId }),
@@ -525,8 +525,25 @@ export function handleClaim(ctx: MeetContext, deps: MeetDeps): Promise<Response>
     await activeMeeting(ctx.env.DB, id, now);
     const input = validate(claimSchema, await readJson(ctx.request));
     const name = 'newName' in input ? validate(MeetingName, normalizeName(input.newName)) : null;
+    const guestToken = input.guestToken;
+    const guestHash = await hashToken(guestToken);
     return changeMeeting(ctx, id, now, async (row, doc) => {
       const db = ctx.env.DB;
+      // 응답을 잃은 브라우저는 먼저 저장한 토큰으로 같은 참석자를 다시 고를 수 있다.
+      const claimed = await db
+        .prepare(
+          "SELECT participant_id FROM meeting_tokens WHERE meeting_id = ? AND kind = 'guest' AND hash = ?",
+        )
+        .bind(id, guestHash)
+        .first<{ participant_id: string }>();
+      if (claimed) {
+        if ('participantId' in input && claimed.participant_id !== input.participantId)
+          throw new MeetError('CONFLICT', '다른 참석자에 쓰인 토큰이에요', { reason: 'taken' });
+        return jsonResponse(
+          { participantId: claimed.participant_id, guestToken, rev: row.rev },
+          { headers: PRIVATE_HEADERS },
+        );
+      }
       const { results: replies } = await db
         .prepare('SELECT participant_id, name FROM meeting_replies WHERE meeting_id = ?')
         .bind(id)
@@ -573,7 +590,6 @@ export function handleClaim(ctx: MeetContext, deps: MeetDeps): Promise<Response>
       ) {
         throw new MeetError('CONFLICT', '다른 기기에서 이미 골랐어요', { reason: 'taken' });
       }
-      const guestToken = newToken();
       const statements = isNew
         ? [
             db
@@ -588,7 +604,7 @@ export function handleClaim(ctx: MeetContext, deps: MeetDeps): Promise<Response>
           .prepare(
             `INSERT INTO meeting_tokens (hash, meeting_id, kind, participant_id, created_at) SELECT ?, ?, 'guest', ?, ? WHERE ${revisionGuard}`,
           )
-          .bind(await hashToken(guestToken), id, participantId, now.toISOString(), id, row.rev),
+          .bind(guestHash, id, participantId, now.toISOString(), id, row.rev),
       );
       return { statements, fields: { participantId, guestToken } };
     });
