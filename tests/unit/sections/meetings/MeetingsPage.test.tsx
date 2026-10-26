@@ -1,7 +1,8 @@
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setAppRuntimeForTest } from 'src/lib/effect/runtime';
+import { MEET_ONLINE_KEY, removeOnline, writeOnline } from 'src/services/meet-online/store';
 import { libraryAtom } from 'src/stores/library-state';
 import { buildMeeting } from '../../../fixtures/builders';
 import { renderLibrary, sampleLibrary } from '../library/fixtures';
@@ -16,11 +17,13 @@ vi.mock('src/sections/meetings/MeetingEditorPage', () => ({
   MeetingEditorPage: () => <h1>약속 편집</h1>,
 }));
 vi.mock('src/sections/meetings/MeetLinkPage', () => ({ MeetLinkPage: () => <h1>약속 링크</h1> }));
+beforeEach(() => localStorage.removeItem(MEET_ONLINE_KEY));
 afterEach(() => {
   cleanup();
   setAppRuntimeForTest(null);
   toastMock.mockClear();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 const f = <T,>(value: T) => ({ value, updatedAt: '2026-10-03T00:00:00.000Z' });
 const seeded = () => {
@@ -48,6 +51,50 @@ const seeded = () => {
 };
 
 describe('약속 목록', () => {
+  it('약속과 온라인 기록 200개를 한 스냅숏으로 읽고 메뉴 렌더에서는 다시 읽지 않는다', async () => {
+    const meetings = Array.from({ length: 200 }, (_, i) =>
+      buildMeeting({ id: `m${String(i).padStart(9, '0')}`, title: f(`약속 ${i}`) }),
+    );
+    localStorage.setItem(
+      MEET_ONLINE_KEY,
+      JSON.stringify(Object.fromEntries(meetings.map(({ id }) => [id, { hostToken: 'host' }]))),
+    );
+    const getItem = vi.spyOn(Storage.prototype, 'getItem');
+    const onlineReads = () => getItem.mock.calls.filter(([key]) => key === MEET_ONLINE_KEY).length;
+    await renderLibrary(
+      { ...sampleLibrary(), meetings: Object.fromEntries(meetings.map((m) => [m.id, m])) },
+      { path: '/meetings' },
+    );
+    const list = screen.getByRole('list', { name: '약속 목록' });
+    expect(within(list).getAllByRole('listitem')).toHaveLength(200);
+    expect(within(list).getAllByText('공유 중')).toHaveLength(200);
+    expect(onlineReads()).toBeGreaterThan(0);
+    expect(onlineReads()).toBeLessThanOrEqual(2);
+    const initialReads = onlineReads();
+    await userEvent.click(screen.getByRole('button', { name: '‘약속 0’ 메뉴' }));
+    expect(screen.getByRole('menuitem', { name: '삭제' })).toBeInTheDocument();
+    expect(onlineReads()).toBe(initialReads);
+  });
+  it('같은 탭에서 온라인 기록을 쓰거나 지우면 공유 상태를 갱신한다', async () => {
+    await renderLibrary(seeded(), { path: '/meetings' });
+    expect(screen.queryByText('공유 중')).not.toBeInTheDocument();
+    act(() => writeOnline('meeting001', { hostToken: 'host' }));
+    expect(screen.getByText('공유 중')).toBeInTheDocument();
+    act(() => writeOnline('meeting001', { ended: true }));
+    expect(screen.queryByText('공유 중')).not.toBeInTheDocument();
+    expect(screen.getByText('공유 끝남')).toBeInTheDocument();
+    act(() => removeOnline('meeting001'));
+    expect(screen.queryByText('공유 끝남')).not.toBeInTheDocument();
+  });
+  it('다른 탭의 기록 변경과 저장소 전체 삭제를 목록에 반영한다', async () => {
+    await renderLibrary(seeded(), { path: '/meetings' });
+    localStorage.setItem(MEET_ONLINE_KEY, JSON.stringify({ meeting002: { hostToken: 'host' } }));
+    act(() => window.dispatchEvent(new StorageEvent('storage', { key: MEET_ONLINE_KEY })));
+    expect(screen.getByText('공유 중')).toBeInTheDocument();
+    localStorage.removeItem(MEET_ONLINE_KEY);
+    act(() => window.dispatchEvent(new StorageEvent('storage', { key: null })));
+    expect(screen.queryByText('공유 중')).not.toBeInTheDocument();
+  });
   it('비어 있으면 안내와 새 약속 단추를 보인다', async () => {
     await renderLibrary(sampleLibrary(), { path: '/meetings' });
     expect(screen.getByText('아직 약속이 없어요')).toBeInTheDocument();

@@ -65,6 +65,7 @@ export function createOnlineStore(storage: () => Storage = () => window.localSto
   let memory = new Map<string, OnlineRecord>();
   let memoryOnly = false;
   const listeners = new Map<string, Set<(record: OnlineRecord | null) => void>>();
+  const allListeners = new Set<() => void>();
   function read() {
     if (memoryOnly) return memory;
     let raw: string | null;
@@ -114,6 +115,19 @@ export function createOnlineStore(storage: () => Storage = () => window.localSto
   }
   function notify(id: string) {
     for (const listener of listeners.get(id) ?? []) listener(readOnline(id));
+    for (const listener of allListeners) listener();
+  }
+  /** 목록은 약속 수와 무관하게 한 번만 구독하고 전체 스냅숏을 다시 읽는다. */
+  function subscribeAllOnline(listener: () => void) {
+    allListeners.add(listener);
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === MEET_ONLINE_KEY || event.key === null) listener();
+    };
+    window.addEventListener('storage', onStorage);
+    return () => {
+      allListeners.delete(listener);
+      window.removeEventListener('storage', onStorage);
+    };
   }
   function subscribeOnline(id: string, listener: (record: OnlineRecord | null) => void) {
     const group = listeners.get(id) ?? new Set();
@@ -144,11 +158,17 @@ export function createOnlineStore(storage: () => Storage = () => window.localSto
     save();
     notify(id);
   }
-  return { allOnline, readOnline, writeOnline, removeOnline, subscribeOnline };
+  return { allOnline, readOnline, writeOnline, removeOnline, subscribeOnline, subscribeAllOnline };
 }
 
-export const { allOnline, readOnline, writeOnline, removeOnline, subscribeOnline } =
-  createOnlineStore();
+export const {
+  allOnline,
+  readOnline,
+  writeOnline,
+  removeOnline,
+  subscribeOnline,
+  subscribeAllOnline,
+} = createOnlineStore();
 
 /** 한도가 차면 서버에 아직 있는 참석자의 삭제 기록부터 지킨다. */
 export function rememberReplyOnly(

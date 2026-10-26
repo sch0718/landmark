@@ -282,6 +282,43 @@ it('저장소가 막혀도 같은 탭의 메모리 기록 변경을 알린다', 
   unsubscribe();
 });
 
+it.each([false, true])(
+  '전체 기록 구독은 쓰기·삭제를 알리고 해제한다 (메모리 전용: %s)',
+  (blocked) => {
+    const storage = createMemoryStorage();
+    const store = createOnlineStore(() => {
+      if (blocked) throw new Error('차단');
+      return storage;
+    });
+    const listener = vi.fn();
+    const unsubscribe = store.subscribeAllOnline(listener);
+    store.writeOnline('meeting001', { hostToken: 'host' });
+    expect(listener).toHaveBeenCalledTimes(1);
+    store.writeOnline('meeting002', { ended: true });
+    expect(listener).toHaveBeenCalledTimes(2);
+    store.removeOnline('meeting001');
+    expect(listener).toHaveBeenCalledTimes(3);
+    unsubscribe();
+    store.writeOnline('meeting001', { lastRev: 1 });
+    expect(listener).toHaveBeenCalledTimes(3);
+  },
+);
+
+it('전체 기록 구독은 다른 키를 무시하고 storage 변경·전체 삭제만 알린다', () => {
+  const store = createOnlineStore(() => createMemoryStorage());
+  const listener = vi.fn();
+  const unsubscribe = store.subscribeAllOnline(listener);
+  window.dispatchEvent(new StorageEvent('storage', { key: 'other' }));
+  expect(listener).not.toHaveBeenCalled();
+  window.dispatchEvent(new StorageEvent('storage', { key: MEET_ONLINE_KEY }));
+  expect(listener).toHaveBeenCalledTimes(1);
+  window.dispatchEvent(new StorageEvent('storage', { key: null }));
+  expect(listener).toHaveBeenCalledTimes(2);
+  unsubscribe();
+  window.dispatchEvent(new StorageEvent('storage', { key: MEET_ONLINE_KEY }));
+  expect(listener).toHaveBeenCalledTimes(2);
+});
+
 it('답장 출발지 10개를 새 저장소에서도 복원한다', () => {
   const storage = createMemoryStorage();
   const replyOrigins = Object.fromEntries(

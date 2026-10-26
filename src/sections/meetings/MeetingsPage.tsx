@@ -8,7 +8,7 @@ import DialogTitle from '@mui/material/DialogTitle';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import { useAtomValue } from 'jotai';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { HelpButton } from 'src/components/HelpButton';
@@ -18,7 +18,7 @@ import { useDocumentTitle } from 'src/lib/use-document-title';
 import { paths } from 'src/routes/paths';
 import { EmptyState } from 'src/sections/library/EmptyState';
 import { MeetingFormDialog } from 'src/sections/meetings/MeetingFormDialog';
-import { readOnline } from 'src/services/meet-online/store';
+import { allOnline, subscribeAllOnline } from 'src/services/meet-online/store';
 import { libraryAtom, useLibraryAction } from 'src/stores/library-state';
 
 const MODE_LABEL = { transit: '대중교통', car: '자동차', straight: '직선거리' };
@@ -32,6 +32,14 @@ export function MeetingsPage() {
   const [creating, setCreating] = useState(false);
   const [menu, setMenu] = useState<{ id: string; anchor: HTMLElement } | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [online, setOnline] = useState(allOnline);
+  useEffect(() => {
+    const refresh = () => setOnline(allOnline());
+    const unsubscribe = subscribeAllOnline(refresh);
+    // 최초 읽기와 구독 사이에 바뀐 기록도 반영한다.
+    refresh();
+    return unsubscribe;
+  }, []);
   const meetings = Object.values(library.meetings ?? {})
     .filter((meeting) => meeting.deletedAt === null)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id));
@@ -80,7 +88,7 @@ export function MeetingsPage() {
       ) : (
         <Box component="ul" aria-label="약속 목록" sx={{ m: 0, p: 0 }}>
           {meetings.map((meeting) => {
-            const record = readOnline(meeting.id);
+            const record = online[meeting.id];
             const sharing = record?.ended ? '공유 끝남' : record?.hostToken ? '공유 중' : null;
             const at = meeting.at.value;
             const info = `${at === null ? '일시 미정' : `${at.date.replaceAll('-', '.')} ${at.time}`} · ${MODE_LABEL[meeting.mode.value]}`;
