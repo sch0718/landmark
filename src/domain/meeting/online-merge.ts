@@ -47,7 +47,8 @@ export function mergeOnline(
   let next = meeting;
   let hostLikes: string[] | undefined;
   const addedReplyOnly: string[] = [];
-  if (shouldAdoptRemoteDoc(meeting, state, sync)) {
+  const adopt = shouldAdoptRemoteDoc(meeting, state, sync);
+  if (adopt) {
     const field = <T>(value: T) => ({ value, updatedAt: ctx.now });
     next = {
       ...meeting,
@@ -89,6 +90,8 @@ export function mergeOnline(
     }
     const previous = next.replies.value[pid];
     const fresh = previous === undefined || previous.sentAt < reply.updatedAt;
+    // 서버 본문보다 답장에 담긴 출발지가 최신이며, 이미 받은 답장에도 적용한다.
+    const applyOrigin = (adopt || fresh) && reply.origin !== null;
     const participant = next.participants.value.find((p) => p.id === pid);
     if (participant === undefined) {
       if (state.doc.participants.some((p) => p.id === pid)) continue;
@@ -104,15 +107,16 @@ export function mergeOnline(
           {
             id: pid,
             name: reply.name,
-            origin: fresh
-              ? reply.origin
-              : (meeting.participants.value.find((p) => p.id === pid)?.origin ?? reply.origin),
+            origin:
+              fresh || applyOrigin
+                ? reply.origin
+                : (meeting.participants.value.find((p) => p.id === pid)?.origin ?? reply.origin),
           },
         ],
         ctx.now,
       );
       addedReplyOnly.push(pid);
-    } else if (fresh && reply.origin !== null) {
+    } else if (applyOrigin) {
       next = meetingField(
         next,
         'participants',

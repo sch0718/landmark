@@ -6,6 +6,7 @@ import { appUrl } from 'src/share-viewer/encode';
 export async function shareLink(
   url: string,
   title: string,
+  options: { quietFailure?: boolean } = {},
 ): Promise<'shared' | 'copied' | 'failed'> {
   try {
     if (typeof navigator.share === 'function') {
@@ -21,7 +22,7 @@ export async function shareLink(
     toast('링크를 복사했어요');
     return 'copied';
   } catch {
-    toast.error('링크를 보내지 못했어요. 다시 시도해 주세요');
+    if (!options.quietFailure) toast.error('링크를 보내지 못했어요. 다시 시도해 주세요');
     return 'failed';
   }
 }

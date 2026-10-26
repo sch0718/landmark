@@ -35,6 +35,18 @@ function removedReplyOnly(doc: MeetingDoc, record: OnlineRecord): string[] {
   return (record.seen ?? []).filter((id) => !remaining.has(id));
 }
 
+/** 비동기 준비로 사용자 동작이 끊기면 새 동작에서 같은 링크를 보낸다. */
+async function shareOnlineLink(url: string, title: string) {
+  if ((await shareLink(url, title, { quietFailure: true })) === 'failed')
+    toast('링크가 준비됐어요', {
+      duration: Infinity,
+      action: {
+        label: '링크 공유하기',
+        onClick: () => void shareLink(url, title),
+      },
+    });
+}
+
 function errorMessage(error: OnlineError, creating = false) {
   switch (error.code) {
     case 'full':
@@ -478,7 +490,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
       toast.error('지금은 보낼 수 없어요. 잠시 뒤 다시 해 주세요');
       return;
     }
-    await shareLink(onlineMeetingUrl(meeting.id), latest.current.meeting.title.value);
+    await shareOnlineLink(onlineMeetingUrl(meeting.id), latest.current.meeting.title.value);
   }
   async function shareFinal() {
     if (mode === 'online' || mode === 'local') {
@@ -493,7 +505,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
   async function openOnOtherDevice() {
     const current = currentRecord();
     if (current?.hostToken && !current.ended)
-      await shareLink(
+      await shareOnlineLink(
         onlineMeetingUrl(meeting.id, current.hostToken),
         latest.current.meeting.title.value,
       );

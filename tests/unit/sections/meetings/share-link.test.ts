@@ -1,6 +1,9 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { toast } from 'sonner';
 import { onlineMeetingUrl, shareLink } from 'src/sections/meetings/share-link';
+vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { error: vi.fn() }) }));
 const writeText = vi.fn(() => Promise.resolve());
+beforeEach(() => vi.clearAllMocks());
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
@@ -30,5 +33,19 @@ describe('약속 링크 보내기', () => {
   it('클립보드도 사용할 수 없으면 실패를 돌려준다', async () => {
     vi.stubGlobal('navigator', {});
     expect(await shareLink('https://example.test/meet#d=abc', '약속')).toBe('failed');
+    expect(toast.error).toHaveBeenCalledExactlyOnceWith(
+      '링크를 보내지 못했어요. 다시 시도해 주세요',
+    );
+  });
+  it('실패 알림을 끄면 공유와 복사가 모두 거절돼도 실패 결과만 돌려준다', async () => {
+    const denied = new DOMException('사용자 동작이 필요해요', 'NotAllowedError');
+    vi.stubGlobal('navigator', {
+      share: vi.fn().mockRejectedValue(denied),
+      clipboard: { writeText: vi.fn().mockRejectedValue(denied) },
+    });
+    expect(
+      await shareLink('https://example.test/meet/meeting001', '약속', { quietFailure: true }),
+    ).toBe('failed');
+    expect(toast.error).not.toHaveBeenCalled();
   });
 });

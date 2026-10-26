@@ -20,7 +20,9 @@ import { buildMeeting } from '../../../fixtures/builders';
 
 vi.mock('src/components/map/MapView', () => ({ MapView: () => <div /> }));
 vi.mock('src/theme/fonts', () => ({ loadDisplayFont: vi.fn(async () => {}) }));
-vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
+vi.mock('sonner', () => ({
+  toast: Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn() }),
+}));
 vi.mock('src/services/meet-online/client', () => ({
   meetApi: {
     create: vi.fn(),
@@ -304,6 +306,7 @@ it.each([false, true])(
       expect(shareLink).toHaveBeenCalledExactlyOnceWith(
         expect.stringMatching(/\/meet\/meeting001$/),
         edited ? '응답 유실 뒤 고친 제목' : '친구 모임',
+        { quietFailure: true },
       );
       expect(readOnline(saved.id)?.syncedAt).toBe(startAt);
       if (edited) {
@@ -405,9 +408,61 @@ it('첫 공유는 한 번 올리고 기록을 저장하며 다음 공유와 확�
     expect.stringMatching(/^[A-Za-z0-9_-]{43}$/),
   );
   expect(readOnline(saved.id)).toMatchObject({ hostToken: token, docRev: 1, syncedAt: startAt });
-  expect(shareLink).toHaveBeenCalledWith(expect.stringMatching(/\/meet\/meeting001$/), '친구 모임');
+  expect(shareLink).toHaveBeenCalledWith(
+    expect.stringMatching(/\/meet\/meeting001$/),
+    '친구 모임',
+    { quietFailure: true },
+  );
   expect(result.current.mode).toBe('online');
 });
+it.each(['처음 올리기', '다시 올리기', '확정 공유', '주최자 링크', '주최자 링크 다시 발급'])(
+  '%s 뒤 공유와 복사가 거절되면 지속 알림의 동작으로 같은 주소를 다시 공유한다',
+  async (path) => {
+    const { shareLink: actualShareLink } = await vi.importActual<
+      typeof import('src/sections/meetings/share-link')
+    >('src/sections/meetings/share-link');
+    vi.mocked(shareLink)
+      .mockImplementationOnce(actualShareLink)
+      .mockImplementationOnce(actualShareLink);
+    const denied = new DOMException('사용자 동작이 필요해요', 'NotAllowedError');
+    const share = vi.fn().mockRejectedValueOnce(denied).mockResolvedValue(undefined);
+    const writeText = vi.fn().mockRejectedValue(denied);
+    vi.stubGlobal('navigator', { onLine: true, share, clipboard: { writeText } });
+    if (path !== '처음 올리기') online();
+    const { result } = setup();
+    await flush();
+    if (path === '다시 올리기' || path === '확정 공유')
+      await edit({ decided: f('choice01', startAt) });
+    if (path === '주최자 링크 다시 발급') await act(() => result.current.reissueHostLink());
+    const host = path.startsWith('주최자 링크');
+    const url = `${window.location.origin}/meet/${saved.id}${host ? `#h=${readOnline(saved.id)!.hostToken}` : ''}`;
+    await act(() =>
+      host
+        ? result.current.openOnOtherDevice()
+        : path === '확정 공유'
+          ? result.current.shareFinal()
+          : result.current.share(),
+    );
+    expect(share).toHaveBeenCalledExactlyOnceWith({ title: '친구 모임', url });
+    expect(writeText).toHaveBeenCalledExactlyOnceWith(url);
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(toast).toHaveBeenCalledExactlyOnceWith('링크가 준비됐어요', {
+      duration: Infinity,
+      action: { label: '링크 공유하기', onClick: expect.any(Function) },
+    });
+    const options = vi.mocked(toast).mock.calls[0]![1]!;
+    const action = options.action;
+    if (!action || typeof action !== 'object' || !('onClick' in action))
+      throw new Error('공유 동작이 있어야 합니다');
+    await act(async () => {
+      action.onClick({} as Parameters<typeof action.onClick>[0]);
+      // 새 사용자 동작 안에서 바로 공유를 시작해야 한다.
+      expect(share).toHaveBeenCalledTimes(2);
+    });
+    expect(share).toHaveBeenLastCalledWith({ title: '친구 모임', url });
+    expect(writeText).toHaveBeenCalledTimes(1);
+  },
+);
 it.each([
   ['offline', '지금은 보낼 수 없어요. 잠시 뒤 다시 해 주세요'],
   ['unavailable', '지금은 보낼 수 없어요. 잠시 뒤 다시 해 주세요'],
@@ -685,6 +740,7 @@ it('주최자 링크는 #h=로 공유하고 다시 발급하면 기록 토큰을
   expect(shareLink).toHaveBeenCalledWith(
     expect.stringContaining(`/meet/${saved.id}#h=${token}`),
     '친구 모임',
+    { quietFailure: true },
   );
   await act(() => result.current.reissueHostLink());
   expect(meetApi.release).toHaveBeenCalledWith(
@@ -1408,6 +1464,7 @@ it.each(['share', 'shareFinal'] as const)(
     expect(shareLink).toHaveBeenCalledExactlyOnceWith(
       expect.stringMatching(/\/meet\/meeting001$/),
       '친구 모임',
+      { quietFailure: true },
     );
   },
 );
@@ -1461,6 +1518,7 @@ it('확정 공유는 진행 중인 올리기가 끝나면 새 본문을 다시 �
   expect(shareLink).toHaveBeenCalledExactlyOnceWith(
     expect.stringMatching(/\/meet\/meeting001$/),
     '바뀐 제목',
+    { quietFailure: true },
   );
 });
 
