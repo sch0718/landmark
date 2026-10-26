@@ -354,7 +354,7 @@ export function OnlineInviteView({ id }: { id: string }) {
     Object.entries(doc.times).map(([cid, row]) => [cid, { ...row }]),
   );
   for (const reply of state.replies) {
-    if (reply.origin === null || reply.times === null) continue;
+    if (reply.times === null) continue;
     for (const [cid, value] of Object.entries(reply.times))
       (times[cid] ??= {})[reply.participantId] = value;
   }

@@ -279,6 +279,10 @@ export function handleGet(ctx: MeetContext, deps: MeetDeps): Promise<Response> {
       }
       throw error;
     }
+    const token = await readToken(ctx, id);
+    if (ctx.request.headers.has('Authorization') && token === null) {
+      throw new ApiError('UNAUTHORIZED', '약속 연결을 확인해 주세요');
+    }
     if (new URL(ctx.request.url).searchParams.get('since') === String(row.rev)) {
       return new Response(null, { status: 304, headers: PRIVATE_HEADERS });
     }
@@ -301,7 +305,6 @@ export function handleGet(ctx: MeetContext, deps: MeetDeps): Promise<Response> {
       doc: JSON.parse(row.doc),
       replies,
     };
-    const token = await readToken(ctx, id);
     const body =
       token?.kind === 'host' ? state : redactForGuest(state, token?.participant_id ?? null);
     return jsonResponse(body, { headers: PRIVATE_HEADERS });
@@ -378,11 +381,8 @@ export function handleUpdate(ctx: MeetContext, deps: MeetDeps): Promise<Response
       if (changes(results[results.length - 1]) === 0) {
         continue;
       }
-      const updated = await activeMeeting(db, id, now);
-      return jsonResponse(
-        { rev: updated.rev, docRev: updated.doc_rev },
-        { headers: PRIVATE_HEADERS },
-      );
+      // 뒤이은 변경도 다음 확인에서 전체로 받도록 rev는 처음 읽은 값에서 보수적으로 올린다.
+      return jsonResponse({ rev: row.rev + 1, docRev: baseRev + 1 }, { headers: PRIVATE_HEADERS });
     }
     const latest = await activeMeeting(ctx.env.DB, id, now);
     if (latest.doc_rev !== baseRev) conflict(latest.doc_rev);

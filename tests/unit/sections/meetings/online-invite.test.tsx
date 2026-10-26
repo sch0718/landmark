@@ -4,6 +4,7 @@ import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 import { docFromMeeting, type OnlineState } from 'src/domain/meeting/online-doc';
 import { emptyLibrary, type Library } from 'src/schema/library';
 import { meetApi } from 'src/services/meet-online/client';
+import { redactForGuest } from 'src/server/meet/handlers';
 import { readOnline, writeOnline } from 'src/services/meet-online/store';
 import { loadMeetDraft, saveMeetDraft } from 'src/sections/meetings/meet-drafts';
 import { OnlineInviteView } from 'src/sections/meetings/OnlineInviteView';
@@ -230,8 +231,25 @@ it.each(['get', 'reply'] as const)(
     }
     expect(readOnline('meeting001')?.guest).toBeUndefined();
     expect(screen.getByText('나는 누구?')).toBeInTheDocument();
+    expect(meetApi.get).toHaveBeenLastCalledWith('meeting001', null, null);
   },
 );
+
+it('차지가 풀린 토큰은 정기 확인의 401 뒤 토큰 없이 읽고 참석자를 다시 고른다', async () => {
+  guest();
+  await setup();
+  vi.mocked(meetApi.get).mockResolvedValueOnce({ ok: false, error: { code: 'unauthorized' } });
+  await advance(10000);
+  expect(readOnline('meeting001')?.guest).toBeUndefined();
+  expect(screen.getByRole('region', { name: '나는 누구?' })).toBeInTheDocument();
+  expect(meetApi.get).toHaveBeenLastCalledWith('meeting001', null, null);
+  await act(async () => {
+    fireEvent.click(screen.getByRole('button', { name: '친구' }));
+  });
+  expect(meetApi.claim).toHaveBeenCalledWith('meeting001', { participantId: 'person02' });
+  expect(meetApi.get).toHaveBeenLastCalledWith('meeting001', null, token);
+  expect(screen.queryByRole('region', { name: '나는 누구?' })).toBeNull();
+});
 it('다른 사람 좋아요와 출발지 이름을 보이고 보관함은 쓰지 않는다', async () => {
   guest();
   remote = {
@@ -748,7 +766,7 @@ it('좋아요만 저장한 친구는 본문의 20분을 계속 표시한다', as
 });
 
 it.each([null, { choice01: 99 }])(
-  '남의 답장 출발지가 null이면 답장 시간 %j 대신 본문 시간을 쓴다',
+  '남의 답장 출발지가 null이어도 답장 시간 %j가 있으면 쓰고 없으면 본문 시간을 쓴다',
   async (times) => {
     guest();
     remote = {
@@ -767,10 +785,40 @@ it.each([null, { choice01: 99 }])(
     };
     await setup();
     const row = within(screen.getByRole('listitem', { name: '강남역' }));
-    expect(row.getByText('30분')).toBeInTheDocument();
-    expect(row.queryByText('99분')).toBeNull();
+    expect(row.getByText(times === null ? '30분' : '1시간 39분')).toBeInTheDocument();
+    expect(row.queryByText(times === null ? '1시간 39분' : '30분')).toBeNull();
   },
 );
+
+it('서버가 남의 답장 좌표를 가려도 바꾼 출발지의 소요시간을 표시한다', async () => {
+  guest();
+  remote = redactForGuest(
+    {
+      ...remote,
+      doc: { ...remote.doc, times: { choice01: { person01: 10, person02: 20, person03: 30 } } },
+      replies: [
+        {
+          participantId: 'person03',
+          name: '다른 친구',
+          origin: { name: '새 회사', lng: 128, lat: 36 },
+          likes: [],
+          times: { choice01: 17, choice02: 23 },
+          updatedAt: now,
+        },
+      ],
+    },
+    'person02',
+  );
+  expect(remote.replies[0]?.origin).toBeNull();
+  expect(remote.replies[0]?.times).toEqual({ choice01: 17, choice02: 23 });
+  await setup();
+  const row = within(screen.getByRole('listitem', { name: '강남역' }));
+  expect(row.getByText('17분')).toBeInTheDocument();
+  expect(row.queryByText('30분')).toBeNull();
+  expect(
+    within(screen.getByRole('listitem', { name: '시청역' })).getByText('23분'),
+  ).toBeInTheDocument();
+});
 
 it('확정된 약속을 처음 열어도 참석자를 고른 뒤 자기 출발 길찾기를 연다', async () => {
   remote = { ...remote, doc: { ...remote.doc, decided: 'choice01' } };

@@ -135,6 +135,10 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
     }
   }
   async function merge(state: OnlineState): Promise<Meeting | null> {
+    if (state.originNames !== undefined) {
+      markError({ code: 'unauthorized' });
+      return null;
+    }
     let merged: Meeting | null = null;
     let adoptedAt: string | null = null;
     const result = await latest.current.run((lib, ctx) => {

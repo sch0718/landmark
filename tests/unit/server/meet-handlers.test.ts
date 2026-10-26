@@ -346,19 +346,25 @@ describe('약속 읽기와 좌표 가리기', () => {
       ],
     });
   });
-  it.each([undefined, 'invalid-token'])(
-    '토큰 %s이면 모든 참석자 좌표를 가리고 바뀐 출발지 이름을 준다',
-    async (token) => {
-      await seed();
-      await addReply();
-      const response = await handleGet(context('GET', undefined, { token }), deps);
-      const state = (await response.json()) as OnlineState;
-      expect(state.doc.participants.map((p) => p.origin)).toEqual([null, null]);
-      expect(state.replies[0]?.origin).toBeNull();
-      expect(state.originNames).toEqual({ person01: '집', person02: '바꾼 출발지' });
-      expect(state.doc.times).toEqual(doc().times);
-    },
-  );
+  it('토큰 헤더가 없으면 모든 참석자 좌표를 가리고 바뀐 출발지 이름을 준다', async () => {
+    await seed();
+    await addReply();
+    const response = await handleGet(context('GET'), deps);
+    expect(response.status).toBe(200);
+    const state = (await response.json()) as OnlineState;
+    expect(state.doc.participants.map((p) => p.origin)).toEqual([null, null]);
+    expect(state.replies[0]?.origin).toBeNull();
+    expect(state.originNames).toEqual({ person01: '집', person02: '바꾼 출발지' });
+    expect(state.doc.times).toEqual(doc().times);
+  });
+  it.each(['', '?since=1'])('틀린 Bearer는 버전과 무관하게 401이다(%s)', async (query) => {
+    await seed();
+    await expectError(
+      await handleGet(context('GET', undefined, { token: 'invalid-token', query }), deps),
+      401,
+      'UNAUTHORIZED',
+    );
+  });
   it('참석자 토큰이면 자기 본문·답장 출발지만 남긴다', async () => {
     await seed();
     const token = await addReply();
@@ -369,13 +375,14 @@ describe('약속 읽기와 좌표 가리기', () => {
     expect(state.replies[0]?.origin).toEqual(changed);
     expect(state.originNames).toMatchObject({ person01: '집' });
   });
-  it('다른 약속의 주최자 토큰으로 전체 좌표를 읽지 못한다', async () => {
+  it('다른 약속의 주최자 토큰으로 읽으면 401이다', async () => {
     const token = await seed();
     await db.prepare('UPDATE meeting_tokens SET meeting_id = ?').bind('another001').run();
-    const state = (await (
-      await handleGet(context('GET', undefined, { token }), deps)
-    ).json()) as OnlineState;
-    expect(state.doc.participants.every((p) => p.origin === null)).toBe(true);
+    await expectError(
+      await handleGet(context('GET', undefined, { token }), deps),
+      401,
+      'UNAUTHORIZED',
+    );
   });
   it('가리기는 원본을 바꾸지 않고 새 참석자의 출발지 이름도 보존한다', () => {
     const state: OnlineState = {
@@ -636,6 +643,43 @@ describe('약속 고치기와 지우기', () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ rev: 3, docRev: 2 });
   });
+  it.each(['본문', '답장'] as const)(
+    '배치 직후 다른 기기의 %s 갱신이 끼어도 이 요청의 버전을 돌려준다',
+    async (kind) => {
+      const token = await seed();
+      const guestToken = await addReply();
+      const batch = db.batch.bind(db);
+      vi.spyOn(db, 'batch').mockImplementationOnce(async (statements) => {
+        const results = await batch(statements);
+        const later =
+          kind === '본문'
+            ? await handleUpdate(
+                context('PUT', { doc: doc({ title: '다른 기기의 수정' }), baseRev: 2 }, { token }),
+                deps,
+              )
+            : await handleReply(context('PUT', { likes: [] }, { token: guestToken }), deps);
+        expect(later.status).toBe(200);
+        return results;
+      });
+      const response = await handleUpdate(
+        context('PUT', { doc: doc({ title: '이 기기의 수정' }), baseRev: 1 }, { token }),
+        deps,
+      );
+      expect(response.status).toBe(200);
+      const written = await response.json();
+      expect(written).toEqual({ rev: 2, docRev: 2 });
+      expect(await db.prepare('SELECT rev, doc_rev FROM meetings').first()).toEqual({
+        rev: 3,
+        doc_rev: kind === '본문' ? 3 : 2,
+      });
+      const next = await handleGet(
+        context('GET', undefined, { token, query: `?since=${written.rev}` }),
+        deps,
+      );
+      expect(next.status).toBe(200);
+      expect(await next.json()).toMatchObject({ rev: 3, docRev: kind === '본문' ? 3 : 2 });
+    },
+  );
   it('빠진 참석자의 답장·guest 토큰만 같은 배치에서 지운다', async () => {
     const token = await seed();
     await addReply();
@@ -1300,6 +1344,11 @@ describe('참석자 풀기와 주최자 재발급', () => {
     expect(await response.json()).toEqual({ rev: 2 });
     expect(await db.prepare('SELECT * FROM meeting_replies').first()).toEqual(before);
     await expectError(
+      await handleGet(context('GET', undefined, { token: old }), deps),
+      401,
+      'UNAUTHORIZED',
+    );
+    await expectError(
       await handleReply(context('PUT', { likes: [] }, { token: old }), deps),
       401,
       'UNAUTHORIZED',
@@ -1338,6 +1387,11 @@ describe('참석자 풀기와 주최자 재발급', () => {
     expect(body.rev).toBe(2);
     expect(body.hostToken).toMatch(/^[A-Za-z0-9_-]{43}$/);
     expect(body.hostToken).not.toBe(old);
+    await expectError(
+      await handleGet(context('GET', undefined, { token: old }), deps),
+      401,
+      'UNAUTHORIZED',
+    );
     await expectError(
       await handleUpdate(context('PUT', { doc: doc(), baseRev: 1 }, { token: old }), deps),
       401,

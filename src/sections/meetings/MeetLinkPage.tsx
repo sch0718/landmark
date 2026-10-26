@@ -103,7 +103,7 @@ function HostLink({ id, token }: { id: string; token: string }) {
         return;
       }
       const state = response.value;
-      // 현재 API는 철회된 토큰에도 익명 본문을 준다. 가려진 본문으로 보관함을 덮지 않는다.
+      // 가려진 본문이 돌아와도 보관함의 출발지를 덮지 않는다.
       if (state.originNames !== undefined) {
         setError('주최자 링크가 더 이상 쓸 수 없어요');
         return;

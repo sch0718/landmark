@@ -70,6 +70,7 @@ function state(overrides: Partial<OnlineState> = {}): OnlineState {
 function online() {
   writeOnline(saved.id, { hostToken: token, lastRev: 1, docRev: 1, syncedAt: startAt });
 }
+
 function setup() {
   return renderHook(() => {
     const [meeting, setMeeting] = useState(saved);
@@ -125,6 +126,50 @@ afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
 });
+
+it.each(['첫 확인', '정기 확인', '본문 버전 확인', '충돌 재시도'] as const)(
+  '%s에서 가린 응답을 받으면 출발지를 지키고 연결 끊김을 알린다',
+  async (path) => {
+    saved = {
+      ...saved,
+      participants: f([
+        { id: 'person01', name: '나', origin: { name: '집', lng: 127, lat: 37.5 } },
+        { id: 'person02', name: '친구', origin: { name: '회사', lng: 128, lat: 36 } },
+      ]),
+    };
+    online();
+    const before = saved.participants;
+    const doc = state().doc;
+    const redacted = state({
+      rev: 3,
+      docRev: 2,
+      originNames: { person01: '집', person02: '회사' },
+      doc: { ...doc, participants: doc.participants.map((p) => ({ ...p, origin: null })) },
+    });
+    if (path === '첫 확인') vi.mocked(meetApi.get).mockResolvedValue({ ok: true, value: redacted });
+    const { result } = setup();
+    await flush();
+    vi.mocked(meetApi.get).mockResolvedValue({ ok: true, value: redacted });
+    if (path === '정기 확인') await advance(10000);
+    if (path === '본문 버전 확인' || path === '충돌 재시도') {
+      if (path === '본문 버전 확인')
+        writeOnline(saved.id, { hostToken: token, lastRev: 1, syncedAt: startAt });
+      else
+        vi.mocked(meetApi.update).mockResolvedValueOnce({
+          ok: false,
+          error: { code: 'conflict', docRev: 2 },
+        });
+      await edit({ title: f('미전송 제목') });
+      await advance(1000);
+    }
+    expect(saved.participants).toEqual(before);
+    expect(result.current.status.failing).toBe(true);
+    expect(toast.error).toHaveBeenCalledExactlyOnceWith(
+      '이 기기의 주최자 연결이 끊겼어요. 주최자 링크로 다시 연결하세요',
+    );
+    expect(meetApi.update).toHaveBeenCalledTimes(path === '충돌 재시도' ? 1 : 0);
+  },
+);
 
 it('링크 방식 약속은 후보와 확정 해시 문서를 공유한다', async () => {
   saved = {
@@ -757,7 +802,15 @@ it.each(['mode', 'origin'] as const)(
   },
 );
 
-it('unauthorized 확인 세 번에도 같은 화면에서는 알림을 한 번만 띄운다', async () => {
+it('철회된 기기는 401 확인 세 번에도 출발지를 보존하고 알림을 한 번만 띄운다', async () => {
+  saved = {
+    ...saved,
+    participants: f([
+      { id: 'person01', name: '나', origin: { name: '집', lng: 127, lat: 37.5 } },
+      { id: 'person02', name: '친구', origin: { name: '회사', lng: 128, lat: 36 } },
+    ]),
+  };
+  const before = saved;
   online();
   vi.mocked(meetApi.get).mockResolvedValue({ ok: false, error: { code: 'unauthorized' } });
   setup();
@@ -765,6 +818,7 @@ it('unauthorized 확인 세 번에도 같은 화면에서는 알림을 한 번�
   await advance(10000);
   await advance(10000);
   expect(meetApi.get).toHaveBeenCalledTimes(3);
+  expect(saved).toBe(before);
   expect(toast.error).toHaveBeenCalledExactlyOnceWith(
     '이 기기의 주최자 연결이 끊겼어요. 주최자 링크로 다시 연결하세요',
   );
