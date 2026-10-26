@@ -160,3 +160,45 @@ it('대기 중인 최초 본문 시각을 새 저장소에서도 복원한다', 
   createOnlineStore(() => storage).writeOnline('meeting001', record);
   expect(createOnlineStore(() => storage).readOnline('meeting001')).toEqual(record);
 });
+
+it('구독한 약속의 같은 탭 쓰기와 삭제만 알리고 해제 뒤에는 멈춘다', () => {
+  const storage = createMemoryStorage();
+  const store = createOnlineStore(() => storage);
+  const listener = vi.fn();
+  const unsubscribe = store.subscribeOnline('meeting001', listener);
+  store.writeOnline('meeting002', { lastRev: 1 });
+  expect(listener).not.toHaveBeenCalled();
+  store.writeOnline('meeting001', { lastRev: 2, ended: true });
+  expect(listener).toHaveBeenLastCalledWith({ lastRev: 2, ended: true });
+  store.removeOnline('meeting001');
+  expect(listener).toHaveBeenLastCalledWith(null);
+  unsubscribe();
+  store.writeOnline('meeting001', { lastRev: 3 });
+  expect(listener).toHaveBeenCalledTimes(2);
+});
+
+it('storage 이벤트는 구독한 약속을 다시 읽고 다른 키와 해제된 구독은 무시한다', () => {
+  const storage = createMemoryStorage();
+  const store = createOnlineStore(() => storage);
+  const listener = vi.fn();
+  const unsubscribe = store.subscribeOnline('meeting001', listener);
+  storage.setItem(MEET_ONLINE_KEY, JSON.stringify({ meeting001: { lastRev: 2, ended: true } }));
+  window.dispatchEvent(new StorageEvent('storage', { key: 'other' }));
+  expect(listener).not.toHaveBeenCalled();
+  window.dispatchEvent(new StorageEvent('storage', { key: MEET_ONLINE_KEY, newValue: '{}' }));
+  expect(listener).toHaveBeenCalledExactlyOnceWith({ lastRev: 2, ended: true });
+  unsubscribe();
+  window.dispatchEvent(new StorageEvent('storage', { key: MEET_ONLINE_KEY }));
+  expect(listener).toHaveBeenCalledTimes(1);
+});
+
+it('저장소가 막혀도 같은 탭의 메모리 기록 변경을 알린다', () => {
+  const store = createOnlineStore(() => {
+    throw new Error('차단');
+  });
+  const listener = vi.fn();
+  const unsubscribe = store.subscribeOnline('meeting001', listener);
+  store.writeOnline('meeting001', { lastRev: 1 });
+  expect(listener).toHaveBeenCalledExactlyOnceWith({ lastRev: 1 });
+  unsubscribe();
+});

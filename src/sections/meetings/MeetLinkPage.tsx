@@ -158,7 +158,12 @@ function HostLink({ id, token }: { id: string; token: string }) {
         ...readOnline(id),
         hostToken: token,
         lastRev: state.rev,
-        ...(hostLikes === undefined ? {} : { hostLikes }),
+        hostLikes: [
+          ...(hostLikes ??
+            state.replies.find((reply) => reply.participantId === state.doc.participants[0]!.id)
+              ?.likes ??
+            []),
+        ],
         ...(addedReplyOnly.length === 0
           ? {}
           : {

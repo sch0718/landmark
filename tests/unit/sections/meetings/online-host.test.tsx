@@ -11,7 +11,7 @@ import type { Meeting } from 'src/schema/meeting';
 import { emptyLibrary } from 'src/schema/library';
 import { docFromMeeting, type OnlineState } from 'src/domain/meeting/online-doc';
 import { meetApi, type OnlineError } from 'src/services/meet-online/client';
-import { readOnline, writeOnline } from 'src/services/meet-online/store';
+import { MEET_ONLINE_KEY, readOnline, writeOnline } from 'src/services/meet-online/store';
 import { getTurnstileToken } from 'src/services/meet-online/turnstile-loader';
 import { shareLink, shareMeetingDoc } from 'src/sections/meetings/share-link';
 import { useOnlineMeeting, type OnlineCompute } from 'src/sections/meetings/use-online-meeting';
@@ -108,6 +108,43 @@ it('동기화 뒤 바꾸지 않은 빈 좋아요는 다른 기기의 서버 좋�
   expect(readOnline(saved.id)?.hostLikes).toEqual(['choice01']);
   expect(meetApi.reply).not.toHaveBeenCalled();
 });
+
+it.each([true, false])(
+  '좋아요를 취소한 뒤 처음 공유하면 빈 기준을 남기고 다른 기기 좋아요를 받는다(created=%s)',
+  async (created) => {
+    const { result } = setup();
+    await edit({
+      replies: f({ person01: { likes: ['choice01'], sentAt: startAt, receivedAt: startAt } }),
+    });
+    await edit({ replies: f({ person01: { likes: [], sentAt: startAt, receivedAt: startAt } }) });
+    vi.mocked(meetApi.create).mockResolvedValueOnce({
+      ok: true,
+      value: { id: saved.id, rev: 1, docRev: 1, hostToken: token, created },
+    });
+    await act(() => result.current.share());
+    expect(readOnline(saved.id)?.hostLikes).toEqual([]);
+    expect(meetApi.reply).not.toHaveBeenCalled();
+    vi.mocked(meetApi.get).mockResolvedValueOnce({
+      ok: true,
+      value: state({
+        replies: [
+          {
+            participantId: 'person01',
+            name: '나',
+            origin: null,
+            likes: ['choice01'],
+            times: null,
+            updatedAt: startAt,
+          },
+        ],
+      }),
+    });
+    await advance(10000);
+    expect(saved.replies.value.person01?.likes).toEqual(['choice01']);
+    expect(readOnline(saved.id)?.hostLikes).toEqual(['choice01']);
+    expect(meetApi.reply).not.toHaveBeenCalled();
+  },
+);
 
 it('동기화 기록과 다른 로컬 좋아요는 서버 확인 뒤에도 보존해 올린다', async () => {
   saved = {
@@ -1585,3 +1622,36 @@ it('seen 한도가 차도 서버에 남은 답장 전용 참석자의 삭제 기
   await advance(10000);
   expect(saved.participants.value.some((p) => p.id === 'guest001')).toBe(false);
 });
+
+it.each(['storage', 'writeOnline', 'tick'] as const)(
+  '열린 주최자 화면은 다른 곳의 종료 기록을 받아 공유를 막는다(%s)',
+  async (source) => {
+    const { MeetingResults } = await import('src/sections/meetings/MeetingResults');
+    online();
+    function Editor() {
+      const [meeting, setMeeting] = useState(saved);
+      refresh = setMeeting;
+      const host = useOnlineMeeting(meeting, compute);
+      return <MeetingResults meeting={meeting} library={emptyLibrary()} online={host} />;
+    }
+    render(<Editor />);
+    await flush();
+    expect(screen.getByRole('button', { name: '후보 링크 보내기' })).toBeEnabled();
+    const reads = vi.mocked(meetApi.get).mock.calls.length;
+    const ended = { ...readOnline(saved.id)!, ended: true as const };
+    delete ended.hostToken;
+    await act(async () => {
+      if (source === 'writeOnline') writeOnline(saved.id, ended);
+      else {
+        localStorage.setItem(MEET_ONLINE_KEY, JSON.stringify({ [saved.id]: ended }));
+        if (source === 'storage')
+          window.dispatchEvent(new StorageEvent('storage', { key: MEET_ONLINE_KEY }));
+      }
+    });
+    if (source === 'tick') await advance(10000);
+    expect(screen.getByText('공유가 끝난 약속이에요')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '후보 링크 보내기' })).toBeDisabled();
+    await advance(10000);
+    expect(meetApi.get).toHaveBeenCalledTimes(reads);
+  },
+);

@@ -9,6 +9,7 @@ import {
   isLinkMeeting,
   readOnline,
   rememberReplyOnly,
+  subscribeOnline,
   writeOnline,
   type OnlineRecord,
 } from 'src/services/meet-online/store';
@@ -320,6 +321,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
   }
   async function tick(full = false): Promise<'ok' | 'error'> {
     const current = currentRecord();
+    if (active.current && JSON.stringify(current) !== JSON.stringify(record)) setRecord(current);
     if (!current?.hostToken || current.ended || inFlight.current) return 'ok';
     const finish = beginFlight();
     try {
@@ -372,6 +374,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
       active.current = false;
     };
   }, []);
+  useEffect(() => subscribeOnline(meeting.id, setRecord), [meeting.id]);
   useEffect(() => {
     if (mode !== 'online') return;
     if (baseline.current === null) {
@@ -461,6 +464,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
         baseline.current = response.value.created ? JSON.stringify(doc) : '';
         save({
           hostToken: response.value.hostToken,
+          hostLikes: [],
           lastRev: response.value.rev,
           docRev: response.value.docRev,
           syncedAt: response.value.created ? sentAt : pendingSince,

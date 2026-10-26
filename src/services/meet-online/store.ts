@@ -45,6 +45,7 @@ const recordSchema = Schema.Struct({
 export function createOnlineStore(storage: () => Storage = () => window.localStorage) {
   let memory = new Map<string, OnlineRecord>();
   let memoryOnly = false;
+  const listeners = new Map<string, Set<(record: OnlineRecord | null) => void>>();
   function read() {
     if (memoryOnly) return memory;
     let raw: string | null;
@@ -88,6 +89,23 @@ export function createOnlineStore(storage: () => Storage = () => window.localSto
     const record = read().get(id);
     return record ? structuredClone(record) : null;
   }
+  function notify(id: string) {
+    for (const listener of listeners.get(id) ?? []) listener(readOnline(id));
+  }
+  function subscribeOnline(id: string, listener: (record: OnlineRecord | null) => void) {
+    const group = listeners.get(id) ?? new Set();
+    group.add(listener);
+    listeners.set(id, group);
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === MEET_ONLINE_KEY || event.key === null) listener(readOnline(id));
+    };
+    window.addEventListener('storage', onStorage);
+    return () => {
+      group.delete(listener);
+      if (group.size === 0) listeners.delete(id);
+      window.removeEventListener('storage', onStorage);
+    };
+  }
   function writeOnline(id: string, record: OnlineRecord): void {
     read();
     // 다시 쓴 기록을 마지막으로 옮겨, 별도 시각 필드 없이 오래된 기록부터 버린다.
@@ -95,16 +113,19 @@ export function createOnlineStore(storage: () => Storage = () => window.localSto
     memory.set(id, structuredClone(record));
     trim();
     save();
+    notify(id);
   }
   function removeOnline(id: string): void {
     read();
     memory.delete(id);
     save();
+    notify(id);
   }
-  return { allOnline, readOnline, writeOnline, removeOnline };
+  return { allOnline, readOnline, writeOnline, removeOnline, subscribeOnline };
 }
 
-export const { allOnline, readOnline, writeOnline, removeOnline } = createOnlineStore();
+export const { allOnline, readOnline, writeOnline, removeOnline, subscribeOnline } =
+  createOnlineStore();
 
 /** 한도가 차면 서버에 아직 있는 참석자의 삭제 기록부터 지킨다. */
 export function rememberReplyOnly(

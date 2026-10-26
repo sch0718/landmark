@@ -935,3 +935,101 @@ it('주최자 링크에서도 seen이 차면 서버에 남은 삭제 기록을 �
     false,
   );
 });
+
+it.each([{ likes: [] }, { likes: ['choice01'] }])(
+  '주최자 링크를 담을 때 좋아요 기준을 남긴다(%j)',
+  async ({ likes }) => {
+    remote = {
+      rev: remote.rev,
+      docRev: remote.docRev,
+      doc: remote.doc,
+      replies:
+        likes.length === 0
+          ? []
+          : [
+              {
+                participantId: 'person01',
+                name: '주최자',
+                origin: null,
+                likes,
+                times: null,
+                updatedAt: now,
+              },
+            ],
+    };
+    await setup(`/meet/meeting001#h=${hostToken}`);
+    expect(readOnline('meeting001')?.hostLikes).toEqual(likes);
+  },
+);
+
+it('지워진 참석자를 고르면 목록을 다시 읽어 안내하고 확인을 계속한다', async () => {
+  await setup();
+  remote = {
+    ...remote,
+    rev: 3,
+    docRev: 2,
+    doc: {
+      ...remote.doc,
+      participants: remote.doc.participants.filter((p) => p.id !== 'person02'),
+    },
+  };
+  vi.mocked(meetApi.claim).mockResolvedValueOnce({ ok: false, error: { code: 'not-found' } });
+  await act(async () => {
+    fireEvent.click(screen.getByRole('button', { name: '친구' }));
+  });
+  expect(screen.getByRole('alert')).toHaveTextContent(
+    '그 참석자는 이제 목록에 없어요. 다시 골라 주세요',
+  );
+  expect(meetApi.get).toHaveBeenLastCalledWith('meeting001', null, null);
+  expect(screen.queryByRole('button', { name: '친구' })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '다른 친구' })).toBeEnabled();
+  expect(screen.queryByText('끝난 약속이에요')).not.toBeInTheDocument();
+  const reads = vi.mocked(meetApi.get).mock.calls.length;
+  await advance(10000);
+  expect(meetApi.get).toHaveBeenCalledTimes(reads + 1);
+  expect(meetApi.get).toHaveBeenLastCalledWith('meeting001', 3, null);
+});
+
+it.each(['ended', 'not-found'] as const)(
+  '차지 실패 뒤 읽기가 %s이면 끝난 약속을 보인다',
+  async (code) => {
+    await setup();
+    vi.mocked(meetApi.claim).mockResolvedValueOnce({ ok: false, error: { code: 'not-found' } });
+    vi.mocked(meetApi.get).mockResolvedValue({ ok: false, error: { code } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '친구' }));
+    });
+    expect(meetApi.get).toHaveBeenCalledTimes(2);
+    expect(meetApi.get).toHaveBeenLastCalledWith('meeting001', null, null);
+    expect(screen.getByRole('heading', { name: '끝난 약속이에요' })).toBeInTheDocument();
+  },
+);
+
+it('주최자 링크에서 미전송 좋아요를 보존해도 서버 좋아요 기준을 남긴다', async () => {
+  library = {
+    ...library,
+    meetings: {
+      meeting001: buildMeeting({
+        replies: f({ person01: { likes: ['choice01'], sentAt: now, receivedAt: now } }),
+      }),
+    },
+  };
+  remote = {
+    rev: remote.rev,
+    docRev: remote.docRev,
+    doc: remote.doc,
+    replies: [
+      {
+        participantId: 'person01',
+        name: '주최자',
+        origin: null,
+        likes: ['choice02'],
+        times: null,
+        updatedAt: now,
+      },
+    ],
+  };
+  await setup(`/meet/meeting001#h=${hostToken}`);
+  expect(library.meetings?.meeting001?.replies.value.person01?.likes).toEqual(['choice01']);
+  expect(readOnline('meeting001')?.hostLikes).toEqual(['choice02']);
+});

@@ -23,9 +23,6 @@ function message(error: OnlineError) {
       return '다른 기기에서 이미 답했어요. 주최자에게 풀어 달라고 하세요';
     case 'full':
       return '참석자가 가득 찼어요';
-    case 'ended':
-    case 'not-found':
-      return '끝난 약속이에요';
     default:
       return '지금은 보낼 수 없어요. 잠시 뒤 다시 해 주세요';
   }
@@ -122,7 +119,7 @@ export function OnlineInviteView({ id }: { id: string }) {
     return () => clearInterval(timer);
   }, []);
 
-  function markError(failure: OnlineError) {
+  function markError(failure: OnlineError, reading = false) {
     if (!active.current) return;
     if (failure.code === 'unauthorized') {
       const record = { ...readOnline(id), lastRev: 0 };
@@ -135,7 +132,7 @@ export function OnlineInviteView({ id }: { id: string }) {
       setError(null);
     } else {
       setError(message(failure));
-      if (failure.code === 'ended' || failure.code === 'not-found') setEnded(true);
+      if (reading && (failure.code === 'ended' || failure.code === 'not-found')) setEnded(true);
     }
   }
   async function sendDraft(): Promise<boolean> {
@@ -204,7 +201,7 @@ export function OnlineInviteView({ id }: { id: string }) {
       );
       if (!active.current || current.guest?.token !== latest.current.guest?.token) return 'error';
       if (!result.ok) {
-        markError(result.error);
+        markError(result.error, true);
         return 'error';
       }
       if (result.value !== 'unchanged') {
@@ -263,6 +260,25 @@ export function OnlineInviteView({ id }: { id: string }) {
     setClaiming(true);
     const result = await meetApi.claim(id, who);
     if (!active.current) return;
+    if (!result.ok && (result.error.code === 'not-found' || result.error.code === 'ended')) {
+      const refreshed = await meetApi.get(id, null, null);
+      if (!active.current) return;
+      setClaiming(false);
+      if (!refreshed.ok) {
+        markError(refreshed.error, true);
+        return;
+      }
+      if (refreshed.value !== 'unchanged') {
+        setState(refreshed.value);
+        writeOnline(id, {
+          ...readOnline(id),
+          lastRev: refreshed.value.rev,
+          docRev: refreshed.value.docRev,
+        });
+      }
+      setError('그 참석자는 이제 목록에 없어요. 다시 골라 주세요');
+      return;
+    }
     setClaiming(false);
     if (!result.ok) {
       markError(result.error);
