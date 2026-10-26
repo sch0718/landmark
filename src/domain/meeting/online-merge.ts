@@ -20,7 +20,23 @@ type OnlineMergeResult =
       replyOrigins?: Record<string, Origin>;
     });
 
-/** 답장 출발지·답장 전용 참석자를 빼고 주최자가 고친 본문만 비교한다. */
+/** 마지막으로 본 친구 출발지와 다른 보관함 값은 주최자의 덮어쓰기다. */
+export function overriddenReplyOrigins(
+  participants: MeetingDoc['participants'],
+  replyOrigins: Record<string, Origin> = {},
+): string[] {
+  const hostId = participants[0]?.id;
+  return participants
+    .filter(
+      (p) =>
+        p.id !== hostId &&
+        replyOrigins[p.id] !== undefined &&
+        JSON.stringify(p.origin) !== JSON.stringify(replyOrigins[p.id]),
+    )
+    .map((p) => p.id);
+}
+
+/** 친구가 고른 출발지·답장 전용 참석자를 빼고 주최자가 고친 본문을 비교한다. */
 export function hostEdits(
   meeting: Meeting,
   syncedDoc: MeetingDoc,
@@ -48,6 +64,7 @@ export function hostEdits(
       .map((p) => [p.id, p.name]),
   });
   return (
+    overriddenReplyOrigins(meeting.participants.value, replyOrigins).length > 0 ||
     originEdited ||
     JSON.stringify(
       project(docFromMeeting(meeting, {}, meeting.mode.value === 'straight' ? 'm' : 'min')),
@@ -129,14 +146,9 @@ export function mergeOnline(
     const previous = next.replies.value[pid];
     const fresh = previous === undefined || previous.sentAt !== reply.updatedAt;
     const participant = next.participants.value.find((p) => p.id === pid);
-    const syncedParticipant = sync.syncedDoc?.participants.find((p) => p.id === pid);
-    // 본문 출발지가 그대로면 옛 답장도 복원하되, 다른 기기가 고친 출발지는 되돌리지 않는다.
-    const changedOrigin =
-      adopt &&
-      participant !== undefined &&
-      JSON.stringify(participant.origin) !== JSON.stringify(syncedParticipant?.origin) &&
-      JSON.stringify(participant.origin) !== JSON.stringify(reply.origin);
-    const applyOrigin = (fresh || (adopt && !changedOrigin)) && reply.origin !== null;
+    // 답장 시각은 좋아요에만 쓴다. 출발지는 이 기기가 마지막으로 본 값과 비교한다.
+    const applyOrigin =
+      reply.origin !== null && JSON.stringify(reply.origin) !== JSON.stringify(replyOrigins[pid]);
     if (participant === undefined) {
       if (state.doc.participants.some((p) => p.id === pid)) continue;
       if (next.participants.value.length >= LIBRARY_LIMITS.meetingParticipantsMax) continue;
@@ -148,10 +160,9 @@ export function mergeOnline(
           {
             id: pid,
             name: reply.name,
-            origin:
-              fresh || applyOrigin
-                ? reply.origin
-                : (meeting.participants.value.find((p) => p.id === pid)?.origin ?? reply.origin),
+            origin: applyOrigin
+              ? reply.origin
+              : (meeting.participants.value.find((p) => p.id === pid)?.origin ?? null),
           },
         ],
         ctx.now,
@@ -165,7 +176,7 @@ export function mergeOnline(
         ctx.now,
       );
     }
-    if (reply.origin !== null && (fresh || applyOrigin)) replyOrigins[pid] = reply.origin;
+    if (applyOrigin) replyOrigins[pid] = reply.origin!;
     if (!fresh) continue;
     next = meetingField(
       next,

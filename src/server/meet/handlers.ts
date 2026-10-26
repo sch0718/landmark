@@ -48,6 +48,9 @@ const updateSchema = Schema.Struct({
   removed: Schema.optionalKey(
     Schema.Array(MeetingMemberId).check(Schema.isMaxLength(LIBRARY_LIMITS.meetingParticipantsMax)),
   ),
+  clearReplyOrigins: Schema.optionalKey(
+    Schema.Array(MeetingMemberId).check(Schema.isMaxLength(LIBRARY_LIMITS.meetingParticipantsMax)),
+  ),
 });
 
 // 공통 오류 형식을 지키면서 이 API의 이유·현재 버전을 덧붙인다.
@@ -347,6 +350,7 @@ export function handleUpdate(ctx: MeetContext, deps: MeetDeps): Promise<Response
       doc,
       baseRev,
       removed: requestedRemoved = [],
+      clearReplyOrigins = [],
     } = validate(updateSchema, await readJson(ctx.request));
     if (doc.meetingId !== id) throw new ApiError('BAD_REQUEST', '약속 id가 경로와 달라요');
     const conflict = (docRev: number): never => {
@@ -386,18 +390,26 @@ export function handleUpdate(ctx: MeetContext, deps: MeetDeps): Promise<Response
           )
           .bind(id, pid, id, baseRev, row.rev),
       ]);
+      const clearOrigins = new Set(clearReplyOrigins.filter((pid) => pid !== hostId));
       for (const participant of doc.participants) {
         const previous = old.participants.find((p) => p.id === participant.id);
-        if (previous && JSON.stringify(previous.origin) !== JSON.stringify(participant.origin)) {
-          // 주최자가 고친 출발지를 쓰도록 옛 답장과 그 출발지의 시간을 함께 비운다.
-          cleanup.push(
-            db
-              .prepare(
-                `UPDATE meeting_replies SET origin = NULL, times = NULL WHERE meeting_id = ? AND participant_id = ? AND ${guard}`,
-              )
-              .bind(id, participant.id, id, baseRev, row.rev),
-          );
+        if (
+          participant.id !== hostId &&
+          previous &&
+          JSON.stringify(previous.origin) !== JSON.stringify(participant.origin)
+        ) {
+          clearOrigins.add(participant.id);
         }
+      }
+      for (const pid of clearOrigins) {
+        // 주최자가 고친 출발지를 쓰도록 옛 답장과 그 출발지의 시간을 함께 비운다.
+        cleanup.push(
+          db
+            .prepare(
+              `UPDATE meeting_replies SET origin = NULL, times = NULL WHERE meeting_id = ? AND participant_id = ? AND ${guard}`,
+            )
+            .bind(id, pid, id, baseRev, row.rev),
+        );
       }
       const oldCandidates = new Map(old.candidates.map((c) => [c.id, c]));
       const changedConditions =

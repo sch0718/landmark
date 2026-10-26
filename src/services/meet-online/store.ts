@@ -20,6 +20,7 @@ export type OnlineRecord = {
   lastRev?: number;
   docRev?: number;
   syncedDoc?: MeetingDoc;
+  // 이 기기가 마지막으로 받은 각 참석자의 답장 출발지다.
   replyOrigins?: Record<string, Origin>;
   seen?: string[];
   ended?: true;

@@ -16,6 +16,20 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('온라인 약속 API', () => {
+  it('주최자가 덮어쓴 답장 출발지 id를 PUT 본문에 보낸다', async () => {
+    respond({ rev: 8, docRev: 3 });
+    const signal = new AbortController().signal;
+    await meetApi.update(doc.meetingId, doc, 2, token, [], signal, ['person02']);
+    const input = fetchMock.mock.calls[0]![1]!;
+    expect(JSON.parse(input.body as string)).toEqual({
+      doc,
+      baseRev: 2,
+      removed: [],
+      clearReplyOrigins: ['person02'],
+    });
+    expect(input.signal).toBe(signal);
+  });
+
   const cases = [
     [
       '올리기',

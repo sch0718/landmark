@@ -98,6 +98,89 @@ async function seed() {
   await Promise.all(pending);
   return body.hostToken;
 }
+
+it('본문이 같아도 지정한 답장 출발지와 시간만 비우고 주최자 id는 무시한다', async () => {
+  const token = await seed();
+  await addReply();
+  await addReply('person01');
+  await addReply('person03');
+  const response = await handleUpdate(
+    context(
+      'PUT',
+      {
+        doc: doc(),
+        baseRev: 1,
+        clearReplyOrigins: ['person01', 'person02'],
+      },
+      { token },
+    ),
+    deps,
+  );
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ rev: 2, docRev: 2 });
+  const { results } = await db
+    .prepare(
+      'SELECT participant_id, origin, times, likes, updated_at FROM meeting_replies ORDER BY participant_id',
+    )
+    .all();
+  expect(results).toEqual(
+    ['person01', 'person02', 'person03'].map((pid) => ({
+      participant_id: pid,
+      origin: pid === 'person02' ? null : JSON.stringify(changed),
+      times: pid === 'person02' ? null : '{"choice01":25}',
+      likes: '["choice01"]',
+      updated_at: NOW.toISOString(),
+    })),
+  );
+});
+
+it('출발지 비우기도 같은 batch의 버전 조건 안에서만 적용한다', async () => {
+  const token = await seed();
+  await addReply();
+  const batch = db.batch.bind(db);
+  vi.spyOn(db, 'batch').mockImplementationOnce(async (statements) => {
+    await db.prepare('UPDATE meetings SET doc_rev = doc_rev + 1').run();
+    return batch(statements);
+  });
+  expect(
+    (
+      await handleUpdate(
+        context(
+          'PUT',
+          {
+            doc: doc(),
+            baseRev: 1,
+            clearReplyOrigins: ['person02'],
+          },
+          { token },
+        ),
+        deps,
+      )
+    ).status,
+  ).toBe(409);
+  expect(await db.prepare('SELECT origin, times FROM meeting_replies').first()).toEqual({
+    origin: JSON.stringify(changed),
+    times: '{"choice01":25}',
+  });
+});
+
+it.each([
+  { clearReplyOrigins: ['wrong'] },
+  {
+    clearReplyOrigins: Array.from({ length: 11 }, (_, i) => `person${String(i).padStart(2, '0')}`),
+  },
+])('답장 출발지를 비울 id 형식과 최대 10명 제한을 검사한다: %j', async ({ clearReplyOrigins }) => {
+  const token = await seed();
+  expect(
+    (
+      await handleUpdate(
+        context('PUT', { doc: doc(), baseRev: 1, clearReplyOrigins }, { token }),
+        deps,
+      )
+    ).status,
+  ).toBe(400);
+});
+
 async function addReply(
   pid = 'person02',
   origin: typeof home | null = changed,

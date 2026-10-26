@@ -80,6 +80,74 @@ function online() {
   writeOnline(saved.id, { hostToken: token, lastRev: 1, docRev: 1, syncedDoc: state().doc });
 }
 
+it.each(['성공', '실패', '전송 중 새 출발지'] as const)(
+  '합친 B를 저장된 A로 되돌리면 본문이 같아도 답장 출발지를 비우도록 올린다: %s',
+  async (outcome) => {
+    const originA = { name: '저장된 A', lng: 127, lat: 37.5 };
+    const originB = { name: '친구 B', lng: 128, lat: 38 };
+    const originD = { name: '새 친구 D', lng: 126.5, lat: 37.2 };
+    saved = {
+      ...saved,
+      participants: f(
+        saved.participants.value.map((p) => (p.id === 'person02' ? { ...p, origin: originA } : p)),
+      ),
+    };
+    online();
+    const baseline = state().doc;
+    vi.mocked(meetApi.get).mockResolvedValueOnce({
+      ok: true,
+      value: state({
+        replies: [
+          {
+            participantId: 'person02',
+            name: '친구',
+            origin: originB,
+            likes: [],
+            times: null,
+            updatedAt: startAt,
+          },
+        ],
+      }),
+    });
+    setup();
+    await flush();
+    expect(saved.participants.value[1]?.origin).toEqual(originB);
+    await edit({ participants: f(baseline.participants) });
+    let finish!: (value: Awaited<ReturnType<typeof meetApi.update>>) => void;
+    vi.mocked(meetApi.update).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    await advance(1000);
+    expect(meetApi.update).toHaveBeenCalledExactlyOnceWith(
+      saved.id,
+      baseline,
+      1,
+      token,
+      [],
+      expect.any(AbortSignal),
+      ['person02'],
+    );
+    if (outcome === '전송 중 새 출발지')
+      writeOnline(saved.id, {
+        ...readOnline(saved.id)!,
+        replyOrigins: { person02: originD },
+      });
+    await act(async () =>
+      finish(
+        outcome === '실패'
+          ? { ok: false, error: { code: 'offline' } }
+          : { ok: true, value: { rev: 3, docRev: 2 } },
+      ),
+    );
+    expect(readOnline(saved.id)?.replyOrigins ?? {}).toEqual(
+      outcome === '성공' ? {} : { person02: outcome === '실패' ? originB : originD },
+    );
+  },
+);
+
 it.each(['person01', 'person02'])(
   '올리기 전 %s 출발지 수정은 원격 제목에 덮이지 않고 다음 올리기에 실린다',
   async (pid) => {
@@ -108,6 +176,7 @@ it.each(['person01', 'person02'])(
       token,
       [],
       expect.any(AbortSignal),
+      [],
     );
   },
 );
@@ -266,7 +335,7 @@ it.each([false, true])(
 );
 
 it.each(['성공', '실패', '전송 중 새 출발지'] as const)(
-  '본문 올리기 %s 때 전송한 값과 같은 답장 출발지만 정리한다',
+  '본문 올리기 %s 때 덮어쓰지 않은 마지막 답장 출발지를 보존한다',
   async (outcome) => {
     online();
     const origin = { name: '회사', lng: 128, lat: 38 };
@@ -312,9 +381,9 @@ it.each(['성공', '실패', '전송 중 새 출발지'] as const)(
           : { ok: true, value: { rev: 3, docRev: 2 } },
       ),
     );
-    expect(readOnline(saved.id)?.replyOrigins ?? {}).toEqual(
-      outcome === '성공' ? {} : { person02: outcome === '실패' ? origin : newer },
-    );
+    expect(readOnline(saved.id)?.replyOrigins ?? {}).toEqual({
+      person02: outcome === '전송 중 새 출발지' ? newer : origin,
+    });
   },
 );
 
@@ -567,6 +636,7 @@ it.each([false, true])(
           pendingToken,
           [],
           expect.any(AbortSignal),
+          [],
         );
       }
     } finally {
@@ -770,6 +840,7 @@ it('열 때 즉시 확인하고 참석자 수정 두 번을 1초 모아 docRev�
     token,
     [],
     expect.any(AbortSignal),
+    [],
   );
   expect(readOnline(saved.id)).toMatchObject({ docRev: 2, syncedDoc: state().doc });
   expect(result.current.status.failing).toBe(false);
@@ -809,6 +880,7 @@ it('충돌한 본문 버전이 다를 때 get·merge 뒤 새 docRev로 한 번 �
     token,
     [],
     expect.any(AbortSignal),
+    [],
   );
   expect(meetApi.update).toHaveBeenCalledTimes(2);
   expect(result.current.status.failing).toBe(false);
@@ -1094,6 +1166,7 @@ it('전송 중에 다시 고친 본문도 첫 전송이 끝나면 자동으로 �
     token,
     [],
     expect.any(AbortSignal),
+    [],
   );
 });
 it('두 번째 충돌은 바로 또 시도하지 않고 다음 확인까지 기다린다', async () => {
@@ -1684,6 +1757,7 @@ it.each([
         token,
         [],
         expect.any(AbortSignal),
+        [],
       );
     } finally {
       finish();
@@ -1784,6 +1858,7 @@ it.each(['person02', 'person03'])(
         token,
         [],
         expect.any(AbortSignal),
+        [],
       );
     } finally {
       finish();
@@ -1846,6 +1921,7 @@ it.each([false, true])(
         token,
         [],
         expect.any(AbortSignal),
+        [],
       );
       expect(reported).toEqual({ times: {}, unit: 'm', pending: false });
       vi.mocked(meetApi.get).mockResolvedValue({
@@ -1865,6 +1941,7 @@ it.each([false, true])(
         token,
         [],
         expect.any(AbortSignal),
+        [],
       );
     } finally {
       unmount();
@@ -1899,6 +1976,7 @@ it.each(['share', 'shareFinal'] as const)(
       token,
       [],
       expect.any(AbortSignal),
+      [],
     );
     expect(shareLink).not.toHaveBeenCalled();
     await act(async () => {
@@ -1959,6 +2037,7 @@ it('확정 공유는 진행 중인 올리기가 끝나면 새 본문을 다시 �
     token,
     [],
     expect.any(AbortSignal),
+    [],
   );
   expect(shareLink).toHaveBeenCalledExactlyOnceWith(
     expect.stringMatching(/\/meet\/meeting001$/),
@@ -2043,6 +2122,7 @@ it.each(['성공', '실패 후 재시도', '충돌 재시도'] as const)(
       token,
       ['person03'],
       expect.any(AbortSignal),
+      [],
     );
     if (path === '실패 후 재시도') {
       expect(readOnline(saved.id)?.seen).toEqual(['person03']);
@@ -2117,6 +2197,7 @@ it('다른 기기가 삭제 대기 참석자를 본문에 넣어도 받지 않�
     token,
     ['person03'],
     expect.any(AbortSignal),
+    [],
   );
   expect(readOnline(saved.id)?.seen).toEqual(['person03']);
   await act(async () => finish({ ok: true, value: { rev: 4, docRev: 3 } }));

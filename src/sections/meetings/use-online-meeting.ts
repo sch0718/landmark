@@ -2,7 +2,12 @@ import { useCallback, useEffect, useEffectEvent, useLayoutEffect, useRef, useSta
 import { toast } from 'sonner';
 import { finalFromMeeting, inviteFromMeeting } from 'src/domain/meeting/link';
 import { docFromMeeting, type MeetingDoc, type OnlineState } from 'src/domain/meeting/online-doc';
-import { hostEdits, mergeOnline, shouldAdoptRemoteDoc } from 'src/domain/meeting/online-merge';
+import {
+  hostEdits,
+  mergeOnline,
+  overriddenReplyOrigins,
+  shouldAdoptRemoteDoc,
+} from 'src/domain/meeting/online-merge';
 import type { Meeting, Origin } from 'src/schema/meeting';
 import { meetApi, type OnlineError } from 'src/services/meet-online/client';
 import {
@@ -139,6 +144,13 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
   function markOk() {
     if (active.current) setStatus({ lastOkAt: Date.now(), failing: false });
   }
+  function needsUpload(doc: MeetingDoc, current: OnlineRecord): boolean {
+    return (
+      JSON.stringify(doc) !== baseline.current ||
+      removedReplyOnly(doc, current).length > 0 ||
+      overriddenReplyOrigins(doc.participants, current.replyOrigins).length > 0
+    );
+  }
   async function sendHostLikes(): Promise<boolean> {
     const signal = lifecycle.current?.signal;
     if (!isCurrent(signal)) return false;
@@ -239,7 +251,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
     if (!current?.hostToken || current.ended || input.compute.pending) return true;
     let doc = docFromMeeting(input.meeting, input.compute.times, input.compute.unit);
     let baseDocRev = current.docRev;
-    if (JSON.stringify(doc) === baseline.current && removedReplyOnly(doc, current).length === 0) {
+    if (!needsUpload(doc, current)) {
       retry.current = false;
       deferred.current = false;
       return true;
@@ -258,13 +270,15 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
       current = currentRecord()!;
       baseDocRev = response.value.docRev;
       doc = docFromMeeting(merged, latest.current.compute.times, latest.current.compute.unit);
-      if (JSON.stringify(doc) === baseline.current && removedReplyOnly(doc, current).length === 0) {
+      if (!needsUpload(doc, current)) {
         retry.current = false;
         deferred.current = false;
         return true;
       }
     }
     let removed = removedReplyOnly(doc, current);
+    let sentReplyOrigins = current.replyOrigins;
+    let clearReplyOrigins = overriddenReplyOrigins(doc.participants, sentReplyOrigins);
     let response = await meetApi.update(
       meeting.id,
       doc,
@@ -272,6 +286,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
       current.hostToken!,
       removed,
       signal,
+      clearReplyOrigins,
     );
     if (!isCurrent(signal)) return false;
     if (
@@ -300,6 +315,8 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
       current = currentRecord()!;
       doc = docFromMeeting(merged, latest.current.compute.times, latest.current.compute.unit);
       removed = removedReplyOnly(doc, current);
+      sentReplyOrigins = current.replyOrigins;
+      clearReplyOrigins = overriddenReplyOrigins(doc.participants, sentReplyOrigins);
       response = await meetApi.update(
         meeting.id,
         doc,
@@ -307,6 +324,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
         current.hostToken!,
         removed,
         signal,
+        clearReplyOrigins,
       );
       if (!isCurrent(signal)) return false;
     }
@@ -327,8 +345,8 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
             replyOrigins: Object.fromEntries(
               Object.entries(fresh.replyOrigins).filter(
                 ([pid, origin]) =>
-                  JSON.stringify(doc.participants.find((p) => p.id === pid)?.origin) !==
-                  JSON.stringify(origin),
+                  !clearReplyOrigins.includes(pid) ||
+                  JSON.stringify(origin) !== JSON.stringify(sentReplyOrigins?.[pid]),
               ),
             ),
           }),
@@ -371,8 +389,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
         const input = latest.current;
         if (input.compute.pending) return false;
         const doc = docFromMeeting(input.meeting, input.compute.times, input.compute.unit);
-        if (JSON.stringify(doc) === baseline.current && removedReplyOnly(doc, current).length === 0)
-          return true;
+        if (!needsUpload(doc, current)) return true;
         if (!(await upload(signal))) {
           if (isCurrent(signal)) deferred.current = true;
           return false;

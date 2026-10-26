@@ -159,9 +159,15 @@ export const meetApi = {
     hostToken: string,
     removed?: string[],
     signal?: AbortSignal,
+    clearReplyOrigins?: string[],
   ) {
     return request(pathFor(id), 'PUT', updateSchema, {
-      body: { doc, baseRev: baseDocRev, ...(removed === undefined ? {} : { removed }) },
+      body: {
+        doc,
+        baseRev: baseDocRev,
+        ...(removed === undefined ? {} : { removed }),
+        ...(clearReplyOrigins === undefined ? {} : { clearReplyOrigins }),
+      },
       token: hostToken,
       signal,
     });

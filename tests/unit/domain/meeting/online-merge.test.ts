@@ -72,6 +72,86 @@ const merge = (
 };
 const mergedMeeting = (lib: Library) => lib.meetings![meeting.id]!;
 
+it.each([false, true])(
+  '주최자 출발지는 같은 답장의 좋아요만 바뀌면 유지하고 새 출발지는 받는다: %s',
+  (newOrigin) => {
+    const seenOrigin = { name: '친구 집 B', lng: 128, lat: 38 };
+    const hostOrigin = { name: '주최자 집 C', lng: 127.5, lat: 37.6 };
+    const nextOrigin = { name: '친구 집 D', lng: 126.5, lat: 37.2 };
+    const first = mergedMeeting(merge(library(), state([reply({ origin: seenOrigin })])));
+    const local = {
+      ...first,
+      participants: {
+        ...first.participants,
+        value: first.participants.value.map((p) =>
+          p.id === 'person01' ? { ...p, origin: hostOrigin } : p,
+        ),
+      },
+    };
+    const result = mergeOnline(
+      library(local),
+      meeting.id,
+      state([
+        reply({
+          origin: newOrigin ? nextOrigin : seenOrigin,
+          likes: [],
+          updatedAt: now,
+        }),
+      ]),
+      ctx,
+      {
+        syncedDoc: docFromMeeting(meeting, {}, 'min'),
+        docRev: 1,
+        seen: [],
+        hostLikes: null,
+        replyOrigins: { person01: seenOrigin },
+      },
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(mergedMeeting(result.lib).participants.value[1]?.origin).toEqual(
+      newOrigin ? nextOrigin : hostOrigin,
+    );
+    expect(mergedMeeting(result.lib).replies.value.person01?.likes).toEqual([]);
+    expect(result.replyOrigins).toEqual({ person01: newOrigin ? nextOrigin : seenOrigin });
+  },
+);
+
+it('본문을 받을 때도 같은 출발지의 새 좋아요 답장으로 원격 출발지를 덮지 않는다', () => {
+  const seenOrigin = { name: '친구 집 B', lng: 128, lat: 38 };
+  const remoteOrigin = { name: '다른 기기 집 C', lng: 127.5, lat: 37.6 };
+  const first = merge(library(), state([reply({ origin: seenOrigin })]));
+  const remote = state([reply({ origin: seenOrigin, likes: [], updatedAt: now })]);
+  const next = mergedMeeting(
+    merge(
+      first,
+      {
+        ...remote,
+        docRev: 2,
+        doc: {
+          ...remote.doc,
+          participants: remote.doc.participants.map((p) =>
+            p.id === 'person01' ? { ...p, origin: remoteOrigin } : p,
+          ),
+        },
+      },
+      remote.doc,
+      1,
+      { person01: seenOrigin },
+    ),
+  );
+  expect(next.participants.value[1]?.origin).toEqual(remoteOrigin);
+  expect(next.replies.value.person01?.likes).toEqual([]);
+});
+
+it('본문 출발지로 되돌려도 마지막으로 본 답장 출발지를 덮어쓰면 주최자 수정이다', () => {
+  expect(
+    hostEdits(meeting, docFromMeeting(meeting, {}, 'min'), [], {
+      person01: { name: '친구 집 B', lng: 128, lat: 38 },
+    }),
+  ).toBe(true);
+});
+
 it('보관함보다 작은 답장 시각도 다르면 서버 좋아요와 출발지로 갱신한다', () => {
   const local = {
     ...meeting,
@@ -131,11 +211,17 @@ it.each([
   };
   const remote = state([remoteReply]);
   const next = mergedMeeting(
-    merge(library(local), {
-      ...remote,
-      docRev: 2,
-      doc: { ...remote.doc, title: '다른 기기 제목' },
-    }),
+    merge(
+      library(local),
+      {
+        ...remote,
+        docRev: 2,
+        doc: { ...remote.doc, title: '다른 기기 제목' },
+      },
+      remote.doc,
+      1,
+      replyOrigin === null ? {} : { [pid]: replyOrigin },
+    ),
   );
   expect(next.participants.value.find((p) => p.id === pid)?.origin).toEqual(changed);
   expect(next.title.value).toBe(meeting.title.value);
@@ -255,7 +341,7 @@ describe('온라인 상태를 보관한 약속에 합친다', () => {
     expect(next.participants).toBe(meeting.participants);
   });
 
-  it('같은 갱신 시각을 다시 합치면 보관함과 필드 시각이 그대로다', () => {
+  it('같은 갱신 시각이어도 새 출발지는 반영하고 좋아요와 답장 필드 시각은 유지한다', () => {
     const first = merge(library(), state([reply({ origin: { name: '회사', lng: 128, lat: 38 } })]));
     const result = mergeOnline(
       first,
@@ -264,18 +350,24 @@ describe('온라인 상태를 보관한 약속에 합친다', () => {
       { ...ctx, now: '2026-10-27T00:00:00.000Z' },
       { syncedDoc: docFromMeeting(meeting, {}, 'min'), docRev: 1, hostLikes: null, seen: [] },
     );
-    expect(result).toEqual({ ok: true, lib: first, addedReplyOnly: [] });
-    if (result.ok) expect(result.lib).toBe(first);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(mergedMeeting(result.lib).participants.value[1]?.origin).toEqual(origin);
+      expect(mergedMeeting(result.lib).replies).toBe(mergedMeeting(first).replies);
+      expect(result.replyOrigins).toEqual({ person01: origin });
+    }
   });
 
-  it('서버 본문을 받아도 같은 시각의 답장으로 받은 친구 출발지를 유지한다', () => {
+  it('서버 본문을 받으면 이미 본 같은 답장 출발지는 다시 적용하지 않는다', () => {
     const changed = { name: '회사', lng: 128, lat: 38 };
     const remote = state([reply({ origin: changed })]);
     const first = merge(library(), remote);
     expect(mergedMeeting(first).participants.value[1]?.origin).toEqual(changed);
 
-    const next = mergedMeeting(merge(first, { ...remote, docRev: 2 }));
-    expect(next.participants.value[1]?.origin).toEqual(changed);
+    const next = mergedMeeting(
+      merge(first, { ...remote, docRev: 2 }, remote.doc, 1, { person01: changed }),
+    );
+    expect(next.participants.value[1]?.origin).toEqual(origin);
     expect(next.replies.value.person01).toEqual(mergedMeeting(first).replies.value.person01);
   });
 
