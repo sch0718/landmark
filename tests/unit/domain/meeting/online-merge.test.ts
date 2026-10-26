@@ -581,3 +581,32 @@ it('처음 보는 답장 전용 참석자를 더하고 id를 결과로 알린다
   expect(mergedMeeting(result.lib).participants.value.some((p) => p.id === 'new00001')).toBe(true);
   expect(result.addedReplyOnly).toEqual(['new00001']);
 });
+
+it('다른 기기 본문에 포함돼도 올리기 전 지운 답장 전용 참석자와 답장은 되살리지 않는다', () => {
+  const remote = state([reply({ participantId: 'new00001', origin })]);
+  const first = mergedMeeting(merge(library(), remote));
+  const local = {
+    ...first,
+    participants: { ...first.participants, value: meeting.participants.value },
+    replies: { ...first.replies, value: {} },
+  };
+  const result = mergeOnline(
+    library(local),
+    meeting.id,
+    {
+      ...remote,
+      docRev: 2,
+      doc: { ...remote.doc, title: '다른 기기 제목', participants: first.participants.value },
+    },
+    ctx,
+    { syncedDoc: remote.doc, docRev: 1, seen: ['new00001'], hostLikes: null },
+  );
+  expect(result.ok).toBe(true);
+  if (!result.ok) return;
+  const next = mergedMeeting(result.lib);
+  expect(next.title.value).toBe('다른 기기 제목');
+  expect(next.participants.value.some((p) => p.id === 'new00001')).toBe(false);
+  expect(next.replies.value.new00001).toBeUndefined();
+  expect(result.addedReplyOnly).toEqual([]);
+  expect(safeParse(LibrarySchema, result.lib).success).toBe(true);
+});

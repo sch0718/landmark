@@ -61,6 +61,9 @@ export function mergeOnline(
 ): OnlineMergeResult {
   const meeting = lib.meetings?.[meetingId];
   if (meeting === undefined || meeting.deletedAt !== null) return meetingFailure('not-found');
+  const locallyRemoved = new Set(
+    sync.seen.filter((id) => !meeting.participants.value.some((p) => p.id === id)),
+  );
   let next = meeting;
   let hostLikes: string[] | undefined;
   const addedReplyOnly: string[] = [];
@@ -72,7 +75,7 @@ export function mergeOnline(
       title: field(state.doc.title),
       at: field(state.doc.at),
       mode: field(state.doc.mode),
-      participants: field(state.doc.participants),
+      participants: field(state.doc.participants.filter((p) => !locallyRemoved.has(p.id))),
       candidates: field(state.doc.candidates),
       decided: field(state.doc.decided),
     };
@@ -81,6 +84,8 @@ export function mergeOnline(
   const candidates = new Set(next.candidates.value.map((c) => c.id));
   for (const reply of state.replies) {
     const pid = reply.participantId;
+    // 아직 올리지 않은 삭제는 다른 기기 본문과 답장으로 되살리지 않는다.
+    if (locallyRemoved.has(pid)) continue;
     if (pid === hostId) {
       const previous = next.replies.value[pid];
       if (
@@ -112,9 +117,6 @@ export function mergeOnline(
     const participant = next.participants.value.find((p) => p.id === pid);
     if (participant === undefined) {
       if (state.doc.participants.some((p) => p.id === pid)) continue;
-      // 서버 본문을 받으며 잠시 빠진 기존 참석자는 살리고, 이 기기에서 지운 사람만 건너뛴다.
-      if (sync.seen.includes(pid) && !meeting.participants.value.some((p) => p.id === pid))
-        continue;
       if (next.participants.value.length >= LIBRARY_LIMITS.meetingParticipantsMax) continue;
       next = meetingField(
         next,

@@ -82,12 +82,14 @@ export function MeetingResults({
   const candidateCompute = useMeetingCompute({ ...args, targets: meeting.candidates.value });
   const reportCompute = useEffectEvent(() =>
     onComputeChange?.({
-      times: candidateCompute.times,
+      times: meeting.candidates.value.length === 0 ? {} : candidateCompute.times,
       unit: candidateCompute.unit,
-      pending: candidateCompute.pending || candidateCompute.stale,
+      pending:
+        meeting.candidates.value.length > 0 && (candidateCompute.pending || candidateCompute.stale),
     }),
   );
   const computeKey = JSON.stringify([
+    meeting.candidates.value.length,
     candidateCompute.times,
     candidateCompute.unit,
     candidateCompute.pending,

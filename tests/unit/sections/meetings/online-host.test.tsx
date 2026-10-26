@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Effect } from 'effect';
 import * as effectRuntime from 'src/lib/effect/runtime';
 import { haversineM } from 'src/domain/trips/geo';
+import { removeCandidate } from 'src/domain/meeting/ops';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { toast } from 'sonner';
 import type { useLibraryAction } from 'src/stores/library-state';
@@ -1476,6 +1477,86 @@ it.each(['person02', 'person03'])(
   },
 );
 
+it.each([false, true])(
+  '계산 중=%s에 마지막 후보를 지우면 1초 뒤 빈 후보와 확정 취소를 올리고 다음 확인 뒤에도 저장한다',
+  async (pending) => {
+    const { MeetingResults } = await import('src/sections/meetings/MeetingResults');
+    saved = { ...saved, mode: f('straight'), decided: f('choice01') };
+    online();
+    let reported!: OnlineCompute;
+    let finish!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    if (pending) {
+      const fork = effectRuntime.forkEffect;
+      vi.spyOn(effectRuntime, 'forkEffect').mockImplementationOnce((effect) =>
+        fork(Effect.promise(() => gate).pipe(Effect.andThen(effect))),
+      );
+    }
+    function Editor() {
+      const [meeting, setMeeting] = useState(saved);
+      const [computed, setComputed] = useState<OnlineCompute>({
+        times: {},
+        unit: 'm',
+        pending: true,
+      });
+      refresh = setMeeting;
+      const host = useOnlineMeeting(meeting, computed);
+      return (
+        <MeetingResults
+          meeting={meeting}
+          library={emptyLibrary()}
+          online={host}
+          onComputeChange={(value) => {
+            reported = value;
+            setComputed(value);
+          }}
+        />
+      );
+    }
+    const { unmount } = render(<Editor />);
+    try {
+      await flush();
+      expect(reported.pending).toBe(pending);
+      await advance(1000);
+      vi.mocked(meetApi.update).mockClear();
+      await act(() => run((lib, ctx) => removeCandidate(lib, saved.id, 'choice01', ctx)));
+      await advance(999);
+      expect(meetApi.update).not.toHaveBeenCalled();
+      await advance(1);
+      expect(meetApi.update).toHaveBeenCalledExactlyOnceWith(
+        saved.id,
+        expect.objectContaining({ candidates: [], decided: null, times: {}, unit: 'm' }),
+        expect.any(Number),
+        token,
+        [],
+      );
+      expect(reported).toEqual({ times: {}, unit: 'm', pending: false });
+      vi.mocked(meetApi.get).mockResolvedValue({
+        ok: true,
+        value: state({ rev: 3, docRev: 2 }),
+      });
+      await advance(10000);
+      expect(saved.candidates.value).toEqual([]);
+      expect(saved.decided.value).toBeNull();
+      await edit({ title: f('후보를 지운 뒤 수정', new Date().toISOString()) });
+      await advance(1000);
+      expect(meetApi.update).toHaveBeenCalledTimes(2);
+      expect(meetApi.update).toHaveBeenLastCalledWith(
+        saved.id,
+        expect.objectContaining({ title: '후보를 지운 뒤 수정', candidates: [], decided: null }),
+        2,
+        token,
+        [],
+      );
+    } finally {
+      unmount();
+      finish();
+    }
+  },
+);
+
 it.each(['share', 'shareFinal'] as const)(
   '%s는 확정 직후 미전송 본문을 먼저 저장하고 성공한 뒤 공유한다',
   async (action) => {
@@ -1660,6 +1741,67 @@ it.each(['성공', '실패 후 재시도', '충돌 재시도'] as const)(
     expect(saved.replies.value.person03).toBeUndefined();
   },
 );
+
+it('다른 기기가 삭제 대기 참석자를 본문에 넣어도 받지 않고 다음 removed 전송 성공 뒤 seen을 지운다', async () => {
+  online();
+  const reply = {
+    participantId: 'person03',
+    name: '새 친구',
+    origin: null,
+    likes: ['choice01'],
+    times: null,
+    updatedAt: startAt,
+  };
+  const remote = state({ replies: [reply] });
+  vi.mocked(meetApi.get).mockResolvedValue({ ok: true, value: remote });
+  const inputCompute = { ...compute, pending: true };
+  const { rerender } = setup(inputCompute);
+  await flush();
+  expect(saved.participants.value.some((p) => p.id === 'person03')).toBe(true);
+  expect(readOnline(saved.id)?.seen).toEqual(['person03']);
+  const otherDeviceDoc = {
+    ...remote.doc,
+    title: '다른 기기 제목',
+    participants: saved.participants.value,
+  };
+  await edit({
+    participants: f(saved.participants.value.filter((p) => p.id !== 'person03')),
+    replies: f({}),
+  });
+  vi.mocked(meetApi.get).mockResolvedValue({
+    ok: true,
+    value: { ...remote, rev: 3, docRev: 2, doc: otherDeviceDoc },
+  });
+  await advance(10000);
+  expect(saved.title.value).toBe('다른 기기 제목');
+  expect(saved.participants.value.some((p) => p.id === 'person03')).toBe(false);
+  expect(saved.replies.value.person03).toBeUndefined();
+  expect(readOnline(saved.id)?.seen).toEqual(['person03']);
+  expect(meetApi.update).not.toHaveBeenCalled();
+  let finish!: (value: Awaited<ReturnType<typeof meetApi.update>>) => void;
+  vi.mocked(meetApi.update).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  inputCompute.pending = false;
+  rerender();
+  await advance(1000);
+  expect(meetApi.update).toHaveBeenCalledExactlyOnceWith(
+    saved.id,
+    expect.objectContaining({
+      title: '다른 기기 제목',
+      participants: expect.not.arrayContaining([expect.objectContaining({ id: 'person03' })]),
+    }),
+    2,
+    token,
+    ['person03'],
+  );
+  expect(readOnline(saved.id)?.seen).toEqual(['person03']);
+  await act(async () => finish({ ok: true, value: { rev: 4, docRev: 3 } }));
+  expect(readOnline(saved.id)?.seen).toEqual([]);
+});
 
 it('올리기 전 화면을 다시 열고 확인해도 지운 답장 전용 참석자를 되살리지 않는다', async () => {
   online();
