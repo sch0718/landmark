@@ -19,10 +19,10 @@ describe('온라인 약속 API', () => {
   const cases = [
     [
       '올리기',
-      () => meetApi.create(doc, 'dev'),
+      () => meetApi.create(doc, 'dev', token),
       '/api/meet',
       'POST',
-      { doc, turnstile: 'dev' },
+      { doc, turnstile: 'dev', hostToken: token },
       null,
       { id: doc.meetingId, rev: 1, docRev: 1, hostToken: token },
       201,
@@ -232,7 +232,10 @@ describe('온라인 약속 API', () => {
 
   it('fetch 거절은 offline이다', async () => {
     fetchMock.mockRejectedValueOnce(new TypeError('연결 끊김'));
-    expect(await meetApi.create(doc, 'dev')).toEqual({ ok: false, error: { code: 'offline' } });
+    expect(await meetApi.create(doc, 'dev', token)).toEqual({
+      ok: false,
+      error: { code: 'offline' },
+    });
   });
 });
 

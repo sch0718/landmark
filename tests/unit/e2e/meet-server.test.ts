@@ -3,6 +3,7 @@ import type { BrowserContext, Route } from '@playwright/test';
 import { afterEach, expect, it, vi } from 'vitest';
 import { docFromMeeting } from '../../../src/domain/meeting/online-doc';
 import { createMeetServer, installMeetServer } from '../../e2e/meet-server';
+import { newToken } from '../../../src/server/meet/tokens';
 import { buildMeeting } from '../../fixtures/builders';
 
 const servers: ReturnType<typeof createMeetServer>[] = [];
@@ -70,7 +71,9 @@ it('5175 출처를 정규화하고 네 문맥이 같은 DB에서 올리기·답�
     ...original,
     participants: [...original.participants, { id: 'person02', name: '친구', origin: null }],
   };
-  const created = (await host('/api/meet', 'POST', { doc, turnstile: 'dev' })).response!;
+  const created = (
+    await host('/api/meet', 'POST', { doc, turnstile: 'dev', hostToken: newToken() })
+  ).response!;
   expect(created.status).toBe(201);
   expect(created.headers.get('Cache-Control')).toBe('private, no-store');
   const { hostToken } = await created.json();
@@ -123,16 +126,26 @@ it('시험마다 DB와 일 한도를 분리한다', async () => {
   const first = await browserContext(server());
   const second = await browserContext(server());
   const doc = docFromMeeting(buildMeeting(), {}, 'min');
-  expect((await first('/api/meet', 'POST', { doc, turnstile: 'dev' })).response!.status).toBe(201);
+  expect(
+    (await first('/api/meet', 'POST', { doc, turnstile: 'dev', hostToken: newToken() })).response!
+      .status,
+  ).toBe(201);
   // 같은 IP의 중복 올리기도 한도를 소비한다. 다른 시험의 DB에는 전파되지 않는다.
   for (let i = 1; i < 20; i++) {
-    expect((await first('/api/meet', 'POST', { doc, turnstile: 'dev' })).response!.status).toBe(
-      409,
-    );
+    expect(
+      (await first('/api/meet', 'POST', { doc, turnstile: 'dev', hostToken: newToken() })).response!
+        .status,
+    ).toBe(409);
   }
-  expect((await first('/api/meet', 'POST', { doc, turnstile: 'dev' })).response!.status).toBe(429);
+  expect(
+    (await first('/api/meet', 'POST', { doc, turnstile: 'dev', hostToken: newToken() })).response!
+      .status,
+  ).toBe(429);
   expect((await second(`/api/meet/${doc.meetingId}`)).response!.status).toBe(404);
-  expect((await second('/api/meet', 'POST', { doc, turnstile: 'dev' })).response!.status).toBe(201);
+  expect(
+    (await second('/api/meet', 'POST', { doc, turnstile: 'dev', hostToken: newToken() })).response!
+      .status,
+  ).toBe(201);
 });
 
 it('API 경로·메서드가 아닌 요청은 다음 가로채기로 넘긴다', async () => {

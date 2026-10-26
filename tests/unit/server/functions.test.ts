@@ -788,7 +788,9 @@ describe('온라인 약속 Pages 진입점', () => {
     });
     try {
       stubFetch({});
-      const created = await create(ctx('POST', { doc, turnstile: 'dev' }));
+      const created = await create(
+        ctx('POST', { doc, turnstile: 'dev', hostToken: 'h'.repeat(43) }),
+      );
       expect(created.status).toBe(201);
       const { hostToken } = await created.json();
       await Promise.all(pending);
@@ -830,6 +832,7 @@ describe('온라인 약속 Pages 진입점', () => {
           body: JSON.stringify({
             doc: docFromMeeting(buildMeeting(), {}, 'min'),
             turnstile: 'test',
+            hostToken: 'h'.repeat(43),
           }),
         }),
         env: { DB: db, TURNSTILE_SECRET: 'test-only' },

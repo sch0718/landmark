@@ -37,7 +37,11 @@ type ReplyRow = {
 };
 type TokenRow = { kind: 'host' | 'guest'; participant_id: string | null };
 const PRIVATE_HEADERS = { 'Cache-Control': 'private, no-store' };
-const createSchema = Schema.Struct({ doc: Schema.Unknown, turnstile: Schema.String });
+const createSchema = Schema.Struct({
+  doc: Schema.Unknown,
+  turnstile: Schema.String,
+  hostToken: Schema.String.check(Schema.isPattern(/^[A-Za-z0-9_-]{43}$/)),
+});
 const updateSchema = Schema.Struct({
   doc: MeetingDocSchema,
   baseRev: Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(1)),
@@ -229,11 +233,28 @@ export function handleCreate(ctx: MeetContext, deps: MeetDeps): Promise<Response
     }
     const doc = validate(MeetingDocSchema, input.doc);
     const db = ctx.env.DB;
-    if (await db.prepare('SELECT id FROM meetings WHERE id = ?').bind(doc.meetingId).first()) {
-      throw new ApiError('CONFLICT', '이미 올린 약속이에요');
-    }
-    const token = newToken();
+    const token = input.hostToken;
     const hash = await hashToken(token);
+    async function retryExisting(): Promise<Response | null> {
+      const row = await db
+        .prepare('SELECT rev, doc_rev FROM meetings WHERE id = ?')
+        .bind(doc.meetingId)
+        .first<Pick<MeetingRow, 'rev' | 'doc_rev'>>();
+      if (!row) return null;
+      const host = await db
+        .prepare(
+          "SELECT hash FROM meeting_tokens WHERE meeting_id = ? AND kind = 'host' AND hash = ?",
+        )
+        .bind(doc.meetingId, hash)
+        .first();
+      if (!host) throw new ApiError('CONFLICT', '이미 올린 약속이에요');
+      return jsonResponse(
+        { id: doc.meetingId, rev: row.rev, docRev: row.doc_rev, hostToken: token },
+        { headers: PRIVATE_HEADERS },
+      );
+    }
+    const existing = await retryExisting();
+    if (existing) return existing;
     const timestamp = now.toISOString();
     try {
       await db.batch([
@@ -249,12 +270,13 @@ export function handleCreate(ctx: MeetContext, deps: MeetDeps): Promise<Response
           .bind(hash, doc.meetingId, 'host', timestamp),
       ]);
     } catch (error) {
-      // 두 요청이 없는 id를 함께 확인했어도 하나만 만들 수 있다.
+      // 동시에 만든 같은 토큰의 요청도 이미 저장된 약속으로 이어진다.
       if (
         error instanceof Error &&
         /UNIQUE constraint failed: meetings\.id\b/i.test(error.message)
       ) {
-        throw new ApiError('CONFLICT', '이미 올린 약속이에요');
+        const existing = await retryExisting();
+        if (existing) return existing;
       }
       throw error;
     }

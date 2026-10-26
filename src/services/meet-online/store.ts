@@ -7,6 +7,8 @@ import { LIBRARY_LIMITS } from 'src/schema/library-base';
 export const MEET_ONLINE_KEY = 'tripmap:meet-online:v1';
 export type OnlineRecord = {
   hostToken?: string;
+  pendingHostToken?: string;
+  hostLikes?: string[];
   guest?: { participantId: string; token: string };
   lastRev: number;
   docRev?: number;
@@ -17,6 +19,14 @@ export type OnlineRecord = {
 const nonempty = Schema.String.check(Schema.isMinLength(1));
 const recordSchema = Schema.Struct({
   hostToken: Schema.optionalKey(nonempty),
+  pendingHostToken: Schema.optionalKey(
+    Schema.String.check(Schema.isPattern(/^[A-Za-z0-9_-]{43}$/)),
+  ),
+  hostLikes: Schema.optionalKey(
+    Schema.mutable(Schema.Array(MeetingMemberId)).check(
+      Schema.isMaxLength(LIBRARY_LIMITS.meetingCandidatesMax),
+    ),
+  ),
   guest: Schema.optionalKey(Schema.Struct({ participantId: MeetingMemberId, token: nonempty })),
   lastRev: Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0)),
   docRev: Schema.optionalKey(Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(1))),

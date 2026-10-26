@@ -19,7 +19,7 @@ import {
   redactForGuest,
   type MeetDeps,
 } from 'src/server/meet/handlers';
-import { hashIp, hashToken } from 'src/server/meet/tokens';
+import { hashIp, hashToken, newToken } from 'src/server/meet/tokens';
 import { verifyTurnstile } from 'src/server/meet/turnstile';
 import { createSqliteD1 } from '../../helpers/sqlite-d1';
 import { buildMeeting } from '../../fixtures/builders';
@@ -88,8 +88,8 @@ function context(
     },
   };
 }
-async function create(current = doc()) {
-  return handleCreate(context('POST', { doc: current, turnstile: 'dev' }), deps);
+async function create(current = doc(), hostToken = newToken()) {
+  return handleCreate(context('POST', { doc: current, turnstile: 'dev', hostToken }), deps);
 }
 async function seed() {
   const response = await create();
@@ -133,6 +133,48 @@ async function count(table: 'meetings' | 'meeting_tokens' | 'meeting_replies') {
 }
 
 describe('약속 올리기', () => {
+  it('같은 주최자 토큰으로 다시 올리면 본문을 보존하고 현재 버전으로 성공한다', async () => {
+    const hostToken = newToken();
+    const first = await create(doc(), hostToken);
+    expect(first.status).toBe(201);
+    expect(await first.json()).toEqual({ id: doc().meetingId, rev: 1, docRev: 1, hostToken });
+    await handleUpdate(
+      context('PUT', { doc: doc({ title: '새 제목' }), baseRev: 1 }, { token: hostToken }),
+      deps,
+    );
+    const retry = await create(doc(), hostToken);
+    expect(retry.status).toBe(200);
+    expect(retry.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(await retry.json()).toEqual({ id: doc().meetingId, rev: 2, docRev: 2, hostToken });
+    expect(await count('meetings')).toBe(1);
+    expect(await count('meeting_tokens')).toBe(1);
+    expect(
+      JSON.parse((await db.prepare('SELECT doc FROM meetings').first<{ doc: string }>())!.doc)
+        .title,
+    ).toBe('새 제목');
+  });
+  it('같은 토큰의 동시 올리기도 둘 다 성공하고 한 약속만 만든다', async () => {
+    const hostToken = newToken();
+    const responses = await Promise.all([create(doc(), hostToken), create(doc(), hostToken)]);
+    expect(responses.map((r) => r.status).sort()).toEqual([200, 201]);
+    expect(await count('meetings')).toBe(1);
+    expect(await count('meeting_tokens')).toBe(1);
+  });
+  it.each([
+    undefined,
+    null,
+    '',
+    'a'.repeat(42),
+    'a'.repeat(44),
+    '+'.repeat(43),
+    'a'.repeat(43) + '\n',
+  ])('주최자 토큰 %j는 올릴 수 없다', async (hostToken) => {
+    await expectError(
+      await handleCreate(context('POST', { doc: doc(), turnstile: 'dev', hostToken }), deps),
+      400,
+      'BAD_REQUEST',
+    );
+  });
   it('본문과 주최자 해시를 원자적으로 저장하고 201로 토큰을 돌려준다', async () => {
     const response = await create();
     expect(response.status).toBe(201);
@@ -189,11 +231,24 @@ describe('약속 올리기', () => {
     expect(await count('meeting_tokens')).toBe(1);
   });
   it.each([
-    ['빈 제목', () => ({ doc: doc({ title: '' }), turnstile: 'dev' })],
-    ['잘못된 참조', () => ({ doc: doc({ decided: 'missing1' }), turnstile: 'dev' })],
-    ['64KB 초과', () => ({ doc: doc({ title: '가'.repeat(22_000) }), turnstile: 'dev' })],
-    ['남는 문서 키', () => ({ doc: { ...doc(), sentAt: NOW.toISOString() }, turnstile: 'dev' })],
-    ['남는 본문 키', () => ({ doc: doc(), turnstile: 'dev', extra: true })],
+    ['빈 제목', () => ({ doc: doc({ title: '' }), turnstile: 'dev', hostToken: newToken() })],
+    [
+      '잘못된 참조',
+      () => ({ doc: doc({ decided: 'missing1' }), turnstile: 'dev', hostToken: newToken() }),
+    ],
+    [
+      '64KB 초과',
+      () => ({ doc: doc({ title: '가'.repeat(22_000) }), turnstile: 'dev', hostToken: newToken() }),
+    ],
+    [
+      '남는 문서 키',
+      () => ({
+        doc: { ...doc(), sentAt: NOW.toISOString() },
+        turnstile: 'dev',
+        hostToken: newToken(),
+      }),
+    ],
+    ['남는 본문 키', () => ({ doc: doc(), turnstile: 'dev', hostToken: newToken(), extra: true })],
     ['검증 토큰 누락', () => ({ doc: doc() })],
     ['빈 본문', () => null],
   ])('%s는 400이다', async (_label, body) => {
@@ -233,7 +288,7 @@ describe('약속 올리기', () => {
   ])('%s은 503 config다', async (_label, origin, config) => {
     Object.assign(env, config);
     const response = await handleCreate(
-      context('POST', { doc: doc(), turnstile: 'test' }, { origin }),
+      context('POST', { doc: doc(), turnstile: 'test', hostToken: newToken() }, { origin }),
       deps,
     );
     expect(response.status).toBe(503);
@@ -246,7 +301,7 @@ describe('약속 올리기', () => {
     Object.assign(env, { IP_HASH_SALT: '시험용-소금', TURNSTILE_SECRET: '시험용-비밀키' });
     vi.mocked(deps.fetch).mockResolvedValue(new Response('{"success":true}'));
     const response = await handleCreate(
-      context('POST', { doc: doc(), turnstile: 'test' }, { origin: PROD }),
+      context('POST', { doc: doc(), turnstile: 'test', hostToken: newToken() }, { origin: PROD }),
       deps,
     );
     expect(response.status).toBe(201);
@@ -276,7 +331,7 @@ describe('약속 올리기', () => {
     expect((await create()).status).toBe(201);
   });
   it('IP 헤더가 없으면 local의 해시만 기록한다', async () => {
-    const ctx = context('POST', { doc: doc(), turnstile: 'dev' });
+    const ctx = context('POST', { doc: doc(), turnstile: 'dev', hostToken: newToken() });
     ctx.request.headers.delete('CF-Connecting-IP');
     expect((await handleCreate(ctx, deps)).status).toBe(201);
     expect(await db.prepare('SELECT key FROM rate_counters').first()).toEqual({

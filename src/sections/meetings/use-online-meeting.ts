@@ -69,7 +69,6 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
   const unauthorizedNotified = useRef(false);
   const deferred = useRef(false);
   const baseline = useRef<string | null>(null);
-  const hostLikesBaseline = useRef('[]');
   const hostReplyInFlight = useRef(false);
   const hostReplyDeferred = useRef(false);
   const hostReplyRetry = useRef(false);
@@ -116,7 +115,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
     const input = latest.current.meeting;
     const likes = input.replies.value[input.participants.value[0]!.id]?.likes ?? [];
     const sent = JSON.stringify(likes);
-    if (sent === hostLikesBaseline.current) {
+    if (sent === JSON.stringify(current.hostLikes ?? [])) {
       hostReplyRetry.current = false;
       hostReplyDeferred.current = false;
       return true;
@@ -130,7 +129,8 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
         markError(response.error);
         return false;
       }
-      hostLikesBaseline.current = sent;
+      const fresh = currentRecord();
+      if (fresh && !fresh.ended) save({ ...fresh, hostLikes: [...likes] });
       hostReplyRetry.current = false;
       hostReplyDeferred.current = false;
       if (active.current) setUploaded((count) => count + 1);
@@ -148,12 +148,14 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
     let merged: Meeting | null = null;
     let adoptedAt: string | null = null;
     let addedReplyOnly: string[] = [];
+    let hostLikes: string[] | undefined;
     const result = await latest.current.run((lib, ctx) => {
       const current = currentRecord();
       const sync = {
         syncedAt: current?.syncedAt ?? null,
         docRev: current?.docRev ?? null,
         seen: current?.seen ?? [],
+        hostLikes: current?.hostLikes ?? null,
       };
       const before = lib.meetings?.[meeting.id];
       if (before && shouldAdoptRemoteDoc(before, state, sync)) adoptedAt = ctx.now;
@@ -161,6 +163,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
       if (out.ok) {
         merged = out.lib.meetings![meeting.id]!;
         addedReplyOnly = out.addedReplyOnly;
+        hostLikes = out.hostLikes;
       }
       return out;
     });
@@ -170,6 +173,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
       save({
         ...current,
         lastRev: state.rev,
+        ...(hostLikes === undefined || hostReplyInFlight.current ? {} : { hostLikes }),
         ...(addedReplyOnly.length === 0
           ? {}
           : {
@@ -182,15 +186,6 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
       });
     hydrated.current = true;
     if (adoptedAt !== null) baseline.current = JSON.stringify(state.doc);
-    if (!hostReplyInFlight.current) {
-      hostLikesBaseline.current = JSON.stringify(
-        (
-          state.replies.find(
-            (r) => r.participantId === latest.current.meeting.participants.value[0]!.id,
-          )?.likes ?? []
-        ).filter((cid) => merged?.candidates.value.some((c) => c.id === cid)),
-      );
-    }
     if (active.current) setReplyState(state);
     return merged;
   }
@@ -417,6 +412,13 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
       if (creating.current) return;
       creating.current = true;
       try {
+        const hostToken =
+          current?.pendingHostToken ??
+          btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))
+            .replace(/\+/g, '-')
+            .replace(/\//g, '_')
+            .replace(/=+$/, '');
+        save({ ...current, lastRev: current?.lastRev ?? 0, pendingHostToken: hostToken });
         let turnstile: string;
         try {
           turnstile = await getTurnstileToken();
@@ -431,7 +433,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
           fresh.compute.unit,
         );
         const sentAt = new Date().toISOString();
-        const response = await meetApi.create(doc, turnstile);
+        const response = await meetApi.create(doc, turnstile, hostToken);
         if (!response.ok) {
           if (response.error.code === 'switched-off') {
             await shareFallback(fresh, sentAt);

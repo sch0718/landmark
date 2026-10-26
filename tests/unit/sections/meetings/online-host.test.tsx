@@ -74,6 +74,76 @@ function online() {
   writeOnline(saved.id, { hostToken: token, lastRev: 1, docRev: 1, syncedAt: startAt });
 }
 
+it('동기화 뒤 바꾸지 않은 빈 좋아요는 다른 기기의 서버 좋아요를 받고 되돌려 보내지 않는다', async () => {
+  saved = {
+    ...saved,
+    replies: f({ person01: { likes: [], sentAt: startAt, receivedAt: startAt } }),
+  };
+  writeOnline(saved.id, {
+    hostToken: token,
+    lastRev: 1,
+    docRev: 1,
+    syncedAt: startAt,
+    hostLikes: [],
+  });
+  vi.mocked(meetApi.get).mockResolvedValue({
+    ok: true,
+    value: state({
+      replies: [
+        {
+          participantId: 'person01',
+          name: '나',
+          origin: null,
+          likes: ['choice01'],
+          times: null,
+          updatedAt: startAt,
+        },
+      ],
+    }),
+  });
+  setup();
+  await flush();
+  await advance(1100);
+  expect(saved.replies.value.person01?.likes).toEqual(['choice01']);
+  expect(readOnline(saved.id)?.hostLikes).toEqual(['choice01']);
+  expect(meetApi.reply).not.toHaveBeenCalled();
+});
+
+it('동기화 기록과 다른 로컬 좋아요는 서버 확인 뒤에도 보존해 올린다', async () => {
+  saved = {
+    ...saved,
+    replies: f({ person01: { likes: ['choice01'], sentAt: startAt, receivedAt: startAt } }),
+  };
+  writeOnline(saved.id, {
+    hostToken: token,
+    lastRev: 1,
+    docRev: 1,
+    syncedAt: startAt,
+    hostLikes: [],
+  });
+  vi.mocked(meetApi.get).mockResolvedValue({
+    ok: true,
+    value: state({
+      replies: [
+        {
+          participantId: 'person01',
+          name: '나',
+          origin: null,
+          likes: [],
+          times: null,
+          updatedAt: startAt,
+        },
+      ],
+    }),
+  });
+  setup();
+  await flush();
+  await advance(1100);
+  expect(saved.replies.value.person01?.likes).toEqual(['choice01']);
+  expect(meetApi.reply).toHaveBeenCalledExactlyOnceWith(saved.id, { likes: ['choice01'] }, token);
+  expect(readOnline(saved.id)?.hostLikes).toEqual(['choice01']);
+});
+
 function setup(inputCompute: OnlineCompute = compute) {
   return renderHook(() => {
     const [meeting, setMeeting] = useState(saved);
@@ -128,6 +198,71 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
+
+it('올리기 응답 유실 뒤 화면을 다시 열고 공유하면 저장한 같은 토큰으로 짧은 링크를 보낸다', async () => {
+  const { webcrypto } = await import('node:crypto');
+  const { createSqliteD1 } = await import('../../../helpers/sqlite-d1');
+  const { handleCreate } = await import('src/server/meet/handlers');
+  const { meetApi: actualApi } = await vi.importActual<
+    typeof import('src/services/meet-online/client')
+  >('src/services/meet-online/client');
+  vi.stubGlobal('crypto', webcrypto);
+  const db = createSqliteD1();
+  const pending: Promise<unknown>[] = [];
+  const sentTokens: string[] = [];
+  const storedBeforeRequest: boolean[] = [];
+  const fetchMock = vi.fn<typeof fetch>(async (_url, init) => {
+    const body = JSON.parse(init!.body as string);
+    sentTokens.push(body.hostToken);
+    storedBeforeRequest.push(readOnline(saved.id)?.pendingHostToken === body.hostToken);
+    const response = await handleCreate(
+      {
+        request: new Request('http://localhost:8788/api/meet', {
+          ...init,
+          headers: { Origin: 'http://localhost:8788' },
+        }),
+        env: { DB: db },
+        params: {},
+        waitUntil: (p) => {
+          pending.push(p);
+        },
+      },
+      { now: () => new Date(), fetch: fetchMock },
+    );
+    await Promise.all(pending);
+    expect(response.status).toBe(sentTokens.length === 1 ? 201 : 200);
+    if (sentTokens.length === 1) throw new TypeError('응답 유실');
+    return response;
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  vi.mocked(meetApi.create).mockImplementation(actualApi.create);
+  try {
+    const first = setup();
+    await act(() => first.result.current.share());
+    const pendingToken = readOnline(saved.id)?.pendingHostToken;
+    expect(pendingToken).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(readOnline(saved.id)?.hostToken).toBeUndefined();
+    expect(shareLink).not.toHaveBeenCalled();
+    first.unmount();
+    const second = setup();
+    await act(() => second.result.current.share());
+    expect(sentTokens).toEqual([pendingToken, pendingToken]);
+    expect(storedBeforeRequest).toEqual([true, true]);
+    expect(readOnline(saved.id)?.hostToken).toBe(pendingToken);
+    expect(readOnline(saved.id)?.pendingHostToken).toBeUndefined();
+    expect(await db.prepare('SELECT COUNT(*) AS count FROM meetings').first()).toEqual({
+      count: 1,
+    });
+    expect(shareLink).toHaveBeenCalledExactlyOnceWith(
+      expect.stringMatching(/\/meet\/meeting001$/),
+      '친구 모임',
+    );
+  } finally {
+    await Promise.all(pending);
+    db.close();
+  }
 });
 
 it.each(['첫 확인', '정기 확인', '본문 버전 확인', '충돌 재시도'] as const)(
@@ -202,7 +337,11 @@ it('첫 공유는 한 번 올리고 기록을 저장하며 다음 공유와 확�
   await act(() => result.current.share());
   await act(() => result.current.shareFinal());
   expect(meetApi.create).toHaveBeenCalledTimes(1);
-  expect(meetApi.create).toHaveBeenCalledWith(docFromMeeting(saved, {}, 'min'), 'dev');
+  expect(meetApi.create).toHaveBeenCalledWith(
+    docFromMeeting(saved, {}, 'min'),
+    'dev',
+    expect.stringMatching(/^[A-Za-z0-9_-]{43}$/),
+  );
   expect(readOnline(saved.id)).toMatchObject({ hostToken: token, docRev: 1, syncedAt: startAt });
   expect(shareLink).toHaveBeenCalledWith(expect.stringMatching(/\/meet\/meeting001$/), '친구 모임');
   expect(result.current.mode).toBe('online');
@@ -220,15 +359,21 @@ it.each([
   const { result } = setup();
   await act(() => result.current.share());
   expect(toast.error).toHaveBeenCalledWith(message);
-  expect(readOnline(saved.id)).toBeNull();
+  expect(readOnline(saved.id)).toEqual({
+    lastRev: 0,
+    pendingHostToken: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/),
+  });
 });
-it('기능 스위치가 꺼지면 알림과 기록 없이 해시 문서를 공유한다', async () => {
+it('기능 스위치가 꺼지면 대기 토큰을 보존하고 알림 없이 해시 문서를 공유한다', async () => {
   vi.mocked(meetApi.create).mockResolvedValue({ ok: false, error: { code: 'switched-off' } });
   const { result } = setup();
   await act(() => result.current.share());
   expect(shareMeetingDoc).toHaveBeenCalled();
   expect(toast.error).not.toHaveBeenCalled();
-  expect(readOnline(saved.id)).toBeNull();
+  expect(readOnline(saved.id)).toEqual({
+    lastRev: 0,
+    pendingHostToken: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/),
+  });
 });
 it('Turnstile 거절을 안내한다', async () => {
   vi.mocked(getTurnstileToken).mockRejectedValue(new Error('확인 실패'));
@@ -1153,7 +1298,10 @@ it.each([
       '친구 모임',
     );
     expect(shareLink).not.toHaveBeenCalled();
-    expect(readOnline(saved.id)).toBeNull();
+    expect(readOnline(saved.id)).toEqual({
+      lastRev: 0,
+      pendingHostToken: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/),
+    });
   },
 );
 

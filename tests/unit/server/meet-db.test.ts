@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ensureSchema, resetSchemaMemo, type MeetDb } from 'src/server/meet/db';
-import { SCHEMA_STATEMENTS, SCHEMA_VERSION } from 'src/server/meet/schema.sql';
+import { SCHEMA_STATEMENTS, SCHEMA_VERSION } from 'src/server/meet/schema-sql';
 import { createSqliteD1 } from '../../helpers/sqlite-d1';
 
 let db: ReturnType<typeof createSqliteD1>;

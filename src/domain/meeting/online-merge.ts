@@ -5,10 +5,15 @@ import { LIBRARY_LIMITS } from 'src/schema/library-base';
 import type { OnlineState } from './online-doc';
 import { meetingFailure, meetingField, storeMeeting } from './ops';
 
-type OnlineSync = { syncedAt: string | null; docRev: number | null; seen: readonly string[] };
+type OnlineSync = {
+  syncedAt: string | null;
+  docRev: number | null;
+  seen: readonly string[];
+  hostLikes: readonly string[] | null;
+};
 type OnlineMergeResult =
   | Extract<OpResult, { ok: false }>
-  | (Extract<OpResult, { ok: true }> & { addedReplyOnly: string[] });
+  | (Extract<OpResult, { ok: true }> & { addedReplyOnly: string[]; hostLikes?: string[] });
 
 /** 미전송 본문이 없고 서버 본문 버전이 다를 때만 다른 기기 본문을 받는다. */
 export function shouldAdoptRemoteDoc(
@@ -40,6 +45,7 @@ export function mergeOnline(
   const meeting = lib.meetings?.[meetingId];
   if (meeting === undefined || meeting.deletedAt !== null) return meetingFailure('not-found');
   let next = meeting;
+  let hostLikes: string[] | undefined;
   const addedReplyOnly: string[] = [];
   if (shouldAdoptRemoteDoc(meeting, state, sync)) {
     const field = <T>(value: T) => ({ value, updatedAt: ctx.now });
@@ -58,14 +64,20 @@ export function mergeOnline(
   for (const reply of state.replies) {
     const pid = reply.participantId;
     if (pid === hostId) {
-      if (next.replies.value[pid] === undefined) {
+      const previous = next.replies.value[pid];
+      if (
+        previous === undefined ||
+        (sync.hostLikes !== null &&
+          JSON.stringify(previous.likes) === JSON.stringify(sync.hostLikes))
+      ) {
+        hostLikes = reply.likes.filter((cid) => candidates.has(cid));
         next = meetingField(
           next,
           'replies',
           {
             ...next.replies.value,
             [pid]: {
-              likes: reply.likes.filter((cid) => candidates.has(cid)),
+              likes: hostLikes,
               sentAt: reply.updatedAt,
               receivedAt: ctx.now,
             },
@@ -140,5 +152,7 @@ export function mergeOnline(
     ctx.now,
   );
   const result = storeMeeting(lib, next);
-  return result.ok ? { ...result, addedReplyOnly } : result;
+  return result.ok
+    ? { ...result, addedReplyOnly, ...(hostLikes === undefined ? {} : { hostLikes }) }
+    : result;
 }

@@ -1,4 +1,4 @@
-import { SCHEMA_STATEMENTS, SCHEMA_VERSION } from './schema.sql';
+import { SCHEMA_STATEMENTS, SCHEMA_VERSION } from './schema-sql';
 
 export type MeetStatement = {
   bind(...values: (string | number | null)[]): MeetStatement;

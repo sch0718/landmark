@@ -110,6 +110,7 @@ function HostLink({ id, token }: { id: string; token: string }) {
       }
       let adoptedAt: string | null = null;
       let addedReplyOnly: string[] = [];
+      let hostLikes: string[] | undefined;
       const result = await run((lib, ctx) => {
         const before = lib.meetings?.[id];
         if (!before && Object.keys(lib.meetings ?? {}).length >= LIBRARY_LIMITS.meetingsMax)
@@ -133,15 +134,19 @@ function HostLink({ id, token }: { id: string; token: string }) {
         if (!stored.ok) return stored;
         const current = readOnline(id);
         const sync = restored
-          ? { syncedAt: null, docRev: null, seen: [] }
+          ? { syncedAt: null, docRev: null, seen: [], hostLikes: null }
           : {
               syncedAt: current?.syncedAt ?? null,
               docRev: current?.docRev ?? null,
               seen: current?.seen ?? [],
+              hostLikes: current?.hostLikes ?? null,
             };
         if (shouldAdoptRemoteDoc(meeting, state, sync)) adoptedAt = ctx.now;
         const out = mergeOnline(stored.lib, id, state, ctx, sync);
-        if (out.ok) addedReplyOnly = out.addedReplyOnly;
+        if (out.ok) {
+          addedReplyOnly = out.addedReplyOnly;
+          hostLikes = out.hostLikes;
+        }
         return out;
       });
       if (!active) return;
@@ -153,6 +158,7 @@ function HostLink({ id, token }: { id: string; token: string }) {
         ...readOnline(id),
         hostToken: token,
         lastRev: state.rev,
+        ...(hostLikes === undefined ? {} : { hostLikes }),
         ...(addedReplyOnly.length === 0
           ? {}
           : {

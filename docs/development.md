@@ -101,7 +101,7 @@ curl -H 'Origin: http://localhost:8788' 'http://localhost:8788/api/place?url=htt
 
 | 요청 | 하는 일·성공 응답 | 권한 |
 | --- | --- | --- |
-| `POST /api/meet` | `{ doc, turnstile }` 올리기 → `201 { id, rev, docRev, hostToken }` | 출처·Turnstile·일 한도 |
+| `POST /api/meet` | `{ doc, turnstile, hostToken }`(토큰은 브라우저가 만듦) 올리기 → `201 { id, rev, docRev, hostToken }`, 같은 토큰 재시도 → 현재 버전의 `200`(다른 토큰은 `409`) | 출처·Turnstile·일 한도 |
 | `GET /api/meet/:id?since=<rev>` | `200 { rev, docRev, doc, replies, originNames? }`, 버전이 같으면 본문 없는 `304` | 링크 소지자 |
 | `PUT /api/meet/:id` | `{ doc, baseRev, removed? }` 갱신·확정·확정 취소 → `200 { rev, docRev }`. `removed?`: 지운 답장 전용 참석자 id 배열(최대 10명) | 주최자 |
 | `DELETE /api/meet/:id` | 서버 사본·답장·토큰 삭제 → `204` | 주최자 |

@@ -50,7 +50,12 @@ const merge = (
   docRev: number | null = 1,
 ) => {
   const original = JSON.stringify(lib);
-  const result = mergeOnline(lib, meeting.id, online, ctx, { syncedAt, docRev, seen: [] });
+  const result = mergeOnline(lib, meeting.id, online, ctx, {
+    syncedAt,
+    docRev,
+    hostLikes: null,
+    seen: [],
+  });
   expect(JSON.stringify(lib)).toBe(original);
   expect(result.ok).toBe(true);
   if (!result.ok) throw new Error(JSON.stringify(result));
@@ -59,11 +64,40 @@ const merge = (
 };
 const mergedMeeting = (lib: Library) => lib.meetings![meeting.id]!;
 
+it.each([
+  { local: [], baseline: [], remote: ['choice01'], expected: ['choice01'] },
+  { local: ['choice01'], baseline: ['choice01'], remote: [], expected: [] },
+  { local: ['choice01'], baseline: [], remote: [], expected: ['choice01'] },
+  { local: [], baseline: null, remote: ['choice01'], expected: [] },
+])('주최자 좋아요는 마지막 동기화 기록과 비교한다: %j', ({ local, baseline, remote, expected }) => {
+  const current = {
+    ...meeting,
+    replies: {
+      value: { host0001: { likes: local, sentAt: updatedAt, receivedAt: updatedAt } },
+      updatedAt,
+    },
+  };
+  const result = mergeOnline(
+    library(current),
+    meeting.id,
+    state([reply({ participantId: 'host0001', likes: remote })]),
+    ctx,
+    { syncedAt: now, docRev: 1, seen: [], hostLikes: baseline },
+  );
+  expect(result.ok).toBe(true);
+  if (result.ok) expect(mergedMeeting(result.lib).replies.value.host0001?.likes).toEqual(expected);
+});
+
 describe('온라인 상태를 보관한 약속에 합친다', () => {
   it('없는 약속과 삭제된 약속은 not-found', () => {
     for (const lib of [emptyLibrary(), library({ ...meeting, deletedAt: now })]) {
       expect(
-        mergeOnline(lib, meeting.id, state(), ctx, { syncedAt: now, docRev: 1, seen: [] }),
+        mergeOnline(lib, meeting.id, state(), ctx, {
+          syncedAt: now,
+          docRev: 1,
+          hostLikes: null,
+          seen: [],
+        }),
       ).toEqual({
         ok: false,
         error: { _tag: 'MeetingOpError', reason: 'not-found' },
@@ -151,7 +185,7 @@ describe('온라인 상태를 보관한 약속에 합친다', () => {
       meeting.id,
       state([reply({ origin, likes: [] })]),
       { ...ctx, now: '2026-10-27T00:00:00.000Z' },
-      { syncedAt: now, docRev: 1, seen: [] },
+      { syncedAt: now, docRev: 1, hostLikes: null, seen: [] },
     );
     expect(result).toEqual({ ok: true, lib: first, addedReplyOnly: [] });
     if (result.ok) expect(result.lib).toBe(first);
@@ -291,6 +325,7 @@ it('원격 후보 추가와 확정, 새 답장을 한 번에 반영한다', () =
   const result = mergeOnline(library(), meeting.id, remote, ctx, {
     syncedAt: now,
     docRev: null,
+    hostLikes: null,
     seen: [],
   });
   expect(result.ok).toBe(true);
@@ -309,6 +344,7 @@ it.each(['title', 'at', 'mode', 'participants', 'candidates', 'decided'] as cons
     const initial = state([], 'choice01');
     const remote = { ...initial, doc: { ...initial.doc, title: '원격 제목' } };
     const result = mergeOnline(library(local), meeting.id, remote, ctx, {
+      hostLikes: null,
       seen: [],
       syncedAt: updatedAt,
       docRev: null,
@@ -329,6 +365,7 @@ it('지금 후보에 없는 확정과 기존 답장 좋아요를 저장 전에 �
     },
   };
   const result = mergeOnline(library(local), meeting.id, state([]), ctx, {
+    hostLikes: null,
     seen: [],
     syncedAt: now,
     docRev: 1,
@@ -362,6 +399,7 @@ it('서버 본문을 받을 때 이미 받은 답장 전용 참석자도 보존�
   const remote = state([reply({ participantId: 'new00001', origin })]);
   const first = merge(library(), remote);
   const result = mergeOnline(first, meeting.id, { ...remote, docRev: 2 }, ctx, {
+    hostLikes: null,
     seen: ['new00001'],
     syncedAt: now,
     docRev: 1,
@@ -381,6 +419,7 @@ it('이미 합친 뒤 지운 답장 전용 참석자와 답장을 되살리지 �
   const result = mergeOnline(lib, meeting.id, state([reply({ participantId: 'new00001' })]), ctx, {
     syncedAt: now,
     docRev: 1,
+    hostLikes: null,
     seen: ['new00001'],
   });
   expect(result.ok).toBe(true);
@@ -398,6 +437,7 @@ it('처음 보는 답장 전용 참석자를 더하고 id를 결과로 알린다
     {
       syncedAt: now,
       docRev: 1,
+      hostLikes: null,
       seen: [],
     },
   );

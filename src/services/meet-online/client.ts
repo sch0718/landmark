@@ -133,8 +133,8 @@ async function request<S extends Schema.Decoder<unknown>, Empty = never>(
 
 const pathFor = (id: string) => `/${encodeURIComponent(id)}`;
 export const meetApi = {
-  create(doc: MeetingDoc, turnstile: string) {
-    return request('', 'POST', createSchema, { body: { doc, turnstile } });
+  create(doc: MeetingDoc, turnstile: string, hostToken: string) {
+    return request('', 'POST', createSchema, { body: { doc, turnstile, hostToken } });
   },
   get(
     id: string,
