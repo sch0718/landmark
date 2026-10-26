@@ -8,6 +8,7 @@ export const MEET_ONLINE_KEY = 'tripmap:meet-online:v1';
 export type OnlineRecord = {
   hostToken?: string;
   pendingHostToken?: string;
+  pendingSince?: string;
   hostLikes?: string[];
   guest?: { participantId: string; token: string };
   lastRev: number;
@@ -22,6 +23,7 @@ const recordSchema = Schema.Struct({
   pendingHostToken: Schema.optionalKey(
     Schema.String.check(Schema.isPattern(/^[A-Za-z0-9_-]{43}$/)),
   ),
+  pendingSince: Schema.optionalKey(IsoDateTime),
   hostLikes: Schema.optionalKey(
     Schema.mutable(Schema.Array(MeetingMemberId)).check(
       Schema.isMaxLength(LIBRARY_LIMITS.meetingCandidatesMax),

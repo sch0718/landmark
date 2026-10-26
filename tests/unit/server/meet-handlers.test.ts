@@ -137,7 +137,13 @@ describe('약속 올리기', () => {
     const hostToken = newToken();
     const first = await create(doc(), hostToken);
     expect(first.status).toBe(201);
-    expect(await first.json()).toEqual({ id: doc().meetingId, rev: 1, docRev: 1, hostToken });
+    expect(await first.json()).toEqual({
+      id: doc().meetingId,
+      rev: 1,
+      docRev: 1,
+      hostToken,
+      created: true,
+    });
     await handleUpdate(
       context('PUT', { doc: doc({ title: '새 제목' }), baseRev: 1 }, { token: hostToken }),
       deps,
@@ -145,13 +151,37 @@ describe('약속 올리기', () => {
     const retry = await create(doc(), hostToken);
     expect(retry.status).toBe(200);
     expect(retry.headers.get('Cache-Control')).toBe('private, no-store');
-    expect(await retry.json()).toEqual({ id: doc().meetingId, rev: 2, docRev: 2, hostToken });
+    expect(await retry.json()).toEqual({
+      id: doc().meetingId,
+      rev: 2,
+      docRev: 2,
+      hostToken,
+      created: false,
+    });
     expect(await count('meetings')).toBe(1);
     expect(await count('meeting_tokens')).toBe(1);
     expect(
       JSON.parse((await db.prepare('SELECT doc FROM meetings').first<{ doc: string }>())!.doc)
         .title,
     ).toBe('새 제목');
+  });
+  it('처음 올리기는 created true이고 바뀐 본문의 같은 토큰 재시도는 created false로 원본을 남긴다', async () => {
+    const hostToken = newToken();
+    const first = await create(doc(), hostToken);
+    expect(await first.json()).toMatchObject({ created: true });
+    const retry = await create(doc({ title: '응답 유실 뒤 고친 제목' }), hostToken);
+    expect(retry.status).toBe(200);
+    expect(await retry.json()).toEqual({
+      id: doc().meetingId,
+      rev: 1,
+      docRev: 1,
+      hostToken,
+      created: false,
+    });
+    expect(
+      JSON.parse((await db.prepare('SELECT doc FROM meetings').first<{ doc: string }>())!.doc)
+        .title,
+    ).toBe(doc().title);
   });
   it('같은 토큰의 동시 올리기도 둘 다 성공하고 한 약속만 만든다', async () => {
     const hostToken = newToken();
@@ -1434,9 +1464,44 @@ describe('참석자 풀기와 주최자 재발급', () => {
       likes: '["choice01"]',
     });
   });
+  it('같은 새 토큰의 재발급 재시도는 철회된 인증으로도 버전을 바꾸지 않고 성공한다', async () => {
+    const old = await seed();
+    const hostToken = newToken();
+    const body = { host: true, hostToken };
+    const first = await handleRelease(context('POST', body, { token: old }), deps);
+    expect(first.status).toBe(200);
+    expect(await first.json()).toEqual({ rev: 2, hostToken });
+    const retry = await handleRelease(context('POST', body, { token: old }), deps);
+    expect(retry.status).toBe(200);
+    expect(await retry.json()).toEqual({ rev: 2, hostToken });
+    expect(await db.prepare('SELECT rev, doc_rev FROM meetings').first()).toEqual({
+      rev: 2,
+      doc_rev: 1,
+    });
+    expect(await count('meeting_tokens')).toBe(1);
+    await expectError(
+      await handleRelease(
+        context('POST', { host: true, hostToken: newToken() }, { token: old }),
+        deps,
+      ),
+      401,
+      'UNAUTHORIZED',
+    );
+    await expectError(
+      await handleRelease(
+        context('POST', { host: true, hostToken: newToken() }, { token: 'wrong' }),
+        deps,
+      ),
+      401,
+      'UNAUTHORIZED',
+    );
+  });
   it('주최자 토큰 재발급은 이전 토큰을 철회하고 새 토큰만 전체 좌표를 읽는다', async () => {
     const old = await seed();
-    const response = await handleRelease(context('POST', { host: true }, { token: old }), deps);
+    const response = await handleRelease(
+      context('POST', { host: true, hostToken: newToken() }, { token: old }),
+      deps,
+    );
     expect(response.status).toBe(200);
     const body = await response.json();
     expect(body.rev).toBe(2);
@@ -1498,7 +1563,7 @@ describe('참석자 풀기와 주최자 재발급', () => {
       )
       .run();
     await expectError(
-      await handleRelease(context('POST', { host: true }, { token }), deps),
+      await handleRelease(context('POST', { host: true, hostToken: newToken() }, { token }), deps),
       502,
       'UPSTREAM_ERROR',
     );

@@ -249,7 +249,7 @@ export function handleCreate(ctx: MeetContext, deps: MeetDeps): Promise<Response
         .first();
       if (!host) throw new ApiError('CONFLICT', '이미 올린 약속이에요');
       return jsonResponse(
-        { id: doc.meetingId, rev: row.rev, docRev: row.doc_rev, hostToken: token },
+        { id: doc.meetingId, rev: row.rev, docRev: row.doc_rev, hostToken: token, created: false },
         { headers: PRIVATE_HEADERS },
       );
     }
@@ -284,7 +284,7 @@ export function handleCreate(ctx: MeetContext, deps: MeetDeps): Promise<Response
       Promise.all([pruneExpired(db, now, 20), pruneLimits(db, now)]).catch(() => undefined),
     );
     return jsonResponse(
-      { id: doc.meetingId, rev: 1, docRev: 1, hostToken: token },
+      { id: doc.meetingId, rev: 1, docRev: 1, hostToken: token, created: true },
       { status: 201, headers: PRIVATE_HEADERS },
     );
   });
@@ -444,7 +444,7 @@ const claimSchema = Schema.Union([
 ]);
 const releaseSchema = Schema.Union([
   Schema.Struct({ participantId: MeetingMemberId }),
-  Schema.Struct({ host: Schema.Literal(true) }),
+  Schema.Struct({ host: Schema.Literal(true), hostToken: createSchema.fields.hostToken }),
 ]);
 const normalizeName = (name: string) => name.normalize('NFC').trim().replace(/\s+/g, ' ');
 const revisionGuard = 'EXISTS (SELECT 1 FROM meetings WHERE id = ? AND rev = ?)';
@@ -470,16 +470,21 @@ async function changeMeeting(
   build: (
     row: MeetingRow,
     doc: MeetingDoc,
-  ) => Promise<{
-    statements: MeetStatement[];
-    fields?: Record<string, unknown>;
-  }>,
+  ) => Promise<
+    | {
+        statements: MeetStatement[];
+        fields?: Record<string, unknown>;
+      }
+    | Response
+  >,
 ): Promise<Response> {
   const db = ctx.env.DB;
   for (let attempt = 0; attempt < 5; attempt++) {
     const row = await activeMeeting(db, id, now);
     const doc: MeetingDoc = JSON.parse(row.doc);
-    const { statements, fields } = await build(row, doc);
+    const change = await build(row, doc);
+    if (change instanceof Response) return change;
+    const { statements, fields } = change;
     const results = await db.batch([
       ...statements,
       db
@@ -643,11 +648,24 @@ export function handleRelease(ctx: MeetContext, deps: MeetDeps): Promise<Respons
     const id = readMeetingId(ctx);
     const now = deps.now();
     await prepare(ctx, origin, now);
-    let input: { readonly participantId: string } | { readonly host: true } | undefined;
+    let input: typeof releaseSchema.Type | undefined;
     return changeMeeting(ctx, id, now, async (row) => {
-      await requireHost(ctx, id);
       input ??= validate(releaseSchema, await readJson(ctx.request));
       const db = ctx.env.DB;
+      if ('host' in input) {
+        const existing = await db
+          .prepare(
+            "SELECT hash FROM meeting_tokens WHERE meeting_id = ? AND kind = 'host' AND hash = ?",
+          )
+          .bind(id, await hashToken(input.hostToken))
+          .first();
+        if (existing)
+          return jsonResponse(
+            { rev: row.rev, hostToken: input.hostToken },
+            { headers: PRIVATE_HEADERS },
+          );
+      }
+      await requireHost(ctx, id);
       if ('participantId' in input) {
         return {
           statements: [
@@ -659,7 +677,7 @@ export function handleRelease(ctx: MeetContext, deps: MeetDeps): Promise<Respons
           ],
         };
       }
-      const hostToken = newToken();
+      const hostToken = input.hostToken;
       return {
         statements: [
           db

@@ -22,6 +22,13 @@ export type OnlineCompute = { times: MeetingTimes; unit: 'min' | 'm'; pending: b
 export type OnlineMeetingMode = 'link' | 'local' | 'online' | 'ended';
 export type OnlineMeeting = ReturnType<typeof useOnlineMeeting>;
 
+function newHostToken(): string {
+  return btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+}
+
 function removedReplyOnly(doc: MeetingDoc, record: OnlineRecord): string[] {
   const remaining = new Set(doc.participants.map((p) => p.id));
   return (record.seen ?? []).filter((id) => !remaining.has(id));
@@ -64,6 +71,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
   const active = useRef(false);
   const inFlight = useRef<Promise<void> | null>(null);
   const creating = useRef(false);
+  const reissuing = useRef<Promise<boolean> | null>(null);
   const hydrated = useRef(false);
   const retry = useRef(false);
   const unauthorizedNotified = useRef(false);
@@ -315,11 +323,19 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
     if (!current?.hostToken || current.ended || inFlight.current) return 'ok';
     const finish = beginFlight();
     try {
-      const response = await meetApi.get(
+      let response = await meetApi.get(
         meeting.id,
         full || !hydrated.current ? null : current.lastRev,
         current.hostToken,
       );
+      if (
+        !response.ok &&
+        response.error.code === 'unauthorized' &&
+        currentRecord()?.pendingHostToken
+      ) {
+        if (!(await reissueToken())) return 'error';
+        response = await meetApi.get(meeting.id, null, currentRecord()!.hostToken!);
+      }
       if (!response.ok) {
         markError(response.error);
         return 'error';
@@ -412,13 +428,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
       if (creating.current) return;
       creating.current = true;
       try {
-        const hostToken =
-          current?.pendingHostToken ??
-          btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))
-            .replace(/\+/g, '-')
-            .replace(/\//g, '_')
-            .replace(/=+$/, '');
-        save({ ...current, lastRev: current?.lastRev ?? 0, pendingHostToken: hostToken });
+        const hostToken = current?.pendingHostToken ?? newHostToken();
         let turnstile: string;
         try {
           turnstile = await getTurnstileToken();
@@ -433,6 +443,13 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
           fresh.compute.unit,
         );
         const sentAt = new Date().toISOString();
+        const pendingSince = current?.pendingSince ?? sentAt;
+        save({
+          ...current,
+          lastRev: current?.lastRev ?? 0,
+          pendingHostToken: hostToken,
+          pendingSince,
+        });
         const response = await meetApi.create(doc, turnstile, hostToken);
         if (!response.ok) {
           if (response.error.code === 'switched-off') {
@@ -440,12 +457,13 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
           } else toast.error(errorMessage(response.error, true));
           return;
         }
-        baseline.current = JSON.stringify(doc);
+        // 재시도 성공은 처음 본문이 서버에 있다는 뜻이므로 이번 본문은 아직 올리지 않은 것으로 둔다.
+        baseline.current = response.value.created ? JSON.stringify(doc) : '';
         save({
           hostToken: response.value.hostToken,
           lastRev: response.value.rev,
           docRev: response.value.docRev,
-          syncedAt: sentAt,
+          syncedAt: response.value.created ? sentAt : pendingSince,
         });
         markOk();
         await sendHostLikes();
@@ -487,6 +505,36 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
     const response = await meetApi.release(meeting.id, { participantId: pid }, current.hostToken);
     if (!response.ok) markError(response.error, true);
   }
+  async function reissueToken(): Promise<boolean> {
+    if (reissuing.current) return reissuing.current;
+    const current = currentRecord();
+    if (!current?.hostToken || current.ended) return false;
+    const hostToken = current.pendingHostToken ?? newHostToken();
+    save({ ...current, pendingHostToken: hostToken });
+    reissuing.current = (async () => {
+      const response = await meetApi.release(
+        meeting.id,
+        { host: true, hostToken },
+        current.hostToken!,
+      );
+      if (!response.ok) {
+        markError(response.error, true);
+        return false;
+      }
+      const fresh = currentRecord();
+      if (!fresh || fresh.ended) return false;
+      const next = { ...fresh, hostToken };
+      delete next.pendingHostToken;
+      save(next);
+      markOk();
+      return true;
+    })();
+    try {
+      return await reissuing.current;
+    } finally {
+      reissuing.current = null;
+    }
+  }
   async function reissueHostLink() {
     const current = currentRecord();
     if (
@@ -495,15 +543,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
       !window.confirm('주최자 링크를 다시 발급할까요? 이전 링크는 쓸 수 없어요')
     )
       return;
-    const response = await meetApi.release(meeting.id, { host: true }, current.hostToken);
-    if (!response.ok) {
-      markError(response.error, true);
-      return;
-    }
-    if (response.value.hostToken) {
-      save({ ...currentRecord()!, hostToken: response.value.hostToken });
-      toast.success('이전 주최자 링크는 이제 쓸 수 없어요');
-    }
+    if (await reissueToken()) toast.success('이전 주최자 링크는 이제 쓸 수 없어요');
   }
   async function removeFromServer() {
     const current = currentRecord();

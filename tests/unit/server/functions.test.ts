@@ -807,7 +807,8 @@ describe('온라인 약속 Pages 진입점', () => {
         const claimed = await claim(ctx('POST', { participantId: 'person02' }));
         const { guestToken } = await claimed.json();
         response = await reply(ctx(method, { likes: ['choice01'] }, guestToken));
-      } else response = await release(ctx(method, { host: true }, hostToken));
+      } else
+        response = await release(ctx(method, { host: true, hostToken: 'n'.repeat(43) }, hostToken));
       expect(response.status).toBe(action === '올리기' ? 201 : action === '지우기' ? 204 : 200);
       expect(response.headers.get('Cache-Control')).toBe('private, no-store');
     } finally {

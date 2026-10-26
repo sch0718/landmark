@@ -184,7 +184,7 @@ beforeEach(() => {
   vi.mocked(getTurnstileToken).mockResolvedValue('dev');
   vi.mocked(meetApi.create).mockResolvedValue({
     ok: true,
-    value: { id: saved.id, rev: 1, docRev: 1, hostToken: token },
+    value: { id: saved.id, rev: 1, docRev: 1, hostToken: token, created: true },
   });
   vi.mocked(meetApi.get).mockResolvedValue({ ok: true, value: 'unchanged' });
   vi.mocked(meetApi.reply).mockResolvedValue({ ok: true, value: { rev: 3 } });
@@ -201,69 +201,94 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-it('올리기 응답 유실 뒤 화면을 다시 열고 공유하면 저장한 같은 토큰으로 짧은 링크를 보낸다', async () => {
-  const { webcrypto } = await import('node:crypto');
-  const { createSqliteD1 } = await import('../../../helpers/sqlite-d1');
-  const { handleCreate } = await import('src/server/meet/handlers');
-  const { meetApi: actualApi } = await vi.importActual<
-    typeof import('src/services/meet-online/client')
-  >('src/services/meet-online/client');
-  vi.stubGlobal('crypto', webcrypto);
-  const db = createSqliteD1();
-  const pending: Promise<unknown>[] = [];
-  const sentTokens: string[] = [];
-  const storedBeforeRequest: boolean[] = [];
-  const fetchMock = vi.fn<typeof fetch>(async (_url, init) => {
-    const body = JSON.parse(init!.body as string);
-    sentTokens.push(body.hostToken);
-    storedBeforeRequest.push(readOnline(saved.id)?.pendingHostToken === body.hostToken);
-    const response = await handleCreate(
-      {
-        request: new Request('http://localhost:8788/api/meet', {
-          ...init,
-          headers: { Origin: 'http://localhost:8788' },
-        }),
-        env: { DB: db },
-        params: {},
-        waitUntil: (p) => {
-          pending.push(p);
+it.each([false, true])(
+  '올리기 응답 유실 뒤 제목 수정 %s 후 다시 공유하면 같은 토큰으로 복구하고 수정은 자동으로 올린다',
+  async (edited) => {
+    const { webcrypto } = await import('node:crypto');
+    const { createSqliteD1 } = await import('../../../helpers/sqlite-d1');
+    const { handleCreate } = await import('src/server/meet/handlers');
+    const { meetApi: actualApi } = await vi.importActual<
+      typeof import('src/services/meet-online/client')
+    >('src/services/meet-online/client');
+    vi.stubGlobal('crypto', webcrypto);
+    const db = createSqliteD1();
+    const pending: Promise<unknown>[] = [];
+    const sentTokens: string[] = [];
+    const storedBeforeRequest: boolean[] = [];
+    const fetchMock = vi.fn<typeof fetch>(async (_url, init) => {
+      const body = JSON.parse(init!.body as string);
+      sentTokens.push(body.hostToken);
+      storedBeforeRequest.push(
+        readOnline(saved.id)?.pendingHostToken === body.hostToken &&
+          readOnline(saved.id)?.pendingSince === startAt,
+      );
+      const response = await handleCreate(
+        {
+          request: new Request('http://localhost:8788/api/meet', {
+            ...init,
+            headers: { Origin: 'http://localhost:8788' },
+          }),
+          env: { DB: db },
+          params: {},
+          waitUntil: (p) => {
+            pending.push(p);
+          },
         },
-      },
-      { now: () => new Date(), fetch: fetchMock },
-    );
-    await Promise.all(pending);
-    expect(response.status).toBe(sentTokens.length === 1 ? 201 : 200);
-    if (sentTokens.length === 1) throw new TypeError('응답 유실');
-    return response;
-  });
-  vi.stubGlobal('fetch', fetchMock);
-  vi.mocked(meetApi.create).mockImplementation(actualApi.create);
-  try {
-    const first = setup();
-    await act(() => first.result.current.share());
-    const pendingToken = readOnline(saved.id)?.pendingHostToken;
-    expect(pendingToken).toMatch(/^[A-Za-z0-9_-]{43}$/);
-    expect(readOnline(saved.id)?.hostToken).toBeUndefined();
-    expect(shareLink).not.toHaveBeenCalled();
-    first.unmount();
-    const second = setup();
-    await act(() => second.result.current.share());
-    expect(sentTokens).toEqual([pendingToken, pendingToken]);
-    expect(storedBeforeRequest).toEqual([true, true]);
-    expect(readOnline(saved.id)?.hostToken).toBe(pendingToken);
-    expect(readOnline(saved.id)?.pendingHostToken).toBeUndefined();
-    expect(await db.prepare('SELECT COUNT(*) AS count FROM meetings').first()).toEqual({
-      count: 1,
+        { now: () => new Date(), fetch: fetchMock },
+      );
+      await Promise.all(pending);
+      expect(response.status).toBe(sentTokens.length === 1 ? 201 : 200);
+      if (sentTokens.length === 1) throw new TypeError('응답 유실');
+      return response;
     });
-    expect(shareLink).toHaveBeenCalledExactlyOnceWith(
-      expect.stringMatching(/\/meet\/meeting001$/),
-      '친구 모임',
-    );
-  } finally {
-    await Promise.all(pending);
-    db.close();
-  }
-});
+    vi.stubGlobal('fetch', fetchMock);
+    vi.mocked(meetApi.create).mockImplementation(actualApi.create);
+    try {
+      const first = setup();
+      await act(() => first.result.current.share());
+      const pendingToken = readOnline(saved.id)?.pendingHostToken;
+      expect(pendingToken).toMatch(/^[A-Za-z0-9_-]{43}$/);
+      expect(readOnline(saved.id)?.hostToken).toBeUndefined();
+      expect(shareLink).not.toHaveBeenCalled();
+      first.unmount();
+      if (edited) {
+        await advance(2000);
+        saved = { ...saved, title: f('응답 유실 뒤 고친 제목', new Date().toISOString()) };
+      }
+      const second = setup();
+      await act(() => second.result.current.share());
+      expect(sentTokens).toEqual([pendingToken, pendingToken]);
+      expect(storedBeforeRequest).toEqual([true, true]);
+      expect(readOnline(saved.id)?.hostToken).toBe(pendingToken);
+      expect(readOnline(saved.id)?.pendingHostToken).toBeUndefined();
+      expect(await db.prepare('SELECT COUNT(*) AS count FROM meetings').first()).toEqual({
+        count: 1,
+      });
+      expect(shareLink).toHaveBeenCalledExactlyOnceWith(
+        expect.stringMatching(/\/meet\/meeting001$/),
+        edited ? '응답 유실 뒤 고친 제목' : '친구 모임',
+      );
+      expect(readOnline(saved.id)?.syncedAt).toBe(startAt);
+      if (edited) {
+        expect(
+          JSON.parse((await db.prepare('SELECT doc FROM meetings').first<{ doc: string }>())!.doc)
+            .title,
+        ).toBe('친구 모임');
+        await advance(1100);
+        expect(meetApi.update).toHaveBeenCalledExactlyOnceWith(
+          saved.id,
+          expect.objectContaining({ title: '응답 유실 뒤 고친 제목' }),
+          1,
+          pendingToken,
+          [],
+        );
+      }
+    } finally {
+      await Promise.all(pending);
+      db.close();
+    }
+  },
+);
 
 it.each(['첫 확인', '정기 확인', '본문 버전 확인', '충돌 재시도'] as const)(
   '%s에서 가린 응답을 받으면 출발지를 지키고 연결 끊김을 알린다',
@@ -362,6 +387,7 @@ it.each([
   expect(readOnline(saved.id)).toEqual({
     lastRev: 0,
     pendingHostToken: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/),
+    pendingSince: startAt,
   });
 });
 it('기능 스위치가 꺼지면 대기 토큰을 보존하고 알림 없이 해시 문서를 공유한다', async () => {
@@ -373,6 +399,7 @@ it('기능 스위치가 꺼지면 대기 토큰을 보존하고 알림 없이 �
   expect(readOnline(saved.id)).toEqual({
     lastRev: 0,
     pendingHostToken: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/),
+    pendingSince: startAt,
   });
 });
 it('Turnstile 거절을 안내한다', async () => {
@@ -513,6 +540,106 @@ it.each(['ended', 'not-found'] as const)('%s 응답은 끝남 기록으로 남�
   await advance(30000);
   expect(meetApi.get).toHaveBeenCalledTimes(1);
 });
+it.each(['확인', '다시 발급'] as const)(
+  '재발급 응답 유실 뒤 %s에서 같은 토큰으로 주최자 권한을 복구한다',
+  async (path) => {
+    const { webcrypto } = await import('node:crypto');
+    const { createSqliteD1 } = await import('../../../helpers/sqlite-d1');
+    const { handleCreate, handleRelease, handleGet } = await import('src/server/meet/handlers');
+    const { meetApi: actualApi } = await vi.importActual<
+      typeof import('src/services/meet-online/client')
+    >('src/services/meet-online/client');
+    vi.stubGlobal('crypto', webcrypto);
+    const db = createSqliteD1();
+    const pending: Promise<unknown>[] = [];
+    const sentTokens: string[] = [];
+    const context = (request: Request) => ({
+      request,
+      env: { DB: db },
+      params: { id: saved.id },
+      waitUntil: (p: Promise<unknown>) => {
+        pending.push(p);
+      },
+    });
+    const deps = { now: () => new Date(), fetch: vi.fn<typeof fetch>() };
+    try {
+      await handleCreate(
+        context(
+          new Request('http://localhost:8788/api/meet', {
+            method: 'POST',
+            headers: { Origin: 'http://localhost:8788' },
+            body: JSON.stringify({ doc: state().doc, turnstile: 'dev', hostToken: token }),
+          }),
+        ),
+        deps,
+      );
+      await Promise.all(pending);
+      online();
+      const pendingSince = '2026-10-26T00:30:00.000Z';
+      writeOnline(saved.id, { ...readOnline(saved.id)!, pendingSince });
+      vi.stubGlobal(
+        'fetch',
+        vi.fn<typeof fetch>(async (url, init) => {
+          const headers = new Headers(init?.headers);
+          headers.set('Origin', 'http://localhost:8788');
+          const ctx = context(new Request(`http://localhost:8788${url}`, { ...init, headers }));
+          if (String(url).endsWith('/release')) {
+            const body = JSON.parse(init!.body as string);
+            sentTokens.push(body.hostToken);
+            expect(readOnline(saved.id)?.pendingHostToken).toBe(body.hostToken);
+            expect(readOnline(saved.id)?.pendingSince).toBe(pendingSince);
+            const response = await handleRelease(ctx, deps);
+            if (sentTokens.length === 1) throw new TypeError('응답 유실');
+            return response;
+          }
+          return handleGet(ctx, deps);
+        }),
+      );
+      let finishInitial!: () => void;
+      let finishRecovery!: () => void;
+      const initialChecked = new Promise<void>((resolve) => {
+        finishInitial = resolve;
+      });
+      const recoveryChecked = new Promise<void>((resolve) => {
+        finishRecovery = resolve;
+      });
+      vi.mocked(meetApi.get).mockImplementation(async (...args) => {
+        const response = await actualApi.get(...args);
+        if (response.ok) {
+          if (args[2] === token) finishInitial();
+          else finishRecovery();
+        }
+        return response;
+      });
+      vi.mocked(meetApi.release).mockImplementation(actualApi.release);
+      const first = setup();
+      await act(async () => {
+        await initialChecked;
+      });
+      await act(() => first.result.current.reissueHostLink());
+      const pendingToken = readOnline(saved.id)?.pendingHostToken;
+      expect(pendingToken).toMatch(/^[A-Za-z0-9_-]{43}$/);
+      expect(readOnline(saved.id)?.hostToken).toBe(token);
+      vi.mocked(toast.error).mockClear();
+      if (path === '확인') {
+        first.unmount();
+        setup();
+        await act(async () => {
+          await recoveryChecked;
+        });
+      } else await act(() => first.result.current.reissueHostLink());
+      expect(sentTokens).toEqual([pendingToken, pendingToken]);
+      expect(readOnline(saved.id)?.hostToken).toBe(pendingToken);
+      expect(readOnline(saved.id)?.pendingHostToken).toBeUndefined();
+      expect(readOnline(saved.id)?.pendingSince).toBe(pendingSince);
+      expect(toast.error).not.toHaveBeenCalled();
+      expect((await actualApi.get(saved.id, null, pendingToken!)).ok).toBe(true);
+    } finally {
+      await Promise.all(pending);
+      db.close();
+    }
+  },
+);
 it('주최자 링크는 #h=로 공유하고 다시 발급하면 기록 토큰을 바꾼다', async () => {
   online();
   const { result } = setup();
@@ -523,7 +650,12 @@ it('주최자 링크는 #h=로 공유하고 다시 발급하면 기록 토큰을
     '친구 모임',
   );
   await act(() => result.current.reissueHostLink());
-  expect(readOnline(saved.id)?.hostToken).toBe('n'.repeat(43));
+  expect(meetApi.release).toHaveBeenCalledWith(
+    saved.id,
+    { host: true, hostToken: readOnline(saved.id)?.hostToken },
+    token,
+  );
+  expect(readOnline(saved.id)?.hostToken).not.toBe(token);
   expect(toast.success).toHaveBeenCalledWith('이전 주최자 링크는 이제 쓸 수 없어요');
 });
 it('참석자 차지 풀기와 서버 삭제는 확인을 받고 보관함을 남긴다', async () => {
@@ -1301,6 +1433,7 @@ it.each([
     expect(readOnline(saved.id)).toEqual({
       lastRev: 0,
       pendingHostToken: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/),
+      pendingSince: startAt,
     });
   },
 );

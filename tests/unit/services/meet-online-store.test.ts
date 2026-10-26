@@ -149,3 +149,14 @@ it.each([
   );
   expect(createOnlineStore(() => storage).allOnline()).toEqual({ meeting002: { lastRev: 1 } });
 });
+
+it('대기 중인 최초 본문 시각을 새 저장소에서도 복원한다', () => {
+  const storage = createMemoryStorage();
+  const record = {
+    lastRev: 0,
+    pendingHostToken: 'p'.repeat(43),
+    pendingSince: '2026-10-26T00:00:00.000Z',
+  };
+  createOnlineStore(() => storage).writeOnline('meeting001', record);
+  expect(createOnlineStore(() => storage).readOnline('meeting001')).toEqual(record);
+});

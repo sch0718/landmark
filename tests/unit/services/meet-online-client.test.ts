@@ -24,7 +24,7 @@ describe('온라인 약속 API', () => {
       'POST',
       { doc, turnstile: 'dev', hostToken: token },
       null,
-      { id: doc.meetingId, rev: 1, docRev: 1, hostToken: token },
+      { id: doc.meetingId, rev: 1, docRev: 1, hostToken: token, created: true },
       201,
     ],
     [
@@ -109,10 +109,10 @@ describe('온라인 약속 API', () => {
     ],
     [
       '주최자 다시 발급',
-      () => meetApi.release(doc.meetingId, { host: true }, token),
+      () => meetApi.release(doc.meetingId, { host: true, hostToken: token }, token),
       '/api/meet/meeting001/release',
       'POST',
-      { host: true },
+      { host: true, hostToken: token },
       token,
       { rev: 8, hostToken: token },
       200,
@@ -257,4 +257,10 @@ it('본문 갱신에 지운 답장 전용 참석자 id를 보낸다', async () =
     baseRev: 2,
     removed: ['person03'],
   });
+});
+
+it('올리기 재시도의 created false를 읽는다', async () => {
+  const response = { id: doc.meetingId, rev: 2, docRev: 2, hostToken: token, created: false };
+  respond(response);
+  expect(await meetApi.create(doc, 'dev', token)).toEqual({ ok: true, value: response });
 });

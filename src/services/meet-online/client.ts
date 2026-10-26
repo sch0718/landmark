@@ -36,6 +36,7 @@ const replySchema = Schema.Struct({
 const updateSchema = Schema.Struct({ rev: revision, docRev: revision });
 const createSchema = Schema.Struct({
   id: MeetingId,
+  created: Schema.Boolean,
   rev: revision,
   docRev: revision,
   hostToken: token,
@@ -166,7 +167,11 @@ export const meetApi = {
   reply(id: string, input: ReplyInput, token: string) {
     return request(`${pathFor(id)}/reply`, 'PUT', replySchema, { body: input, token });
   },
-  release(id: string, body: { participantId: string } | { host: true }, hostToken: string) {
+  release(
+    id: string,
+    body: { participantId: string } | { host: true; hostToken: string },
+    hostToken: string,
+  ) {
     return request(`${pathFor(id)}/release`, 'POST', releaseSchema, { body, token: hostToken });
   },
 };
