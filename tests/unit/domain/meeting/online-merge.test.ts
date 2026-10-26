@@ -610,3 +610,10 @@ it('다른 기기 본문에 포함돼도 올리기 전 지운 답장 전용 참�
   expect(result.addedReplyOnly).toEqual([]);
   expect(safeParse(LibrarySchema, result.lib).success).toBe(true);
 });
+
+it('기록보다 낮은 본문 버전은 받지 않고 새 답장만 합친다', () => {
+  const remote = state([reply()], 'choice01');
+  const next = mergedMeeting(merge(library(), remote, docFromMeeting(meeting, {}, 'min'), 2));
+  expect(next.decided.value).toBeNull();
+  expect(next.replies.value.person01?.likes).toEqual(['choice01']);
+});

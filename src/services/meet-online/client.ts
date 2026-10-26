@@ -98,6 +98,7 @@ async function request<S extends Schema.Decoder<unknown>, Empty = never>(
   options: {
     body?: unknown;
     token?: string | null;
+    signal?: AbortSignal;
     noBody?: { status: number; value: Empty };
   } = {},
 ): Promise<Result<S['Type'] | Empty>> {
@@ -110,6 +111,7 @@ async function request<S extends Schema.Decoder<unknown>, Empty = never>(
       method,
       credentials: 'same-origin',
       headers,
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
       ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
     });
   } catch {
@@ -141,18 +143,27 @@ export const meetApi = {
     id: string,
     since: number | null,
     token: string | null,
+    signal?: AbortSignal,
   ): Promise<Result<OnlineState | 'unchanged'>> {
     return request(
       `${pathFor(id)}${since === null ? '' : `?since=${since}`}`,
       'GET',
       OnlineStateSchema,
-      { token, noBody: { status: 304, value: 'unchanged' as const } },
+      { token, signal, noBody: { status: 304, value: 'unchanged' as const } },
     );
   },
-  update(id: string, doc: MeetingDoc, baseDocRev: number, hostToken: string, removed?: string[]) {
+  update(
+    id: string,
+    doc: MeetingDoc,
+    baseDocRev: number,
+    hostToken: string,
+    removed?: string[],
+    signal?: AbortSignal,
+  ) {
     return request(pathFor(id), 'PUT', updateSchema, {
       body: { doc, baseRev: baseDocRev, ...(removed === undefined ? {} : { removed }) },
       token: hostToken,
+      signal,
     });
   },
   remove(id: string, hostToken: string): Promise<Result<void>> {

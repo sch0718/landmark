@@ -264,3 +264,11 @@ it('올리기 재시도의 created false를 읽는다', async () => {
   respond(response);
   expect(await meetApi.create(doc, 'dev', token)).toEqual({ ok: true, value: response });
 });
+
+it.each(['get', 'update'] as const)('%s는 취소 신호를 fetch에 전달한다', async (method) => {
+  const controller = new AbortController();
+  respond({ rev: 2, docRev: 2 });
+  if (method === 'get') await meetApi.get(doc.meetingId, null, token, controller.signal);
+  else await meetApi.update(doc.meetingId, doc, 1, token, [], controller.signal);
+  expect(fetchMock.mock.calls[0]?.[1]?.signal).toBe(controller.signal);
+});

@@ -82,6 +82,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
     latest.current = { meeting, compute, run };
   });
   const active = useRef(false);
+  const lifecycle = useRef<AbortController | null>(null);
   const inFlight = useRef<Promise<void> | null>(null);
   const creating = useRef(false);
   const reissuing = useRef<Promise<boolean> | null>(null);
@@ -112,6 +113,14 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
     [meeting.id],
   );
   const currentRecord = () => readOnline(meeting.id);
+  function isCurrent(signal: AbortSignal | undefined): signal is AbortSignal {
+    return (
+      signal !== undefined &&
+      active.current &&
+      signal === lifecycle.current?.signal &&
+      !signal.aborted
+    );
+  }
   function markError(error: OnlineError, notify = false) {
     const current = currentRecord();
     if ((error.code === 'ended' || error.code === 'not-found') && current) {
@@ -131,6 +140,8 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
     if (active.current) setStatus({ lastOkAt: Date.now(), failing: false });
   }
   async function sendHostLikes(): Promise<boolean> {
+    const signal = lifecycle.current?.signal;
+    if (!isCurrent(signal)) return false;
     const current = currentRecord();
     if (!current?.hostToken || current.ended || hostReplyInFlight.current) return true;
     const input = latest.current.meeting;
@@ -144,6 +155,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
     hostReplyInFlight.current = true;
     try {
       const response = await meetApi.reply(meeting.id, { likes }, current.hostToken);
+      if (!isCurrent(signal)) return false;
       if (!response.ok) {
         hostReplyRetry.current = true;
         hostReplyDeferred.current = true;
@@ -161,7 +173,8 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
       hostReplyInFlight.current = false;
     }
   }
-  async function merge(state: OnlineState): Promise<Meeting | null> {
+  async function merge(state: OnlineState, signal: AbortSignal): Promise<Meeting | null> {
+    if (!isCurrent(signal) || state.rev < (currentRecord()?.lastRev ?? 0)) return null;
     if (state.originNames !== undefined) {
       markError({ code: 'unauthorized' });
       return null;
@@ -172,6 +185,8 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
     let hostLikes: string[] | undefined;
     const result = await latest.current.run((lib, ctx) => {
       const current = currentRecord();
+      // 보관함 연산을 기다리는 동안 화면이 닫히거나 다른 화면이 더 새 상태를 합칠 수 있다.
+      if (!isCurrent(signal) || state.rev < (current?.lastRev ?? 0)) return lib;
       const sync = {
         syncedDoc: current?.syncedDoc ?? null,
         docRev: current?.docRev ?? null,
@@ -188,8 +203,9 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
       }
       return out;
     });
-    if (!result.ok) return null;
+    if (!result.ok || !merged || !isCurrent(signal)) return null;
     const current = currentRecord();
+    if (state.rev < (current?.lastRev ?? 0)) return null;
     if (current && !current.ended)
       save({
         ...current,
@@ -203,14 +219,17 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
                 ...state.replies.map((r) => r.participantId),
               ]),
             }),
-        ...(!adopted ? {} : { docRev: state.docRev, syncedDoc: state.doc }),
+        ...(!adopted || state.docRev < (current.docRev ?? 0)
+          ? {}
+          : { docRev: state.docRev, syncedDoc: state.doc }),
       });
     hydrated.current = true;
     if (adopted) baseline.current = JSON.stringify(state.doc);
     if (active.current) setReplyState(state);
     return merged;
   }
-  async function upload(): Promise<boolean> {
+  async function upload(signal = lifecycle.current?.signal): Promise<boolean> {
+    if (!isCurrent(signal)) return false;
     let current = currentRecord();
     const input = latest.current;
     if (!current?.hostToken || current.ended || input.compute.pending) return true;
@@ -223,14 +242,15 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
     }
     retry.current = true;
     if (current.docRev === undefined) {
-      const response = await meetApi.get(meeting.id, null, current.hostToken);
+      const response = await meetApi.get(meeting.id, null, current.hostToken, signal);
+      if (!isCurrent(signal)) return false;
       if (!response.ok) {
         markError(response.error);
         return false;
       }
       if (response.value === 'unchanged') return false;
-      const merged = await merge(response.value);
-      if (!merged) return false;
+      const merged = await merge(response.value, signal);
+      if (!merged || !isCurrent(signal)) return false;
       current = currentRecord()!;
       baseDocRev = response.value.docRev;
       doc = docFromMeeting(merged, latest.current.compute.times, latest.current.compute.unit);
@@ -241,14 +261,23 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
       }
     }
     let removed = removedReplyOnly(doc, current);
-    let response = await meetApi.update(meeting.id, doc, baseDocRev!, current.hostToken!, removed);
+    let response = await meetApi.update(
+      meeting.id,
+      doc,
+      baseDocRev!,
+      current.hostToken!,
+      removed,
+      signal,
+    );
+    if (!isCurrent(signal)) return false;
     if (
       !response.ok &&
       response.error.code === 'conflict' &&
       response.error.docRev !== undefined &&
       response.error.docRev !== current.docRev
     ) {
-      const remote = await meetApi.get(meeting.id, null, current.hostToken!);
+      const remote = await meetApi.get(meeting.id, null, current.hostToken!, signal);
+      if (!isCurrent(signal)) return false;
       if (!remote.ok) {
         retry.current = true;
         markError(remote.error);
@@ -258,7 +287,8 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
         retry.current = true;
         return false;
       }
-      const merged = await merge(remote.value);
+      const merged = await merge(remote.value, signal);
+      if (!isCurrent(signal)) return false;
       if (!merged) {
         retry.current = true;
         return false;
@@ -272,7 +302,9 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
         remote.value.docRev,
         current.hostToken!,
         removed,
+        signal,
       );
+      if (!isCurrent(signal)) return false;
     }
     if (!response.ok) {
       retry.current = true;
@@ -280,15 +312,15 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
       return false;
     }
     const fresh = currentRecord();
-    if (fresh && !fresh.ended)
-      save({
-        ...fresh,
-        docRev: response.value.docRev,
-        syncedDoc: doc,
-        ...(fresh.seen === undefined
-          ? {}
-          : { seen: fresh.seen.filter((id) => !removed.includes(id)) }),
-      });
+    if (!fresh || fresh.ended || (fresh.docRev ?? 0) > response.value.docRev) return false;
+    save({
+      ...fresh,
+      docRev: response.value.docRev,
+      syncedDoc: doc,
+      ...(fresh.seen === undefined
+        ? {}
+        : { seen: fresh.seen.filter((id) => !removed.includes(id)) }),
+    });
     baseline.current = JSON.stringify(doc);
     retry.current = false;
     deferred.current = false;
@@ -298,20 +330,27 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
   }
   function beginFlight() {
     let finish!: () => void;
-    inFlight.current = new Promise<void>((resolve) => {
+    const flight = new Promise<void>((resolve) => {
       finish = resolve;
     });
+    inFlight.current = flight;
     return () => {
-      inFlight.current = null;
+      if (inFlight.current === flight) inFlight.current = null;
       finish();
     };
   }
   async function flushUpload(): Promise<boolean> {
+    const signal = lifecycle.current?.signal;
+    if (!isCurrent(signal)) return false;
     // 확인·자동 올리기가 끝나면 최신 본문을 다시 확인한다.
-    while (inFlight.current) await inFlight.current;
+    while (inFlight.current) {
+      await inFlight.current;
+      if (!isCurrent(signal)) return false;
+    }
     const finish = beginFlight();
     try {
       while (true) {
+        if (!isCurrent(signal)) return false;
         const current = currentRecord();
         if (!current?.hostToken || current.ended) return false;
         const input = latest.current;
@@ -319,8 +358,8 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
         const doc = docFromMeeting(input.meeting, input.compute.times, input.compute.unit);
         if (JSON.stringify(doc) === baseline.current && removedReplyOnly(doc, current).length === 0)
           return true;
-        if (!(await upload())) {
-          deferred.current = true;
+        if (!(await upload(signal))) {
+          if (isCurrent(signal)) deferred.current = true;
           return false;
         }
       }
@@ -329,6 +368,8 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
     }
   }
   async function tick(full = false): Promise<'ok' | 'error'> {
+    const signal = lifecycle.current?.signal;
+    if (!isCurrent(signal)) return 'ok';
     const current = currentRecord();
     if (active.current && JSON.stringify(current) !== JSON.stringify(record)) setRecord(current);
     if (!current?.hostToken || current.ended || inFlight.current) return 'ok';
@@ -338,25 +379,31 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
         meeting.id,
         full || !hydrated.current ? null : current.lastRev,
         current.hostToken,
+        signal,
       );
+      if (!isCurrent(signal)) return 'ok';
       if (
         !response.ok &&
         response.error.code === 'unauthorized' &&
         currentRecord()?.pendingHostToken
       ) {
         if (!(await reissueToken())) return 'error';
-        response = await meetApi.get(meeting.id, null, currentRecord()!.hostToken!);
+        if (!isCurrent(signal)) return 'ok';
+        response = await meetApi.get(meeting.id, null, currentRecord()!.hostToken!, signal);
+        if (!isCurrent(signal)) return 'ok';
       }
       if (!response.ok) {
         markError(response.error);
         return 'error';
       }
-      if (response.value !== 'unchanged' && !(await merge(response.value))) return 'error';
-      if (retry.current && !(await upload())) {
-        deferred.current = true;
+      if (response.value !== 'unchanged' && !(await merge(response.value, signal))) return 'error';
+      if (!isCurrent(signal)) return 'ok';
+      if (retry.current && !(await upload(signal))) {
+        if (isCurrent(signal)) deferred.current = true;
         return 'error';
       }
       if (hostReplyRetry.current && !(await sendHostLikes())) return 'error';
+      if (!isCurrent(signal)) return 'ok';
       markOk();
       return 'ok';
     } finally {
@@ -365,6 +412,8 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
   }
   const initialCheck = useEffectEvent(() => tick(true));
   const autoUpload = useEffectEvent(async () => {
+    const signal = lifecycle.current?.signal;
+    if (!isCurrent(signal)) return;
     if (deferred.current) return;
     if (inFlight.current) {
       retry.current = true;
@@ -372,15 +421,19 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
     }
     const finish = beginFlight();
     try {
-      if (!(await upload())) deferred.current = true;
+      if (!(await upload(signal)) && isCurrent(signal)) deferred.current = true;
     } finally {
       finish();
     }
   });
   useEffect(() => {
+    const controller = new AbortController();
+    lifecycle.current = controller;
     active.current = true;
     return () => {
       active.current = false;
+      controller.abort();
+      inFlight.current = null;
     };
   }, []);
   useEffect(() => subscribeOnline(meeting.id, setRecord), [meeting.id]);
@@ -511,6 +564,8 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
     if (!response.ok) markError(response.error, true);
   }
   async function reissueToken(): Promise<boolean> {
+    const signal = lifecycle.current?.signal;
+    if (!isCurrent(signal)) return false;
     if (reissuing.current) return reissuing.current;
     const current = currentRecord();
     if (!current?.hostToken || current.ended) return false;
@@ -522,6 +577,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
         { host: true, hostToken },
         current.hostToken!,
       );
+      if (!isCurrent(signal)) return false;
       if (!response.ok) {
         markError(response.error, true);
         return false;

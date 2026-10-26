@@ -1,5 +1,5 @@
 import { act, fireEvent, render, renderHook, screen } from '@testing-library/react';
-import { useState } from 'react';
+import { StrictMode, useState } from 'react';
 import { Effect } from 'effect';
 import * as effectRuntime from 'src/lib/effect/runtime';
 import { haversineM } from 'src/domain/trips/geo';
@@ -226,15 +226,18 @@ it('동기화 기록과 다른 로컬 좋아요는 서버 확인 뒤에도 보�
   expect(readOnline(saved.id)?.hostLikes).toEqual(['choice01']);
 });
 
-function setup(inputCompute: OnlineCompute = compute) {
-  return renderHook(() => {
-    const [meeting, setMeeting] = useState(saved);
-    refresh = setMeeting;
-    return useOnlineMeeting(meeting, {
-      ...inputCompute,
-      unit: meeting.mode.value === 'straight' ? 'm' : 'min',
-    });
-  });
+function setup(inputCompute: OnlineCompute = compute, strict = false) {
+  return renderHook(
+    () => {
+      const [meeting, setMeeting] = useState(saved);
+      refresh = setMeeting;
+      return useOnlineMeeting(meeting, {
+        ...inputCompute,
+        unit: meeting.mode.value === 'straight' ? 'm' : 'min',
+      });
+    },
+    { wrapper: strict ? StrictMode : undefined },
+  );
 }
 async function flush() {
   await act(async () => {});
@@ -364,6 +367,7 @@ it.each([false, true])(
           1,
           pendingToken,
           [],
+          expect.any(AbortSignal),
         );
       }
     } finally {
@@ -552,7 +556,7 @@ it('열 때 즉시 확인하고 참석자 수정 두 번을 1초 모아 docRev�
   online();
   const { result } = setup();
   await flush();
-  expect(meetApi.get).toHaveBeenCalledWith(saved.id, null, token);
+  expect(meetApi.get).toHaveBeenCalledWith(saved.id, null, token, expect.any(AbortSignal));
   await edit({ title: f('첫 변경') });
   await advance(500);
   await edit({ title: f('두 번째') });
@@ -566,6 +570,7 @@ it('열 때 즉시 확인하고 참석자 수정 두 번을 1초 모아 docRev�
     1,
     token,
     [],
+    expect.any(AbortSignal),
   );
   expect(readOnline(saved.id)).toMatchObject({ docRev: 2, syncedDoc: state().doc });
   expect(result.current.status.failing).toBe(false);
@@ -595,7 +600,7 @@ it('충돌한 본문 버전이 다를 때 get·merge 뒤 새 docRev로 한 번 �
   vi.mocked(meetApi.get).mockResolvedValue({ ok: true, value: remote });
   await edit({ title: f('수정') });
   await advance(1000);
-  expect(meetApi.get).toHaveBeenLastCalledWith(saved.id, null, token);
+  expect(meetApi.get).toHaveBeenLastCalledWith(saved.id, null, token, expect.any(AbortSignal));
   expect(meetApi.update).toHaveBeenLastCalledWith(
     saved.id,
     expect.objectContaining({
@@ -604,6 +609,7 @@ it('충돌한 본문 버전이 다를 때 get·merge 뒤 새 docRev로 한 번 �
     8,
     token,
     [],
+    expect.any(AbortSignal),
   );
   expect(meetApi.update).toHaveBeenCalledTimes(2);
   expect(result.current.status.failing).toBe(false);
@@ -888,6 +894,7 @@ it('전송 중에 다시 고친 본문도 첫 전송이 끝나면 자동으로 �
     2,
     token,
     [],
+    expect.any(AbortSignal),
   );
 });
 it('두 번째 충돌은 바로 또 시도하지 않고 다음 확인까지 기다린다', async () => {
@@ -1014,9 +1021,9 @@ it('다시 열 때 전체 상태를 읽어 이미 받은 친구 소요시간도 
   vi.mocked(meetApi.get).mockResolvedValueOnce({ ok: true, value: state() });
   setup();
   await flush();
-  expect(meetApi.get).toHaveBeenCalledWith(saved.id, null, token);
+  expect(meetApi.get).toHaveBeenCalledWith(saved.id, null, token, expect.any(AbortSignal));
   await advance(10000);
-  expect(meetApi.get).toHaveBeenLastCalledWith(saved.id, 2, token);
+  expect(meetApi.get).toHaveBeenLastCalledWith(saved.id, 2, token, expect.any(AbortSignal));
 });
 it.each(['mode', 'at', 'candidate', 'origin'] as const)(
   '주최자가 %s 계산 조건을 바꾸면 이전 답장의 시간을 덮어쓰지 않는다',
@@ -1470,6 +1477,7 @@ it.each(['person02', 'person03'])(
         expect.any(Number),
         token,
         [],
+        expect.any(AbortSignal),
       );
     } finally {
       finish();
@@ -1531,6 +1539,7 @@ it.each([false, true])(
         expect.any(Number),
         token,
         [],
+        expect.any(AbortSignal),
       );
       expect(reported).toEqual({ times: {}, unit: 'm', pending: false });
       vi.mocked(meetApi.get).mockResolvedValue({
@@ -1549,6 +1558,7 @@ it.each([false, true])(
         2,
         token,
         [],
+        expect.any(AbortSignal),
       );
     } finally {
       unmount();
@@ -1582,6 +1592,7 @@ it.each(['share', 'shareFinal'] as const)(
       1,
       token,
       [],
+      expect.any(AbortSignal),
     );
     expect(shareLink).not.toHaveBeenCalled();
     await act(async () => {
@@ -1641,6 +1652,7 @@ it('확정 공유는 진행 중인 올리기가 끝나면 새 본문을 다시 �
     2,
     token,
     [],
+    expect.any(AbortSignal),
   );
   expect(shareLink).toHaveBeenCalledExactlyOnceWith(
     expect.stringMatching(/\/meet\/meeting001$/),
@@ -1724,6 +1736,7 @@ it.each(['성공', '실패 후 재시도', '충돌 재시도'] as const)(
       1,
       token,
       ['person03'],
+      expect.any(AbortSignal),
     );
     if (path === '실패 후 재시도') {
       expect(readOnline(saved.id)?.seen).toEqual(['person03']);
@@ -1797,6 +1810,7 @@ it('다른 기기가 삭제 대기 참석자를 본문에 넣어도 받지 않�
     2,
     token,
     ['person03'],
+    expect.any(AbortSignal),
   );
   expect(readOnline(saved.id)?.seen).toEqual(['person03']);
   await act(async () => finish({ ok: true, value: { rev: 4, docRev: 3 } }));
@@ -1914,3 +1928,169 @@ it.each(['storage', 'writeOnline', 'tick'] as const)(
     expect(meetApi.get).toHaveBeenCalledTimes(reads);
   },
 );
+
+it.each([false, true])(
+  '닫힌 화면의 늦은 GET은 새 화면의 제목과 버전 기록을 되돌리지 않는다(StrictMode=%s)',
+  async (strict) => {
+    online();
+    const oldState = state({ rev: 3, docRev: 2, doc: { ...state().doc, title: '옛 제목' } });
+    const newState = state({ rev: 5, docRev: 4, doc: { ...state().doc, title: '새 제목' } });
+    let finish!: (value: Awaited<ReturnType<typeof meetApi.get>>) => void;
+    vi.mocked(meetApi.get)
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+      )
+      .mockResolvedValue({ ok: true, value: newState });
+    const first = setup(compute, strict);
+    if (!strict) {
+      first.unmount();
+      setup();
+    }
+    await flush();
+    expect(saved.title.value).toBe('새 제목');
+    const fresh = readOnline(saved.id);
+    expect(fresh).toMatchObject({ lastRev: 5, docRev: 4, syncedDoc: newState.doc });
+    await act(async () => finish({ ok: true, value: oldState }));
+    expect(saved.title.value).toBe('새 제목');
+    expect(readOnline(saved.id)).toEqual(fresh);
+    const signal = vi.mocked(meetApi.get).mock.calls[0]?.[3];
+    expect(signal).toBeInstanceOf(AbortSignal);
+    expect(signal?.aborted).toBe(true);
+  },
+);
+
+it.each(['hydrate', 'conflict'] as const)(
+  '닫힌 화면의 %s GET 응답은 합치거나 다시 올리지 않는다',
+  async (stage) => {
+    online();
+    const first = setup();
+    await flush();
+    if (stage === 'hydrate') {
+      const record = { ...readOnline(saved.id)! };
+      delete record.docRev;
+      writeOnline(saved.id, record);
+    } else {
+      vi.mocked(meetApi.update).mockResolvedValueOnce({
+        ok: false,
+        error: { code: 'conflict', docRev: 2 },
+      });
+    }
+    let finish!: (value: Awaited<ReturnType<typeof meetApi.get>>) => void;
+    vi.mocked(meetApi.get).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    await edit({ title: f('로컬 수정') });
+    await advance(1000);
+    first.unmount();
+    const fresh = readOnline(saved.id);
+    const before = saved;
+    const uploads = vi.mocked(meetApi.update).mock.calls.length;
+    await act(async () =>
+      finish({
+        ok: true,
+        value: state({
+          rev: 3,
+          docRev: 2,
+          replies: [
+            {
+              participantId: 'person03',
+              name: '늦은 친구',
+              origin: null,
+              likes: [],
+              times: null,
+              updatedAt: startAt,
+            },
+          ],
+        }),
+      }),
+    );
+    expect(saved).toEqual(before);
+    expect(readOnline(saved.id)).toEqual(fresh);
+    expect(meetApi.update).toHaveBeenCalledTimes(uploads);
+    expect(vi.mocked(meetApi.get).mock.calls.at(-1)?.[3]?.aborted).toBe(true);
+  },
+);
+
+it('닫힌 화면의 늦은 오류는 새 화면을 끝난 약속으로 바꾸지 않는다', async () => {
+  online();
+  let finish!: (value: Awaited<ReturnType<typeof meetApi.get>>) => void;
+  vi.mocked(meetApi.get).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const first = setup();
+  first.unmount();
+  const second = setup();
+  await flush();
+  const fresh = readOnline(saved.id);
+  await act(async () => finish({ ok: false, error: { code: 'ended' } }));
+  expect(readOnline(saved.id)).toEqual(fresh);
+  expect(second.result.current.mode).toBe('online');
+  expect(toast.error).not.toHaveBeenCalled();
+});
+
+it.each([
+  { closed: false, newer: true },
+  { closed: true, newer: true },
+  { closed: true, newer: false },
+])('늦은 PUT 성공은 닫힌 화면이나 더 새 본문 기록을 덮지 않는다(%j)', async ({ closed, newer }) => {
+  online();
+  const first = setup();
+  await flush();
+  let finish!: (value: Awaited<ReturnType<typeof meetApi.update>>) => void;
+  vi.mocked(meetApi.update).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  await edit({ title: f('먼저 올린 제목') });
+  await advance(1000);
+  if (closed) first.unmount();
+  if (newer) {
+    const newDoc = { ...state().doc, title: '더 새 제목' };
+    saved = { ...saved, title: f(newDoc.title) };
+    await act(async () =>
+      writeOnline(saved.id, { ...readOnline(saved.id)!, lastRev: 5, docRev: 4, syncedDoc: newDoc }),
+    );
+  }
+  if (closed) {
+    setup();
+    await flush();
+  }
+  const fresh = readOnline(saved.id);
+  await act(async () => finish({ ok: true, value: { rev: 3, docRev: 2 } }));
+  expect(saved.title.value).toBe(newer ? '더 새 제목' : '먼저 올린 제목');
+  expect(readOnline(saved.id)).toEqual(fresh);
+  expect(vi.mocked(meetApi.update).mock.calls[0]?.[5]?.aborted).toBe(closed);
+});
+
+it.each([
+  { rev: 4, docRev: 3 },
+  { rev: 6, docRev: 2 },
+])('기록보다 낮은 버전 %j는 최신 본문을 덮지 않는다', async ({ rev, docRev }) => {
+  online();
+  const newDoc = { ...state().doc, title: '최신 제목' };
+  saved = { ...saved, title: f(newDoc.title) };
+  writeOnline(saved.id, { ...readOnline(saved.id)!, lastRev: 5, docRev: 3, syncedDoc: newDoc });
+  vi.mocked(meetApi.get).mockResolvedValueOnce({
+    ok: true,
+    value: state({ rev, docRev, doc: { ...newDoc, title: '옛 제목' } }),
+  });
+  setup();
+  await flush();
+  expect(saved.title.value).toBe('최신 제목');
+  expect(readOnline(saved.id)).toMatchObject({
+    lastRev: Math.max(5, rev),
+    docRev: 3,
+    syncedDoc: newDoc,
+  });
+});

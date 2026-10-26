@@ -41,14 +41,14 @@ export function hostEdits(
   );
 }
 
-/** 미전송 본문이 없고 서버 본문 버전이 다를 때만 다른 기기 본문을 받는다. */
+/** 미전송 본문이 없고 서버 본문 버전이 더 높을 때만 다른 기기 본문을 받는다. */
 export function shouldAdoptRemoteDoc(
   meeting: Meeting,
   state: OnlineState,
   sync: OnlineSync,
 ): boolean {
   const dirty = sync.syncedDoc !== null && hostEdits(meeting, sync.syncedDoc, sync.seen);
-  return (sync.docRev === null || state.docRev !== sync.docRev) && !dirty;
+  return (sync.docRev === null || state.docRev > sync.docRev) && !dirty;
 }
 
 /** 다른 기기 본문과 서버 답장을 합치되 아직 올리지 않은 본문은 보존한다. */
