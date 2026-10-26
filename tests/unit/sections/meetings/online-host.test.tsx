@@ -3151,3 +3151,33 @@ it('본문 버전 복구를 합친 직후 같은 탭에서 연결이 바뀌면 �
   expect(meetApi.update).not.toHaveBeenCalled();
   unsubscribe();
 });
+
+it('Web Lock을 기다리는 주최자 링크 재발급은 중복 요청을 합친다', async () => {
+  online();
+  const { result } = setup();
+  await flush();
+  let release!: () => void;
+  let tail: Promise<unknown> = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const request = vi.fn((_name: string, callback: () => unknown) => {
+    const next = tail.then(callback);
+    tail = next.catch(() => {});
+    return next;
+  });
+  vi.stubGlobal('navigator', { onLine: true, locks: { request } });
+  let first!: Promise<void>;
+  let second!: Promise<void>;
+  act(() => {
+    first = result.current.reissueHostLink();
+    second = result.current.reissueHostLink();
+  });
+  expect(meetApi.release).not.toHaveBeenCalled();
+  await act(async () => {
+    release();
+    await Promise.all([first, second]);
+  });
+  expect(meetApi.release).toHaveBeenCalledTimes(1);
+  expect(readOnline(saved.id)?.pendingHostToken).toBeUndefined();
+  expect(readOnline(saved.id)?.hostToken).not.toBe(token);
+});

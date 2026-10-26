@@ -125,8 +125,8 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
   const hostLikesJson = JSON.stringify(meeting.replies.value[hostId]?.likes ?? []);
 
   const save = useCallback(
-    (update: (current: OnlineRecord | null) => OnlineRecord | null) => {
-      const next = updateOnline(meeting.id, update);
+    async (update: (current: OnlineRecord | null) => OnlineRecord | null) => {
+      const next = await updateOnline(meeting.id, update);
       if (active.current) setRecord(next);
       return next;
     },
@@ -141,11 +141,11 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
       !signal.aborted
     );
   }
-  function markError(error: OnlineError, notify = false, expected: OnlineRecord | null) {
+  async function markError(error: OnlineError, notify = false, expected: OnlineRecord | null) {
     const current = currentRecord();
     if (!sameHostConnection(current, expected)) return;
     if ((error.code === 'ended' || error.code === 'not-found') && current) {
-      save((fresh) => {
+      await save((fresh) => {
         if (
           !fresh ||
           !sameHostConnection(fresh, expected) ||
@@ -195,11 +195,11 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
       if (!response.ok) {
         hostReplyRetry.current = true;
         hostReplyDeferred.current = true;
-        markError(response.error, false, current);
+        await markError(response.error, false, current);
         return false;
       }
       let applied = false;
-      save((fresh) => {
+      await save((fresh) => {
         if (
           !fresh ||
           fresh.ended ||
@@ -237,7 +237,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
     )
       return null;
     if (state.originNames !== undefined) {
-      markError({ code: 'unauthorized' }, false, expected);
+      await markError({ code: 'unauthorized' }, false, expected);
       return null;
     }
     const beforeMerge = currentRecord();
@@ -277,7 +277,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
     });
     if (!result.ok || !merged || !isCurrent(signal)) return null;
     let applied = false;
-    save((current) => {
+    await save((current) => {
       if (!current || current.ended || !unchanged(current) || state.rev < (current.lastRev ?? 0))
         return current;
       const seen =
@@ -330,7 +330,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
       const response = await meetApi.get(meeting.id, null, current.hostToken, signal);
       if (!isCurrent(signal) || !sameHostConnection(currentRecord(), current)) return false;
       if (!response.ok) {
-        markError(response.error, false, current);
+        await markError(response.error, false, current);
         return false;
       }
       if (response.value === 'unchanged') return false;
@@ -369,7 +369,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
       if (!isCurrent(signal) || !sameHostConnection(currentRecord(), current)) return false;
       if (!remote.ok) {
         retry.current = true;
-        markError(remote.error, false, current);
+        await markError(remote.error, false, current);
         return false;
       }
       if (remote.value === 'unchanged') {
@@ -387,7 +387,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
         // 새 출발지의 계산이 끝난 뒤 받은 본문 버전으로 이어 올린다.
         const expected = current;
         const docRev = remote.value.docRev;
-        save((fresh) =>
+        await save((fresh) =>
           fresh && sameHostConnection(fresh, expected) && fresh.docRev === expected.docRev
             ? { ...fresh, docRev: Math.max(fresh.docRev ?? 0, docRev) }
             : fresh,
@@ -412,12 +412,12 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
     }
     if (!response.ok) {
       retry.current = true;
-      markError(response.error, false, current);
+      await markError(response.error, false, current);
       return false;
     }
     const value = response.value;
     let applied = false;
-    save((fresh) => {
+    await save((fresh) => {
       if (
         !fresh ||
         fresh.ended ||
@@ -542,7 +542,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
         if (!isCurrent(signal) || !sameHostConnection(currentRecord(), current)) return 'ok';
       }
       if (!response.ok) {
-        markError(response.error, false, current);
+        await markError(response.error, false, current);
         return 'error';
       }
       if (response.value !== 'unchanged' && !(await merge(response.value, signal, current)))
@@ -648,7 +648,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
       try {
         const hostToken = current?.pendingHostToken ?? newHostToken();
         const pending = { ...current, pendingHostToken: hostToken };
-        save((fresh) =>
+        await save((fresh) =>
           sameHostConnection(fresh, current) ? { ...fresh, pendingHostToken: hostToken } : fresh,
         );
         let turnstile: string;
@@ -669,7 +669,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
         const beforeCreate = currentRecord();
         const syncedDoc = beforeCreate?.syncedDoc ?? doc;
         const prepared = { ...beforeCreate, lastRev: beforeCreate?.lastRev ?? 0, syncedDoc };
-        save((record) =>
+        await save((record) =>
           sameOnlineSync(record, beforeCreate) ? { ...record, ...prepared } : record,
         );
         if (!sameOnlineSync(currentRecord(), prepared)) return;
@@ -682,7 +682,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
           return;
         }
         let applied = false;
-        save((record) => {
+        await save((record) => {
           if (
             !sameOnlineSync(record, prepared) ||
             JSON.stringify(record?.hostLikes) !== JSON.stringify(prepared.hostLikes) ||
@@ -742,7 +742,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
     )
       return;
     const response = await meetApi.release(meeting.id, { participantId: pid }, current.hostToken);
-    if (!response.ok) markError(response.error, true, current);
+    if (!response.ok) await markError(response.error, true, current);
   }
   async function reissueToken(): Promise<boolean> {
     const signal = lifecycle.current?.signal;
@@ -752,10 +752,11 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
     if (!current?.hostToken || current.ended) return false;
     const hostToken = current.pendingHostToken ?? newHostToken();
     const pending = { ...current, pendingHostToken: hostToken };
-    save((fresh) =>
-      sameHostConnection(fresh, current) ? { ...fresh, pendingHostToken: hostToken } : fresh,
-    );
     reissuing.current = (async () => {
+      await save((fresh) =>
+        sameHostConnection(fresh, current) ? { ...fresh, pendingHostToken: hostToken } : fresh,
+      );
+      if (!isCurrent(signal) || !sameHostConnection(currentRecord(), pending)) return false;
       const response = await meetApi.release(
         meeting.id,
         { host: true, hostToken },
@@ -763,11 +764,11 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
       );
       if (!isCurrent(signal)) return false;
       if (!response.ok) {
-        markError(response.error, true, pending);
+        await markError(response.error, true, pending);
         return false;
       }
       let applied = false;
-      save((fresh) => {
+      await save((fresh) => {
         if (!fresh || fresh.ended || !sameHostConnection(fresh, pending)) return fresh;
         const next = { ...fresh, hostToken };
         delete next.pendingHostToken;
@@ -804,10 +805,10 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
       return;
     const response = await meetApi.remove(meeting.id, current.hostToken);
     if (!response.ok) {
-      markError(response.error, true, current);
+      await markError(response.error, true, current);
       return;
     }
-    save((fresh) => {
+    await save((fresh) => {
       if (
         !fresh ||
         !sameHostConnection(fresh, current) ||

@@ -1,6 +1,6 @@
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
-import { useEffect, useState } from 'react';
+import { useEffect, useEffectEvent, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router';
 import { mergeOnline, shouldAdoptRemoteDoc } from 'src/domain/meeting/online-merge';
 import { meetingFailure, storeMeeting } from 'src/domain/meeting/ops';
@@ -73,10 +73,17 @@ function LegacyMeetLinkPage() {
   );
 }
 
-function LinkError({ message = '링크를 읽지 못했어요' }: { message?: string }) {
+function LinkError({
+  message = '링크를 읽지 못했어요',
+  onRetry,
+}: {
+  message?: string;
+  onRetry?: () => void;
+}) {
   return (
     <Box role="alert" sx={{ p: 3 }}>
       <h1>{message}</h1>
+      {onRetry && <Button onClick={onRetry}>다시 시도</Button>}
       <Button component={Link} to={paths.meetings}>
         약속 목록으로
       </Button>
@@ -84,34 +91,78 @@ function LinkError({ message = '링크를 읽지 못했어요' }: { message?: st
   );
 }
 
-/** 해시를 먼저 지우고 서버 본문을 담은 뒤에만 주최자 화면으로 옮긴다. */
+const HOST_LINK_KEY = 'tripmap:meet-host-link:v1';
+function readHostLinks(): Record<string, string> {
+  try {
+    const parsed: unknown = JSON.parse(sessionStorage.getItem(HOST_LINK_KEY) ?? '{}');
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return {};
+    return Object.fromEntries(
+      Object.entries(parsed).filter(
+        ([id, token]) =>
+          safeParse(MeetingId, id).success && typeof token === 'string' && token.length > 0,
+      ),
+    );
+  } catch {
+    return {};
+  }
+}
+function rememberHostLink(id: string, token: string): boolean {
+  try {
+    sessionStorage.setItem(HOST_LINK_KEY, JSON.stringify({ ...readHostLinks(), [id]: token }));
+    return true;
+  } catch {
+    return false;
+  }
+}
+function forgetHostLink(id: string, token: string) {
+  try {
+    const tokens = readHostLinks();
+    if (tokens[id] !== token) return;
+    delete tokens[id];
+    if (Object.keys(tokens).length === 0) sessionStorage.removeItem(HOST_LINK_KEY);
+    else sessionStorage.setItem(HOST_LINK_KEY, JSON.stringify(tokens));
+  } catch {
+    // 저장소가 막혀도 이번 화면의 담기는 마친다.
+  }
+}
+
+/** 이 탭에 토큰을 보관한 뒤 해시를 지우고, 담기에 성공하면 토큰도 지운다. */
 function HostLink({ id, token }: { id: string; token: string }) {
   const { run } = useMeeting(id);
+  const importMeeting = useEffectEvent((op: Parameters<typeof run>[0]) => run(op));
   const navigate = useNavigate();
   const { search } = useLocation();
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ message: string; retry: boolean } | null>(null);
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let active = true;
-    window.history.replaceState(window.history.state, '', `${paths.meetOnline(id)}${search}`);
+    // 세션 저장이 막히면 새로고침으로 토큰을 잃지 않도록 해시를 남긴다.
+    if (rememberHostLink(id, token))
+      window.history.replaceState(window.history.state, '', `${paths.meetOnline(id)}${search}`);
     const expected = readOnline(id);
     void (async () => {
       const response = await meetApi.get(id, null, token);
       if (!active) return;
       if (!response.ok || response.value === 'unchanged') {
-        setError(
-          !response.ok && response.error.code === 'unauthorized'
-            ? '주최자 링크가 더 이상 쓸 수 없어요'
-            : !response.ok &&
-                (response.error.code === 'ended' || response.error.code === 'not-found')
-              ? '끝난 약속이에요'
-              : '지금은 열 수 없어요. 잠시 뒤 다시 해 주세요',
-        );
+        const terminal =
+          !response.ok && ['unauthorized', 'ended', 'not-found'].includes(response.error.code);
+        if (terminal) forgetHostLink(id, token);
+        setError({
+          message:
+            !response.ok && response.error.code === 'unauthorized'
+              ? '주최자 링크가 더 이상 쓸 수 없어요'
+              : terminal
+                ? '끝난 약속이에요'
+                : '지금은 열 수 없어요. 잠시 뒤 다시 해 주세요',
+          retry: !terminal,
+        });
         return;
       }
       const state = response.value;
       // 가려진 본문이 돌아와도 보관함의 출발지를 덮지 않는다.
       if (state.originNames !== undefined) {
-        setError('주최자 링크가 더 이상 쓸 수 없어요');
+        forgetHostLink(id, token);
+        setError({ message: '주최자 링크가 더 이상 쓸 수 없어요', retry: false });
         return;
       }
       const outdated = (current = readOnline(id)) =>
@@ -121,6 +172,7 @@ function HostLink({ id, token }: { id: string; token: string }) {
           current.hostToken !== token &&
           (current.lastRev ?? 0) >= state.rev);
       if (outdated()) {
+        forgetHostLink(id, token);
         void navigate(paths.meeting(id), { replace: true });
         return;
       }
@@ -131,7 +183,7 @@ function HostLink({ id, token }: { id: string; token: string }) {
       let seenNames: Record<string, string> = {};
       let hostLikes: string[] | undefined;
       let replyOrigins: Record<string, Origin> | undefined;
-      const result = await run((lib, ctx) => {
+      const result = await importMeeting((lib, ctx) => {
         const current = readOnline(id);
         // 보관함 연산을 기다리는 동안 갱신된 기록과 새 토큰도 지킨다.
         if (!active || outdated(current)) {
@@ -182,7 +234,7 @@ function HostLink({ id, token }: { id: string; token: string }) {
       });
       if (!active) return;
       if (!result.ok) {
-        setError('저장하지 못했어요. 다시 시도해 주세요');
+        setError({ message: '저장하지 못했어요. 다시 시도해 주세요', retry: true });
         return;
       }
       if (
@@ -190,11 +242,16 @@ function HostLink({ id, token }: { id: string; token: string }) {
         outdated() ||
         JSON.stringify(readOnline(id)) !== JSON.stringify(mergedRecord)
       ) {
+        forgetHostLink(id, token);
         void navigate(paths.meeting(id), { replace: true });
         return;
       }
-      updateOnline(id, (current) => {
-        if (outdated(current) || JSON.stringify(current) !== JSON.stringify(mergedRecord))
+      await updateOnline(id, (current) => {
+        if (
+          !active ||
+          outdated(current) ||
+          JSON.stringify(current) !== JSON.stringify(mergedRecord)
+        )
           return current;
         const seen =
           current?.seen === undefined && addedReplyOnly.length === 0
@@ -234,14 +291,26 @@ function HostLink({ id, token }: { id: string; token: string }) {
         delete record.ended;
         return record;
       });
+      if (!active) return;
+      forgetHostLink(id, token);
       void navigate(paths.meeting(id), { replace: true });
     })();
     return () => {
       active = false;
     };
-  }, [id, token, run, navigate, search]);
+  }, [id, token, navigate, search, attempt]);
   return error ? (
-    <LinkError message={error} />
+    <LinkError
+      message={error.message}
+      onRetry={
+        error.retry
+          ? () => {
+              setError(null);
+              setAttempt((count) => count + 1);
+            }
+          : undefined
+      }
+    />
   ) : (
     <Box role="status" sx={{ p: 3 }}>
       주최자 약속을 담는 중이에요
@@ -264,5 +333,7 @@ export function MeetLinkPage() {
     }
     return <HostLink key={`${id}:${token}`} id={id} token={token} />;
   }
+  const token = readHostLinks()[id];
+  if (token) return <HostLink key={`${id}:${token}`} id={id} token={token} />;
   return <OnlineInviteView key={id} id={id} />;
 }

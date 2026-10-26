@@ -438,7 +438,7 @@ it('updateOnline은 최신 기록을 읽어 조건이 맞을 때만 쓰고 같�
   unsubscribe();
 });
 
-it('updateOnline의 구독자가 같은 탭에서 이어 쓴 결과를 돌려주고 보존한다', () => {
+it('updateOnline의 구독자가 같은 탭에서 이어 쓴 결과를 돌려주고 보존한다', async () => {
   const storage = createMemoryStorage();
   const store = createOnlineStore(() => storage);
   store.writeOnline('meeting001', { hostToken: 'old' });
@@ -449,11 +449,94 @@ it('updateOnline의 구독자가 같은 탭에서 이어 쓴 결과를 돌려주
       pendingHostToken: 'p'.repeat(43),
     }));
   });
-  expect(store.updateOnline('meeting001', (current) => ({ ...current, hostToken: 'new' }))).toEqual(
-    { hostToken: 'new', pendingHostToken: 'p'.repeat(43) },
-  );
+  expect(
+    await store.updateOnline('meeting001', (current) => ({ ...current, hostToken: 'new' })),
+  ).toEqual({ hostToken: 'new', pendingHostToken: 'p'.repeat(43) });
   expect(store.readOnline('meeting001')).toEqual({
     hostToken: 'new',
     pendingHostToken: 'p'.repeat(43),
   });
+});
+
+/** 다른 탭이 잠금을 잡은 동안 요청을 줄 세운다. */
+function heldWebLock() {
+  let release!: () => void;
+  let tail: Promise<unknown> = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const request = vi.fn((_name: string, callback: () => unknown) => {
+    const next = tail.then(callback);
+    tail = next.catch(() => {});
+    return next;
+  });
+  vi.stubGlobal('navigator', { locks: { request } });
+  return { release, request };
+}
+
+it('두 탭의 다른 약속 갱신은 같은 Web Lock 안에서 최신 전체를 읽어 모두 보존한다', async () => {
+  const storage = createMemoryStorage();
+  const first = createOnlineStore(() => storage);
+  const second = createOnlineStore(() => storage);
+  const lock = heldWebLock();
+  try {
+    const a = first.updateOnline('meeting001', () => ({ hostToken: 'a' }));
+    const b = second.updateOnline('meeting002', () => ({ hostToken: 'b' }));
+    expect(first.allOnline()).toEqual({});
+    lock.release();
+    await Promise.all([a, b]);
+    expect(second.allOnline()).toEqual({
+      meeting001: { hostToken: 'a' },
+      meeting002: { hostToken: 'b' },
+    });
+    expect(lock.request.mock.calls.map(([name]) => name)).toEqual([
+      'tripmap:meet-online',
+      'tripmap:meet-online',
+    ]);
+  } finally {
+    lock.release();
+    vi.unstubAllGlobals();
+  }
+});
+
+it('같은 약속의 비교 후 교체는 잠금을 얻은 뒤 최신 토큰으로 판단한다', async () => {
+  const storage = createMemoryStorage();
+  storage.setItem(MEET_ONLINE_KEY, JSON.stringify({ meeting001: { hostToken: 'old' } }));
+  const first = createOnlineStore(() => storage);
+  const second = createOnlineStore(() => storage);
+  const lock = heldWebLock();
+  const compare = vi.fn((current: ReturnType<typeof first.readOnline>) =>
+    current?.hostToken === 'old' ? { ...current, hostToken: 'stale' } : current,
+  );
+  try {
+    const a = first.writeOnline('meeting001', { hostToken: 'new' });
+    const b = second.updateOnline('meeting001', compare);
+    expect(compare).not.toHaveBeenCalled();
+    lock.release();
+    await Promise.all([a, b]);
+    expect(compare).toHaveBeenCalledWith({ hostToken: 'new' });
+    expect(first.readOnline('meeting001')).toEqual({ hostToken: 'new' });
+  } finally {
+    lock.release();
+    vi.unstubAllGlobals();
+  }
+});
+
+it('다른 탭의 쓰기를 기다린 삭제도 다른 약속의 최신 기록을 보존한다', async () => {
+  const storage = createMemoryStorage();
+  storage.setItem(MEET_ONLINE_KEY, JSON.stringify({ meeting001: { hostToken: 'old' } }));
+  const first = createOnlineStore(() => storage);
+  const second = createOnlineStore(() => storage);
+  const lock = heldWebLock();
+  try {
+    const a = first.writeOnline('meeting002', { hostToken: 'new' });
+    const b = second.removeOnline('meeting001');
+    expect(second.readOnline('meeting001')).toEqual({ hostToken: 'old' });
+    lock.release();
+    await Promise.all([a, b]);
+    expect(first.allOnline()).toEqual({ meeting002: { hostToken: 'new' } });
+    expect(lock.request).toHaveBeenCalledTimes(2);
+  } finally {
+    lock.release();
+    vi.unstubAllGlobals();
+  }
 });

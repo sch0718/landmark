@@ -174,31 +174,31 @@ export function createOnlineStore(storage: () => Storage = () => window.localSto
       window.removeEventListener('storage', onStorage);
     };
   }
-  /** 읽기·비교·쓰기를 한 동기 경로에 모아 늦은 응답이 최신 기록을 덮지 않게 한다. */
-  function updateOnline(
+  /** 탭 사이에서 읽기·비교·쓰기를 한 잠금으로 묶는다. */
+  async function updateOnline(
     id: string,
     update: (current: OnlineRecord | null) => OnlineRecord | null,
-  ): OnlineRecord | null {
-    const current = readOnline(id);
-    const next = update(current);
-    if (next === current) return current;
-    // 다시 쓴 기록을 마지막으로 옮겨 오래된 기록부터 버린다.
-    memory.delete(id);
-    if (next !== null) memory.set(id, structuredClone(next));
-    trim();
-    save();
-    notify(id);
-    // 구독자가 이어 쓴 값까지 화면에 돌려준다.
-    return readOnline(id);
+  ): Promise<OnlineRecord | null> {
+    const change = () => {
+      // 잠금을 얻은 뒤 최신 전체를 읽고 해당 약속만 바꾼다.
+      const current = readOnline(id);
+      const next = update(current);
+      if (next === current) return current;
+      memory.delete(id);
+      if (next !== null) memory.set(id, structuredClone(next));
+      trim();
+      save();
+      notify(id);
+      return readOnline(id);
+    };
+    const locks = typeof navigator === 'undefined' ? undefined : navigator.locks;
+    return locks === undefined ? change() : locks.request('tripmap:meet-online', change);
   }
-  function writeOnline(id: string, record: OnlineRecord): void {
-    updateOnline(id, () => record);
+  async function writeOnline(id: string, record: OnlineRecord): Promise<void> {
+    await updateOnline(id, () => record);
   }
-  function removeOnline(id: string): void {
-    read();
-    memory.delete(id);
-    save();
-    notify(id);
+  async function removeOnline(id: string): Promise<void> {
+    await updateOnline(id, () => null);
   }
   return {
     allOnline,

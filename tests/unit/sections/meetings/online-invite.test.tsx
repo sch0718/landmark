@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 import { docFromMeeting, type OnlineState } from 'src/domain/meeting/online-doc';
@@ -94,6 +94,7 @@ beforeEach(() => {
   vi.setSystemTime(now);
   vi.clearAllMocks();
   localStorage.clear();
+  sessionStorage.clear();
   vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
   vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(true);
   library = emptyLibrary();
@@ -176,7 +177,9 @@ it('참석자를 차지하는 동안 바뀐 주최자 기록을 다시 읽어 gu
         finish = resolve;
       }),
   );
-  fireEvent.click(screen.getByRole('button', { name: '친구' }));
+  await act(async () => {
+    fireEvent.click(screen.getByRole('button', { name: '친구' }));
+  });
   const hostRecord = {
     hostToken,
     pendingHostToken: 'p'.repeat(43),
@@ -1452,6 +1455,7 @@ it.each(['기존 참석자', '새 이름'] as const)(
       const choose = async () =>
         act(async () => {
           fireEvent.click(screen.getByRole('button', { name: newPerson ? '참석하기' : '친구' }));
+          await Promise.resolve();
           await claimFlight;
         });
       await choose();
@@ -1640,4 +1644,65 @@ it('초안 쓰기가 막혀도 현재 화면의 답장을 보내고 실패 뒤 �
   await advance(9000);
   expect(meetApi.reply).toHaveBeenCalledTimes(2);
   expect(meetApi.reply).toHaveBeenLastCalledWith('meeting001', { likes: ['choice01'] }, token);
+});
+
+const HOST_LINK_KEY = 'tripmap:meet-host-link:v1';
+function fullHostState() {
+  return { rev: remote.rev, docRev: remote.docRev, doc: remote.doc, replies: remote.replies };
+}
+it.each(['offline', 'unavailable'] as const)(
+  '주최자 담기 %s 실패 후 같은 토큰으로 다시 시도한다',
+  async (code) => {
+    vi.mocked(meetApi.get).mockResolvedValue({ ok: false, error: { code } });
+    const router = await setup(`/meet/meeting001#h=${hostToken}`);
+    expect(JSON.parse(sessionStorage.getItem(HOST_LINK_KEY)!)).toEqual({ meeting001: hostToken });
+    expect(window.location.hash).toBe('');
+    const retry = screen.getByRole('button', { name: '다시 시도' });
+    vi.mocked(meetApi.get).mockResolvedValue({ ok: true, value: fullHostState() });
+    await act(async () => {
+      fireEvent.click(retry);
+    });
+    expect(meetApi.get).toHaveBeenLastCalledWith('meeting001', null, hostToken);
+    expect(router.state.location.pathname).toBe('/meetings/meeting001');
+    expect(readOnline('meeting001')?.hostToken).toBe(hostToken);
+    expect(sessionStorage.getItem(HOST_LINK_KEY)).toBeNull();
+  },
+);
+
+it('주최자 담기 실패 후 해시 없이 재마운트해도 이 탭의 토큰으로 담는다', async () => {
+  vi.mocked(meetApi.get).mockResolvedValue({ ok: false, error: { code: 'offline' } });
+  await setup(`/meet/meeting001#h=${hostToken}`);
+  expect(sessionStorage.getItem(HOST_LINK_KEY)).not.toBeNull();
+  cleanup();
+  vi.mocked(meetApi.get).mockClear().mockResolvedValue({ ok: true, value: fullHostState() });
+  const router = await setup('/meet/meeting001');
+  expect(meetApi.get).toHaveBeenCalledWith('meeting001', null, hostToken);
+  expect(router.state.location.pathname).toBe('/meetings/meeting001');
+  expect(sessionStorage.getItem(HOST_LINK_KEY)).toBeNull();
+});
+
+it.each(['unauthorized', 'ended', 'not-found'] as const)(
+  '주최자 담기의 %s 응답은 해당 약속의 세션 토큰만 지운다',
+  async (code) => {
+    sessionStorage.setItem(
+      HOST_LINK_KEY,
+      JSON.stringify({ meeting001: hostToken, meeting002: 'other' }),
+    );
+    vi.mocked(meetApi.get).mockResolvedValue({ ok: false, error: { code } });
+    await setup('/meet/meeting001');
+    expect(meetApi.get).toHaveBeenCalledWith('meeting001', null, hostToken);
+    expect(JSON.parse(sessionStorage.getItem(HOST_LINK_KEY)!)).toEqual({ meeting002: 'other' });
+    expect(screen.queryByRole('button', { name: '다시 시도' })).not.toBeInTheDocument();
+  },
+);
+
+it('주최자 토큰을 세션에 저장한 뒤 주소에서 지운다', async () => {
+  vi.mocked(meetApi.get).mockImplementation(() => new Promise(() => {}));
+  let storedAtErase: string | null = null;
+  vi.spyOn(window.history, 'replaceState').mockImplementation(() => {
+    storedAtErase = sessionStorage.getItem(HOST_LINK_KEY);
+  });
+  await setup(`/meet/meeting001#h=${hostToken}`);
+  expect(window.history.replaceState).toHaveBeenCalled();
+  expect(JSON.parse(storedAtErase!)).toEqual({ meeting001: hostToken });
 });

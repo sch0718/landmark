@@ -62,6 +62,7 @@ function context(
   body?: unknown,
   options: {
     origin?: string | null;
+    urlOrigin?: string;
     token?: string;
     id?: string;
     query?: string;
@@ -74,7 +75,7 @@ function context(
   if (options.token) headers.set('Authorization', `Bearer ${options.token}`);
   return {
     request: new Request(
-      `${LOCAL}/api/meet${method === 'POST' ? '' : '/meeting001'}${options.query ?? ''}`,
+      `${options.urlOrigin ?? options.origin ?? LOCAL}/api/meet${method === 'POST' ? '' : '/meeting001'}${options.query ?? ''}`,
       {
         method,
         headers,
@@ -570,6 +571,44 @@ describe('약속 올리기', () => {
       error: { code: 'UNAVAILABLE' },
     });
   });
+  it.each([{}, { TURNSTILE_SECRET: '시험용-비밀키' }, { IP_HASH_SALT: '시험용-소금' }])(
+    '운영 요청에 localhost Origin을 위조해도 누락 설정 %j를 우회하지 못한다',
+    async (config) => {
+      Object.assign(env, config);
+      const response = await handleCreate(
+        context(
+          'POST',
+          { doc: doc(), turnstile: 'test', hostToken: newToken() },
+          {
+            origin: LOCAL,
+            urlOrigin: PROD,
+          },
+        ),
+        deps,
+      );
+      expect(response.status).toBe(503);
+      expect(await response.json()).toMatchObject({ reason: 'config' });
+      expect(deps.fetch).not.toHaveBeenCalled();
+    },
+  );
+  it.each(['localhost', '127.0.0.1', '[::1]'])(
+    '요청 주소가 %s면 시크릿 없이 개발 예외를 허용한다',
+    async (hostname) => {
+      const response = await handleCreate(
+        context(
+          'POST',
+          { doc: doc(), turnstile: 'dev', hostToken: newToken() },
+          {
+            origin: LOCAL,
+            urlOrigin: `http://${hostname}:8788`,
+          },
+        ),
+        deps,
+      );
+      expect(response.status).toBe(201);
+      expect(deps.fetch).not.toHaveBeenCalled();
+    },
+  );
   it('운영에서는 검증 성공 뒤 올린다', async () => {
     Object.assign(env, { IP_HASH_SALT: '시험용-소금', TURNSTILE_SECRET: '시험용-비밀키' });
     vi.mocked(deps.fetch).mockResolvedValue(new Response('{"success":true}'));

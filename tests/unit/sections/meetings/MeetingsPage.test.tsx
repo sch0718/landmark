@@ -78,12 +78,12 @@ describe('약속 목록', () => {
   it('같은 탭에서 온라인 기록을 쓰거나 지우면 공유 상태를 갱신한다', async () => {
     await renderLibrary(seeded(), { path: '/meetings' });
     expect(screen.queryByText('공유 중')).not.toBeInTheDocument();
-    act(() => writeOnline('meeting001', { hostToken: 'host' }));
+    await act(() => writeOnline('meeting001', { hostToken: 'host' }));
     expect(screen.getByText('공유 중')).toBeInTheDocument();
-    act(() => writeOnline('meeting001', { ended: true }));
+    await act(() => writeOnline('meeting001', { ended: true }));
     expect(screen.queryByText('공유 중')).not.toBeInTheDocument();
     expect(screen.getByText('공유 끝남')).toBeInTheDocument();
-    act(() => removeOnline('meeting001'));
+    await act(() => removeOnline('meeting001'));
     expect(screen.queryByText('공유 끝남')).not.toBeInTheDocument();
   });
   it('다른 탭의 기록 변경과 저장소 전체 삭제를 목록에 반영한다', async () => {

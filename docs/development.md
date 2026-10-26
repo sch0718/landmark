@@ -97,7 +97,7 @@ curl -H 'Origin: http://localhost:8788' 'http://localhost:8788/api/place?url=htt
 3. 운영·미리보기에 서버 시크릿 `IP_HASH_SALT`를 넣습니다. 키·시크릿 값은 저장소에 기록하지 않습니다.
 4. 표는 첫 요청에서 `ensureSchema`가 `schema_meta` 버전을 확인해 추가형 SQL을 한 `batch`로 실행합니다. 수동 SQL이나 `wrangler d1 migrations`는 필요 없습니다. 실패하면 다음 요청에서 다시 시도합니다.
 
-로컬은 `DB` 바인딩이 필요하지만, 요청 출처가 `http://localhost:*`이면 `TURNSTILE_SECRET`이 없을 때 검증을 건너뛰고 `IP_HASH_SALT`가 없을 때 개발용 소금을 씁니다. 로컬에서 `VITE_TURNSTILE_SITE_KEY`를 비워 두면 브라우저도 외부 스크립트를 부르지 않습니다. 운영·미리보기에서 DB·시크릿 설정이 빠지면 약속 올리기는 `503 UNAVAILABLE`(`reason: 'config'`)로 실패합니다. `MEET_ONLINE=off`의 `503`(`reason: 'off'`)만 새 약속을 링크 방식으로 공유하게 하며, 일반 장애·설정 누락 때는 다시 시도 안내를 보입니다. 설정 후 미리보기에서 올리기·답장·집계와 함수 CPU 시간을 확인합니다.
+로컬은 `DB` 바인딩이 필요하지만, 실제 요청 주소의 호스트가 `localhost`·`127.0.0.1`·`[::1]`일 때만 `TURNSTILE_SECRET`이 없을 때 검증을 건너뛰고 `IP_HASH_SALT`가 없을 때 개발용 소금을 씁니다. 로컬에서 `VITE_TURNSTILE_SITE_KEY`를 비워 두면 브라우저도 외부 스크립트를 부르지 않습니다. 운영·미리보기에서 DB·시크릿 설정이 빠지면 약속 올리기는 `503 UNAVAILABLE`(`reason: 'config'`)로 실패합니다. `MEET_ONLINE=off`의 `503`(`reason: 'off'`)만 새 약속을 링크 방식으로 공유하게 하며, 일반 장애·설정 누락 때는 다시 시도 안내를 보입니다. 설정 후 미리보기에서 올리기·답장·집계와 함수 CPU 시간을 확인합니다.
 
 | 요청 | 하는 일·성공 응답 | 권한 |
 | --- | --- | --- |

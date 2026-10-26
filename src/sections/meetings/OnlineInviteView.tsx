@@ -135,7 +135,7 @@ export function OnlineInviteView({ id }: { id: string }) {
     return () => clearInterval(timer);
   }, []);
 
-  function markError(
+  async function markError(
     failure: OnlineError,
     reading = false,
     failedToken: string | null = null,
@@ -153,7 +153,7 @@ export function OnlineInviteView({ id }: { id: string }) {
         setState(null);
         deferred.current = false;
       } else {
-        const fresh = updateOnline(id, (current) => {
+        const fresh = await updateOnline(id, (current) => {
           if (!current?.guest || current.guest.token !== failedToken) return current;
           const next = { ...current };
           delete next.guest;
@@ -201,7 +201,7 @@ export function OnlineInviteView({ id }: { id: string }) {
     if (!active.current || latest.current.guest?.token !== current.guest.token) return false;
     if (!result.ok) {
       deferred.current = true;
-      markError(result.error, false, current.guest.token, sentVersion);
+      await markError(result.error, false, current.guest.token, sentVersion);
       return false;
     }
     const updatedAt = new Date().toISOString();
@@ -270,7 +270,7 @@ export function OnlineInviteView({ id }: { id: string }) {
       );
       if (!active.current || current.guest?.token !== latest.current.guest?.token) return 'error';
       if (!result.ok) {
-        markError(
+        await markError(
           result.error,
           true,
           current.guest?.token ?? null,
@@ -345,7 +345,7 @@ export function OnlineInviteView({ id }: { id: string }) {
         ? pending.participantId === who.participantId
         : pending.newName === who.newName);
     const guestToken = sameChoice ? pending.token : newGuestToken();
-    updateOnline(id, (fresh) => ({ ...fresh, pendingGuest: { ...who, token: guestToken } }));
+    await updateOnline(id, (fresh) => ({ ...fresh, pendingGuest: { ...who, token: guestToken } }));
     const result = await meetApi.claim(id, who, guestToken);
     if (!active.current) return;
     if (!result.ok && (result.error.code === 'not-found' || result.error.code === 'ended')) {
@@ -353,7 +353,7 @@ export function OnlineInviteView({ id }: { id: string }) {
       if (!active.current) return;
       setClaiming(false);
       if (!refreshed.ok) {
-        markError(refreshed.error, true);
+        await markError(refreshed.error, true);
         return;
       }
       if (refreshed.value !== 'unchanged') {
@@ -364,12 +364,12 @@ export function OnlineInviteView({ id }: { id: string }) {
     }
     setClaiming(false);
     if (!result.ok) {
-      markError(result.error);
+      await markError(result.error);
       return;
     }
     const next = { participantId: result.value.participantId, token: result.value.guestToken };
     let applied = false;
-    const record = updateOnline(id, (fresh) => {
+    const record = await updateOnline(id, (fresh) => {
       if (
         fresh?.pendingGuest?.token !== guestToken ||
         fresh.guest?.token !== current?.guest?.token ||

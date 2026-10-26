@@ -80,16 +80,13 @@ async function readJson(request: Request): Promise<unknown> {
   }
 }
 
-async function withRequest(
-  ctx: MeetContext,
-  run: (origin: string) => Promise<Response>,
-): Promise<Response> {
+async function withRequest(ctx: MeetContext, run: () => Promise<Response>): Promise<Response> {
   try {
     const origin = requestOrigin(ctx.request);
     if (!isAllowedOrigin(origin) || origin === null) {
       throw new ApiError('FORBIDDEN_ORIGIN', '허용하지 않는 요청 출처');
     }
-    return await run(origin);
+    return await run();
   } catch (error) {
     const response = errorResponse(error);
     if (!(error instanceof MeetError)) return response;
@@ -103,33 +100,22 @@ async function withRequest(
   }
 }
 
-function isLocal(origin: string): boolean {
-  const url = new URL(origin);
-  return url.protocol === 'http:' && url.hostname === 'localhost';
+function isLocal(request: Request): boolean {
+  return ['localhost', '127.0.0.1', '[::1]'].includes(new URL(request.url).hostname);
 }
 
 function configurationError(): never {
   throw new MeetError('UNAVAILABLE', '서버 설정을 확인해 주세요', { reason: 'config' });
 }
 
-async function prepare(
-  ctx: MeetContext,
-  origin: string,
-  now: Date,
-  action?: LimitAction,
-): Promise<void> {
+async function prepare(ctx: MeetContext, now: Date, action?: LimitAction): Promise<void> {
   if (!ctx.env.DB) configurationError();
   await ensureSchema(ctx.env.DB);
-  if (action) await checkLimit(ctx, origin, now, action);
+  if (action) await checkLimit(ctx, now, action);
 }
 
-async function checkLimit(
-  ctx: MeetContext,
-  origin: string,
-  now: Date,
-  action: LimitAction,
-): Promise<void> {
-  const salt = ctx.env.IP_HASH_SALT || (isLocal(origin) ? 'dev-salt' : null);
+async function checkLimit(ctx: MeetContext, now: Date, action: LimitAction): Promise<void> {
+  const salt = ctx.env.IP_HASH_SALT || (isLocal(ctx.request) ? 'dev-salt' : null);
   if (!salt) configurationError();
   const ip = ctx.request.headers.get('CF-Connecting-IP') ?? 'local';
   if (!(await consumeLimit(ctx.env.DB, action, await hashIp(ip, salt), now))) {
@@ -214,14 +200,14 @@ export function redactForGuest(state: OnlineState, participantId: string | null)
 }
 
 export function handleCreate(ctx: MeetContext, deps: MeetDeps): Promise<Response> {
-  return withRequest(ctx, async (origin) => {
+  return withRequest(ctx, async () => {
     if (ctx.env.MEET_ONLINE === 'off') {
       throw new MeetError('UNAVAILABLE', '온라인 공유가 꺼져 있어요', { reason: 'off' });
     }
     const now = deps.now();
-    await prepare(ctx, origin, now, 'create');
+    await prepare(ctx, now, 'create');
     const secret = ctx.env.TURNSTILE_SECRET;
-    if (!secret && !isLocal(origin)) configurationError();
+    if (!secret && !isLocal(ctx.request)) configurationError();
     const input = validate(createSchema, await readJson(ctx.request));
     if (
       secret &&
@@ -296,16 +282,16 @@ export function handleCreate(ctx: MeetContext, deps: MeetDeps): Promise<Response
 }
 
 export function handleGet(ctx: MeetContext, deps: MeetDeps): Promise<Response> {
-  return withRequest(ctx, async (origin) => {
+  return withRequest(ctx, async () => {
     const id = readMeetingId(ctx);
     const now = deps.now();
-    await prepare(ctx, origin, now);
+    await prepare(ctx, now);
     let row: MeetingRow;
     try {
       row = await activeMeeting(ctx.env.DB, id, now);
     } catch (error) {
       if (error instanceof ApiError && (error.code === 'NOT_FOUND' || error.code === 'ENDED')) {
-        await checkLimit(ctx, origin, now, 'read');
+        await checkLimit(ctx, now, 'read');
       }
       throw error;
     }
@@ -342,10 +328,10 @@ export function handleGet(ctx: MeetContext, deps: MeetDeps): Promise<Response> {
 }
 
 export function handleUpdate(ctx: MeetContext, deps: MeetDeps): Promise<Response> {
-  return withRequest(ctx, async (origin) => {
+  return withRequest(ctx, async () => {
     const id = readMeetingId(ctx);
     const now = deps.now();
-    await prepare(ctx, origin, now, 'update');
+    await prepare(ctx, now, 'update');
     await activeMeeting(ctx.env.DB, id, now);
     await requireHost(ctx, id);
     const {
@@ -440,10 +426,10 @@ export function handleUpdate(ctx: MeetContext, deps: MeetDeps): Promise<Response
 }
 
 export function handleDelete(ctx: MeetContext, deps: MeetDeps): Promise<Response> {
-  return withRequest(ctx, async (origin) => {
+  return withRequest(ctx, async () => {
     const id = readMeetingId(ctx);
     const now = deps.now();
-    await prepare(ctx, origin, now);
+    await prepare(ctx, now);
     await activeMeeting(ctx.env.DB, id, now);
     await requireHost(ctx, id);
     await ctx.env.DB.batch([
@@ -517,10 +503,10 @@ async function changeMeeting(
 }
 
 export function handleClaim(ctx: MeetContext, deps: MeetDeps): Promise<Response> {
-  return withRequest(ctx, async (origin) => {
+  return withRequest(ctx, async () => {
     const id = readMeetingId(ctx);
     const now = deps.now();
-    await prepare(ctx, origin, now, 'claim');
+    await prepare(ctx, now, 'claim');
     // 만료·없는 약속을 입력 오류보다 먼저 알린다.
     await activeMeeting(ctx.env.DB, id, now);
     const input = validate(claimSchema, await readJson(ctx.request));
@@ -612,10 +598,10 @@ export function handleClaim(ctx: MeetContext, deps: MeetDeps): Promise<Response>
 }
 
 export function handleReply(ctx: MeetContext, deps: MeetDeps): Promise<Response> {
-  return withRequest(ctx, async (origin) => {
+  return withRequest(ctx, async () => {
     const id = readMeetingId(ctx);
     const now = deps.now();
-    await prepare(ctx, origin, now, 'reply');
+    await prepare(ctx, now, 'reply');
     let input: ReplyInput | undefined;
     return changeMeeting(ctx, id, now, async (row, doc) => {
       const token = await readToken(ctx, id);
@@ -681,10 +667,10 @@ export function handleReply(ctx: MeetContext, deps: MeetDeps): Promise<Response>
 }
 
 export function handleRelease(ctx: MeetContext, deps: MeetDeps): Promise<Response> {
-  return withRequest(ctx, async (origin) => {
+  return withRequest(ctx, async () => {
     const id = readMeetingId(ctx);
     const now = deps.now();
-    await prepare(ctx, origin, now);
+    await prepare(ctx, now);
     let input: typeof releaseSchema.Type | undefined;
     return changeMeeting(ctx, id, now, async (row) => {
       input ??= validate(releaseSchema, await readJson(ctx.request));
