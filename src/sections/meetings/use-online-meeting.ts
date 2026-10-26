@@ -377,7 +377,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
     try {
       let response = await meetApi.get(
         meeting.id,
-        full || !hydrated.current ? null : current.lastRev,
+        full || !hydrated.current ? null : (current.lastRev ?? null),
         current.hostToken,
         signal,
       );

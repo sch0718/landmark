@@ -1,5 +1,6 @@
 import { act, fireEvent, render, renderHook, screen } from '@testing-library/react';
 import { StrictMode, useState } from 'react';
+import { MemoryRouter } from 'react-router';
 import { Effect } from 'effect';
 import * as effectRuntime from 'src/lib/effect/runtime';
 import { haversineM } from 'src/domain/trips/geo';
@@ -17,6 +18,7 @@ import { getTurnstileToken } from 'src/services/meet-online/turnstile-loader';
 import { shareLink, shareMeetingDoc } from 'src/sections/meetings/share-link';
 import { useOnlineMeeting, type OnlineCompute } from 'src/sections/meetings/use-online-meeting';
 import { OnlineHostMenu } from 'src/sections/meetings/OnlineHostMenu';
+import { OnlineInviteView } from 'src/sections/meetings/OnlineInviteView';
 import { buildMeeting } from '../../../fixtures/builders';
 
 vi.mock('src/components/map/MapView', () => ({ MapView: () => <div /> }));
@@ -76,6 +78,48 @@ function state(overrides: Partial<OnlineState> = {}): OnlineState {
 function online() {
   writeOnline(saved.id, { hostToken: token, lastRev: 1, docRev: 1, syncedDoc: state().doc });
 }
+
+it('주최자 기기의 친구 화면은 동기화 기준을 지키고 다음 주최자 확인이 다른 기기의 확정을 받는다', async () => {
+  const syncedDoc = state().doc;
+  writeOnline(saved.id, {
+    hostToken: token,
+    pendingHostToken: 'p'.repeat(43),
+    lastRev: 3,
+    docRev: 2,
+    syncedDoc,
+    hostLikes: [],
+    seen: [],
+  });
+  let remote = state({ rev: 3, docRev: 2, doc: syncedDoc });
+  vi.mocked(meetApi.get).mockImplementation(async (_id, since, auth) => ({
+    ok: true,
+    value:
+      since === remote.rev
+        ? 'unchanged'
+        : auth === token
+          ? structuredClone(remote)
+          : { ...structuredClone(remote), originNames: {} },
+  }));
+  setup();
+  await flush();
+  const hostRecord = readOnline(saved.id);
+  remote = state({ rev: 5, docRev: 4, doc: { ...syncedDoc, decided: 'choice01' } });
+  render(
+    <MemoryRouter>
+      <OnlineInviteView id={saved.id} />
+    </MemoryRouter>,
+  );
+  await flush();
+  expect(screen.getByRole('heading', { name: '확정 · 강남역' })).toBeInTheDocument();
+  expect.soft(readOnline(saved.id)).toEqual(hostRecord);
+
+  await advance(10000);
+  expect.soft(meetApi.get).toHaveBeenCalledWith(saved.id, 3, token, expect.any(AbortSignal));
+  expect(saved.decided.value).toBe('choice01');
+  expect(readOnline(saved.id)).toMatchObject({ lastRev: 5, docRev: 4, syncedDoc: remote.doc });
+  await advance(1100);
+  expect(meetApi.update).not.toHaveBeenCalled();
+});
 
 it.each([false, true])(
   '친구 출발지를 합친 뒤 화면 재진입=%s여도 서버 확정을 받고 옛 확정을 올리지 않는다',

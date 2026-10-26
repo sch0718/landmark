@@ -122,9 +122,11 @@ export function OnlineInviteView({ id }: { id: string }) {
   function markError(failure: OnlineError, reading = false) {
     if (!active.current) return;
     if (failure.code === 'unauthorized') {
-      const record = { ...readOnline(id), lastRev: 0 };
-      delete record.guest;
-      writeOnline(id, record);
+      const record = readOnline(id);
+      if (record?.guest) {
+        delete record.guest;
+        writeOnline(id, record);
+      }
       removeMeetDraft(id);
       setGuest(null);
       setDraft(null);
@@ -134,12 +136,6 @@ export function OnlineInviteView({ id }: { id: string }) {
       setError(message(failure));
       if (reading && (failure.code === 'ended' || failure.code === 'not-found')) setEnded(true);
     }
-  }
-  function rememberRevision(state: OnlineState) {
-    const record = readOnline(id);
-    // 읽기만 한 약속의 버전은 화면 메모리로 충분하다.
-    if (record?.hostToken || record?.guest || record?.pendingHostToken)
-      writeOnline(id, { ...record, lastRev: state.rev, docRev: state.docRev });
   }
   async function sendDraft(): Promise<boolean> {
     const current = latest.current;
@@ -214,7 +210,6 @@ export function OnlineInviteView({ id }: { id: string }) {
         needsFreshDoc.current = false;
         deferred.current = false;
         setState(result.value);
-        rememberRevision(result.value);
       }
       if (sent) setError(null);
       setLastOkAt(Date.now());
@@ -272,7 +267,6 @@ export function OnlineInviteView({ id }: { id: string }) {
       }
       if (refreshed.value !== 'unchanged') {
         setState(refreshed.value);
-        rememberRevision(refreshed.value);
       }
       setError('그 참석자는 이제 목록에 없어요. 다시 골라 주세요');
       return;
@@ -283,7 +277,7 @@ export function OnlineInviteView({ id }: { id: string }) {
       return;
     }
     const next = { participantId: result.value.participantId, token: result.value.guestToken };
-    writeOnline(id, { ...readOnline(id), guest: next, lastRev: result.value.rev });
+    writeOnline(id, { ...readOnline(id), guest: next });
     setGuest(next);
     setDraft(null);
     setError(null);

@@ -12,6 +12,29 @@ import {
 import { buildMeeting } from '../../fixtures/builders';
 import { docFromMeeting } from 'src/domain/meeting/online-doc';
 
+it('주최자 버전이 없는 참석자 전용 기록을 새 저장소에서도 복원한다', () => {
+  const storage = createMemoryStorage();
+  const record = { guest: { participantId: 'person02', token: 'guest' } };
+  storage.setItem(MEET_ONLINE_KEY, JSON.stringify({ meeting001: record }));
+  expect(createOnlineStore(() => storage).readOnline('meeting001')).toEqual(record);
+});
+
+it.each([null, -1, 1.5, '3'])(
+  '참석자 기록에 깨진 주최자 lastRev %j가 있으면 그 기록만 버린다',
+  (lastRev) => {
+    const storage = createMemoryStorage();
+    const guest = { participantId: 'person02', token: 'guest' };
+    storage.setItem(
+      MEET_ONLINE_KEY,
+      JSON.stringify({
+        meeting001: { guest, lastRev },
+        meeting002: { guest },
+      }),
+    );
+    expect(createOnlineStore(() => storage).allOnline()).toEqual({ meeting002: { guest } });
+  },
+);
+
 it('마지막으로 맞춘 본문을 새 저장소에서도 복원한다', () => {
   const storage = createMemoryStorage();
   const record = { lastRev: 1, syncedDoc: docFromMeeting(buildMeeting(), {}, 'min') };

@@ -153,11 +153,69 @@ it('고르면 기록을 저장하고 내 답장 화면을 연다', async () => {
   });
   expect(meetApi.claim).toHaveBeenCalledWith('meeting001', { participantId: 'person02' });
   expect(readOnline('meeting001')?.guest).toEqual({ participantId: 'person02', token });
+  expect(readOnline('meeting001')).toEqual({ guest: { participantId: 'person02', token } });
   expect(screen.getByRole('button', { name: '강남역 좋아요' })).toBeEnabled();
   expect(screen.queryByText('나는 누구?')).not.toBeInTheDocument();
   expect(meetApi.get).toHaveBeenLastCalledWith('meeting001', null, token);
   expect(meetApi.reply).not.toHaveBeenCalled();
 });
+it('참석자를 차지하는 동안 바뀐 주최자 기록을 다시 읽어 guest만 더한다', async () => {
+  await setup();
+  let finish!: (value: Awaited<ReturnType<typeof meetApi.claim>>) => void;
+  vi.mocked(meetApi.claim).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  fireEvent.click(screen.getByRole('button', { name: '친구' }));
+  const hostRecord = {
+    hostToken,
+    pendingHostToken: 'p'.repeat(43),
+    lastRev: 7,
+    docRev: 4,
+    syncedDoc: { ...remote.doc, title: '다른 화면에서 받은 제목' },
+    hostLikes: ['choice02'],
+    seen: ['person04'],
+  };
+  writeOnline('meeting001', hostRecord);
+  await act(async () => {
+    finish({ ok: true, value: { participantId: 'person02', guestToken: token, rev: 8 } });
+  });
+  expect(readOnline('meeting001')).toEqual({
+    ...hostRecord,
+    guest: { participantId: 'person02', token },
+  });
+});
+it.each(['get', 'reply'] as const)(
+  '친구 화면의 %s 인증 실패는 최신 주최자 기록에서 guest만 지운다',
+  async (method) => {
+    guest();
+    await setup();
+    let finish!: (value: { ok: false; error: { code: 'unauthorized' } }) => void;
+    const response = new Promise<{ ok: false; error: { code: 'unauthorized' } }>((resolve) => {
+      finish = resolve;
+    });
+    vi.mocked(meetApi[method]).mockImplementationOnce(() => response);
+    if (method === 'reply') like();
+    await advance(method === 'get' ? 10000 : 1000);
+    const hostRecord = {
+      hostToken,
+      pendingHostToken: 'p'.repeat(43),
+      lastRev: 7,
+      docRev: 4,
+      syncedDoc: { ...remote.doc, title: '다른 화면에서 받은 제목' },
+      hostLikes: ['choice02'],
+      seen: ['person04'],
+    };
+    writeOnline('meeting001', { ...hostRecord, guest: { participantId: 'person02', token } });
+    await act(async () => {
+      finish({ ok: false, error: { code: 'unauthorized' } });
+    });
+    expect(readOnline('meeting001')).toEqual(hostRecord);
+    expect(screen.getByRole('region', { name: '나는 누구?' })).toBeInTheDocument();
+  },
+);
 it('목록에 없는 이름은 정리해서 차지한다', async () => {
   await setup();
   fireEvent.click(screen.getByRole('button', { name: '목록에 없어요' }));
