@@ -10,6 +10,33 @@ import {
   writeOnline,
 } from 'src/services/meet-online/store';
 import { buildMeeting } from '../../fixtures/builders';
+import { docFromMeeting } from 'src/domain/meeting/online-doc';
+
+it('마지막으로 맞춘 본문을 새 저장소에서도 복원한다', () => {
+  const storage = createMemoryStorage();
+  const record = { lastRev: 1, syncedDoc: docFromMeeting(buildMeeting(), {}, 'min') };
+  createOnlineStore(() => storage).writeOnline('meeting001', record);
+  expect(createOnlineStore(() => storage).readOnline('meeting001')).toEqual(record);
+});
+
+it.each([null, {}, { title: '깨짐' }])('깨진 syncedDoc %j의 기록만 버린다', (syncedDoc) => {
+  const storage = createMemoryStorage();
+  storage.setItem(
+    MEET_ONLINE_KEY,
+    JSON.stringify({
+      meeting001: { lastRev: 1, syncedDoc },
+      meeting002: { lastRev: 1 },
+    }),
+  );
+  expect(createOnlineStore(() => storage).allOnline()).toEqual({ meeting002: { lastRev: 1 } });
+});
+
+it('64KB를 넘는 동기화 본문 기록은 읽지 않는다', () => {
+  const storage = createMemoryStorage();
+  const syncedDoc = { ...docFromMeeting(buildMeeting(), {}, 'min'), title: '가'.repeat(22_000) };
+  storage.setItem(MEET_ONLINE_KEY, JSON.stringify({ meeting001: { lastRev: 1, syncedDoc } }));
+  expect(createOnlineStore(() => storage).readOnline('meeting001')).toBeNull();
+});
 
 beforeEach(() => localStorage.removeItem(MEET_ONLINE_KEY));
 
@@ -23,7 +50,7 @@ describe('온라인 약속 연결 기록', () => {
       guest: { participantId: 'person02', token: 'guest' },
       lastRev: 7,
       docRev: 3,
-      syncedAt: '2026-10-26T00:00:00.000Z',
+      syncedDoc: docFromMeeting(buildMeeting(), {}, 'min'),
       ended: true as const,
     };
     expect(readOnline('meeting001')).toBeNull();
@@ -179,12 +206,12 @@ it.each([
   expect(createOnlineStore(() => storage).allOnline()).toEqual({ meeting002: { lastRev: 1 } });
 });
 
-it('대기 중인 최초 본문 시각을 새 저장소에서도 복원한다', () => {
+it('대기 중인 최초 본문을 새 저장소에서도 복원한다', () => {
   const storage = createMemoryStorage();
   const record = {
     lastRev: 0,
     pendingHostToken: 'p'.repeat(43),
-    pendingSince: '2026-10-26T00:00:00.000Z',
+    syncedDoc: docFromMeeting(buildMeeting(), {}, 'min'),
   };
   createOnlineStore(() => storage).writeOnline('meeting001', record);
   expect(createOnlineStore(() => storage).readOnline('meeting001')).toEqual(record);

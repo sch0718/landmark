@@ -1191,6 +1191,67 @@ describe('참석자 답장', () => {
     expect(response.status).toBe(200);
     return (await response.json()).guestToken as string;
   }
+  it('겹친 답장의 첫 요청이 재시도로 나중에 커밋되면 두 번째보다 큰 시각을 쓴다', async () => {
+    await seed();
+    const token = await guest();
+    const batch = db.batch.bind(db);
+    let release!: () => void;
+    let entered!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const waiting = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    let attempts = 0;
+    vi.spyOn(db, 'batch').mockImplementation(async (statements) => {
+      if (++attempts === 1) {
+        entered();
+        await gate;
+      }
+      return batch(statements);
+    });
+    const first = handleReply(context('PUT', { likes: ['choice01'] }, { token }), {
+      ...deps,
+      now: () => new Date(NOW.getTime() + 1000),
+    });
+    await waiting;
+    try {
+      const second = await handleReply(context('PUT', { likes: [] }, { token }), {
+        ...deps,
+        now: () => new Date(NOW.getTime() + 2000),
+      });
+      expect(second.status).toBe(200);
+      const committed = await db
+        .prepare('SELECT updated_at FROM meeting_replies')
+        .first<{ updated_at: string }>();
+      expect(committed?.updated_at).toBe('2026-10-26T12:00:02.000Z');
+      release();
+      expect((await first).status).toBe(200);
+      expect(attempts).toBe(3);
+      expect(await db.prepare('SELECT likes, updated_at FROM meeting_replies').first()).toEqual({
+        likes: '["choice01"]',
+        updated_at: '2026-10-26T12:00:02.001Z',
+      });
+    } finally {
+      release();
+      await first;
+    }
+  });
+
+  it('같은 서버 시각의 연속 답장도 기존 시각보다 1ms 크게 저장한다', async () => {
+    await seed();
+    const token = await guest();
+    await handleReply(context('PUT', { likes: [] }, { token }), deps);
+    const first = await db
+      .prepare('SELECT updated_at FROM meeting_replies')
+      .first<{ updated_at: string }>();
+    await handleReply(context('PUT', { likes: ['choice01'] }, { token }), deps);
+    const second = await db
+      .prepare('SELECT updated_at FROM meeting_replies')
+      .first<{ updated_at: string }>();
+    expect(Date.parse(second!.updated_at)).toBe(Date.parse(first!.updated_at) + 1);
+  });
   it('버전 충돌이 계속되면 총 5번 시도 뒤 busy 409를 돌려준다', async () => {
     await seed();
     const token = await guest();

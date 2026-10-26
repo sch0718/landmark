@@ -367,7 +367,7 @@ it.each([false, true])(
       hostToken,
       lastRev: 2,
       docRev: 1,
-      syncedAt: now,
+      syncedDoc: remote.doc,
     });
     expect(router.state.location.pathname).toBe('/meetings/meeting001');
   },
@@ -894,13 +894,13 @@ it('확정 화면에서도 이미 차지한 참석자를 고르면 기존 taken 
 });
 
 it('주최자 링크 재연결도 올리지 않은 로컬 본문과 버전을 보존한다', async () => {
-  const syncedAt = '2026-10-25T00:00:00.000Z';
-  writeOnline('meeting001', { hostToken, docRev: 1, lastRev: 1, syncedAt });
+  const syncedDoc = remote.doc;
+  writeOnline('meeting001', { hostToken, docRev: 1, lastRev: 1, syncedDoc });
   library = { ...library, meetings: { meeting001: buildMeeting({ title: f('미전송 제목') }) } };
   remote = { rev: 3, docRev: 2, doc: remote.doc, replies: [] };
   await setup(`/meet/meeting001#h=${hostToken}`);
   expect(library.meetings?.meeting001?.title.value).toBe('미전송 제목');
-  expect(readOnline('meeting001')).toMatchObject({ docRev: 1, syncedAt, lastRev: 3 });
+  expect(readOnline('meeting001')).toMatchObject({ docRev: 1, syncedDoc, lastRev: 3 });
 });
 
 it('보관함에서 지운 약속도 유효한 주최자 링크로 다시 담는다', async () => {
@@ -920,7 +920,7 @@ it.each([false, true])(
         hostToken,
         lastRev: 1,
         docRev: 1,
-        syncedAt: now,
+        syncedDoc: remote.doc,
         seen: ['person04'],
       });
     }
@@ -952,7 +952,13 @@ it('주최자 링크에서도 seen이 차면 서버에 남은 삭제 기록을 �
   const oldIds = Array.from({ length: 9 }, (_, i) => `guest00${i + 1}`);
   const local = buildMeeting({ participants: f([remote.doc.participants[0]!]) });
   library = { ...library, meetings: { meeting001: local } };
-  writeOnline('meeting001', { hostToken, lastRev: 1, docRev: 1, syncedAt: now, seen: oldIds });
+  writeOnline('meeting001', {
+    hostToken,
+    lastRev: 1,
+    docRev: 1,
+    syncedDoc: remote.doc,
+    seen: oldIds,
+  });
   const replyIds = ['guest001', ...Array.from({ length: 8 }, (_, i) => `new0000${i + 1}`)];
   remote = {
     rev: 3,

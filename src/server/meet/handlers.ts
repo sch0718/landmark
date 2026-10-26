@@ -610,6 +610,10 @@ export function handleReply(ctx: MeetContext, deps: MeetDeps): Promise<Response>
         .first<ReplyRow>();
       const name = doc.participants.find((p) => p.id === participantId)?.name ?? old?.name;
       if (!name) throw new ApiError('UNAUTHORIZED', '참석자 연결을 확인해 주세요');
+      // 재시도마다 직전 커밋보다 큰 시각을 써, 겹친 요청도 저장 순서대로 구분한다.
+      const updatedAt = new Date(
+        Math.max(deps.now().getTime(), old ? Date.parse(old.updated_at) + 1 : -Infinity),
+      ).toISOString();
       const encode = (value: unknown) => (value == null ? null : JSON.stringify(value));
       return {
         ...(timesDropped ? { fields: { timesDropped: true } } : {}),
@@ -633,7 +637,7 @@ export function handleReply(ctx: MeetContext, deps: MeetDeps): Promise<Response>
                 : input.times === undefined
                   ? (old?.times ?? null)
                   : encode(input.times),
-              now.toISOString(),
+              updatedAt,
               id,
               row.rev,
             ),

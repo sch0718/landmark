@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { docFromMeeting, type OnlineReply, type OnlineState } from 'src/domain/meeting/online-doc';
-import { mergeOnline } from 'src/domain/meeting/online-merge';
+import {
+  docFromMeeting,
+  type MeetingDoc,
+  type OnlineReply,
+  type OnlineState,
+} from 'src/domain/meeting/online-doc';
+import { hostEdits, mergeOnline } from 'src/domain/meeting/online-merge';
 import { emptyLibrary, LibrarySchema, type Library } from 'src/schema/library';
 import { safeParse } from 'src/schema/parse';
 import { buildMeeting } from '../../../fixtures/builders';
@@ -46,12 +51,12 @@ const state = (
 const merge = (
   lib: Library,
   online = state(),
-  syncedAt: string | null = now,
+  syncedDoc: MeetingDoc | null = docFromMeeting(meeting, {}, 'min'),
   docRev: number | null = 1,
 ) => {
   const original = JSON.stringify(lib);
   const result = mergeOnline(lib, meeting.id, online, ctx, {
-    syncedAt,
+    syncedDoc,
     docRev,
     hostLikes: null,
     seen: [],
@@ -63,6 +68,34 @@ const merge = (
   return result.lib;
 };
 const mergedMeeting = (lib: Library) => lib.meetings![meeting.id]!;
+
+it('보관함보다 작은 답장 시각도 다르면 서버 좋아요와 출발지로 갱신한다', () => {
+  const local = {
+    ...meeting,
+    replies: {
+      value: { person01: { likes: ['choice01'], sentAt: now, receivedAt: now } },
+      updatedAt: now,
+    },
+  };
+  const changed = { name: '새 집', lng: 128, lat: 38 };
+  const next = mergedMeeting(merge(library(local), state([reply({ origin: changed, likes: [] })])));
+  expect(next.replies.value.person01).toEqual({ likes: [], sentAt: updatedAt, receivedAt: now });
+  expect(next.participants.value[1]?.origin).toEqual(changed);
+});
+
+it('친구 출발지를 합친 뒤에도 다른 주최자 기기의 확정을 받는다', () => {
+  const syncedDoc = docFromMeeting(meeting, {}, 'min');
+  const changed = { name: '회사', lng: 128, lat: 38 };
+  const first = merge(library(), state([reply({ origin: changed })]));
+  const result = mergeOnline(first, meeting.id, { ...state([], 'choice01'), docRev: 2 }, ctx, {
+    syncedDoc,
+    docRev: 1,
+    seen: [],
+    hostLikes: null,
+  });
+  expect(result.ok).toBe(true);
+  if (result.ok) expect(mergedMeeting(result.lib).decided.value).toBe('choice01');
+});
 
 it.each([
   { local: [], baseline: [], remote: ['choice01'], expected: ['choice01'] },
@@ -82,7 +115,7 @@ it.each([
     meeting.id,
     state([reply({ participantId: 'host0001', likes: remote })]),
     ctx,
-    { syncedAt: now, docRev: 1, seen: [], hostLikes: baseline },
+    { syncedDoc: docFromMeeting(meeting, {}, 'min'), docRev: 1, seen: [], hostLikes: baseline },
   );
   expect(result.ok).toBe(true);
   if (result.ok) expect(mergedMeeting(result.lib).replies.value.host0001?.likes).toEqual(expected);
@@ -93,7 +126,7 @@ describe('온라인 상태를 보관한 약속에 합친다', () => {
     for (const lib of [emptyLibrary(), library({ ...meeting, deletedAt: now })]) {
       expect(
         mergeOnline(lib, meeting.id, state(), ctx, {
-          syncedAt: now,
+          syncedDoc: docFromMeeting(meeting, {}, 'min'),
           docRev: 1,
           hostLikes: null,
           seen: [],
@@ -185,7 +218,7 @@ describe('온라인 상태를 보관한 약속에 합친다', () => {
       meeting.id,
       state([reply({ origin, likes: [] })]),
       { ...ctx, now: '2026-10-27T00:00:00.000Z' },
-      { syncedAt: now, docRev: 1, hostLikes: null, seen: [] },
+      { syncedDoc: docFromMeeting(meeting, {}, 'min'), docRev: 1, hostLikes: null, seen: [] },
     );
     expect(result).toEqual({ ok: true, lib: first, addedReplyOnly: [] });
     if (result.ok) expect(result.lib).toBe(first);
@@ -202,20 +235,18 @@ describe('온라인 상태를 보관한 약속에 합친다', () => {
     expect(next.replies.value.person01).toEqual(mergedMeeting(first).replies.value.person01);
   });
 
-  it('더 오래된 답장은 출발지까지 모두 무시한다', () => {
+  it('더 작은 시각이라도 다른 서버 답장은 출발지까지 반영한다', () => {
     const first = merge(library());
-    expect(
-      merge(
-        first,
-        state([
-          reply({
-            updatedAt: meeting.createdAt,
-            origin: { name: '옛집', lng: 128, lat: 38 },
-            likes: [],
-          }),
-        ]),
-      ),
-    ).toBe(first);
+    const origin = { name: '옛집', lng: 128, lat: 38 };
+    const next = mergedMeeting(
+      merge(first, state([reply({ updatedAt: meeting.createdAt, origin, likes: [] })])),
+    );
+    expect(next.participants.value[1]?.origin).toEqual(origin);
+    expect(next.replies.value.person01).toEqual({
+      likes: [],
+      sentAt: meeting.createdAt,
+      receivedAt: now,
+    });
   });
 
   it('기존 주최자 답장은 출발지·좋아요를 모두 무시한다', () => {
@@ -245,7 +276,9 @@ describe('온라인 상태를 보관한 약속에 합친다', () => {
       ...meeting,
       decided: { value: decided === null ? 'choice01' : null, updatedAt },
     };
-    const next = mergedMeeting(merge(library(current), state([], decided), now, null));
+    const next = mergedMeeting(
+      merge(library(current), state([], decided), docFromMeeting(current, {}, 'min'), null),
+    );
     expect(next.decided).toEqual({ value: decided, updatedAt: now });
   });
 
@@ -255,7 +288,12 @@ describe('온라인 상태를 보관한 약속에 합친다', () => {
       decided: { value: decided, updatedAt: '2026-10-25T23:59:59.000Z' },
     };
     const lib = library(current);
-    expect(merge(lib, state([], decided === null ? 'choice01' : null), updatedAt)).toBe(lib);
+    expect(
+      merge(lib, state([], decided === null ? 'choice01' : null), {
+        ...docFromMeeting(current, {}, 'min'),
+        decided: decided === null ? 'choice01' : null,
+      }),
+    ).toBe(lib);
   });
 
   it('마지막 동기화 이전 확정은 다른 주최자 기기의 확정으로 바꾼다', () => {
@@ -269,13 +307,17 @@ describe('온라인 상태를 보관한 약속에 합친다', () => {
     };
     const initial = state([], 'choice02');
     const remote = { ...initial, doc: { ...initial.doc, candidates: current.candidates.value } };
-    const next = mergedMeeting(merge(library(current), remote, now, null));
+    const next = mergedMeeting(
+      merge(library(current), remote, docFromMeeting(current, {}, 'min'), null),
+    );
     expect(next.decided).toEqual({ value: 'choice02', updatedAt: now });
   });
 
-  it('확정 시각이 마지막 동기화와 같으면 서버 확정을 반영한다', () => {
+  it('확정 내용이 마지막 동기화와 같으면 서버 확정을 반영한다', () => {
     const current = { ...meeting, decided: { value: 'choice01', updatedAt } };
-    const next = mergedMeeting(merge(library(current), state([]), updatedAt, null));
+    const next = mergedMeeting(
+      merge(library(current), state([]), docFromMeeting(current, {}, 'min'), null),
+    );
     expect(next.decided).toEqual({ value: null, updatedAt: now });
   });
 
@@ -297,8 +339,8 @@ describe('온라인 상태를 보관한 약속에 합친다', () => {
   it.each([null, 'choice01'])('확정 %s가 같으면 시각과 객체를 바꾸지 않는다', (decided) => {
     const current = { ...meeting, decided: { value: decided, updatedAt } };
     const lib = library(current);
-    for (const syncedAt of [null, meeting.createdAt, now]) {
-      const next = merge(lib, state([], decided), syncedAt);
+    for (const syncedDoc of [null, docFromMeeting(current, {}, 'min')]) {
+      const next = merge(lib, state([], decided), syncedDoc);
       expect(next).toBe(lib);
       expect(mergedMeeting(next)).toBe(current);
       expect(mergedMeeting(next).decided).toBe(current.decided);
@@ -334,7 +376,7 @@ it('원격 후보 추가와 확정, 새 답장을 한 번에 반영한다', () =
     },
   };
   const result = mergeOnline(library(), meeting.id, remote, ctx, {
-    syncedAt: now,
+    syncedDoc: docFromMeeting(meeting, {}, 'min'),
     docRev: null,
     hostLikes: null,
     seen: [],
@@ -351,13 +393,21 @@ it('원격 후보 추가와 확정, 새 답장을 한 번에 반영한다', () =
 it.each(['title', 'at', 'mode', 'participants', 'candidates', 'decided'] as const)(
   '미전송 %s 수정이 있으면 원격 본문 전체를 받지 않는다',
   (key) => {
-    const local = { ...meeting, [key]: { ...meeting[key], updatedAt: now } };
+    const changes = {
+      title: '로컬 제목',
+      at: { date: '2026-10-28', time: '12:00' },
+      mode: 'car' as const,
+      participants: meeting.participants.value.map((p) => ({ ...p, name: '바꾼 이름' })),
+      candidates: meeting.candidates.value.map((c) => ({ ...c, name: '바꾼 후보' })),
+      decided: 'choice01',
+    };
+    const local = { ...meeting, [key]: { value: changes[key], updatedAt: now } };
     const initial = state([], 'choice01');
     const remote = { ...initial, doc: { ...initial.doc, title: '원격 제목' } };
     const result = mergeOnline(library(local), meeting.id, remote, ctx, {
       hostLikes: null,
       seen: [],
-      syncedAt: updatedAt,
+      syncedDoc: docFromMeeting(meeting, {}, 'min'),
       docRev: null,
     });
     expect(result).toEqual({ ok: true, lib: library(local), addedReplyOnly: [] });
@@ -378,7 +428,7 @@ it('지금 후보에 없는 확정과 기존 답장 좋아요를 저장 전에 �
   const result = mergeOnline(library(local), meeting.id, state([]), ctx, {
     hostLikes: null,
     seen: [],
-    syncedAt: now,
+    syncedDoc: docFromMeeting(meeting, {}, 'min'),
     docRev: 1,
   });
   expect(result.ok).toBe(true);
@@ -412,7 +462,7 @@ it('서버 본문을 받을 때 이미 받은 답장 전용 참석자도 보존�
   const result = mergeOnline(first, meeting.id, { ...remote, docRev: 2 }, ctx, {
     hostLikes: null,
     seen: ['new00001'],
-    syncedAt: now,
+    syncedDoc: docFromMeeting(meeting, {}, 'min'),
     docRev: 1,
   });
   expect(result.ok).toBe(true);
@@ -437,14 +487,72 @@ it('서버 본문을 받으며 복원하는 답장 전용 참석자도 같은 �
       ),
     },
   };
-  const next = mergedMeeting(merge(library(local), { ...remote, docRev: 2 }));
+  const result = mergeOnline(library(local), meeting.id, { ...remote, docRev: 2 }, ctx, {
+    syncedDoc: remote.doc,
+    docRev: 1,
+    seen: ['new00001'],
+    hostLikes: null,
+  });
+  expect(result.ok).toBe(true);
+  if (!result.ok) return;
+  const next = mergedMeeting(result.lib);
   expect(next.participants.value.find((p) => p.id === 'new00001')?.origin).toEqual(origin);
+});
+
+it('마지막 본문과 같은 후보의 로컬 참조 id는 주최자 수정으로 보지 않는다', () => {
+  const local = {
+    ...meeting,
+    candidates: {
+      ...meeting.candidates,
+      value: meeting.candidates.value.map((c) => ({
+        ...c,
+        hubId: 'hub001',
+        placeId: 'place00001',
+      })),
+    },
+  };
+  expect(hostEdits(local, docFromMeeting(local, {}, 'min'))).toBe(false);
+});
+
+it.each(['이름', '삭제', '추가'] as const)('주최자 참석자 %s는 내용 변경이다', (change) => {
+  const participants =
+    change === '이름'
+      ? meeting.participants.value.map((p) => ({ ...p, name: '새 이름' }))
+      : change === '삭제'
+        ? meeting.participants.value.slice(0, 1)
+        : [...meeting.participants.value, { id: 'person03', name: '새 친구', origin: null }];
+  const local = { ...meeting, participants: { ...meeting.participants, value: participants } };
+  expect(hostEdits(local, docFromMeeting(meeting, {}, 'min'))).toBe(true);
+});
+
+it('seen에 있어도 마지막 본문에 포함된 참석자 이름은 비교한다', () => {
+  const local = {
+    ...meeting,
+    participants: {
+      ...meeting.participants,
+      value: meeting.participants.value.map((p) => ({ ...p, name: '새 이름' })),
+    },
+  };
+  expect(hostEdits(local, docFromMeeting(meeting, {}, 'min'), ['person01'])).toBe(true);
+});
+
+it('답장 전용 참석자의 추가·변경·삭제는 주최자 수정에서 뺀다', () => {
+  const syncedDoc = docFromMeeting(meeting, {}, 'min');
+  const local = {
+    ...meeting,
+    participants: {
+      ...meeting.participants,
+      value: [...meeting.participants.value, { id: 'person03', name: '새 친구', origin }],
+    },
+  };
+  expect(hostEdits(local, syncedDoc, ['person03'])).toBe(false);
+  expect(hostEdits(meeting, syncedDoc, ['person03'])).toBe(false);
 });
 
 it('이미 합친 뒤 지운 답장 전용 참석자와 답장을 되살리지 않는다', () => {
   const lib = library();
   const result = mergeOnline(lib, meeting.id, state([reply({ participantId: 'new00001' })]), ctx, {
-    syncedAt: now,
+    syncedDoc: docFromMeeting(meeting, {}, 'min'),
     docRev: 1,
     hostLikes: null,
     seen: ['new00001'],
@@ -462,7 +570,7 @@ it('처음 보는 답장 전용 참석자를 더하고 id를 결과로 알린다
     state([reply({ participantId: 'new00001' })]),
     ctx,
     {
-      syncedAt: now,
+      syncedDoc: docFromMeeting(meeting, {}, 'min'),
       docRev: 1,
       hostLikes: null,
       seen: [],

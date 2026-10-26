@@ -2,7 +2,7 @@ import { useCallback, useEffect, useEffectEvent, useLayoutEffect, useRef, useSta
 import { toast } from 'sonner';
 import { finalFromMeeting, inviteFromMeeting } from 'src/domain/meeting/link';
 import { docFromMeeting, type MeetingDoc, type OnlineState } from 'src/domain/meeting/online-doc';
-import { mergeOnline, shouldAdoptRemoteDoc } from 'src/domain/meeting/online-merge';
+import { hostEdits, mergeOnline, shouldAdoptRemoteDoc } from 'src/domain/meeting/online-merge';
 import type { Meeting } from 'src/schema/meeting';
 import { meetApi, type OnlineError } from 'src/services/meet-online/client';
 import {
@@ -167,19 +167,19 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
       return null;
     }
     let merged: Meeting | null = null;
-    let adoptedAt: string | null = null;
+    let adopted = false;
     let addedReplyOnly: string[] = [];
     let hostLikes: string[] | undefined;
     const result = await latest.current.run((lib, ctx) => {
       const current = currentRecord();
       const sync = {
-        syncedAt: current?.syncedAt ?? null,
+        syncedDoc: current?.syncedDoc ?? null,
         docRev: current?.docRev ?? null,
         seen: current?.seen ?? [],
         hostLikes: current?.hostLikes ?? null,
       };
       const before = lib.meetings?.[meeting.id];
-      if (before && shouldAdoptRemoteDoc(before, state, sync)) adoptedAt = ctx.now;
+      if (before && shouldAdoptRemoteDoc(before, state, sync)) adopted = true;
       const out = mergeOnline(lib, meeting.id, state, ctx, sync);
       if (out.ok) {
         merged = out.lib.meetings![meeting.id]!;
@@ -203,10 +203,10 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
                 ...state.replies.map((r) => r.participantId),
               ]),
             }),
-        ...(adoptedAt === null ? {} : { docRev: state.docRev, syncedAt: adoptedAt }),
+        ...(!adopted ? {} : { docRev: state.docRev, syncedDoc: state.doc }),
       });
     hydrated.current = true;
-    if (adoptedAt !== null) baseline.current = JSON.stringify(state.doc);
+    if (adopted) baseline.current = JSON.stringify(state.doc);
     if (active.current) setReplyState(state);
     return merged;
   }
@@ -240,8 +240,6 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
         return true;
       }
     }
-    // 응답을 기다리는 사이 고친 필드는 이 시각보다 새로워 다음 확인에서도 보존된다.
-    let sentAt = new Date().toISOString();
     let removed = removedReplyOnly(doc, current);
     let response = await meetApi.update(meeting.id, doc, baseDocRev!, current.hostToken!, removed);
     if (
@@ -267,7 +265,6 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
       }
       current = currentRecord()!;
       doc = docFromMeeting(merged, latest.current.compute.times, latest.current.compute.unit);
-      sentAt = new Date().toISOString();
       removed = removedReplyOnly(doc, current);
       response = await meetApi.update(
         meeting.id,
@@ -287,7 +284,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
       save({
         ...fresh,
         docRev: response.value.docRev,
-        syncedAt: sentAt,
+        syncedDoc: doc,
         ...(fresh.seen === undefined
           ? {}
           : { seen: fresh.seen.filter((id) => !removed.includes(id)) }),
@@ -390,17 +387,9 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
   useEffect(() => {
     if (mode !== 'online') return;
     if (baseline.current === null) {
-      const syncedAt = readOnline(meeting.id)?.syncedAt;
+      const current = readOnline(meeting.id);
       const dirty =
-        !syncedAt ||
-        [
-          meeting.title,
-          meeting.at,
-          meeting.mode,
-          meeting.participants,
-          meeting.candidates,
-          meeting.decided,
-        ].some((field) => field.updatedAt > syncedAt);
+        current?.syncedDoc != null && hostEdits(meeting, current.syncedDoc, current.seen);
       baseline.current = dirty ? '' : json;
     }
     if (document.visibilityState === 'visible' && navigator.onLine) void initialCheck();
@@ -458,12 +447,12 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
           fresh.compute.unit,
         );
         const sentAt = new Date().toISOString();
-        const pendingSince = current?.pendingSince ?? sentAt;
+        const syncedDoc = current?.syncedDoc ?? doc;
         save({
           ...current,
           lastRev: current?.lastRev ?? 0,
           pendingHostToken: hostToken,
-          pendingSince,
+          syncedDoc,
         });
         const response = await meetApi.create(doc, turnstile, hostToken);
         if (!response.ok) {
@@ -479,7 +468,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
           hostLikes: [],
           lastRev: response.value.rev,
           docRev: response.value.docRev,
-          syncedAt: response.value.created ? sentAt : pendingSince,
+          syncedDoc: response.value.created ? doc : syncedDoc,
         });
         markOk();
         await sendHostLikes();

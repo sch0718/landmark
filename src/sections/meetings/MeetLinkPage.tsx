@@ -108,7 +108,7 @@ function HostLink({ id, token }: { id: string; token: string }) {
         setError('주최자 링크가 더 이상 쓸 수 없어요');
         return;
       }
-      let adoptedAt: string | null = null;
+      let adopted = false;
       let addedReplyOnly: string[] = [];
       let hostLikes: string[] | undefined;
       const result = await run((lib, ctx) => {
@@ -134,14 +134,14 @@ function HostLink({ id, token }: { id: string; token: string }) {
         if (!stored.ok) return stored;
         const current = readOnline(id);
         const sync = restored
-          ? { syncedAt: null, docRev: null, seen: [], hostLikes: null }
+          ? { syncedDoc: null, docRev: null, seen: [], hostLikes: null }
           : {
-              syncedAt: current?.syncedAt ?? null,
+              syncedDoc: current?.syncedDoc ?? null,
               docRev: current?.docRev ?? null,
               seen: current?.seen ?? [],
               hostLikes: current?.hostLikes ?? null,
             };
-        if (shouldAdoptRemoteDoc(meeting, state, sync)) adoptedAt = ctx.now;
+        if (shouldAdoptRemoteDoc(meeting, state, sync)) adopted = true;
         const out = mergeOnline(stored.lib, id, state, ctx, sync);
         if (out.ok) {
           addedReplyOnly = out.addedReplyOnly;
@@ -172,7 +172,7 @@ function HostLink({ id, token }: { id: string; token: string }) {
                 ...state.replies.map((r) => r.participantId),
               ]),
             }),
-        ...(adoptedAt === null ? {} : { docRev: state.docRev, syncedAt: adoptedAt }),
+        ...(!adopted ? {} : { docRev: state.docRev, syncedDoc: state.doc }),
       };
       delete record.ended;
       writeOnline(id, record);

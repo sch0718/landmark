@@ -73,8 +73,50 @@ function state(overrides: Partial<OnlineState> = {}): OnlineState {
   };
 }
 function online() {
-  writeOnline(saved.id, { hostToken: token, lastRev: 1, docRev: 1, syncedAt: startAt });
+  writeOnline(saved.id, { hostToken: token, lastRev: 1, docRev: 1, syncedDoc: state().doc });
 }
+
+it.each([false, true])(
+  '친구 출발지를 합친 뒤 화면 재진입=%s여도 서버 확정을 받고 옛 확정을 올리지 않는다',
+  async (reopen) => {
+    online();
+    const firstDoc = state().doc;
+    writeOnline(saved.id, { ...readOnline(saved.id)!, syncedDoc: firstDoc });
+    const reply = {
+      participantId: 'person02',
+      name: '친구',
+      origin: { name: '회사', lng: 128, lat: 38 },
+      likes: [],
+      times: null,
+      updatedAt: startAt,
+    };
+    const inputCompute = { ...compute, pending: true };
+    const first = setup(inputCompute);
+    await flush();
+    vi.mocked(meetApi.get).mockResolvedValueOnce({ ok: true, value: state({ replies: [reply] }) });
+    await advance(10000);
+    const remoteDoc = { ...firstDoc, decided: 'choice01' };
+    vi.mocked(meetApi.get).mockResolvedValue({
+      ok: true,
+      value: state({ rev: 3, docRev: 2, doc: remoteDoc, replies: [reply] }),
+    });
+    if (reopen) {
+      // 새 훅은 보관한 본문으로 첫 화면의 미전송 여부를 판단한다.
+      first.unmount();
+      setup();
+      await flush();
+    } else {
+      await advance(10000);
+      inputCompute.pending = false;
+      first.rerender();
+    }
+    expect(saved.decided.value).toBe('choice01');
+    await advance(1100);
+    for (const call of vi.mocked(meetApi.update).mock.calls)
+      expect(call[1].decided).toBe('choice01');
+    expect(readOnline(saved.id)?.syncedDoc?.decided).toBe('choice01');
+  },
+);
 
 it('동기화 뒤 바꾸지 않은 빈 좋아요는 다른 기기의 서버 좋아요를 받고 되돌려 보내지 않는다', async () => {
   saved = {
@@ -85,7 +127,7 @@ it('동기화 뒤 바꾸지 않은 빈 좋아요는 다른 기기의 서버 좋�
     hostToken: token,
     lastRev: 1,
     docRev: 1,
-    syncedAt: startAt,
+    syncedDoc: state().doc,
     hostLikes: [],
   });
   vi.mocked(meetApi.get).mockResolvedValue({
@@ -157,7 +199,7 @@ it('동기화 기록과 다른 로컬 좋아요는 서버 확인 뒤에도 보�
     hostToken: token,
     lastRev: 1,
     docRev: 1,
-    syncedAt: startAt,
+    syncedDoc: state().doc,
     hostLikes: [],
   });
   vi.mocked(meetApi.get).mockResolvedValue({
@@ -259,7 +301,7 @@ it.each([false, true])(
       sentTokens.push(body.hostToken);
       storedBeforeRequest.push(
         readOnline(saved.id)?.pendingHostToken === body.hostToken &&
-          readOnline(saved.id)?.pendingSince === startAt,
+          readOnline(saved.id)?.syncedDoc?.title === '친구 모임',
       );
       const response = await handleCreate(
         {
@@ -308,7 +350,7 @@ it.each([false, true])(
         edited ? '응답 유실 뒤 고친 제목' : '친구 모임',
         { quietFailure: true },
       );
-      expect(readOnline(saved.id)?.syncedAt).toBe(startAt);
+      expect(readOnline(saved.id)?.syncedDoc?.title).toBe('친구 모임');
       if (edited) {
         expect(
           JSON.parse((await db.prepare('SELECT doc FROM meetings').first<{ doc: string }>())!.doc)
@@ -356,7 +398,7 @@ it.each(['첫 확인', '정기 확인', '본문 버전 확인', '충돌 재시�
     if (path === '정기 확인') await advance(10000);
     if (path === '본문 버전 확인' || path === '충돌 재시도') {
       if (path === '본문 버전 확인')
-        writeOnline(saved.id, { hostToken: token, lastRev: 1, syncedAt: startAt });
+        writeOnline(saved.id, { hostToken: token, lastRev: 1, syncedDoc: state().doc });
       else
         vi.mocked(meetApi.update).mockResolvedValueOnce({
           ok: false,
@@ -407,7 +449,11 @@ it('첫 공유는 한 번 올리고 기록을 저장하며 다음 공유와 확�
     'dev',
     expect.stringMatching(/^[A-Za-z0-9_-]{43}$/),
   );
-  expect(readOnline(saved.id)).toMatchObject({ hostToken: token, docRev: 1, syncedAt: startAt });
+  expect(readOnline(saved.id)).toMatchObject({
+    hostToken: token,
+    docRev: 1,
+    syncedDoc: state().doc,
+  });
   expect(shareLink).toHaveBeenCalledWith(
     expect.stringMatching(/\/meet\/meeting001$/),
     '친구 모임',
@@ -479,7 +525,7 @@ it.each([
   expect(readOnline(saved.id)).toEqual({
     lastRev: 0,
     pendingHostToken: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/),
-    pendingSince: startAt,
+    syncedDoc: state().doc,
   });
 });
 it('기능 스위치가 꺼지면 대기 토큰을 보존하고 알림 없이 해시 문서를 공유한다', async () => {
@@ -491,7 +537,7 @@ it('기능 스위치가 꺼지면 대기 토큰을 보존하고 알림 없이 �
   expect(readOnline(saved.id)).toEqual({
     lastRev: 0,
     pendingHostToken: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/),
-    pendingSince: startAt,
+    syncedDoc: state().doc,
   });
 });
 it('Turnstile 거절을 안내한다', async () => {
@@ -520,7 +566,7 @@ it('열 때 즉시 확인하고 참석자 수정 두 번을 1초 모아 docRev�
     token,
     [],
   );
-  expect(readOnline(saved.id)).toMatchObject({ docRev: 2, syncedAt: '2026-10-26T01:00:01.500Z' });
+  expect(readOnline(saved.id)).toMatchObject({ docRev: 2, syncedDoc: state().doc });
   expect(result.current.status.failing).toBe(false);
 });
 it('충돌한 본문 버전이 다를 때 get·merge 뒤 새 docRev로 한 번 재시도한다', async () => {
@@ -577,7 +623,7 @@ it.each([
   await advance(9000);
   expect(meetApi.update).toHaveBeenCalledTimes(2);
 });
-it('새 답장을 보관함에 합쳐도 syncedAt은 올리지 않는다', async () => {
+it('새 답장을 보관함에 합쳐도 마지막으로 맞춘 본문은 바꾸지 않는다', async () => {
   online();
   vi.mocked(meetApi.get).mockResolvedValue({
     ok: true,
@@ -597,9 +643,9 @@ it('새 답장을 보관함에 합쳐도 syncedAt은 올리지 않는다', async
   setup();
   await flush();
   expect(saved.replies.value.person02?.likes).toEqual(['choice01']);
-  expect(readOnline(saved.id)).toMatchObject({ lastRev: 2, syncedAt: startAt });
+  expect(readOnline(saved.id)).toMatchObject({ lastRev: 2, syncedDoc: state().doc });
 });
-it('확정 직후 확인이 돌아도 보내기 전 확정을 지키고 응답 시각 대신 본문의 기준 시각을 저장한다', async () => {
+it('확정 직후 확인이 돌아도 보내기 전 확정을 지키고 응답 시점 대신 보낸 본문을 저장한다', async () => {
   online();
   const remote = state();
   setup();
@@ -609,7 +655,7 @@ it('확정 직후 확인이 돌아도 보내기 전 확정을 지키고 응답 �
   vi.mocked(meetApi.get).mockResolvedValueOnce({ ok: true, value: remote });
   await advance(500);
   expect(saved.decided.value).toBe('choice01');
-  expect(readOnline(saved.id)?.syncedAt).toBe(startAt);
+  expect(readOnline(saved.id)?.syncedDoc?.decided).toBeNull();
   let finish!: (value: Awaited<ReturnType<typeof meetApi.update>>) => void;
   vi.mocked(meetApi.update).mockImplementationOnce(
     () =>
@@ -620,7 +666,7 @@ it('확정 직후 확인이 돌아도 보내기 전 확정을 지키고 응답 �
   await advance(500);
   await advance(2000);
   await act(async () => finish({ ok: true, value: { rev: 4, docRev: 2 } }));
-  expect(readOnline(saved.id)?.syncedAt).toBe('2026-10-26T01:00:10.500Z');
+  expect(readOnline(saved.id)?.syncedDoc?.decided).toBe('choice01');
 });
 it.each(['ended', 'not-found'] as const)('%s 응답은 끝남 기록으로 남기고 멈춘다', async (code) => {
   online();
@@ -667,8 +713,8 @@ it.each(['확인', '다시 발급'] as const)(
       );
       await Promise.all(pending);
       online();
-      const pendingSince = '2026-10-26T00:30:00.000Z';
-      writeOnline(saved.id, { ...readOnline(saved.id)!, pendingSince });
+      const syncedDoc = state().doc;
+      writeOnline(saved.id, { ...readOnline(saved.id)!, syncedDoc });
       vi.stubGlobal(
         'fetch',
         vi.fn<typeof fetch>(async (url, init) => {
@@ -679,7 +725,7 @@ it.each(['확인', '다시 발급'] as const)(
             const body = JSON.parse(init!.body as string);
             sentTokens.push(body.hostToken);
             expect(readOnline(saved.id)?.pendingHostToken).toBe(body.hostToken);
-            expect(readOnline(saved.id)?.pendingSince).toBe(pendingSince);
+            expect(readOnline(saved.id)?.syncedDoc).toEqual(syncedDoc);
             const response = await handleRelease(ctx, deps);
             if (sentTokens.length === 1) throw new TypeError('응답 유실');
             return response;
@@ -723,7 +769,7 @@ it.each(['확인', '다시 발급'] as const)(
       expect(sentTokens).toEqual([pendingToken, pendingToken]);
       expect(readOnline(saved.id)?.hostToken).toBe(pendingToken);
       expect(readOnline(saved.id)?.pendingHostToken).toBeUndefined();
-      expect(readOnline(saved.id)?.pendingSince).toBe(pendingSince);
+      expect(readOnline(saved.id)?.syncedDoc).toEqual(syncedDoc);
       expect(toast.error).not.toHaveBeenCalled();
       expect((await actualApi.get(saved.id, null, pendingToken!)).ok).toBe(true);
     } finally {
@@ -1050,7 +1096,7 @@ it('계산 조건이 바뀌어도 부모에 같은 계산 결과를 되풀이 �
 });
 it('본문 버전이 없는 기록의 확인 실패도 다음 확인 때 다시 시도한다', async () => {
   online();
-  writeOnline(saved.id, { hostToken: token, lastRev: 1, syncedAt: startAt });
+  writeOnline(saved.id, { hostToken: token, lastRev: 1, syncedDoc: state().doc });
   saved = { ...saved, title: f('미전송 수정', '2026-10-26T01:00:01.000Z') };
   vi.mocked(meetApi.get)
     .mockResolvedValueOnce({ ok: false, error: { code: 'offline' } })
@@ -1274,7 +1320,7 @@ it('다른 기기의 확정과 확정 취소를 연이어 받고 다시 올리�
   });
   await advance(10000);
   expect(saved.decided.value).toBe('choice01');
-  expect(readOnline(saved.id)).toMatchObject({ docRev: 2, syncedAt: new Date().toISOString() });
+  expect(readOnline(saved.id)).toMatchObject({ docRev: 2, syncedDoc: state().doc });
   vi.mocked(meetApi.get).mockResolvedValueOnce({
     ok: true,
     value: state({ rev: 4, docRev: 3, doc: { ...state().doc, decided: null } }),
@@ -1285,7 +1331,7 @@ it('다른 기기의 확정과 확정 취소를 연이어 받고 다시 올리�
   expect(meetApi.update).not.toHaveBeenCalled();
 });
 
-it('미전송 수정이 있으면 원격 본문 버전과 동기화 시각도 보존한다', async () => {
+it('미전송 수정이 있으면 원격 본문 버전과 동기화 본문도 보존한다', async () => {
   online();
   const remote = state({ rev: 5, docRev: 4 });
   setup();
@@ -1295,7 +1341,7 @@ it('미전송 수정이 있으면 원격 본문 버전과 동기화 시각도 �
   vi.mocked(meetApi.get).mockResolvedValueOnce({ ok: true, value: remote });
   await advance(500);
   expect(saved.title.value).toBe('로컬 제목');
-  expect(readOnline(saved.id)).toMatchObject({ docRev: 1, syncedAt: startAt, lastRev: 5 });
+  expect(readOnline(saved.id)).toMatchObject({ docRev: 1, syncedDoc: remote.doc, lastRev: 5 });
 });
 
 it('새 기기는 서버 주최자 좋아요를 복원하고 빈 좋아요를 자동 전송하지 않는다', async () => {
@@ -1541,7 +1587,7 @@ it.each([
     expect(readOnline(saved.id)).toEqual({
       lastRev: 0,
       pendingHostToken: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/),
-      pendingSince: startAt,
+      syncedDoc: state().doc,
     });
   },
 );
@@ -1663,7 +1709,7 @@ it('seen 한도가 차도 서버에 남은 답장 전용 참석자의 삭제 기
     hostToken: token,
     lastRev: 1,
     docRev: 1,
-    syncedAt: startAt,
+    syncedDoc: state().doc,
     seen: oldIds,
   });
   setup({ ...compute, pending: true });
