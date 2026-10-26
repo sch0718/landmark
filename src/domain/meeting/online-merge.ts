@@ -5,7 +5,10 @@ import { LIBRARY_LIMITS } from 'src/schema/library-base';
 import type { OnlineState } from './online-doc';
 import { meetingFailure, meetingField, storeMeeting } from './ops';
 
-type OnlineSync = { syncedAt: string | null; docRev: number | null };
+type OnlineSync = { syncedAt: string | null; docRev: number | null; seen: readonly string[] };
+type OnlineMergeResult =
+  | Extract<OpResult, { ok: false }>
+  | (Extract<OpResult, { ok: true }> & { addedReplyOnly: string[] });
 
 /** 미전송 본문이 없고 서버 본문 버전이 다를 때만 다른 기기 본문을 받는다. */
 export function shouldAdoptRemoteDoc(
@@ -33,10 +36,11 @@ export function mergeOnline(
   state: OnlineState,
   ctx: OpCtx,
   sync: OnlineSync,
-): OpResult {
+): OnlineMergeResult {
   const meeting = lib.meetings?.[meetingId];
   if (meeting === undefined || meeting.deletedAt !== null) return meetingFailure('not-found');
   let next = meeting;
+  const addedReplyOnly: string[] = [];
   if (shouldAdoptRemoteDoc(meeting, state, sync)) {
     const field = <T>(value: T) => ({ value, updatedAt: ctx.now });
     next = {
@@ -76,6 +80,9 @@ export function mergeOnline(
     const participant = next.participants.value.find((p) => p.id === pid);
     if (participant === undefined) {
       if (state.doc.participants.some((p) => p.id === pid)) continue;
+      // 서버 본문을 받으며 잠시 빠진 기존 참석자는 살리고, 이 기기에서 지운 사람만 건너뛴다.
+      if (sync.seen.includes(pid) && !meeting.participants.value.some((p) => p.id === pid))
+        continue;
       if (next.participants.value.length >= LIBRARY_LIMITS.meetingParticipantsMax) continue;
       next = meetingField(
         next,
@@ -92,6 +99,7 @@ export function mergeOnline(
         ],
         ctx.now,
       );
+      addedReplyOnly.push(pid);
     } else if (fresh && reply.origin !== null) {
       next = meetingField(
         next,
@@ -131,5 +139,6 @@ export function mergeOnline(
     ),
     ctx.now,
   );
-  return storeMeeting(lib, next);
+  const result = storeMeeting(lib, next);
+  return result.ok ? { ...result, addedReplyOnly } : result;
 }

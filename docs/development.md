@@ -103,7 +103,7 @@ curl -H 'Origin: http://localhost:8788' 'http://localhost:8788/api/place?url=htt
 | --- | --- | --- |
 | `POST /api/meet` | `{ doc, turnstile }` 올리기 → `201 { id, rev, docRev, hostToken }` | 출처·Turnstile·일 한도 |
 | `GET /api/meet/:id?since=<rev>` | `200 { rev, docRev, doc, replies, originNames? }`, 버전이 같으면 본문 없는 `304` | 링크 소지자 |
-| `PUT /api/meet/:id` | `{ doc, baseRev }` 갱신·확정·확정 취소 → `200 { rev, docRev }` | 주최자 |
+| `PUT /api/meet/:id` | `{ doc, baseRev, removed? }` 갱신·확정·확정 취소 → `200 { rev, docRev }`. `removed?`: 지운 답장 전용 참석자 id 배열(최대 10명) | 주최자 |
 | `DELETE /api/meet/:id` | 서버 사본·답장·토큰 삭제 → `204` | 주최자 |
 | `POST /api/meet/:id/claim` | `{ participantId }` 또는 `{ newName }`로 참석자 차지 → `200 { participantId, guestToken, rev }` | 링크 소지자·일 한도 |
 | `PUT /api/meet/:id/reply` | `{ likes, origin?, times?, docRev? }` 저장 → `200 { rev, timesDropped? }` | 해당 참석자·주최자 |

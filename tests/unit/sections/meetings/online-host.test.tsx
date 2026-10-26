@@ -74,12 +74,12 @@ function online() {
   writeOnline(saved.id, { hostToken: token, lastRev: 1, docRev: 1, syncedAt: startAt });
 }
 
-function setup() {
+function setup(inputCompute: OnlineCompute = compute) {
   return renderHook(() => {
     const [meeting, setMeeting] = useState(saved);
     refresh = setMeeting;
     return useOnlineMeeting(meeting, {
-      ...compute,
+      ...inputCompute,
       unit: meeting.mode.value === 'straight' ? 'm' : 'min',
     });
   });
@@ -254,6 +254,7 @@ it('열 때 즉시 확인하고 참석자 수정 두 번을 1초 모아 docRev�
     expect.objectContaining({ title: '두 번째' }),
     1,
     token,
+    [],
   );
   expect(readOnline(saved.id)).toMatchObject({ docRev: 2, syncedAt: '2026-10-26T01:00:01.500Z' });
   expect(result.current.status.failing).toBe(false);
@@ -291,6 +292,7 @@ it('충돌한 본문 버전이 다를 때 get·merge 뒤 새 docRev로 한 번 �
     }),
     8,
     token,
+    [],
   );
   expect(meetApi.update).toHaveBeenCalledTimes(2);
   expect(result.current.status.failing).toBe(false);
@@ -468,6 +470,7 @@ it('전송 중에 다시 고친 본문도 첫 전송이 끝나면 자동으로 �
     expect.objectContaining({ title: '나중' }),
     2,
     token,
+    [],
   );
 });
 it('두 번째 충돌은 바로 또 시도하지 않고 다음 확인까지 기다린다', async () => {
@@ -1036,6 +1039,7 @@ it.each(['person02', 'person03'])(
         }),
         expect.any(Number),
         token,
+        [],
       );
     } finally {
       finish();
@@ -1067,6 +1071,7 @@ it.each(['share', 'shareFinal'] as const)(
       expect.objectContaining({ decided: 'choice01' }),
       1,
       token,
+      [],
     );
     expect(shareLink).not.toHaveBeenCalled();
     await act(async () => {
@@ -1124,6 +1129,7 @@ it('확정 공유는 진행 중인 올리기가 끝나면 새 본문을 다시 �
     expect.objectContaining({ decided: 'choice01' }),
     2,
     token,
+    [],
   );
   expect(shareLink).toHaveBeenCalledExactlyOnceWith(
     expect.stringMatching(/\/meet\/meeting001$/),
@@ -1150,3 +1156,151 @@ it.each([
     expect(readOnline(saved.id)).toBeNull();
   },
 );
+
+it.each(['성공', '실패 후 재시도', '충돌 재시도'] as const)(
+  '답장 전용 참석자를 지우면 확인 때 되살리지 않고 removed로 올린다: %s',
+  async (path) => {
+    online();
+    const remote = state({
+      replies: [
+        {
+          participantId: 'person03',
+          name: '새 친구',
+          origin: null,
+          likes: ['choice01'],
+          times: null,
+          updatedAt: startAt,
+        },
+      ],
+    });
+    vi.mocked(meetApi.get).mockResolvedValue({ ok: true, value: remote });
+    setup();
+    await flush();
+    expect(saved.participants.value.some((p) => p.id === 'person03')).toBe(true);
+    expect(readOnline(saved.id)?.seen).toEqual(['person03']);
+    await advance(100);
+    await edit({
+      participants: f(
+        saved.participants.value.filter((p) => p.id !== 'person03'),
+        new Date().toISOString(),
+      ),
+      replies: f({}),
+    });
+    vi.mocked(meetApi.get).mockResolvedValue({ ok: true, value: { ...remote, rev: 3 } });
+    if (path === '실패 후 재시도')
+      vi.mocked(meetApi.update).mockResolvedValueOnce({ ok: false, error: { code: 'offline' } });
+    if (path === '충돌 재시도') {
+      vi.mocked(meetApi.update).mockResolvedValueOnce({
+        ok: false,
+        error: { code: 'conflict', docRev: 2 },
+      });
+      vi.mocked(meetApi.get).mockResolvedValue({
+        ok: true,
+        value: { ...remote, rev: 3, docRev: 2 },
+      });
+    }
+    await advance(1000);
+    expect(meetApi.update).toHaveBeenCalledWith(
+      saved.id,
+      expect.objectContaining({
+        participants: expect.not.arrayContaining([expect.objectContaining({ id: 'person03' })]),
+      }),
+      1,
+      token,
+      ['person03'],
+    );
+    if (path === '실패 후 재시도') {
+      expect(readOnline(saved.id)?.seen).toEqual(['person03']);
+      await advance(9000);
+      expect(meetApi.update).toHaveBeenCalledTimes(2);
+    }
+    expect(readOnline(saved.id)?.seen).toEqual([]);
+    expect(saved.participants.value.some((p) => p.id === 'person03')).toBe(false);
+    vi.mocked(meetApi.get).mockResolvedValue({
+      ok: true,
+      value: state({ rev: 4, docRev: 2, replies: [] }),
+    });
+    await advance(10000);
+    expect(saved.participants.value.some((p) => p.id === 'person03')).toBe(false);
+    expect(saved.replies.value.person03).toBeUndefined();
+  },
+);
+
+it('올리기 전 화면을 다시 열고 확인해도 지운 답장 전용 참석자를 되살리지 않는다', async () => {
+  online();
+  const remote = state({
+    replies: [
+      {
+        participantId: 'person03',
+        name: '새 친구',
+        origin: null,
+        likes: [],
+        times: null,
+        updatedAt: startAt,
+      },
+    ],
+  });
+  vi.mocked(meetApi.get).mockResolvedValue({ ok: true, value: remote });
+  const first = setup({ ...compute, pending: true });
+  await flush();
+  await advance(100);
+  await edit({
+    participants: f(
+      saved.participants.value.filter((p) => p.id !== 'person03'),
+      new Date().toISOString(),
+    ),
+    replies: f({}),
+  });
+  first.unmount();
+  setup({ ...compute, pending: true });
+  await flush();
+  await advance(10000);
+  expect(meetApi.update).not.toHaveBeenCalled();
+  expect(saved.participants.value.some((p) => p.id === 'person03')).toBe(false);
+  expect(saved.replies.value.person03).toBeUndefined();
+  expect(readOnline(saved.id)?.seen).toEqual(['person03']);
+});
+
+it('seen 한도가 차도 서버에 남은 답장 전용 참석자의 삭제 기록은 버리지 않는다', async () => {
+  const oldIds = Array.from({ length: 9 }, (_, i) => `guest00${i + 1}`);
+  saved = {
+    ...saved,
+    participants: f([
+      saved.participants.value[0]!,
+      ...oldIds.map((id) => ({ id, name: '옛 친구', origin: null })),
+    ]),
+  };
+  writeOnline(saved.id, {
+    hostToken: token,
+    lastRev: 1,
+    docRev: 1,
+    syncedAt: startAt,
+    seen: oldIds,
+  });
+  setup({ ...compute, pending: true });
+  await flush();
+  await advance(100);
+  await edit({
+    participants: f(saved.participants.value.slice(0, 1), new Date().toISOString()),
+    replies: f({}),
+  });
+  const replyIds = ['guest001', ...Array.from({ length: 8 }, (_, i) => `new0000${i + 1}`)];
+  const remote = state({
+    rev: 3,
+    docRev: 2,
+    replies: replyIds.map((participantId) => ({
+      participantId,
+      name: '친구',
+      origin: null,
+      likes: [],
+      times: null,
+      updatedAt: startAt,
+    })),
+  });
+  vi.mocked(meetApi.get).mockResolvedValue({ ok: true, value: remote });
+  await advance(10000);
+  expect(readOnline(saved.id)?.seen).toContain('guest001');
+  expect(readOnline(saved.id)!.seen!.length).toBeLessThanOrEqual(10);
+  await advance(10000);
+  expect(saved.participants.value.some((p) => p.id === 'guest001')).toBe(false);
+});

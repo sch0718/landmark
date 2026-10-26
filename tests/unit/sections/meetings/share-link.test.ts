@@ -1,8 +1,18 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { shareLink } from 'src/sections/meetings/share-link';
+import { onlineMeetingUrl, shareLink } from 'src/sections/meetings/share-link';
 const writeText = vi.fn(() => Promise.resolve());
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
+});
 describe('약속 링크 보내기', () => {
+  it.each([undefined, 'host-secret'])('미리보기 출처로 온라인 링크를 만든다: %s', (token) => {
+    vi.stubEnv('VITE_APP_URL', 'https://landmark.example.com');
+    vi.stubGlobal('window', { location: { origin: 'https://abc.landmark-c5f.pages.dev' } });
+    expect(onlineMeetingUrl('meeting01', token)).toBe(
+      `https://abc.landmark-c5f.pages.dev/meet/meeting01${token ? '#h=host-secret' : ''}`,
+    );
+  });
   it('Web Share를 사용할 수 있으면 공유한다', async () => {
     const share = vi.fn(() => Promise.resolve());
     vi.stubGlobal('navigator', { share, clipboard: { writeText } });

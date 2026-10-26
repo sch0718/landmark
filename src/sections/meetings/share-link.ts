@@ -44,8 +44,6 @@ export async function shareMeetingDoc(doc: MeetDoc, title: string) {
 
 /** 주최자 비밀은 질의 문자열 대신 해시로만 전달한다. */
 export function onlineMeetingUrl(id: string, hostToken?: string): string {
-  const app = appUrl(
-    import.meta.env.VITE_APP_URL || (import.meta.env.DEV ? window.location.origin : undefined),
-  );
+  const app = window.location.origin;
   return `${app}/meet/${encodeURIComponent(id)}${hostToken ? `#h=${encodeURIComponent(hostToken)}` : ''}`;
 }

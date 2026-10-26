@@ -41,6 +41,9 @@ const createSchema = Schema.Struct({ doc: Schema.Unknown, turnstile: Schema.Stri
 const updateSchema = Schema.Struct({
   doc: MeetingDocSchema,
   baseRev: Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(1)),
+  removed: Schema.optionalKey(
+    Schema.Array(MeetingMemberId).check(Schema.isMaxLength(LIBRARY_LIMITS.meetingParticipantsMax)),
+  ),
 });
 
 // 공통 오류 형식을 지키면서 이 API의 이유·현재 버전을 덧붙인다.
@@ -318,7 +321,11 @@ export function handleUpdate(ctx: MeetContext, deps: MeetDeps): Promise<Response
     await prepare(ctx, origin, now, 'update');
     await activeMeeting(ctx.env.DB, id, now);
     await requireHost(ctx, id);
-    const { doc, baseRev } = validate(updateSchema, await readJson(ctx.request));
+    const {
+      doc,
+      baseRev,
+      removed: requestedRemoved = [],
+    } = validate(updateSchema, await readJson(ctx.request));
     if (doc.meetingId !== id) throw new ApiError('BAD_REQUEST', '약속 id가 경로와 달라요');
     const conflict = (docRev: number): never => {
       throw new MeetError('CONFLICT', '약속이 바뀌었어요. 다시 확인해 주세요', { docRev });
@@ -329,7 +336,10 @@ export function handleUpdate(ctx: MeetContext, deps: MeetDeps): Promise<Response
       if (baseRev !== row.doc_rev) conflict(row.doc_rev);
       const old: MeetingDoc = JSON.parse(row.doc);
       const remaining = new Set(doc.participants.map((p) => p.id));
-      const removed = old.participants.filter((p) => !remaining.has(p.id)).map((p) => p.id);
+      const hostId = old.participants[0]!.id;
+      const removed = [
+        ...new Set([...old.participants.map((p) => p.id), ...requestedRemoved]),
+      ].filter((pid) => pid !== hostId && !remaining.has(pid));
       const db = ctx.env.DB;
       const { results: replies } = await db
         .prepare('SELECT participant_id FROM meeting_replies WHERE meeting_id = ?')

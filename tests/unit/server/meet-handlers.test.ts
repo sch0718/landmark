@@ -1562,3 +1562,83 @@ it.each([false, true])(
     expect(await count('meeting_replies')).toBe(1);
   },
 );
+
+it('removed의 답장·토큰과 옛 본문에서 빠진 참석자를 함께 지워 옛 토큰은 401이다', async () => {
+  const token = await seed();
+  await addReply();
+  const guestToken = await addReply('person03');
+  await addReply('person04');
+  const next = doc({ participants: [doc().participants[0]!], times: {} });
+  const response = await handleUpdate(
+    context('PUT', { doc: next, baseRev: 1, removed: ['person03'] }, { token }),
+    deps,
+  );
+  expect(response.status).toBe(200);
+  expect((await db.prepare('SELECT participant_id FROM meeting_replies').all()).results).toEqual([
+    { participant_id: 'person04' },
+  ]);
+  expect(
+    (await db.prepare("SELECT participant_id FROM meeting_tokens WHERE kind = 'guest'").all())
+      .results,
+  ).toEqual([{ participant_id: 'person04' }]);
+  await expectError(
+    await handleReply(context('PUT', { likes: [] }, { token: guestToken }), deps),
+    401,
+    'UNAUTHORIZED',
+  );
+});
+
+it('removed에 주최자와 새 본문에 남는 참석자를 넣어도 답장과 토큰을 지키고 중복 id를 받는다', async () => {
+  const token = await seed();
+  await addReply('person01');
+  await addReply();
+  await addReply('person03');
+  const response = await handleUpdate(
+    context(
+      'PUT',
+      { doc: doc(), baseRev: 1, removed: ['person01', 'person02', 'person03', 'person03'] },
+      { token },
+    ),
+    deps,
+  );
+  expect(response.status).toBe(200);
+  expect(
+    (await db.prepare('SELECT participant_id FROM meeting_replies ORDER BY participant_id').all())
+      .results,
+  ).toEqual([{ participant_id: 'person01' }, { participant_id: 'person02' }]);
+  expect(await count('meeting_tokens')).toBe(3);
+});
+
+it('본문 버전이 배치 전에 바뀌면 removed의 답장과 토큰도 지우지 않는다', async () => {
+  const token = await seed();
+  await addReply('person03');
+  const batch = db.batch.bind(db);
+  vi.spyOn(db, 'batch').mockImplementationOnce(async (statements) => {
+    await db.prepare('UPDATE meetings SET doc_rev = doc_rev + 1, rev = rev + 1').run();
+    return batch(statements);
+  });
+  await expectError(
+    await handleUpdate(
+      context('PUT', { doc: doc(), baseRev: 1, removed: ['person03'] }, { token }),
+      deps,
+    ),
+    409,
+    'CONFLICT',
+  );
+  expect(await count('meeting_replies')).toBe(1);
+  expect(await count('meeting_tokens')).toBe(2);
+});
+
+it.each([
+  null,
+  'person03',
+  ['bad'],
+  Array.from({ length: 11 }, (_, i) => `person${String(i).padStart(2, '0')}`),
+])('removed의 깨진 값 %j는 400이다', async (removed) => {
+  const token = await seed();
+  await expectError(
+    await handleUpdate(context('PUT', { doc: doc(), baseRev: 1, removed }, { token }), deps),
+    400,
+    'BAD_REQUEST',
+  );
+});

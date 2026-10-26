@@ -871,3 +871,67 @@ it('보관함에서 지운 약속도 유효한 주최자 링크로 다시 담는
   expect(library.meetings?.meeting001?.deletedAt).toBeNull();
   expect(router.state.location.pathname).toBe('/meetings/meeting001');
 });
+
+it.each([false, true])(
+  '주최자 링크도 답장 전용 참석자의 seen을 이어받는다(이미 지움=%s)',
+  async (deleted) => {
+    if (deleted) {
+      library = { ...library, meetings: { meeting001: buildMeeting() } };
+      writeOnline('meeting001', {
+        hostToken,
+        lastRev: 1,
+        docRev: 1,
+        syncedAt: now,
+        seen: ['person04'],
+      });
+    }
+    remote = {
+      rev: 3,
+      docRev: 1,
+      doc: remote.doc,
+      replies: [
+        {
+          participantId: 'person04',
+          name: '새 친구',
+          origin: null,
+          likes: ['choice01'],
+          times: null,
+          updatedAt: now,
+        },
+      ],
+    };
+    await setup(`/meet/meeting001#h=${hostToken}`);
+    expect(library.meetings?.meeting001?.participants.value.some((p) => p.id === 'person04')).toBe(
+      !deleted,
+    );
+    expect(Boolean(library.meetings?.meeting001?.replies.value.person04)).toBe(!deleted);
+    expect(readOnline('meeting001')?.seen).toEqual(['person04']);
+  },
+);
+
+it('주최자 링크에서도 seen이 차면 서버에 남은 삭제 기록을 우선 보존한다', async () => {
+  const oldIds = Array.from({ length: 9 }, (_, i) => `guest00${i + 1}`);
+  const local = buildMeeting({ participants: f([remote.doc.participants[0]!]) });
+  library = { ...library, meetings: { meeting001: local } };
+  writeOnline('meeting001', { hostToken, lastRev: 1, docRev: 1, syncedAt: now, seen: oldIds });
+  const replyIds = ['guest001', ...Array.from({ length: 8 }, (_, i) => `new0000${i + 1}`)];
+  remote = {
+    rev: 3,
+    docRev: 1,
+    doc: { ...remote.doc, participants: [remote.doc.participants[0]!] },
+    replies: replyIds.map((participantId) => ({
+      participantId,
+      name: '친구',
+      origin: null,
+      likes: [],
+      times: null,
+      updatedAt: now,
+    })),
+  };
+  await setup(`/meet/meeting001#h=${hostToken}`);
+  expect(readOnline('meeting001')?.seen).toContain('guest001');
+  expect(readOnline('meeting001')!.seen!.length).toBeLessThanOrEqual(10);
+  expect(library.meetings?.meeting001?.participants.value.some((p) => p.id === 'guest001')).toBe(
+    false,
+  );
+});

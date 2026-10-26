@@ -8,7 +8,7 @@ import { LIBRARY_LIMITS } from 'src/schema/library';
 import { MeetingId, type Meeting } from 'src/schema/meeting';
 import { safeParse } from 'src/schema/parse';
 import { meetApi } from 'src/services/meet-online/client';
-import { readOnline, writeOnline } from 'src/services/meet-online/store';
+import { readOnline, rememberReplyOnly, writeOnline } from 'src/services/meet-online/store';
 import { OnlineInviteView } from './OnlineInviteView';
 import { useMeeting } from './use-meeting';
 import { readMeetHash } from 'src/domain/meeting/link';
@@ -109,6 +109,7 @@ function HostLink({ id, token }: { id: string; token: string }) {
         return;
       }
       let adoptedAt: string | null = null;
+      let addedReplyOnly: string[] = [];
       const result = await run((lib, ctx) => {
         const before = lib.meetings?.[id];
         if (!before && Object.keys(lib.meetings ?? {}).length >= LIBRARY_LIMITS.meetingsMax)
@@ -132,10 +133,16 @@ function HostLink({ id, token }: { id: string; token: string }) {
         if (!stored.ok) return stored;
         const current = readOnline(id);
         const sync = restored
-          ? { syncedAt: null, docRev: null }
-          : { syncedAt: current?.syncedAt ?? null, docRev: current?.docRev ?? null };
+          ? { syncedAt: null, docRev: null, seen: [] }
+          : {
+              syncedAt: current?.syncedAt ?? null,
+              docRev: current?.docRev ?? null,
+              seen: current?.seen ?? [],
+            };
         if (shouldAdoptRemoteDoc(meeting, state, sync)) adoptedAt = ctx.now;
-        return mergeOnline(stored.lib, id, state, ctx, sync);
+        const out = mergeOnline(stored.lib, id, state, ctx, sync);
+        if (out.ok) addedReplyOnly = out.addedReplyOnly;
+        return out;
       });
       if (!active) return;
       if (!result.ok) {
@@ -146,6 +153,14 @@ function HostLink({ id, token }: { id: string; token: string }) {
         ...readOnline(id),
         hostToken: token,
         lastRev: state.rev,
+        ...(addedReplyOnly.length === 0
+          ? {}
+          : {
+              seen: rememberReplyOnly(readOnline(id)?.seen ?? [], addedReplyOnly, [
+                ...state.doc.participants.map((p) => p.id),
+                ...state.replies.map((r) => r.participantId),
+              ]),
+            }),
         ...(adoptedAt === null ? {} : { docRev: state.docRev, syncedAt: adoptedAt }),
       };
       delete record.ended;

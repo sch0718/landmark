@@ -148,9 +148,9 @@ export const meetApi = {
       { token, noBody: { status: 304, value: 'unchanged' as const } },
     );
   },
-  update(id: string, doc: MeetingDoc, baseDocRev: number, hostToken: string) {
+  update(id: string, doc: MeetingDoc, baseDocRev: number, hostToken: string, removed?: string[]) {
     return request(pathFor(id), 'PUT', updateSchema, {
-      body: { doc, baseRev: baseDocRev },
+      body: { doc, baseRev: baseDocRev, ...(removed === undefined ? {} : { removed }) },
       token: hostToken,
     });
   },

@@ -2,6 +2,7 @@ import { Schema } from 'effect';
 import { IsoDateTime } from 'src/schema/common';
 import { MeetingId, MeetingMemberId, type Meeting } from 'src/schema/meeting';
 import { safeParse } from 'src/schema/parse';
+import { LIBRARY_LIMITS } from 'src/schema/library-base';
 
 export const MEET_ONLINE_KEY = 'tripmap:meet-online:v1';
 export type OnlineRecord = {
@@ -10,6 +11,7 @@ export type OnlineRecord = {
   lastRev: number;
   docRev?: number;
   syncedAt?: string;
+  seen?: string[];
   ended?: true;
 };
 const nonempty = Schema.String.check(Schema.isMinLength(1));
@@ -19,6 +21,11 @@ const recordSchema = Schema.Struct({
   lastRev: Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0)),
   docRev: Schema.optionalKey(Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(1))),
   syncedAt: Schema.optionalKey(IsoDateTime),
+  seen: Schema.optionalKey(
+    Schema.mutable(Schema.Array(MeetingMemberId)).check(
+      Schema.isMaxLength(LIBRARY_LIMITS.meetingParticipantsMax),
+    ),
+  ),
   ended: Schema.optionalKey(Schema.Literal(true)),
 });
 
@@ -86,6 +93,19 @@ export function createOnlineStore(storage: () => Storage = () => window.localSto
 }
 
 export const { allOnline, readOnline, writeOnline, removeOnline } = createOnlineStore();
+
+/** 한도가 차면 서버에 아직 있는 참석자의 삭제 기록부터 지킨다. */
+export function rememberReplyOnly(
+  seen: readonly string[],
+  added: readonly string[],
+  activeIds: readonly string[],
+): string[] {
+  const ids = [...new Set([...seen, ...added])];
+  const active = new Set(activeIds);
+  return [...ids.filter((id) => !active.has(id)), ...ids.filter((id) => active.has(id))].slice(
+    -LIBRARY_LIMITS.meetingParticipantsMax,
+  );
+}
 
 export function isLinkMeeting(meeting: Meeting, record: OnlineRecord | null): boolean {
   const hostId = meeting.participants.value[0]?.id;

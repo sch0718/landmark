@@ -245,3 +245,13 @@ it('답장 docRev를 보내고 timesDropped 성공 응답을 읽는다', async (
   });
   expect(JSON.parse(fetchMock.mock.calls[0]![1]!.body as string)).toEqual(input);
 });
+
+it('본문 갱신에 지운 답장 전용 참석자 id를 보낸다', async () => {
+  respond({ rev: 8, docRev: 3 });
+  await meetApi.update(doc.meetingId, doc, 2, token, ['person03']);
+  expect(JSON.parse(fetchMock.mock.calls[0]![1]!.body as string)).toEqual({
+    doc,
+    baseRev: 2,
+    removed: ['person03'],
+  });
+});

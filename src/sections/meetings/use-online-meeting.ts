@@ -8,6 +8,7 @@ import { meetApi, type OnlineError } from 'src/services/meet-online/client';
 import {
   isLinkMeeting,
   readOnline,
+  rememberReplyOnly,
   writeOnline,
   type OnlineRecord,
 } from 'src/services/meet-online/store';
@@ -20,6 +21,11 @@ import { useOnlinePoll } from './use-online-poll';
 export type OnlineCompute = { times: MeetingTimes; unit: 'min' | 'm'; pending: boolean };
 export type OnlineMeetingMode = 'link' | 'local' | 'online' | 'ended';
 export type OnlineMeeting = ReturnType<typeof useOnlineMeeting>;
+
+function removedReplyOnly(doc: MeetingDoc, record: OnlineRecord): string[] {
+  const remaining = new Set(doc.participants.map((p) => p.id));
+  return (record.seen ?? []).filter((id) => !remaining.has(id));
+}
 
 function errorMessage(error: OnlineError, creating = false) {
   switch (error.code) {
@@ -141,13 +147,21 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
     }
     let merged: Meeting | null = null;
     let adoptedAt: string | null = null;
+    let addedReplyOnly: string[] = [];
     const result = await latest.current.run((lib, ctx) => {
       const current = currentRecord();
-      const sync = { syncedAt: current?.syncedAt ?? null, docRev: current?.docRev ?? null };
+      const sync = {
+        syncedAt: current?.syncedAt ?? null,
+        docRev: current?.docRev ?? null,
+        seen: current?.seen ?? [],
+      };
       const before = lib.meetings?.[meeting.id];
       if (before && shouldAdoptRemoteDoc(before, state, sync)) adoptedAt = ctx.now;
       const out = mergeOnline(lib, meeting.id, state, ctx, sync);
-      if (out.ok) merged = out.lib.meetings![meeting.id]!;
+      if (out.ok) {
+        merged = out.lib.meetings![meeting.id]!;
+        addedReplyOnly = out.addedReplyOnly;
+      }
       return out;
     });
     if (!result.ok) return null;
@@ -156,6 +170,14 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
       save({
         ...current,
         lastRev: state.rev,
+        ...(addedReplyOnly.length === 0
+          ? {}
+          : {
+              seen: rememberReplyOnly(current.seen ?? [], addedReplyOnly, [
+                ...state.doc.participants.map((p) => p.id),
+                ...state.replies.map((r) => r.participantId),
+              ]),
+            }),
         ...(adoptedAt === null ? {} : { docRev: state.docRev, syncedAt: adoptedAt }),
       });
     hydrated.current = true;
@@ -178,7 +200,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
     if (!current?.hostToken || current.ended || input.compute.pending) return true;
     let doc = docFromMeeting(input.meeting, input.compute.times, input.compute.unit);
     let baseDocRev = current.docRev;
-    if (JSON.stringify(doc) === baseline.current) {
+    if (JSON.stringify(doc) === baseline.current && removedReplyOnly(doc, current).length === 0) {
       retry.current = false;
       deferred.current = false;
       return true;
@@ -196,7 +218,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
       current = currentRecord()!;
       baseDocRev = response.value.docRev;
       doc = docFromMeeting(merged, latest.current.compute.times, latest.current.compute.unit);
-      if (JSON.stringify(doc) === baseline.current) {
+      if (JSON.stringify(doc) === baseline.current && removedReplyOnly(doc, current).length === 0) {
         retry.current = false;
         deferred.current = false;
         return true;
@@ -204,7 +226,8 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
     }
     // 응답을 기다리는 사이 고친 필드는 이 시각보다 새로워 다음 확인에서도 보존된다.
     let sentAt = new Date().toISOString();
-    let response = await meetApi.update(meeting.id, doc, baseDocRev!, current.hostToken!);
+    let removed = removedReplyOnly(doc, current);
+    let response = await meetApi.update(meeting.id, doc, baseDocRev!, current.hostToken!, removed);
     if (
       !response.ok &&
       response.error.code === 'conflict' &&
@@ -229,7 +252,14 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
       current = currentRecord()!;
       doc = docFromMeeting(merged, latest.current.compute.times, latest.current.compute.unit);
       sentAt = new Date().toISOString();
-      response = await meetApi.update(meeting.id, doc, remote.value.docRev, current.hostToken!);
+      removed = removedReplyOnly(doc, current);
+      response = await meetApi.update(
+        meeting.id,
+        doc,
+        remote.value.docRev,
+        current.hostToken!,
+        removed,
+      );
     }
     if (!response.ok) {
       retry.current = true;
@@ -237,7 +267,15 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
       return false;
     }
     const fresh = currentRecord();
-    if (fresh && !fresh.ended) save({ ...fresh, docRev: response.value.docRev, syncedAt: sentAt });
+    if (fresh && !fresh.ended)
+      save({
+        ...fresh,
+        docRev: response.value.docRev,
+        syncedAt: sentAt,
+        ...(fresh.seen === undefined
+          ? {}
+          : { seen: fresh.seen.filter((id) => !removed.includes(id)) }),
+      });
     baseline.current = JSON.stringify(doc);
     retry.current = false;
     deferred.current = false;
@@ -266,7 +304,8 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
         const input = latest.current;
         if (input.compute.pending) return false;
         const doc = docFromMeeting(input.meeting, input.compute.times, input.compute.unit);
-        if (JSON.stringify(doc) === baseline.current) return true;
+        if (JSON.stringify(doc) === baseline.current && removedReplyOnly(doc, current).length === 0)
+          return true;
         if (!(await upload())) {
           deferred.current = true;
           return false;

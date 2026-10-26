@@ -16,6 +16,7 @@ beforeEach(() => localStorage.removeItem(MEET_ONLINE_KEY));
 describe('온라인 약속 연결 기록', () => {
   it('주최자·참석자·버전·동기화·종료 기록을 왕복하고 지운다', () => {
     const record = {
+      seen: ['person03'],
       hostToken: 'host',
       guest: { participantId: 'person02', token: 'guest' },
       lastRev: 7,
@@ -128,4 +129,21 @@ describe('온라인 약속 연결 기록', () => {
       ).toBe(expected);
     },
   );
+});
+
+it.each([
+  null,
+  'person03',
+  ['bad'],
+  Array.from({ length: 11 }, (_, i) => `person${String(i).padStart(2, '0')}`),
+])('깨진 seen 값 %j가 있는 기록만 버린다', (seen) => {
+  const storage = createMemoryStorage();
+  storage.setItem(
+    MEET_ONLINE_KEY,
+    JSON.stringify({
+      meeting001: { lastRev: 1, seen },
+      meeting002: { lastRev: 1 },
+    }),
+  );
+  expect(createOnlineStore(() => storage).allOnline()).toEqual({ meeting002: { lastRev: 1 } });
 });
