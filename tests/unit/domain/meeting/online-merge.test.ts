@@ -146,6 +146,52 @@ it('주최자가 명시적으로 덮어써 답장 출발지가 비워진 본문�
   expect(next.replies.value.person01?.likes).toEqual([]);
 });
 
+it.each(['출발지 null', '답장 없음'] as const)(
+  '본문을 받으면 비워진 답장 출발지 기록을 버리고 다음 원격 제목도 받는다: %s',
+  (cleared) => {
+    const seenOrigin = { name: '친구 집 B', lng: 128, lat: 38 };
+    const remoteOrigin = { name: '다른 기기 집 C', lng: 127.5, lat: 37.6 };
+    const syncedDoc = docFromMeeting(meeting, {}, 'min');
+    const first = merge(library(), state([reply({ origin: seenOrigin })]));
+    const remote = {
+      ...state(cleared === '답장 없음' ? [] : [reply({ origin: null })]),
+      rev: 3,
+      docRev: 2,
+      doc: {
+        ...syncedDoc,
+        participants: syncedDoc.participants.map((p) =>
+          p.id === 'person01' ? { ...p, origin: remoteOrigin } : p,
+        ),
+      },
+    };
+    const sync = {
+      syncedDoc,
+      docRev: 1,
+      seen: [],
+      hostLikes: null,
+      hostLikesAckRev: null,
+      replyOrigins: { person01: seenOrigin },
+    };
+    const result = mergeOnline(first, meeting.id, remote, ctx, sync);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const next = mergedMeeting(result.lib);
+    expect(next.participants.value[1]?.origin).toEqual(remoteOrigin);
+    expect.soft(result.replyOrigins).toEqual({});
+    expect.soft(hostEdits(next, remote.doc, [], result.replyOrigins)).toBe(false);
+    const title = '또 다른 기기 제목';
+    const following = mergeOnline(
+      result.lib,
+      meeting.id,
+      { ...remote, rev: 4, docRev: 3, doc: { ...remote.doc, title } },
+      ctx,
+      { ...sync, syncedDoc: remote.doc, docRev: 2, replyOrigins: result.replyOrigins },
+    );
+    expect(following.ok).toBe(true);
+    if (following.ok) expect(mergedMeeting(following.lib).title.value).toBe(title);
+  },
+);
+
 it.each([false, true])(
   '제목만 바뀐 본문을 받을 때 이미 본 답장 출발지를 다시 적용한다: 새 좋아요=%s',
   (newLikes) => {

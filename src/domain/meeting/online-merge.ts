@@ -102,11 +102,12 @@ export function mergeOnline(
     sync.seen.filter((id) => !meeting.participants.value.some((p) => p.id === id)),
   );
   let next = meeting;
-  const replyOrigins = { ...sync.replyOrigins };
   const seenNames = { ...sync.seenNames };
   let hostLikes: string[] | undefined;
   const addedReplyOnly: string[] = [];
   const adopt = shouldAdoptRemoteDoc(meeting, state, sync);
+  // 본문을 받으면 출발지 기준도 바꾸고, 살아 있는 답장 출발지만 다시 기록한다.
+  const replyOrigins: Record<string, Origin> = adopt ? {} : { ...sync.replyOrigins };
   if (adopt) {
     const field = <T>(value: T) => ({ value, updatedAt: ctx.now });
     next = {

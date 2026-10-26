@@ -13,6 +13,7 @@ type LibraryOp = Parameters<ReturnType<typeof useLibraryAction>['run']>[0];
 import type { Meeting } from 'src/schema/meeting';
 import { emptyLibrary } from 'src/schema/library';
 import { docFromMeeting, type OnlineState } from 'src/domain/meeting/online-doc';
+import { hostEdits } from 'src/domain/meeting/online-merge';
 import { meetApi, type OnlineError } from 'src/services/meet-online/client';
 import {
   MEET_ONLINE_KEY,
@@ -150,6 +151,64 @@ it.each(['성공', '실패', '전송 중 새 출발지'] as const)(
     expect(readOnline(saved.id)?.replyOrigins ?? {}).toEqual(
       outcome === '성공' ? {} : { person02: outcome === '실패' ? originB : originD },
     );
+  },
+);
+
+it.each(['출발지 null', '답장 없음'] as const)(
+  '다른 기기 본문을 받으면 비워진 답장 출발지 기록을 저장하고 계산 중 다음 제목도 받는다: %s',
+  async (cleared) => {
+    online();
+    const initialDoc = state().doc;
+    const seenOrigin = { name: '친구 집 B', lng: 128, lat: 38 };
+    const remoteOrigin = { name: '다른 기기 집 C', lng: 127.5, lat: 37.6 };
+    const reply = {
+      participantId: 'person02',
+      name: '친구',
+      origin: seenOrigin,
+      likes: [],
+      times: null,
+      updatedAt: startAt,
+    };
+    vi.mocked(meetApi.get).mockResolvedValueOnce({
+      ok: true,
+      value: state({ doc: initialDoc, replies: [reply] }),
+    });
+    setup({ ...compute, pending: true });
+    await flush();
+    expect(readOnline(saved.id)?.replyOrigins).toEqual({ person02: seenOrigin });
+    const remoteDoc = {
+      ...initialDoc,
+      participants: initialDoc.participants.map((p) =>
+        p.id === 'person02' ? { ...p, origin: remoteOrigin } : p,
+      ),
+    };
+    const remote = state({
+      rev: 3,
+      docRev: 2,
+      doc: remoteDoc,
+      replies: cleared === '답장 없음' ? [] : [{ ...reply, origin: null }],
+    });
+    vi.mocked(meetApi.get).mockResolvedValueOnce({ ok: true, value: remote });
+    await advance(10000);
+    expect(saved.participants.value[1]?.origin).toEqual(remoteOrigin);
+    const record = readOnline(saved.id)!;
+    expect(record).toMatchObject({ lastRev: 3, docRev: 2, syncedDoc: remoteDoc });
+    expect.soft(record.replyOrigins).toEqual({});
+    expect.soft(hostEdits(saved, record.syncedDoc!, record.seen, record.replyOrigins)).toBe(false);
+    const title = '또 다른 기기 제목';
+    vi.mocked(meetApi.get).mockResolvedValueOnce({
+      ok: true,
+      value: { ...remote, rev: 4, docRev: 3, doc: { ...remoteDoc, title } },
+    });
+    await advance(10000);
+    expect.soft(saved.title.value).toBe(title);
+    expect(readOnline(saved.id)).toMatchObject({
+      lastRev: 4,
+      docRev: 3,
+      syncedDoc: { ...remoteDoc, title },
+      replyOrigins: {},
+    });
+    expect(meetApi.update).not.toHaveBeenCalled();
   },
 );
 
