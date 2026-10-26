@@ -5,7 +5,7 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router';
 import { mergeOnline, shouldAdoptRemoteDoc } from 'src/domain/meeting/online-merge';
 import { meetingFailure, storeMeeting } from 'src/domain/meeting/ops';
 import { LIBRARY_LIMITS } from 'src/schema/library';
-import { MeetingId, type Meeting } from 'src/schema/meeting';
+import { MeetingId, type Meeting, type Origin } from 'src/schema/meeting';
 import { safeParse } from 'src/schema/parse';
 import { meetApi } from 'src/services/meet-online/client';
 import { readOnline, rememberReplyOnly, writeOnline } from 'src/services/meet-online/store';
@@ -121,6 +121,7 @@ function HostLink({ id, token }: { id: string; token: string }) {
       let skipped = false;
       let addedReplyOnly: string[] = [];
       let hostLikes: string[] | undefined;
+      let replyOrigins: Record<string, Origin> | undefined;
       const result = await run((lib, ctx) => {
         const current = readOnline(id);
         // 보관함 연산을 기다리는 동안 갱신된 기록과 새 토큰도 지킨다.
@@ -155,12 +156,14 @@ function HostLink({ id, token }: { id: string; token: string }) {
               docRev: current?.docRev ?? null,
               seen: current?.seen ?? [],
               hostLikes: current?.hostLikes ?? null,
+              replyOrigins: current?.replyOrigins,
             };
         if (shouldAdoptRemoteDoc(meeting, state, sync)) adopted = true;
         const out = mergeOnline(stored.lib, id, state, ctx, sync);
         if (out.ok) {
           addedReplyOnly = out.addedReplyOnly;
           hostLikes = out.hostLikes;
+          replyOrigins = out.replyOrigins;
         }
         return out;
       });
@@ -178,6 +181,7 @@ function HostLink({ id, token }: { id: string; token: string }) {
         ...current,
         hostToken: token,
         lastRev: state.rev,
+        ...(replyOrigins === undefined ? {} : { replyOrigins }),
         hostLikes: [
           ...(hostLikes ??
             state.replies.find((reply) => reply.participantId === state.doc.participants[0]!.id)

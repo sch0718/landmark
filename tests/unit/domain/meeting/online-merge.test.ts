@@ -7,6 +7,7 @@ import {
 } from 'src/domain/meeting/online-doc';
 import { hostEdits, mergeOnline } from 'src/domain/meeting/online-merge';
 import { emptyLibrary, LibrarySchema, type Library } from 'src/schema/library';
+import type { Origin } from 'src/schema/meeting';
 import { safeParse } from 'src/schema/parse';
 import { buildMeeting } from '../../../fixtures/builders';
 
@@ -53,11 +54,13 @@ const merge = (
   online = state(),
   syncedDoc: MeetingDoc | null = docFromMeeting(meeting, {}, 'min'),
   docRev: number | null = 1,
+  replyOrigins?: Record<string, Origin>,
 ) => {
   const original = JSON.stringify(lib);
   const result = mergeOnline(lib, meeting.id, online, ctx, {
     syncedDoc,
     docRev,
+    replyOrigins,
     hostLikes: null,
     seen: [],
   });
@@ -97,6 +100,7 @@ it('친구 출발지를 합친 뒤에도 다른 주최자 기기의 확정을 �
       docRev: 1,
       seen: [],
       hostLikes: null,
+      replyOrigins: { person01: changed },
     },
   );
   expect(result.ok).toBe(true);
@@ -281,17 +285,23 @@ describe('온라인 상태를 보관한 약속에 합친다', () => {
       const remote = state([reply({ origin: { name: '친구 집', lng: 128, lat: 38 } })]);
       const first = merge(library(), remote);
       const next = mergedMeeting(
-        merge(first, {
-          ...remote,
-          rev: 2,
-          docRev: 2,
-          doc: {
-            ...remote.doc,
-            participants: remote.doc.participants.map((p) =>
-              p.id === 'person01' ? { ...p, origin: changed } : p,
-            ),
+        merge(
+          first,
+          {
+            ...remote,
+            rev: 2,
+            docRev: 2,
+            doc: {
+              ...remote.doc,
+              participants: remote.doc.participants.map((p) =>
+                p.id === 'person01' ? { ...p, origin: changed } : p,
+              ),
+            },
           },
-        }),
+          remote.doc,
+          1,
+          { person01: remote.replies[0]!.origin! },
+        ),
       );
       expect(next.participants.value[1]?.origin).toEqual(changed);
       expect(next.replies.value.person01).toEqual(mergedMeeting(first).replies.value.person01);
@@ -305,18 +315,24 @@ describe('온라인 상태를 보관한 약속에 합친다', () => {
       const first = merge(library(), remote);
       const changed = { name: '주최자가 고친 집', lng: 127.5, lat: 37.6 };
       const next = mergedMeeting(
-        merge(first, {
-          ...remote,
-          rev: 2,
-          docRev: 2,
-          replies: [reply({ origin: null, updatedAt: replyAt })],
-          doc: {
-            ...remote.doc,
-            participants: remote.doc.participants.map((p) =>
-              p.id === 'person01' ? { ...p, origin: changed } : p,
-            ),
+        merge(
+          first,
+          {
+            ...remote,
+            rev: 2,
+            docRev: 2,
+            replies: [reply({ origin: null, updatedAt: replyAt })],
+            doc: {
+              ...remote.doc,
+              participants: remote.doc.participants.map((p) =>
+                p.id === 'person01' ? { ...p, origin: changed } : p,
+              ),
+            },
           },
-        }),
+          remote.doc,
+          1,
+          { person01: remote.replies[0]!.origin! },
+        ),
       );
       expect(next.participants.value[1]?.origin).toEqual(changed);
     },
@@ -728,3 +744,36 @@ it('기록보다 낮은 본문 버전은 받지 않고 새 답장만 합친다',
   expect(next.decided.value).toBeNull();
   expect(next.replies.value.person01?.likes).toEqual(['choice01']);
 });
+
+it('답장 출발지를 적용한 참석자별로 기록하고 없어진 참석자 기록은 버린다', () => {
+  const changed = { name: '회사', lng: 128, lat: 38 };
+  const result = mergeOnline(library(), meeting.id, state([reply({ origin: changed })]), ctx, {
+    syncedDoc: docFromMeeting(meeting, {}, 'min'),
+    docRev: 1,
+    hostLikes: null,
+    seen: [],
+    replyOrigins: { removed1: origin },
+  });
+  expect(result.ok).toBe(true);
+  if (result.ok) expect(result.replyOrigins).toEqual({ person01: changed });
+});
+
+it.each(['host0001', 'person01'])(
+  '시각이 같아도 %s의 직접 출발지 수정은 답장 출처 기록과 비교한다',
+  (pid) => {
+    const imported = { name: '회사', lng: 128, lat: 38 };
+    const local = {
+      ...meeting,
+      participants: {
+        updatedAt: now,
+        value: meeting.participants.value.map((p) =>
+          p.id === pid ? { ...p, origin: imported } : p,
+        ),
+      },
+      replies: { updatedAt: now, value: { [pid]: { likes: [], sentAt: now, receivedAt: now } } },
+    };
+    const syncedDoc = docFromMeeting(meeting, {}, 'min');
+    expect(hostEdits(local, syncedDoc, [], { [pid]: origin })).toBe(true);
+    expect(hostEdits(local, syncedDoc, [], { [pid]: imported })).toBe(pid === 'host0001');
+  },
+);

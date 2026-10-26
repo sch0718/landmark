@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 import { finalFromMeeting, inviteFromMeeting } from 'src/domain/meeting/link';
 import { docFromMeeting, type MeetingDoc, type OnlineState } from 'src/domain/meeting/online-doc';
 import { hostEdits, mergeOnline, shouldAdoptRemoteDoc } from 'src/domain/meeting/online-merge';
-import type { Meeting } from 'src/schema/meeting';
+import type { Meeting, Origin } from 'src/schema/meeting';
 import { meetApi, type OnlineError } from 'src/services/meet-online/client';
 import {
   isLinkMeeting,
@@ -183,6 +183,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
     let adopted = false;
     let addedReplyOnly: string[] = [];
     let hostLikes: string[] | undefined;
+    let replyOrigins: Record<string, Origin> | undefined;
     const result = await latest.current.run((lib, ctx) => {
       const current = currentRecord();
       // 보관함 연산을 기다리는 동안 화면이 닫히거나 다른 화면이 더 새 상태를 합칠 수 있다.
@@ -192,6 +193,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
         docRev: current?.docRev ?? null,
         seen: current?.seen ?? [],
         hostLikes: current?.hostLikes ?? null,
+        replyOrigins: current?.replyOrigins,
       };
       const before = lib.meetings?.[meeting.id];
       if (before && shouldAdoptRemoteDoc(before, state, sync)) adopted = true;
@@ -200,6 +202,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
         merged = out.lib.meetings![meeting.id]!;
         addedReplyOnly = out.addedReplyOnly;
         hostLikes = out.hostLikes;
+        replyOrigins = out.replyOrigins;
       }
       return out;
     });
@@ -210,6 +213,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
       save({
         ...current,
         lastRev: state.rev,
+        ...(replyOrigins === undefined ? {} : { replyOrigins }),
         ...(hostLikes === undefined || hostReplyInFlight.current ? {} : { hostLikes }),
         ...(addedReplyOnly.length === 0
           ? {}
@@ -317,6 +321,17 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
       ...fresh,
       docRev: response.value.docRev,
       syncedDoc: doc,
+      ...(fresh.replyOrigins === undefined
+        ? {}
+        : {
+            replyOrigins: Object.fromEntries(
+              Object.entries(fresh.replyOrigins).filter(
+                ([pid, origin]) =>
+                  JSON.stringify(doc.participants.find((p) => p.id === pid)?.origin) !==
+                  JSON.stringify(origin),
+              ),
+            ),
+          }),
       ...(fresh.seen === undefined
         ? {}
         : { seen: fresh.seen.filter((id) => !removed.includes(id)) }),
@@ -443,7 +458,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
       const current = readOnline(meeting.id);
       const dirty =
         current?.syncedDoc != null &&
-        hostEdits(meeting, current.syncedDoc, current.seen, replyState?.replies);
+        hostEdits(meeting, current.syncedDoc, current.seen, current.replyOrigins);
       baseline.current = dirty ? '' : json;
     }
     if (document.visibilityState === 'visible' && navigator.onLine) void initialCheck();

@@ -1,6 +1,12 @@
 import { Schema } from 'effect';
 import { MeetingDocSchema, type MeetingDoc } from 'src/domain/meeting/online-doc';
-import { MeetingId, MeetingMemberId, type Meeting } from 'src/schema/meeting';
+import {
+  MeetingId,
+  MeetingMemberId,
+  OriginSchema,
+  type Meeting,
+  type Origin,
+} from 'src/schema/meeting';
 import { safeParse } from 'src/schema/parse';
 import { LIBRARY_LIMITS } from 'src/schema/library-base';
 
@@ -14,6 +20,7 @@ export type OnlineRecord = {
   lastRev?: number;
   docRev?: number;
   syncedDoc?: MeetingDoc;
+  replyOrigins?: Record<string, Origin>;
   seen?: string[];
   ended?: true;
 };
@@ -34,6 +41,16 @@ const recordSchema = Schema.Struct({
   ),
   docRev: Schema.optionalKey(Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(1))),
   syncedDoc: Schema.optionalKey(MeetingDocSchema),
+  replyOrigins: Schema.optionalKey(
+    Schema.Record(Schema.String, OriginSchema).check(
+      Schema.makeFilter(
+        (origins) =>
+          Object.keys(origins).length <= LIBRARY_LIMITS.meetingParticipantsMax &&
+          Object.keys(origins).every(Schema.is(MeetingMemberId)),
+        { message: '답장 출발지의 참석자 id나 개수가 올바르지 않습니다' },
+      ),
+    ),
+  ),
   seen: Schema.optionalKey(
     Schema.mutable(Schema.Array(MeetingMemberId)).check(
       Schema.isMaxLength(LIBRARY_LIMITS.meetingParticipantsMax),

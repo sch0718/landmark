@@ -116,22 +116,55 @@ export function MeetingResults({
   const computeCandidates = candidateCompute.compute;
   const computeHubs = hubCompute.compute;
   const candidateFindSeq = useRef(0);
-  const targetKey = JSON.stringify(meeting.candidates.value);
-  const participantKey = JSON.stringify(meeting.participants.value.map((p) => [p.id, p.origin]));
+  const candidateKey = JSON.stringify([
+    meeting.candidates.value,
+    meeting.participants.value.map((p) => [p.id, p.origin]),
+    meeting.mode.value,
+    meeting.at.value,
+    departure,
+  ]);
+  const candidateRequest = useRef<{
+    key: string | null;
+    recoveredKey: string | null;
+    controller: AbortController | null;
+  }>({ key: null, recoveredKey: null, controller: null });
+  useEffect(
+    () => () => {
+      candidateRequest.current.controller?.abort();
+      candidateRequest.current.key = null;
+    },
+    [],
+  );
   useEffect(() => {
+    const request = candidateRequest.current;
+    const key = JSON.stringify([candidateKey, findSeq]);
+    if (meeting.candidates.value.length === 0) {
+      request.controller?.abort();
+      request.key = null;
+      return;
+    }
+    if (request.key === key) {
+      if (!candidateCompute.stale || candidateCompute.pending || request.recoveredKey === key)
+        return;
+      // 같은 조건에서 낡은 결과만 남은 경우 한 번만 복구한다.
+      request.recoveredKey = key;
+    } else {
+      request.key = key;
+      request.recoveredKey = null;
+    }
     const refresh = candidateFindSeq.current !== findSeq;
     candidateFindSeq.current = findSeq;
-    if (meeting.candidates.value.length === 0) return;
+    request.controller?.abort();
     const controller = new AbortController();
+    request.controller = controller;
     void computeCandidates({ refresh, signal: controller.signal });
-    return () => controller.abort();
   }, [
-    targetKey,
-    participantKey,
+    candidateKey,
     meeting.candidates.value.length,
     computeCandidates,
     findSeq,
-    departure,
+    candidateCompute.stale,
+    candidateCompute.pending,
   ]);
   useEffect(() => {
     if (findSeq === 0) return;

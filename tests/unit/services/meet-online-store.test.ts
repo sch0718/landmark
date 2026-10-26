@@ -281,3 +281,40 @@ it('저장소가 막혀도 같은 탭의 메모리 기록 변경을 알린다', 
   expect(listener).toHaveBeenCalledExactlyOnceWith({ lastRev: 1 });
   unsubscribe();
 });
+
+it('답장 출발지 10개를 새 저장소에서도 복원한다', () => {
+  const storage = createMemoryStorage();
+  const replyOrigins = Object.fromEntries(
+    Array.from({ length: 10 }, (_, i) => [
+      `person${String(i).padStart(2, '0')}`,
+      { name: '집', lng: 127, lat: 37.5 },
+    ]),
+  );
+  const record = { hostToken: 'host', replyOrigins };
+  createOnlineStore(() => storage).writeOnline('meeting001', record);
+  expect(createOnlineStore(() => storage).readOnline('meeting001')).toEqual(record);
+});
+
+it.each([
+  null,
+  [],
+  { bad: { name: '집', lng: 127, lat: 37.5 } },
+  { person01: null },
+  { person01: { name: '집', lng: 0, lat: 37.5 } },
+  Object.fromEntries(
+    Array.from({ length: 11 }, (_, i) => [
+      `person${String(i).padStart(2, '0')}`,
+      { name: '집', lng: 127, lat: 37.5 },
+    ]),
+  ),
+])('깨진 replyOrigins 값 %j가 있는 기록만 버린다', (replyOrigins) => {
+  const storage = createMemoryStorage();
+  storage.setItem(
+    MEET_ONLINE_KEY,
+    JSON.stringify({
+      meeting001: { hostToken: 'host', replyOrigins },
+      meeting002: { lastRev: 1 },
+    }),
+  );
+  expect(createOnlineStore(() => storage).allOnline()).toEqual({ meeting002: { lastRev: 1 } });
+});

@@ -2,6 +2,7 @@ import { act, fireEvent, render, renderHook, screen } from '@testing-library/rea
 import { StrictMode, useState } from 'react';
 import { MemoryRouter } from 'react-router';
 import { Effect } from 'effect';
+import { RouteLookup } from 'src/services/route-lookup';
 import * as effectRuntime from 'src/lib/effect/runtime';
 import { haversineM } from 'src/domain/trips/geo';
 import { removeCandidate } from 'src/domain/meeting/ops';
@@ -192,6 +193,128 @@ it.each([false, true])(
     for (const call of vi.mocked(meetApi.update).mock.calls)
       expect(call[1].decided).toBe('choice01');
     expect(readOnline(saved.id)?.syncedDoc?.decided).toBe('choice01');
+  },
+);
+
+it.each([false, true])(
+  '두 번 나눠 받은 출발지와 주최자 직접 수정=%s를 구별해 재진입 뒤 서버 확정을 받는다',
+  async (hostEdit) => {
+    saved = {
+      ...saved,
+      participants: f([
+        ...saved.participants.value,
+        { id: 'person03', name: '친구 둘', origin: null },
+      ]),
+    };
+    online();
+    const initialDoc = state().doc;
+    const originA = { name: '회사', lng: 128, lat: 38 };
+    const originB = { name: '학교', lng: 127.5, lat: 37.5 };
+    const a = {
+      participantId: 'person02',
+      name: '친구',
+      origin: originA,
+      likes: [],
+      times: null,
+      updatedAt: startAt,
+    };
+    const b = { ...a, participantId: 'person03', name: '친구 둘', origin: originB };
+    vi.mocked(meetApi.get).mockResolvedValueOnce({ ok: true, value: state({ replies: [a] }) });
+    const first = setup({ ...compute, pending: true });
+    await flush();
+    vi.mocked(meetApi.get).mockResolvedValueOnce({
+      ok: true,
+      value: state({ rev: 3, replies: [a, b] }),
+    });
+    await advance(10000);
+    const replyParticipants = saved.participants.value;
+    expect
+      .soft(readOnline(saved.id)?.replyOrigins)
+      .toEqual({ person02: originA, person03: originB });
+    const hostOrigin = { name: '주최자가 고친 출발지', lng: 126.5, lat: 37.2 };
+    if (hostEdit)
+      await edit({
+        participants: f(
+          saved.participants.value.map((p) =>
+            p.id === 'person03' ? { ...p, origin: hostOrigin } : p,
+          ),
+          new Date().toISOString(),
+        ),
+      });
+    const finalDoc = { ...initialDoc, participants: replyParticipants, decided: 'choice01' };
+    vi.mocked(meetApi.get).mockResolvedValue({
+      ok: true,
+      value: state({
+        rev: 4,
+        docRev: 2,
+        doc: finalDoc,
+        replies: [
+          { ...a, origin: null },
+          { ...b, origin: null },
+        ],
+      }),
+    });
+    first.unmount();
+    setup({ ...compute, pending: true });
+    await flush();
+    expect(saved.decided.value).toBe(hostEdit ? null : 'choice01');
+    expect(saved.participants.value.find((p) => p.id === 'person03')?.origin).toEqual(
+      hostEdit ? hostOrigin : originB,
+    );
+    expect(meetApi.update).not.toHaveBeenCalled();
+  },
+);
+
+it.each(['성공', '실패', '전송 중 새 출발지'] as const)(
+  '본문 올리기 %s 때 전송한 값과 같은 답장 출발지만 정리한다',
+  async (outcome) => {
+    online();
+    const origin = { name: '회사', lng: 128, lat: 38 };
+    vi.mocked(meetApi.get).mockResolvedValueOnce({
+      ok: true,
+      value: state({
+        replies: [
+          {
+            participantId: 'person02',
+            name: '친구',
+            origin,
+            likes: [],
+            times: null,
+            updatedAt: startAt,
+          },
+        ],
+      }),
+    });
+    const inputCompute = { ...compute, pending: true };
+    const view = setup(inputCompute);
+    await flush();
+    let finish!: (value: Awaited<ReturnType<typeof meetApi.update>>) => void;
+    vi.mocked(meetApi.update).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    inputCompute.pending = false;
+    view.rerender();
+    await advance(1000);
+    expect(meetApi.update).toHaveBeenCalledTimes(1);
+    const newer = { name: '새 회사', lng: 127.5, lat: 37.2 };
+    if (outcome === '전송 중 새 출발지')
+      writeOnline(saved.id, {
+        ...readOnline(saved.id)!,
+        replyOrigins: { person02: newer },
+      });
+    await act(async () =>
+      finish(
+        outcome === '실패'
+          ? { ok: false, error: { code: 'offline' } }
+          : { ok: true, value: { rev: 3, docRev: 2 } },
+      ),
+    );
+    expect(readOnline(saved.id)?.replyOrigins ?? {}).toEqual(
+      outcome === '성공' ? {} : { person02: outcome === '실패' ? origin : newer },
+    );
   },
 );
 
@@ -1461,6 +1584,113 @@ it('본문과 답장 참석자의 합계 한도 초과를 안내한다', async (
   await advance(1000);
   expect(toast.error).toHaveBeenCalledWith('참석자는 10명까지예요');
 });
+
+it.each([
+  ['straight', 'car', false],
+  ['straight', 'transit', false],
+  ['car', 'car', true],
+  ['transit', 'transit', true],
+] as const)(
+  '온라인 %s→%s 일시 변경=%s 뒤 재계산이 끝나면 도중 고친 제목도 올린다',
+  async (before, after, changeAt) => {
+    const { MeetingResults } = await import('src/sections/meetings/MeetingResults');
+    saved = {
+      ...saved,
+      mode: f(before),
+      participants: f([
+        { id: 'person01', name: '나', origin: { name: '집', lng: 126.9, lat: 37.4 } },
+        { id: 'person02', name: '친구', origin: { name: '회사', lng: 127.1, lat: 37.6 } },
+      ]),
+    };
+    online();
+    let hold = false;
+    let finish!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    const fork = effectRuntime.forkEffect;
+    const lookup = RouteLookup.of({
+      leg: (mode) =>
+        Effect.succeed({
+          mode,
+          durationS: 600,
+          distanceM: 1000,
+          tollFare: null,
+          path: [],
+          queriedAt: startAt,
+          seq: 1,
+          fresh: false,
+        }),
+    });
+    const computations = vi
+      .spyOn(effectRuntime, 'forkEffect')
+      .mockImplementation((effect) =>
+        fork(
+          Effect.promise(() => (hold ? gate : Promise.resolve())).pipe(
+            Effect.andThen(effect),
+            Effect.provideService(RouteLookup, lookup),
+          ),
+        ),
+      );
+    let reported!: OnlineCompute;
+    function Editor() {
+      const [meeting, setMeeting] = useState(saved);
+      const [computed, setComputed] = useState<OnlineCompute>({ ...compute, pending: true });
+      refresh = setMeeting;
+      const host = useOnlineMeeting(meeting, computed);
+      return (
+        <MeetingResults
+          meeting={meeting}
+          library={emptyLibrary()}
+          online={host}
+          onComputeChange={(value) => {
+            reported = value;
+            setComputed(value);
+          }}
+        />
+      );
+    }
+    const view = render(<Editor />);
+    try {
+      await flush();
+      await advance(1000);
+      expect(reported.pending).toBe(false);
+      vi.mocked(meetApi.update).mockClear();
+      computations.mockClear();
+      hold = true;
+      await edit({
+        mode: f(after),
+        ...(changeAt ? { at: f({ date: '2026-10-27', time: '18:00' }) } : {}),
+      });
+      expect(reported.pending).toBe(true);
+      expect(computations).toHaveBeenCalledTimes(1);
+      await edit({ title: f('계산 중 바꾼 제목') });
+      await advance(1100);
+      expect(meetApi.update).not.toHaveBeenCalled();
+      expect(computations).toHaveBeenCalledTimes(1);
+      await act(async () => finish());
+      await advance(1000);
+      expect(reported.pending).toBe(false);
+      expect(meetApi.update).toHaveBeenCalledExactlyOnceWith(
+        saved.id,
+        expect.objectContaining({
+          title: '계산 중 바꾼 제목',
+          mode: after,
+          at: saved.at.value,
+          unit: 'min',
+          times: { choice01: { person01: 10, person02: 10 } },
+        }),
+        expect.any(Number),
+        token,
+        [],
+        expect.any(AbortSignal),
+      );
+    } finally {
+      finish();
+      view.unmount();
+    }
+  },
+);
 
 it.each(['person02', 'person03'])(
   '온라인 답장의 %s 출발지를 합치면 직선거리를 다시 계산할 때까지 올리지 않고 주최자 값을 지킨다',

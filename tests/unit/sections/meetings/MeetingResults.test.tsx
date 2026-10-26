@@ -6,9 +6,38 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { expect, it, vi } from 'vitest';
 import { MeetingResults } from 'src/sections/meetings/MeetingResults';
+import * as meetingCompute from 'src/sections/meetings/use-meeting-compute';
 import { emptyLibrary } from 'src/schema/library';
 import { buildMeeting } from '../../../fixtures/builders';
 const f = <T,>(value: T) => ({ value, updatedAt: '2026-10-23T00:00:00Z' });
+it('입력 키가 그대로인데 낡은 계산이 남으면 같은 키에서 한 번만 다시 시작한다', () => {
+  const meeting = buildMeeting({ mode: f('straight') });
+  let stale = false;
+  const compute = vi.fn(async () => {});
+  const original = meetingCompute.useMeetingCompute;
+  const hook = vi.spyOn(meetingCompute, 'useMeetingCompute').mockImplementation((input) => ({
+    ...original(input),
+    stale,
+    pending: false,
+    compute,
+  }));
+  const view = render(<MeetingResults meeting={meeting} library={emptyLibrary()} />);
+  try {
+    expect(compute).toHaveBeenCalledTimes(1);
+    stale = true;
+    view.rerender(
+      <MeetingResults meeting={{ ...meeting, title: f('새 제목') }} library={emptyLibrary()} />,
+    );
+    expect(compute).toHaveBeenCalledTimes(2);
+    view.rerender(
+      <MeetingResults meeting={{ ...meeting, title: f('다음 제목') }} library={emptyLibrary()} />,
+    );
+    expect(compute).toHaveBeenCalledTimes(2);
+  } finally {
+    view.unmount();
+    hook.mockRestore();
+  }
+});
 it('출발지가 두 명 이상이면 8개 역을 찾고 조건 변경을 안내한다', async () => {
   const meeting = buildMeeting({
     candidates: f([]),
@@ -110,7 +139,9 @@ it('조회 중 조건을 바꾸고 완료 후 되돌리면 찾기와 후보 공�
       await response;
     });
     rerender(<MeetingResults meeting={meeting} library={library} />);
-    expect(screen.getByRole('button', { name: '중간 지점 찾기' })).toBeEnabled();
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: '중간 지점 찾기' })).toBeEnabled(),
+    );
     expect(screen.getByRole('button', { name: '후보 링크 보내기' })).toBeEnabled();
     expect(screen.queryByText(/조회 중/)).not.toBeInTheDocument();
     expect(screen.getAllByText('10분')).toHaveLength(2);

@@ -1,5 +1,5 @@
 import type { OpCtx, OpResult } from 'src/domain/library/ops';
-import type { Meeting } from 'src/schema/meeting';
+import type { Meeting, Origin } from 'src/schema/meeting';
 import type { Library } from 'src/schema/library';
 import { LIBRARY_LIMITS } from 'src/schema/library-base';
 import { docFromMeeting, type MeetingDoc, type OnlineState } from './online-doc';
@@ -10,17 +10,22 @@ type OnlineSync = {
   docRev: number | null;
   seen: readonly string[];
   hostLikes: readonly string[] | null;
+  replyOrigins?: Record<string, Origin>;
 };
 type OnlineMergeResult =
   | Extract<OpResult, { ok: false }>
-  | (Extract<OpResult, { ok: true }> & { addedReplyOnly: string[]; hostLikes?: string[] });
+  | (Extract<OpResult, { ok: true }> & {
+      addedReplyOnly: string[];
+      hostLikes?: string[];
+      replyOrigins?: Record<string, Origin>;
+    });
 
 /** 답장 출발지·답장 전용 참석자를 빼고 주최자가 고친 본문만 비교한다. */
 export function hostEdits(
   meeting: Meeting,
   syncedDoc: MeetingDoc,
   seen: readonly string[] = [],
-  replies: OnlineState['replies'] = [],
+  replyOrigins: Record<string, Origin> = {},
 ): boolean {
   const syncedIds = new Set(syncedDoc.participants.map((p) => p.id));
   const hostId = meeting.participants.value[0]?.id;
@@ -28,13 +33,7 @@ export function hostEdits(
     const synced = syncedDoc.participants.find((previous) => previous.id === p.id);
     if (!synced || JSON.stringify(p.origin) === JSON.stringify(synced.origin)) return false;
     if (p.id === hostId) return true;
-    const reply = replies.find((r) => r.participantId === p.id);
-    const imported = meeting.replies.value[p.id];
-    // 서버가 비운 옛 답장과 동시에 반영했던 출발지는 주최자 수정이 아니다.
-    if (reply?.origin === null && meeting.participants.updatedAt === imported?.receivedAt)
-      return false;
-    // null은 출발지를 지운 답장이 아니라 본문 출발지를 그대로 쓴다는 뜻이다.
-    return reply?.origin == null || JSON.stringify(p.origin) !== JSON.stringify(reply.origin);
+    return JSON.stringify(p.origin) !== JSON.stringify(replyOrigins[p.id]);
   });
   const project = (
     doc: Pick<MeetingDoc, 'title' | 'at' | 'mode' | 'candidates' | 'decided' | 'participants'>,
@@ -63,7 +62,7 @@ export function shouldAdoptRemoteDoc(
   sync: OnlineSync,
 ): boolean {
   const dirty =
-    sync.syncedDoc !== null && hostEdits(meeting, sync.syncedDoc, sync.seen, state.replies);
+    sync.syncedDoc !== null && hostEdits(meeting, sync.syncedDoc, sync.seen, sync.replyOrigins);
   return (sync.docRev === null || state.docRev > sync.docRev) && !dirty;
 }
 
@@ -81,6 +80,7 @@ export function mergeOnline(
     sync.seen.filter((id) => !meeting.participants.value.some((p) => p.id === id)),
   );
   let next = meeting;
+  const replyOrigins = { ...sync.replyOrigins };
   let hostLikes: string[] | undefined;
   const addedReplyOnly: string[] = [];
   const adopt = shouldAdoptRemoteDoc(meeting, state, sync);
@@ -165,6 +165,7 @@ export function mergeOnline(
         ctx.now,
       );
     }
+    if (reply.origin !== null && (fresh || applyOrigin)) replyOrigins[pid] = reply.origin;
     if (!fresh) continue;
     next = meetingField(
       next,
@@ -198,6 +199,19 @@ export function mergeOnline(
   );
   const result = storeMeeting(lib, next);
   return result.ok
-    ? { ...result, addedReplyOnly, ...(hostLikes === undefined ? {} : { hostLikes }) }
+    ? {
+        ...result,
+        addedReplyOnly,
+        ...(hostLikes === undefined ? {} : { hostLikes }),
+        ...(sync.replyOrigins === undefined && Object.keys(replyOrigins).length === 0
+          ? {}
+          : {
+              replyOrigins: Object.fromEntries(
+                Object.entries(replyOrigins).filter(
+                  ([pid]) => participants.has(pid) && pid !== hostId,
+                ),
+              ),
+            }),
+      }
     : result;
 }
