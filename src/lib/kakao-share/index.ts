@@ -25,10 +25,11 @@ export type KakaoFeed = {
   };
   buttonTitle?: string;
 };
+/** 실제 SDK는 `init` 뒤에야 `Share`를 붙인다(2.8.4에서 확인, 2026-10-27). */
 export type KakaoSdk = {
   init(appKey: string): void;
   isInitialized(): boolean;
-  Share: { sendDefault(feed: KakaoFeed): void };
+  Share?: { sendDefault(feed: KakaoFeed): void };
 };
 
 function sdk(): KakaoSdk | undefined {
@@ -63,7 +64,7 @@ function loadScript(doc: Document, config: KakaoShareConfig): Promise<void> {
     };
     const loaded = () => {
       cleanup();
-      if (sdk()?.Share) resolve();
+      if (typeof sdk()?.init === 'function') resolve();
       else {
         script.remove();
         reject(new Error('카카오톡 SDK가 없어요'));
@@ -95,10 +96,11 @@ function loadScript(doc: Document, config: KakaoShareConfig): Promise<void> {
 export async function preloadKakao(config: KakaoShareConfig): Promise<void> {
   if (typeof document === 'undefined' || !config.appKey.trim())
     throw new Error('카카오톡을 준비할 수 없어요');
-  if (!sdk()?.Share) await loadScript(document, config);
+  if (typeof sdk()?.init !== 'function') await loadScript(document, config);
   const kakao = sdk();
-  if (!kakao?.Share) throw new Error('카카오톡 SDK가 없어요');
+  if (typeof kakao?.init !== 'function') throw new Error('카카오톡 SDK가 없어요');
   if (!kakao.isInitialized()) kakao.init(config.appKey);
+  if (!kakao.Share) throw new Error('카카오톡 공유를 쓸 수 없어요');
 }
 
 export function kakaoReady(): boolean {
@@ -115,7 +117,7 @@ export function sendKakao(card: KakaoCard, config: KakaoShareConfig): boolean {
   try {
     if (!kakaoLinkFits(card.url, config) || !kakaoReady()) return false;
     const { url, buttonTitle, ...content } = card;
-    sdk()!.Share.sendDefault({
+    sdk()!.Share!.sendDefault({
       objectType: 'feed',
       content: { ...content, link: { webUrl: url, mobileWebUrl: url } },
       ...(buttonTitle === undefined ? {} : { buttonTitle }),

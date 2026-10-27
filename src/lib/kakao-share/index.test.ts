@@ -10,14 +10,20 @@ import {
 } from './index';
 
 const config = { appKey: 'e2e-kakao-key' };
+/** 실제 SDK처럼 `init` 뒤에 `Share`를 붙인다. */
 function fakeSdk() {
   let initialized = false;
-  const sdk = {
+  const share = { sendDefault: vi.fn() };
+  const sdk: {
+    init: ReturnType<typeof vi.fn>;
+    isInitialized(): boolean;
+    Share?: typeof share;
+  } = {
     init: vi.fn(() => {
       initialized = true;
+      sdk.Share = share;
     }),
     isInitialized: () => initialized,
-    Share: { sendDefault: vi.fn() },
   };
   return sdk;
 }
@@ -80,6 +86,11 @@ describe('카카오톡 공용 모듈', () => {
     expect(document.scripts).toHaveLength(0);
     expect(sdk.init).toHaveBeenCalledTimes(1);
   });
+  it('init 뒤에도 Share가 없으면 준비 실패로 본다', async () => {
+    Object.assign(window, { Kakao: { init: vi.fn(), isInitialized: () => true } });
+    await expect(preloadKakao(config)).rejects.toThrow();
+    expect(kakaoReady()).toBe(false);
+  });
   it('브라우저 밖과 빈 키는 실패하고 준비되지 않은 전송은 false다', async () => {
     expect(sendKakao({ title: '장소', url: 'https://app.test' }, config)).toBe(false);
     await expect(preloadKakao({ appKey: '' })).rejects.toThrow();
@@ -105,7 +116,7 @@ describe('카카오톡 공용 모듈', () => {
       buttonTitle: '지도에서 보기',
     };
     expect(sendKakao(card, config)).toBe(true);
-    expect(sdk.Share.sendDefault).toHaveBeenCalledWith({
+    expect(sdk.Share!.sendDefault).toHaveBeenCalledWith({
       objectType: 'feed',
       content: {
         title: card.title,
@@ -118,8 +129,8 @@ describe('카카오톡 공용 모듈', () => {
       buttonTitle: '지도에서 보기',
     });
     expect(sendKakao({ ...card, url: 'a'.repeat(2001) }, config)).toBe(false);
-    expect(sdk.Share.sendDefault).toHaveBeenCalledTimes(1);
-    sdk.Share.sendDefault.mockImplementation(() => {
+    expect(sdk.Share!.sendDefault).toHaveBeenCalledTimes(1);
+    sdk.Share!.sendDefault.mockImplementation(() => {
       throw new Error('카카오 오류');
     });
     expect(sendKakao(card, config)).toBe(false);
