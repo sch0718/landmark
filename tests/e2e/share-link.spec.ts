@@ -1,5 +1,6 @@
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
 import {
+  test,
   addButton,
   createGangneungTrip,
   emptyLibrary,
@@ -120,4 +121,38 @@ test('데이터 없는 /view와 손상·과대 링크는 복구 안내를 표시
     ).toBeVisible();
     await expect(page.getByRole('link', { name: 'Landmark 열기' })).toHaveAttribute('href', '/');
   }
+});
+
+test('카카오톡 단추는 가짜 SDK에 장소 카드와 보기 링크를 보낸다', async ({ page, baseURL }) => {
+  const { fakeKakao } = await import('./fixtures');
+  await fakeKakao(page);
+  await seedStorage(page, { prefs: { libraryView: 'list' } });
+  await page.goto('/');
+  await page.getByRole('group', { name: '라벨' }).getByRole('button', { name: /^바다/ }).click();
+  await page.getByRole('button', { name: '내보내기', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: '내보내기' });
+  await dialog.getByRole('textbox', { name: '제목' }).fill('함께 갈 바다');
+  const button = dialog.getByRole('button', { name: '카카오톡', exact: true });
+  await expect(button).toBeEnabled();
+  await button.click();
+  const calls = await page.evaluate(() => window.kakaoCalls);
+  expect(await page.evaluate(() => window.kakaoInitKeys)).toEqual(['e2e-kakao-key']);
+  expect(await page.evaluate(() => window.kakaoInitializedChecks)).toBeGreaterThan(0);
+  expect(calls).toEqual([
+    {
+      objectType: 'feed',
+      content: {
+        title: '함께 갈 바다',
+        description: `장소 ${SEA_COUNT}곳 · 랜드마크`,
+        imageUrl: `${baseURL}/icon-512.png`,
+        imageWidth: 512,
+        imageHeight: 512,
+        link: {
+          webUrl: expect.stringMatching(new RegExp(`^${baseURL}/view#d=`)),
+          mobileWebUrl: expect.stringMatching(new RegExp(`^${baseURL}/view#d=`)),
+        },
+      },
+      buttonTitle: '지도에서 보기',
+    },
+  ]);
 });

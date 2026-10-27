@@ -3181,3 +3181,43 @@ it('Web Lock을 기다리는 주최자 링크 재발급은 중복 요청을 합�
   expect(readOnline(saved.id)?.pendingHostToken).toBeUndefined();
   expect(readOnline(saved.id)?.hostToken).not.toBe(token);
 });
+
+it('카카오톡 공유는 온라인 업로드 뒤 새 클릭에서 친구 링크만 보낸다', async () => {
+  vi.stubEnv('VITE_KAKAO_JS_KEY', 'e2e-kakao-key');
+  const sendDefault = vi.fn();
+  vi.stubGlobal('Kakao', { init: vi.fn(), isInitialized: () => true, Share: { sendDefault } });
+  try {
+    const { result } = setup();
+    await act(() => result.current.share('invite', 'kakao'));
+    expect(meetApi.create).toHaveBeenCalledTimes(1);
+    expect(shareLink).not.toHaveBeenCalled();
+    expect(sendDefault).not.toHaveBeenCalled();
+    const options = vi.mocked(toast).mock.calls.at(-1)![1]!;
+    expect(options).toMatchObject({ action: { label: '카카오톡으로 보내기' } });
+    const action = options.action as unknown as { onClick: () => void };
+    action.onClick();
+    expect(sendDefault).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: expect.objectContaining({
+          title: saved.title.value,
+          description: `후보 ${saved.candidates.value.length}곳 · 가능한 곳을 골라 주세요`,
+          link: {
+            webUrl: `${window.location.origin}/meet/${saved.id}`,
+            mobileWebUrl: `${window.location.origin}/meet/${saved.id}`,
+          },
+        }),
+        buttonTitle: '답하기',
+      }),
+    );
+    vi.mocked(toast).mockClear();
+    await act(() => result.current.openOnOtherDevice());
+    expect(shareLink).toHaveBeenCalledWith(
+      expect.stringContaining('#h='),
+      saved.title.value,
+      expect.anything(),
+    );
+    expect(toast).not.toHaveBeenCalled();
+  } finally {
+    vi.unstubAllEnvs();
+  }
+});

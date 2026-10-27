@@ -1,7 +1,8 @@
 import { statSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
 import {
+  test,
   exportSeaPlaces,
   SEA_COUNT,
   SHARE_MAP_URL,

@@ -93,6 +93,8 @@ export function TripShareDialog({ open, onClose, tripId }: Props) {
       open={open}
       onClose={onClose}
       heading="일정 공유"
+      kakaoDescription="여행 일정 · 랜드마크"
+      kakaoButtonTitle="일정 보기"
       summary={summary}
       defaultTitle={title}
       emptyMessage={stopCount === 0 && !withCandidates ? NOTHING_TO_SHARE : null}

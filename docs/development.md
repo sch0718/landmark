@@ -46,6 +46,7 @@ yarn install --frozen-lockfile  # .yarnrc의 ignore-engines가 적용된다
 | -------------------------- | ----------------------------------------------------------------------------- |
 | `VITE_NAVER_MAP_CLIENT_ID` | 네이버 지도 JS API v3(NCP) Client ID. 로컬은 `.env.local`(gitignore)에 둡니다 |
 | `VITE_MAP_ADAPTER`         | `fake`면 네이버 SDK 대신 DOM 가짜 지도를 씁니다(E2E·키 없는 개발용)           |
+| `VITE_KAKAO_JS_KEY` | 카카오톡 공유 JavaScript 키. Pages **Production에만** 넣습니다. 미리보기 도메인은 카카오에 등록할 수 없어 Preview에는 넣지 않습니다. 비어 있으면 단추를 숨깁니다 |
 | `VITE_TURNSTILE_SITE_KEY` | 약속 올리기에 쓰는 Turnstile 공개 사이트 키. Pages Production·Preview의 빌드 환경 변수 |
 | `DB` | D1 바인딩. 운영은 `landmark`, 미리보기는 `landmark-preview` |
 | `TURNSTILE_SECRET` | Turnstile 검증용 비밀 키. Pages의 서버 시크릿 |
@@ -55,6 +56,8 @@ yarn install --frozen-lockfile  # .yarnrc의 ignore-engines가 적용된다
 ```bash
 echo 'VITE_NAVER_MAP_CLIENT_ID=<발급받은 Client ID>' > .env.local
 ```
+
+**카카오 콘솔 도메인 등록**: 앱의 JavaScript SDK 도메인과 제품 링크 관리 › 웹 도메인에 운영 앱 주소를 등록합니다. JavaScript 키 값은 저장소에 기록하지 않습니다(확인일: 2026-10-27).
 
 **NCP 콘솔 도메인 등록**: Maps 애플리케이션의 Web 서비스 URL에 아래 주소를 등록해야 지도가 뜹니다.
 

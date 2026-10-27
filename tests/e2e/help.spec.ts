@@ -1,5 +1,5 @@
-import { expect, test } from '@playwright/test';
-import { HELP_SEEN_KEY, seedStorage } from './fixtures';
+import { expect } from '@playwright/test';
+import { test, HELP_SEEN_KEY, seedStorage } from './fixtures';
 
 test('@smoke 처음 보관함 안내를 시작하면 새로고침 뒤 다시 열리지 않는다', async ({ page }) => {
   await seedStorage(page, { helpSeen: false });

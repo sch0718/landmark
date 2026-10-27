@@ -21,6 +21,7 @@ import { HubResults } from './HubResults';
 import { NearbyPlaces } from './NearbyPlaces';
 import { CandidateTally } from './CandidateTally';
 import { shareMeetingDoc } from './share-link';
+import { useKakao } from '../share-export/kakao';
 import { useMeetingCompute } from './use-meeting-compute';
 import type { OnlineCompute, OnlineMeeting } from './use-online-meeting';
 
@@ -39,6 +40,7 @@ export function MeetingResults({
   onComputeChange?(compute: OnlineCompute): void;
 }) {
   const { run } = useLibraryAction();
+  const kakao = useKakao();
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (online?.mode !== 'online') return;
@@ -312,22 +314,64 @@ export function MeetingResults({
         >
           후보 링크 보내기
         </Button>
-        {meeting.decided.value !== null && (
+        {kakao.enabled && (
           <Button
-            variant="contained"
-            disabled={online?.mode === 'ended'}
-            onClick={() => {
-              if (online) {
-                void online.shareFinal();
-                return;
-              }
-              const doc = finalFromMeeting(meeting);
-              if (doc) void shareMeetingDoc(doc, meeting.title.value);
-            }}
+            variant="outlined"
+            disabled={meeting.candidates.value.length === 0 || pending || online?.mode === 'ended'}
+            onClick={() =>
+              online
+                ? void online.share('invite', 'kakao')
+                : void shareMeetingDoc(
+                    inviteFromMeeting(
+                      meeting,
+                      candidateCompute.times,
+                      candidateCompute.unit,
+                      new Date().toISOString(),
+                    ),
+                    meeting.title.value,
+                    'kakao',
+                  )
+            }
             sx={{ minHeight: 44 }}
           >
-            확정 링크 보내기
+            카카오톡
           </Button>
+        )}
+        {meeting.decided.value !== null && (
+          <>
+            <Button
+              variant="contained"
+              disabled={online?.mode === 'ended'}
+              onClick={() => {
+                if (online) {
+                  void online.shareFinal();
+                  return;
+                }
+                const doc = finalFromMeeting(meeting);
+                if (doc) void shareMeetingDoc(doc, meeting.title.value);
+              }}
+              sx={{ minHeight: 44 }}
+            >
+              확정 링크 보내기
+            </Button>
+            {kakao.enabled && (
+              <Button
+                variant="outlined"
+                disabled={online?.mode === 'ended'}
+                onClick={() => {
+                  if (online) {
+                    void online.shareFinal('kakao');
+                    return;
+                  }
+                  const doc = finalFromMeeting(meeting);
+                  if (doc) void shareMeetingDoc(doc, meeting.title.value, 'kakao');
+                }}
+                sx={{ minHeight: 44 }}
+              >
+                카카오톡
+              </Button>
+            )}
+          </>
         )}
       </Box>
     </Box>

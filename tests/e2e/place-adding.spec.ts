@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { expect, test, type Locator, type Page } from '@playwright/test';
-import { seedStorage } from './fixtures';
+import { expect, type Locator, type Page } from '@playwright/test';
+import { test, seedStorage } from './fixtures';
 
 /** 앱이 `/api`에서 받는 응답을 녹화해 둔 fixture(`tests/fixtures/links/api/`). */
 const apiFixture = (name: string): string =>

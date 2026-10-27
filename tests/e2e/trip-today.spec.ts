@@ -1,5 +1,5 @@
-import { expect, test, type Locator, type Page } from '@playwright/test';
-import { mockRoutes, placeIdByName, seed, seedStorage } from './fixtures';
+import { expect, type Locator, type Page } from '@playwright/test';
+import { test, mockRoutes, placeIdByName, seed, seedStorage } from './fixtures';
 
 /** 좁은 화면(하단 시트·네이버 지도 앱 길찾기)인가. 경계는 `use-layout`의 compact(<768)와 같다. */
 const isCompact = (page: Page): boolean => page.viewportSize()!.width < 768;

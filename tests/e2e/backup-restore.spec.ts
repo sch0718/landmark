@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
-import { expect, test, type Page, type TestInfo } from '@playwright/test';
-import { LIBRARY_KEY, seed, seedJson, SEED_PLACE_COUNT, seedStorage } from './fixtures';
+import { expect, type Page, type TestInfo } from '@playwright/test';
+import { test, LIBRARY_KEY, seed, seedJson, SEED_PLACE_COUNT, seedStorage } from './fixtures';
 
 /**
  * 전체 백업·복원(스펙 §8): 백업 파일 받기 → 보관함이 비어도 그 파일로 되살리기 → 되돌리기 →

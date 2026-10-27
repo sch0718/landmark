@@ -1,6 +1,7 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 import type { Library } from '../../src/schema/library';
 import {
+  test,
   isCompact,
   LIBRARY_KEY,
   PREFS_KEY,
