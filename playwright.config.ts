@@ -23,7 +23,9 @@ export default defineConfig({
   fullyParallel: false,
   forbidOnly: isCI,
   retries: isCI ? 1 : 0,
-  workers: 1,
+  // 시험마다 브라우저 문맥·가짜 응답(route)·약속 DB가 따로라 파일 단위로 둘씩 돌린다. 하나씩이면 핵심 E2E가
+  // CI에서 10분까지 걸려 작업 제한에 닿았다(2026-10-27, 로컬 핵심 389초 → 217초, 전체 161개 6.2분).
+  workers: 2,
   reporter: isCI ? [['list'], ['html', { open: 'never' }]] : 'list',
   timeout: 60_000,
   use: {

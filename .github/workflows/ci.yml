@@ -17,9 +17,11 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # 단위 시험·빌드와 E2E는 서로 기다리지 않도록 작업을 나눠 동시에 돈다. 한 작업에 이어 붙이면
+  # 느린 러너에서 합이 20분에 닿아 취소됐다(2026-10-27, build:ci 7.5분 + 핵심 E2E 10분).
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -43,6 +45,20 @@ jobs:
       # Cloudflare Pages 빌드 명령과 같다: validate → typecheck → 단위 테스트 → 빌드.
       - name: Build (build:ci)
         run: yarn build:ci
+
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: yarn
+
+      - name: Install
+        run: yarn install --frozen-lockfile
 
       - name: Install Playwright browsers
         run: yarn playwright install --with-deps chromium webkit
