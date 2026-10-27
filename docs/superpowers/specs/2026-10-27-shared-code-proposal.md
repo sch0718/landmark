@@ -4,7 +4,9 @@
 
 > **추가 검토(6절):** 사용자가 "앞으로 새 서비스를 계속 만들 예정이고, 공통 코드를 한 곳에서 관리하고 싶다"고 전제를 보탰다. 이 전제에서는 **별도 공용 저장소(패키지 여러 개) + 공개 npm 발행**을 추천안으로 바꾼다. 아래 요약과 1~5절은 소비처가 두 앱뿐일 때의 검토다. 무엇을 공통화할지(1절)는 그대로 유효하다.
 >
-> **결정(2026-10-27):** 사용자가 "가즈아에는 카카오 모듈을 복사하지 말고, 공용 저장소에서 패키지를 발행한 뒤 설치하는 방향으로 가자"고 정했다. 1-a·2.6·4절 단계 1의 "가즈아에 복사" 부분은 이 결정으로 대체된다. 공용 저장소 이름은 `kit`(`sch0718/kit`)로 정했다.
+> **결정(2026-10-27):** 공용 저장소는 `sch0718-toolkit-web`·`sch0718-toolkit-python`, 라이선스는 PolyForm-NC로 정해 저장소를 만들었다(6.13).
+>
+> 사용자가 "가즈아에는 카카오 모듈을 복사하지 말고, 공용 저장소에서 패키지를 발행한 뒤 설치하는 방향으로 가자"고 정했다. 1-a·2.6·4절 단계 1의 "가즈아에 복사" 부분은 이 결정으로 대체된다.
 
 - 카카오 공유를 첫 후보로 삼되, 진행 중인 랜드마크 독립 모듈을 먼저 완성하고 출처를 기록해 가즈아에 복사한다.
 - 기존 코드에서는 처음 안내 기록과 SVG 생성기의 작은 공통 함수부터 추출할 이득이 있다.
@@ -335,6 +337,7 @@ G CI는 고정된 **공개 원본 commit**을 읽어 복사본의 해시 또는 
 | 대상 | 확인 상태 | 의미 |
 | --- | --- | --- |
 | L main | `package.json`의 `private: true`, license 필드·LICENSE 없음. `gh repo view sch0718/landmark --json licenseInfo,visibility` → `licenseInfo: null`, `PUBLIC`(2026-10-27 확인) | 공개 저장소이나 라이선스 미지정, 기본 저작권/All rights reserved |
+| L main(갱신) | 2026-10-27 PR #57로 `LICENSE`(PolyForm Noncommercial 1.0.0)와 `package.json` `license` 필드가 들어갔다(`origin/main` `586ffc9`에서 확인) | 위 행은 조사 시점 기록. 이제 L도 PolyForm-NC |
 | G `origin/main` | LICENSE·license 필드 없음. `gh repo view sch0718/gazua` → `licenseInfo: null`, `PUBLIC`(2026-10-27 확인) | 아직 PolyForm 적용 상태라고 쓰지 않음 |
 | G 라이선스 브랜치 `1684858` | `LICENSE` PolyForm Noncommercial 1.0.0, 앱·proxy·sync-worker의 package license 필드, 고지 생성기 추가 | 병합 전 선택안. Required Notice의 저작권자는 신춘호 |
 
@@ -459,7 +462,7 @@ G `scripts/build-notices.mjs`는 **main에는 없고** `origin/chore/license-pol
 **저장소 하나에 패키지 여러 개**를 추천한다. 패키지마다 저장소를 만드는 안보다 CI·릴리스·라이선스·이슈를 한 곳에서 관리할 수 있어 개인 규모에 맞다. 패키지는 각자 버전을 가진다.
 
 ```
-sch0718/kit                    # 2026-10-27 결정
+sch0718/sch0718-toolkit-web    # 2026-10-27 결정. Python은 sch0718-toolkit-python(6.13)
 ├─ packages/
 │  ├─ kakao-share/      브라우저 런타임. 의존성 0. 카카오 SDK는 클릭 때 로드
 │  ├─ seen-store/       처음 안내 기록(1-e-2)
@@ -474,7 +477,7 @@ sch0718/kit                    # 2026-10-27 결정
 ```
 
 - 공용 저장소의 패키지 매니저는 pnpm으로 한다. 가즈아·새 서비스와 같고, 소비자 쪽(랜드마크 Yarn 1)에는 영향이 없다. 소비자는 발행된 tarball만 설치한다.
-- 저장소 이름은 `kit`로 정했다(2026-10-27). GitHub `sch0718/kit`는 조회 결과 404로, 아직 없는 이름이다(2026-10-27 `gh api repos/sch0718/kit`). npm 패키지 이름은 저장소 이름과 별개로 `@sch0718/<패키지>`를 쓴다. scope는 npm 계정 확인 뒤 확정한다.
+- 저장소 이름은 처음에 `kit`로 정했다가 `sch0718-toolkit-<언어>`로 바꿨다(6.13). npm 패키지 이름은 저장소 이름과 별개로 `@sch0718/<패키지>`를 쓴다. scope는 npm 계정 확인 뒤 확정한다.
 
 ### 6.3 패키지에 넣는 기준
 
@@ -532,10 +535,12 @@ sch0718/kit                    # 2026-10-27 결정
 새 서비스가 계속 생긴다면 코드보다 **설정 공유의 이득이 더 클 수 있다.**
 
 - **설정 패키지:** `@sch0718/tsconfig`(앱은 `"extends": "@sch0718/tsconfig/base.json"`), 필요하면 `eslint-config`, `prettier-config`. 지금 eslint·prettier는 랜드마크에만 있다(1-i). 새 서비스부터 쓰고, 기존 두 앱은 억지로 옮기지 않는다.
-- **재사용 워크플로:** 공용 저장소에 `on: workflow_call` 워크플로를 두면 다른 저장소가 `uses: sch0718/kit/.github/workflows/node-ci.yml@v1`처럼 부른다. 개인 계정이라 `secrets: inherit`는 쓸 수 없고(같은 조직·엔터프라이즈일 때만) 필요한 비밀값을 이름으로 넘긴다. [GitHub Reusing workflows](https://docs.github.com/en/actions/sharing-automations/reusing-workflows), 확인 2026-10-27. 1-i의 판단대로 기존 두 앱의 CI는 앱별로 두고 새 서비스부터 쓴다.
+- **재사용 워크플로:** 공용 저장소에 `on: workflow_call` 워크플로를 두면 다른 저장소가 `uses: sch0718/sch0718-toolkit-web/.github/workflows/node-ci.yml@v1`처럼 부른다. 개인 계정이라 `secrets: inherit`는 쓸 수 없고(같은 조직·엔터프라이즈일 때만) 필요한 비밀값을 이름으로 넘긴다. [GitHub Reusing workflows](https://docs.github.com/en/actions/sharing-automations/reusing-workflows), 확인 2026-10-27. 1-i의 판단대로 기존 두 앱의 CI는 앱별로 두고 새 서비스부터 쓴다.
 - **새 서비스 템플릿:** 공용 패키지와 설정 패키지를 이미 쓰도록 만든 GitHub 템플릿 저장소를 따로 둔다. 템플릿은 패키지가 아니라 시작점이다. 세 번째 서비스를 만들 때 만드는 것을 추천한다. 두 번째 사례가 생기기 전에 만든 템플릿은 맞지 않기 쉽다.
 
 ### 6.8 라이선스
+
+> **결정(2026-10-27):** 사용자가 랜드마크·가즈아와 같은 PolyForm Noncommercial 1.0.0으로 정했다. 아래는 결정 전 검토다.
 
 공용 저장소는 LICENSE 하나로 모든 패키지에 적용한다. **MIT를 추천한다.** 소비하는 서비스의 라이선스가 무엇이든(가즈아 PolyForm-NC, 랜드마크 미지정, 이후 상업 서비스) 제약 없이 넣을 수 있다. PolyForm-NC로 두면 사용자 본인은 저작권자라 상관없지만, 나중에 다른 사람과 함께 만드는 상업 서비스나 외부 기여를 받을 때 걸린다. 3절과 같이 **사용자가 옮길 코드의 유일한 저작권자라는 전제**이고, 법률 자문이 아니다. 패키지 tarball에는 LICENSE를 넣고, 각 앱의 오픈소스 고지(가즈아 `scripts/build-notices.mjs` 등)에 공용 패키지가 잡히는지 확인한다.
 
@@ -558,7 +563,7 @@ sch0718/kit                    # 2026-10-27 결정
 
 **단계 A. 공용 저장소 뼈대 + 카카오 이전 — 1일 안팎, 공용 PR 1~2개 + 앱 PR 2개**
 
-- **결정:** npm 계정·scope, 라이선스(6.12). 저장소 이름 `kit`와 가즈아 설치 방식은 정했다.
+- **결정:** npm 계정·scope(6.12). 저장소 이름·라이선스·가즈아 설치 방식은 정했다(6.13).
 - **만들기:** pnpm workspace, Changesets, `ci.yml`(테스트·빌드·fixture 호환), `release.yml`(trusted publishing). README에 6.3 기준.
 - **카카오:** 다른 세션이 랜드마크에 만드는 독립 폴더를 `packages/kakao-share`로 옮기고 `0.1.0`을 발행한다. 랜드마크는 폴더를 지우고 패키지 의존으로 바꾼다. **가즈아는 복사하지 않고 처음부터 패키지를 설치한다(2026-10-27 사용자 결정).** 그래서 복사본 출처 기록과 동기화 검사는 만들지 않는다. 가즈아 카카오 공유는 `@sch0718/kakao-share` 첫 발행 뒤에 붙인다.
 - **검증:** 공용 CI(fixture 3종), 랜드마크 `yarn build:ci`(`ExportHtmlDialog`·`TripShareDialog`의 `--require-lazy` 포함), 가즈아 `check`·`test`·`e2e`, 두 앱에서 공유 버튼을 누르기 전 카카오 SDK 요청 0건.
@@ -593,13 +598,50 @@ sch0718/kit                    # 2026-10-27 결정
 | 질문 | 선택지 | 추천 |
 | --- | --- | --- |
 | 별도 공용 저장소로 갈까? | 별도 저장소 / 1~5절의 복사 방식 유지 | **별도 저장소**(서비스가 계속 늘어난다는 전제) |
-| 저장소 이름은? | `kit` / `shared` / `common` / 기타 | **결정됨(2026-10-27): `sch0718/kit`** |
+| 저장소 이름은? | `kit` / `shared` / `common` / 기타 | **결정됨(2026-10-27): `sch0718-toolkit-web`, `sch0718-toolkit-python`**(처음 `kit`에서 변경) |
 | npm 계정·scope는? | 개인 계정 `sch0718` / 다른 이름 / npm 조직 | 계정 존재 여부를 먼저 확인. 있으면 `@sch0718` |
 | 공개 여부는? | 공개 npm / 비공개(유료·토큰) | **공개 npm** |
-| 라이선스는? | MIT / PolyForm-NC | **MIT** |
+| 라이선스는? | MIT / PolyForm-NC | **결정됨(2026-10-27): PolyForm-NC**(랜드마크·가즈아와 같게). 처음 추천은 MIT |
 | 가즈아의 카카오 모듈은? | 공용 패키지 발행 후 설치 / 일단 복사했다가 교체 | **결정됨(2026-10-27): 패키지 발행 후 설치.** 랜드마크 적용은 지금 계획대로 진행 |
 | 설정 패키지·재사용 워크플로를 기존 두 앱에도 적용할까? | 새 서비스부터 / 지금 모두 | **새 서비스부터** |
 | 랜드마크를 pnpm으로 옮길까? | 옮기지 않음 / 옮김 | **옮기지 않음**. 공개 npm이면 필요 없다 |
+
+### 6.13 결정과 실행 (2026-10-27)
+
+사용자 결정(원문): "저장소 이름은 sch0718-toolkit 으로 하고, 웹 기반과 백엔드 파이썬 기반으로 나눠서 만들어줘 (나중에 추가될 것을 대비, subffix로 -web, -python 등을 사용) … 누군가 잘(github star가 많고, 공인되거나 업계에서 많이 사용하는) 만들어 놓은 것이 있으면 가능하다면 가져다 사용해줘. 라이선스는 가즈아, 랜드마크와 동일하게 해줘." 이어서 저장소 두 개, 공개, 뼈대+작은 패키지 하나로 정했다.
+
+| 항목 | 결정 |
+| --- | --- |
+| 저장소 | [`sch0718/sch0718-toolkit-web`](https://github.com/sch0718/sch0718-toolkit-web), [`sch0718/sch0718-toolkit-python`](https://github.com/sch0718/sch0718-toolkit-python). 공개. 언어가 늘면 `sch0718-toolkit-<언어>` |
+| 라이선스 | PolyForm Noncommercial 1.0.0. 랜드마크 `LICENSE`를 Required Notice까지 그대로 복사 |
+| 웹 첫 패키지 | `@sch0718/seen-store`(1-e-2). 랜드마크·가즈아 `help-seen`과 저장 형식이 같아 키만 넘기면 기존 기록을 이어 쓴다 |
+| Python | 패키지 없이 뼈대만. 지금 서비스에 Python 백엔드가 없다 |
+| 발행 | 아직 안 함. npm·PyPI 계정과 trusted publisher 설정은 소유자가 직접 한다(각 README) |
+
+**가져다 쓴 도구(직접 만들지 않음).** 별 수는 2026-10-27 GitHub 기준이다.
+
+- 웹: pnpm 11(36.9k), Changesets(12.5k), TypeScript 5.9 `tsc`(111.6k), Vitest(17.3k), ESLint(27.6k)+typescript-eslint(16.5k), Prettier(52.4k), `@tsconfig/strictest`(7.9k), publint(1.3k), Are the types wrong?(1.6k), Size Limit(7.0k).
+- Python: uv(91.2k), Ruff(50.3k), mypy(20.7k), pytest(14.6k), Hatchling(7.2k), pypa/gh-action-pypi-publish(1.2k).
+- 버전은 2026-10-13 이전 릴리스 중 최신으로 고정했다(2주 이상 지난 것).
+
+**6.9·6.10에서 바뀐 점.**
+
+- `bundle-budget` 패키지는 만들지 않는다. 같은 일을 하는 [Size Limit](https://github.com/ai/size-limit)을 쓴다. 가즈아에 첫 로딩 예산을 들일 때도 Size Limit으로 하고, 랜드마크는 `--require-lazy` 등 자체 기능이 있는 `scripts/check-bundle-size.mjs`를 그대로 둔다.
+- 공용 저장소의 패키지 매니저는 pnpm 11이다. pnpm 11은 trusted publishing(OIDC)을 자체 지원한다(pnpm v11.0.7 릴리스 노트). `pnpm ci`가 pnpm 11 내장 명령이라 검사 스크립트 이름은 `verify`다.
+- 호환 시험(6.6)은 `tsc` 타입 검사까지 구현했다. `vite build`는 아직 넣지 않았다.
+
+**검증(로컬).** 웹은 `pnpm run verify`(시험 12개, publint, attw, size 250 B)와 `pnpm compat`(Yarn 1.22+TS 6.0.3, pnpm 10.34.7+TS 5.9.3)가 통과했다. Python은 템플릿으로 시험용 패키지를 만들어 mypy·pytest·`uv build`를 통과시켰다. 메타데이터 `License-Expression: PolyForm-Noncommercial-1.0.0`를 확인한 뒤 시험용 패키지는 지웠다.
+
+**병합.** [sch0718-toolkit-web#1](https://github.com/sch0718/sch0718-toolkit-web/pull/1)은 Codex 검토 4회, [sch0718-toolkit-python#1](https://github.com/sch0718/sch0718-toolkit-python/pull/1)은 3회 만에 지적이 없어졌다. GitHub CI 통과 후 병합했다(웹 `373a23c`, Python `e0655b4`). 검토로 고친 것:
+
+- npm trusted publisher: 2026-09-03 이후 만든 설정은 기본으로 `npm stage publish`만 허용한다. 그래서 Allowed actions에서 `npm publish`를 켜도록 안내를 추가했다([npm 문서](https://docs.npmjs.com/trusted-publishers), 2026-10-27 확인).
+- `@changesets/changelog-github`는 로컬에서 `GITHUB_TOKEN`이 필요하다. 버전 올리기·snapshot 명령에 `GITHUB_TOKEN=$(gh auth token)`을 붙였다. snapshot 발행 전에는 빌드도 하도록 했다.
+- Python 발행: 검사용 빌드와 발행용 `dist/`를 분리해 대상 패키지만 올린다. 태그 커밋이 main에 병합된 것인지 검사하고, `pypi` 환경 보호 규칙을 필수로 안내한다.
+- Python 템플릿: 설명을 TOML·Python 문자열에 맞게 이스케이프하고, 이름 끝 하이픈을 거부한다.
+- Python CI: 패키지가 없는 가상 workspace는 `requires-python`을 실행 중인 Python으로 추정해 3.14에서 lockfile이 달라졌다. 루트에 `requires-python = ">=3.12"`를 명시하고 uv 0.13으로 다시 잠갔다.
+- `astral-sh/setup-uv`, `changesets/action`은 큰 버전 태그(`v10`, `v2`)가 없어 정확한 태그로 고정했다.
+
+**남은 일(소유자).** npm 계정·scope 확인, 첫 발행과 trusted publisher 설정, `RELEASE_ENABLED` 변수 켜기(웹 README 「첫 발행」). Python은 첫 패키지가 생길 때 PyPI pending publisher와 `pypi` 환경을 설정한다. 카카오 공유 모듈은 다른 세션의 랜드마크 작업이 끝나면 `packages/kakao-share`로 옮긴다.
 
 ## 작성 과정
 
@@ -609,3 +651,4 @@ sch0718/kit                    # 2026-10-27 결정
 - **공식 문서 재확인(Claude, 2026-10-27):** [Cloudflare Pages Build image](https://developers.cloudflare.com/pages/configuration/build-image/)(lockfile·engines 감지 안 함, v3 기본 버전), [pnpm 10.26 릴리스](https://pnpm.io/blog/releases/10.26)(git 의존성 `prepare` 기본 차단). 나머지 출처 URL은 Codex가 본문에 적었고 Claude는 다시 확인하지 않았다.
 - **확인 못 한 항목:** 위 5절 끝 목록과 같다. 특히 카카오 모듈 실제 코드(다른 세션이 작업 중이고 아직 원격 브랜치 없음), 오늘 기준 두 앱의 첫 로딩 실측, Cloudflare 계정의 실제 빌드 설정, 각 공유 방식의 설치 실험, 가즈아 로컬 `origin/main`과 GitHub 최신 main의 일치 여부가 남아 있다. 이번 세션은 빌드·테스트·설치를 실행하지 않았다.
 - **6절 추가(2026-10-27, Claude Opus 5.5):** 사용자 요청 "앞으로 새로운 서비스를 계속 만들 예정이야. 공통으로 사용하는 코드들을 한 곳에서 관리하고 싶어"에 따라 별도 공용 저장소 안을 덧붙였다. Codex를 거치지 않고 Claude가 썼다. 다시 확인한 공식 문서: [npm Trusted publishing](https://docs.npmjs.com/trusted-publishers), [GitHub Reusing workflows](https://docs.github.com/en/actions/sharing-automations/reusing-workflows), [Changesets snapshot releases](https://github.com/changesets/changesets/blob/main/docs/snapshot-releases.md)(모두 2026-10-27). 확인하지 못한 것: npm 계정 `sch0718`이 있는지(npmjs.com 사용자 페이지 403, 레지스트리 검색 `maintainer:sch0718` 0건), trusted publishing 설정 전에 첫 버전을 직접 발행해야 하는지, Yarn 1의 git 의존성으로 저장소 하위 폴더를 지정할 수 있는지, npm 조직의 공개 패키지 비용. 확인된 사실이 아닌 서술(작업량 등)은 본문에서 "추정"이나 "확인 필요"로 표시했다.
+- **6.13·저장소 생성(2026-10-27, Claude Opus 5.5):** 사용자 지시로 공개 저장소 두 개를 만들고 첫 PR을 Codex(gpt-6.1-sol, high) 검토 반복 뒤 병합했다. 도구 별 수는 GitHub API, 버전은 npm·PyPI 레지스트리에서 조회했다. pnpm 11 trusted publishing은 pnpm v11.0.7 릴리스 노트, PyPI pending publisher는 warehouse 저장소의 문서 원본으로 확인했다(2026-10-27). 실제 npm·PyPI 발행은 하지 않았다.
