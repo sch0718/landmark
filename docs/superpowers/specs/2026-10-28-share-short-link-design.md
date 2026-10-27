@@ -75,7 +75,7 @@ https://landmark.sch0718.dev/s/<id>#k=<키>
 
 | | 안 A: 압축 해시 그대로 | 안 B: 브라우저에서 암호화(추천) |
 |---|---|---|
-| 서버가 받는 것 | `viewLink`가 만든 해시 값(`#d=` 뒤) | 같은 해시를 키 `k`로 AES-GCM 암호화한 값(IV 12바이트 + 암호문 + 태그 16바이트, base64url) |
+| 서버가 받는 것 | `viewLink`가 만든 해시 값(`#d=` 뒤) | 해시를 base64url에서 **압축 바이트로 되돌린 뒤** 키 `k`로 AES-GCM 암호화한 값(IV 12바이트 + 암호문 + 태그 16바이트를 base64url로). 해시 문자열을 그대로 암호화하면 base64url이 한 번 더 늘어 32,000자 해시가 42,704자가 된다(Codex 검토에서 WebCrypto로 잼, 2026-10-28) |
 | 서버·D1에서 읽을 수 있나 | 읽을 수 있다(장소 이름·주소·좌표·메모·일정) | 읽을 수 없다. 키는 링크의 해시에만 있다 |
 | `/s/<id>` 응답 | `302 Location: /view#d=<해시>` | 암호문을 넣은 작은 HTML. 페이지가 키로 풀고 `location.replace` |
 | 보기 화면 변경 | 없음 | 없음 |
@@ -96,7 +96,7 @@ https://landmark.sch0718.dev/s/<id>#k=<키>
 | `GET /s/:id` | 안 B: `200` 여는 쪽 HTML. 안 A: `302 Location: /view#d=…` | 없음(링크 소지자). 출처 검사를 **하지 않는다**: 카카오톡에서 연 화면 이동에는 `Origin`·`Referer`가 없다 |
 | `DELETE /api/share/:id` | `Authorization: Bearer <deleteToken>` → `204` | 출처·삭제 토큰 |
 
-- `body`: 안 B면 `^[A-Za-z0-9_-]{1,32100}$`(32,000자 해시 + IV·태그), 안 A면 `^[A-Za-z0-9_-]{1,32000}$`. 서버는 내용을 풀어 보지 않는다(안 B는 풀 수 없고, 안 A도 5MB까지 풀리는 문서의 검사는 함수 CPU 시간이 부담된다). 문서 검사는 지금처럼 보기 화면이 한다.
+- `body`: 안 B면 `^[A-Za-z0-9_-]{1,32040}$`(32,000자 해시 = 압축 24,000바이트 + IV·태그 28바이트 = 24,028바이트 → 32,038자), 안 A면 `^[A-Za-z0-9_-]{1,32000}$`. 서버는 내용을 풀어 보지 않는다(안 B는 풀 수 없고, 안 A도 5MB까지 풀리는 문서의 검사는 함수 CPU 시간이 부담된다). 문서 검사는 지금처럼 보기 화면이 한다.
 - 본문을 읽기 전에 `Content-Length`가 40,000바이트를 넘으면 `413`으로 끊는다.
 - `kind`: `places` | `trip`. 보관 기간 계산과 집계에만 쓴다.
 - `keepUntil`: 브라우저가 계산한 날짜(결정 3). 서버는 `[지금 + 30일, 지금 + 최대 기간]`으로 자른다.
@@ -132,18 +132,18 @@ CREATE INDEX IF NOT EXISTS share_links_expires ON share_links(expires_at);
 <!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width">
 <title>Landmark</title>
 <script type="application/json" id="c">"<암호문 base64url>"</script>
-<script>/* #k를 읽어 AES-GCM으로 풀고 location.replace('/view#d=' + 해시). 실패하면 안내 문구 */</script>
+<script>/* #k를 읽어 AES-GCM으로 풀고, 나온 압축 바이트를 base64url로 바꿔 location.replace('/view#d=' + 해시). 실패하면 안내 문구 */</script>
 <noscript>이 링크는 JavaScript가 필요해요.</noscript>
 <p id="m">여는 중…</p>
 ```
 
 - `Content-Security-Policy: default-src 'none'; script-src 'sha256-<인라인 스크립트 해시>'; style-src 'unsafe-inline'`. 암호문은 base64url 글자만이라 HTML에 그대로 넣어도 깨지지 않는다(데이터 블록은 실행되지 않는다).
 - 키가 없거나(`#k=`가 잘림) 풀기에 실패하면 "링크가 온전하지 않아요. 보낸 사람에게 링크를 다시 받아 주세요". `crypto.subtle`이 없으면 "이 브라우저에서는 열 수 없어요. 다른 브라우저로 열어 주세요".
-- 푼 값은 앱의 `viewLink`와 같은 해시 문자열이라 보기 화면이 지금과 똑같이 검사·표시한다.
+- 푼 바이트를 base64url(`=` 없음)로 바꾸면 앱의 `viewLink`가 만든 해시와 같은 문자열이라 보기 화면이 지금과 똑같이 검사·표시한다. 시험에서 이 왕복이 글자 하나까지 같은지 본다.
 
 ### 앱 쪽
 
-- `src/share-viewer/encode.ts`(또는 새 `src/services/share-short/`): `encryptShareHash(hash) → { body, key }`(안 B), `shortLink(id, key, app)`.
+- `src/share-viewer/encode.ts`(또는 새 `src/services/share-short/`): `encryptShareHash(hash) → { body, key }`(안 B: base64url 해시 → 압축 바이트 → AES-GCM, 링크마다 새 키라 IV 재사용이 없다), `shortLink(id, key, app)`.
 - `src/services/share-short/client.ts`: `POST /api/share`·`DELETE`, Turnstile은 `src/services/meet-online/turnstile-loader.ts`를 같이 쓴다(약속과 같은 사이트 키).
 - `ShareFileDialog.tsx`: 카카오톡 단추 상태 `idle → creating → ready → (보냄)`, 실패 문구, 보관 안내. `linkDoc`이 있는 두 창(장소 내보내기·일정 공유)에 함께 적용된다.
 - 기기 저장 `tripmap:share-links:v1`: `{ id, deleteToken, title, kind, createdAt, expiresAt }[]`(최대 100개, 만료된 것은 읽을 때 지움). **키 `k`는 저장하지 않는다.** 철회(결정 4)에 쓴다. 백업 파일에는 넣지 않는다.
@@ -187,7 +187,7 @@ CREATE INDEX IF NOT EXISTS share_links_expires ON share_links(expires_at);
 
 | 항목 | 값 | 이유 |
 |---|---|---|
-| 본문 | 해시 32,000자(안 B는 IV·태그 포함 32,100자), 요청 40,000바이트 | 보기 화면이 받는 한도(`MAX_HASH_CHARS`, `SHARE_IMPORT_LIMITS.hashChars`)와 같다. 넘는 문서는 이미 `too-big`이라 짧은 링크도 만들지 않는다 |
+| 본문 | 해시 32,000자(안 B는 압축 바이트를 암호화해 32,040자), 요청 40,000바이트 | 보기 화면이 받는 한도(`MAX_HASH_CHARS`, `SHARE_IMPORT_LIMITS.hashChars`)와 같다. 넘는 문서는 이미 `too-big`이라 짧은 링크도 만들지 않는다 |
 | 만들기 | IP 해시당 하루 50번(결정 6) | 약속 올리기(20)보다 자주 쓴다. 최악일 때 IP 하나가 하루 약 1.6MB를 쓴다 |
 | 지우기 | IP 해시당 하루 200번 | 목록 정리 |
 | 읽기 | 없는 링크(`404`)·만료(`410`)만 IP 해시당 하루 5,000번 | 약속 읽기와 같은 규칙. 정상 읽기는 카운터를 쓰지 않는다. id 넘겨짚기를 늦춘다 |
