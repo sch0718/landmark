@@ -1,6 +1,6 @@
 # 랜드마크·가즈아 코드 공통화 제안서 (2026-10-27)
 
-상태: **초안, 검토 전**. 조사 기준일: **2026-10-27**. 구현·설정 변경·배포는 이 제안의 범위 밖이다.
+상태: **결정 기록**(1~5절은 처음 제안, 6절과 맨 위 결정이 최종). 조사 기준일: **2026-10-27**. 구현·설정 변경·배포는 이 문서의 범위 밖이며, 공용 저장소의 실제 작업은 6.13 뒤 기록에 있다.
 
 > **추가 검토(6절):** 사용자가 "앞으로 새 서비스를 계속 만들 예정이고, 공통 코드를 한 곳에서 관리하고 싶다"고 전제를 보탰다. 이 전제에서는 **별도 공용 저장소(패키지 여러 개) + 공개 npm 발행**을 추천안으로 바꾼다. 아래 요약과 1~5절은 소비처가 두 앱뿐일 때의 검토다. 무엇을 공통화할지(1절)는 그대로 유효하다.
 >
@@ -655,7 +655,7 @@ sch0718/sch0718-toolkit-web    # 2026-10-27 결정. Python은 sch0718-toolkit-py
 - Python은 복제본에 시험용 패키지와 태그를 만들어 `git+file://…@태그#subdirectory=…` 설치·import를 확인했다. 실제 첫 패키지 릴리스는 아직 없다.
 - 저장소 설정: 웹은 "Allow GitHub Actions to create and approve pull requests"를 켰다(Version Packages PR용).
 
-**남은 일(소유자).** 서비스에서 받으려면 `read:packages` classic 토큰을 만들어 로컬·Cloudflare 빌드 환경변수 `GITHUB_PACKAGES_TOKEN`에 넣는다. 패키지 설정의 Manage Actions access에 서비스 저장소를 추가한다(웹 README 「서비스에서 설치하기」). 카카오 공유 모듈은 다른 세션의 랜드마크 작업이 끝나면 `packages/kakao-share`로 옮긴다.
+**남은 일(소유자).** 서비스에서 받으려면 `read:packages` classic 토큰을 만들어 로컬·Cloudflare 빌드 환경변수 `GITHUB_PACKAGES_TOKEN`에 넣는다. 패키지 설정의 Manage Actions access에 서비스 저장소를 추가한다(웹 README 「서비스에서 설치하기」). 카카오 공유 모듈은 랜드마크 [#59](https://github.com/sch0718/landmark/pull/59)(`src/lib/kakao-share/`, 2026-10-27 병합)로 먼저 들어갔고, 이것을 `packages/kakao-share`로 옮기는 일이 남았다.
 
 ## 작성 과정
 
