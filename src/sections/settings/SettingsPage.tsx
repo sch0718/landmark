@@ -12,6 +12,7 @@ import { ResetHelpButton } from 'src/sections/help/ResetHelpButton';
 import { paths } from 'src/routes/paths';
 import { BackupSection } from 'src/sections/backup/BackupSection';
 import { RestoreDialogHost } from 'src/sections/backup/RestoreDialogHost';
+import { AboutSection } from 'src/sections/settings/AboutSection';
 import { LegacyImportDialog } from 'src/sections/settings/LegacyImportDialog';
 import { OptionGroup, type Option } from 'src/sections/settings/OptionGroup';
 import { ThemePicker } from 'src/sections/settings/ThemePicker';
@@ -55,7 +56,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 const approxKb = (library: unknown): number =>
   Math.max(1, Math.round((JSON.stringify(library).length * 2) / 1024));
 
-/** 설정(스펙 §4.7): 테마·모드·보관함 보기·백업·옛 여행 가져오기·데이터 정보. */
+/** 설정(스펙 §4.7): 테마·모드·보관함 보기·백업·옛 여행 가져오기·데이터 정보·앱 정보(저작권·라이선스·후원). */
 export function SettingsPage() {
   useDocumentTitle('설정');
   const prefs = useAtomValue(prefsAtom);
@@ -171,6 +172,9 @@ export function SettingsPage() {
       </Section>
       <Section title="데이터 정보">
         <Typography variant="body2">{`${info}${persistNote}`}</Typography>
+      </Section>
+      <Section title="이 앱에 대해">
+        <AboutSection />
       </Section>
 
       <LegacyImportDialog

@@ -66,6 +66,12 @@ echo 'VITE_NAVER_MAP_CLIENT_ID=<발급받은 Client ID>' > .env.local
 
 NCP Maps 요금·무료 사용량: **확인 필요**(배포 후 확인해 날짜와 함께 여기에 기록).
 
+### 라이선스와 오픈소스 고지
+
+- 저장소 라이선스는 [PolyForm Noncommercial 1.0.0](../LICENSE)입니다(`package.json`의 `license`).
+- 오픈소스 고지 `public/third-party-notices.txt`는 `yarn build:notices`가 `dependencies`와 앱에 묶이는 아이콘(`@iconify-json/lucide`)의 라이선스 원문을 모아 만듭니다. 의존성을 바꾸면 다시 만들어 커밋합니다. CI는 `node scripts/build-notices.mjs --check`로 어긋나면 실패합니다. 패키지에 라이선스 파일이 없으면 `scripts/licenses/`에 upstream 원문을 두고 스크립트의 `VENDORED`에 연결합니다.
+- 저작권 표기·라이선스·고지·후원 링크는 설정 › 이 앱에 대해(`src/sections/settings/AboutSection.tsx`)에 있고, 주소는 `src/config/about.ts` 한 곳에서 바꿉니다. `KOFI_URL`이 비어 있으면 후원 링크를 숨깁니다.
+
 ## 개발
 
 ```bash

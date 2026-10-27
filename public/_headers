@@ -2,3 +2,5 @@
   X-Robots-Tag: noindex
 /data/*
   Cache-Control: public, max-age=60
+/third-party-notices.txt
+  Content-Type: text/plain; charset=utf-8
