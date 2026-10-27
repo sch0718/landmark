@@ -1,5 +1,5 @@
-import { expect, test } from '@playwright/test';
-import { E2E_PUBLIC_ID, seedStorage } from './fixtures';
+import { expect } from '@playwright/test';
+import { test, E2E_PUBLIC_ID, seedStorage } from './fixtures';
 
 test('@smoke 옛 여행(/t/…) 미리보기 → 가져오기 → 보관함에 장소와 라벨', async ({ page }) => {
   // 보관함은 비어 있는 상태로 시작한다.

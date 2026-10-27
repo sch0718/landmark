@@ -1,6 +1,14 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 import type { Library } from '../../src/schema/library';
-import { isCompact, LIBRARY_KEY, mockRoutes, mockSearch, seedStorage, seedJson } from './fixtures';
+import {
+  test,
+  isCompact,
+  LIBRARY_KEY,
+  mockRoutes,
+  mockSearch,
+  seedStorage,
+  seedJson,
+} from './fixtures';
 
 declare global {
   interface Window {
@@ -145,6 +153,7 @@ test('@smoke 약속 만들기부터 친구 답장 반영·집계·확정 길찾�
     timezoneId: 'Asia/Seoul',
   });
   try {
+    await friendContext.route('https://t1.kakaocdn.net/**', (route) => route.abort());
     const friend = await friendContext.newPage();
     await mockRoutes(friend);
     await mockSearch(friend, [
@@ -234,4 +243,68 @@ test('@mobile 좁은 화면에서 여섯 탭과 44px 목표를 유지하고 약�
     'aria-current',
     'page',
   );
+});
+
+test('약속 후보·확정·답장 카드는 알림을 다시 눌러 카카오톡으로 보낸다', async ({ page }) => {
+  const { fakeKakao } = await import('./fixtures');
+  const { buildMeeting } = await import('../fixtures/builders');
+  const now = '2026-10-27T00:00:00.000Z';
+  const f = <T>(value: T) => ({ value, updatedAt: now });
+  const meeting = buildMeeting({
+    mode: f('straight'),
+    participants: f([
+      { id: 'person01', name: '나', origin: null },
+      { id: 'person02', name: '친구', origin: null },
+    ]),
+    replies: f({ person02: { likes: [], sentAt: now, receivedAt: now } }),
+    decided: f('choice01'),
+  });
+  await fakeKakao(page);
+  await seedStorage(page, { library: false });
+  const library = { ...JSON.parse(seedJson), meetings: { [meeting.id]: meeting } };
+  await page.addInitScript(
+    ({ key, library }) => {
+      localStorage.setItem(key, JSON.stringify(library));
+    },
+    { key: LIBRARY_KEY, library },
+  );
+  await page.goto(`/meetings/${meeting.id}`);
+  const calls = () => page.evaluate(() => window.kakaoCalls);
+  const buttons = page.getByRole('button', { name: '카카오톡', exact: true });
+  await expect(buttons).toHaveCount(2);
+  await expect(buttons.first()).toBeEnabled();
+  await buttons.first().click();
+  const send = page.getByRole('button', { name: '카카오톡으로 보내기', exact: true }).last();
+  await expect(send).toBeVisible();
+  expect(await calls()).toHaveLength(0);
+  await send.click();
+  const invite = (await calls())[0]!;
+  expect(invite).toMatchObject({
+    content: { title: '친구 모임', description: '후보 1곳 · 가능한 곳을 골라 주세요' },
+    buttonTitle: '답하기',
+  });
+  expect(invite.content.link.webUrl).toContain('/meet#d=');
+  expect(invite.content.link.mobileWebUrl).toBe(invite.content.link.webUrl);
+  await buttons.last().click();
+  await send.click();
+  expect((await calls())[1]).toMatchObject({
+    content: {
+      title: '친구 모임',
+      description: '강남역',
+      link: { webUrl: expect.stringContaining('/meet#f=') },
+    },
+    buttonTitle: '확정 보기',
+  });
+  await page.goto(localLink(invite.content.link.webUrl));
+  await page.getByRole('radio', { name: '친구', exact: true }).check();
+  await page.getByRole('button', { name: '카카오톡', exact: true }).click();
+  await send.click();
+  expect((await calls())[0]).toMatchObject({
+    content: {
+      title: '친구 모임',
+      description: '답장을 보냈어요',
+      link: { webUrl: expect.stringContaining('/meet#r=') },
+    },
+    buttonTitle: '답장 열기',
+  });
 });

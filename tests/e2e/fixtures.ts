@@ -1,6 +1,23 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { expect, type Locator, type Page, type TestInfo } from '@playwright/test';
+import type { KakaoFeed } from '../../src/lib/kakao-share';
+import { test as base, expect, type Locator, type Page, type TestInfo } from '@playwright/test';
+
+declare global {
+  interface Window {
+    kakaoCalls: KakaoFeed[];
+    kakaoInitKeys: string[];
+    kakaoInitializedChecks: number;
+  }
+}
+
+/** 모든 앱 시험에서 실제 카카오 CDN을 부르지 않는다. */
+export const test = base.extend({
+  context: async ({ context }, provide) => {
+    await context.route('https://t1.kakaocdn.net/**', (route) => route.abort());
+    await provide(context);
+  },
+});
 
 /** 옛 여행 가져오기 시험용 fixture(`global-setup`이 `public/data/`로 복사한다). */
 export const E2E_PUBLIC_ID = 'e2etest000001';
@@ -82,6 +99,7 @@ export async function seedStorage(
   page: Page,
   options: { library?: boolean; prefs?: PrefsSeed; helpSeen?: boolean } = {},
 ): Promise<void> {
+  await page.context().route('https://t1.kakaocdn.net/**', (route) => route.abort());
   const { library = true, prefs, helpSeen = true } = options;
   const prefsValue = prefs === undefined ? null : prefsJson(prefs);
   await page.addInitScript(
@@ -297,4 +315,33 @@ export async function mockSearch(
       body: JSON.stringify({ results }),
     }),
   );
+}
+
+/** 외부 앱을 열지 않고 SDK가 받은 카드를 기록한다. */
+export async function fakeKakao(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    let initialized = false;
+    const calls: KakaoFeed[] = [];
+    const initKeys: string[] = [];
+    Object.assign(window, {
+      kakaoCalls: calls,
+      kakaoInitKeys: initKeys,
+      kakaoInitializedChecks: 0,
+      Kakao: {
+        init: (appKey: string) => {
+          initKeys.push(appKey);
+          initialized = true;
+        },
+        isInitialized: () => {
+          window.kakaoInitializedChecks += 1;
+          return initialized;
+        },
+        Share: {
+          sendDefault: (card: KakaoFeed) => {
+            calls.push(card);
+          },
+        },
+      },
+    });
+  });
 }

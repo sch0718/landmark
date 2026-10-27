@@ -35,6 +35,8 @@
 | `v0.14.9` | `7b7d5aa` | 라벨은 이모지만: 칩·배지·타일·라벨 관리·찾기·고르기·병합·일괄 편집·폴더 목록에서 선 아이콘을 그리지 않고, 이모지가 없으면 이름만. 라벨 편집의 `아이콘` 고르기를 뺌 (#47) | ✅ 저장 형식 그대로. 라벨의 `icon` 값은 옛 버전이 읽도록 계속 저장한다(새 라벨은 `star`) |
 | `v0.15.0` | `9467aea` | 약속장소 정하기: 새 탭 `약속`(출발지 이름 검색·지도·보관함, 번화가 역 중간 지점 순위, 역 근처 보관함 장소를 후보로), 후보·답장·확정 링크(`/meet#d=`·`#r=`·`#f=`, 서버 저장 없음), `/api/route` 대중교통(`mode=transit`)·`/api/search` (#48) | ⚠️ 보관함에 선택 키 `meetings`(약속)를 더했다(`schemaVersion: 2` 그대로). 옛 버전은 떼어 내고 읽어 화면은 열리지만 옛 버전에서 저장하면 약속이 모두 지워진다(아래) |
 | `v0.16.0` | `edaa752` | 앱 안 도움말: `/help` 목록과 `/help/<메뉴>` 화면(움직이는 그림·단계·팁), 설정 › `도움말`·내비 레일 `도움말`·각 화면 물음표 단추, 보관함·지도·여행·약속·라벨 관리 처음 안내 창(기기 키 `tripmap:help-seen:v1`), 도움말 그림을 `public/help/img`로 (#52) | ✅ 보관함·백업 형식 그대로. 새 키 `tripmap:help-seen:v1`은 옛 버전이 읽지 않음 |
+| `v0.17.0` | `cbe2d42` | 약속 온라인 집계: 새 약속을 처음 보낼 때 서버(Cloudflare D1)에 올리고(Turnstile) 친구 링크 `/meet/<id>`로 보냄, 친구 답장(참석자 차지·좋아요·출발지)을 10초마다 자동 집계, 주최자 메뉴 `다른 기기에서 열기`(`/meet/<id>#h=…`)·`참석자 차지 풀기`·`서버에서 지우기`, 서버 사본 30일 보관, 서버 함수 `/api/meet`, 기능 스위치 `MEET_ONLINE=off` (#55) | ⚠️ 보관함·백업 형식 그대로. 새 기기 키 `tripmap:meet-online:v1`과 탭 세션 키 `tripmap:meet-host-link:v1`은 옛 버전이 읽지 않음. 서버(D1)의 약속은 남음. 다만 친구 답장 초안(`tripmap:meet-drafts:v1`)은 옛 버전이 읽지 못하고, 옛 버전에서 초안을 저장하면 지워짐(아래) |
+| `v0.18.0` | `6144b70` | 라이선스 PolyForm Noncommercial 1.0.0(`LICENSE`·`package.json`·README), 설정 › `이 앱에 대해`(저작권·라이선스·오픈소스 고지·소스 링크, `KOFI_URL`이 있을 때만 Ko-fi 후원 링크), 오픈소스 고지 `public/third-party-notices.txt`와 `yarn build:notices`, CI 고지 확인 (#57) | ✅ 저장 형식·공유 형식 그대로. 새 저장 키 없음 |
 
 - 마지막 열은 2026-10-17에 `v0.8.0`·`v0.9.0`·`v0.10.0`의 `src/schema`로 지금 형식의 문서(`visitedOn`·`review`·`folders` 포함)를 읽어 확인했다(차례로 셋 다 지움 / `folders`만 지움 / 모두 유지). `v0.3.0`~`v0.7.2`는 `v0.8.0`과 저장 형식이 같다. 새 버전을 낼 때 저장 형식에 필드를 더했다면 그보다 옛 버전 줄을 모두 다시 본다.
 - 보관함은 각 기기의 localStorage(`tripmap:library:v2`)에만 있다. `v0.3.0`~`v0.8.0` 사이는 저장 형식이 같아 데이터 걱정 없이 오갈 수 있다. 그 뒤로는 선택 필드만 더했다(`v0.9.0` 장소의 `visitedOn`·`review`, `v0.10.0` 보관함의 `folders`). `v0.11.0`~`v0.14.6`은 보관함 저장 형식을 바꾸지 않았다. `v0.14.7`은 라벨에 선택 필드 `emoji`만 더했다(`v0.13.0`이 더한 `tripmap:hours:v1`은 지워도 다시 받는 캐시다. `v0.14.0`이 가져온 여행·장소도 지금 스키마 그대로다). `v0.15.0`은 보관함에 선택 키 `meetings`(약속)만 더했다. 옛 버전은 모르는 필드를 손상으로 보지 않고 떼어 낸 채 읽으므로 화면은 그대로 열리지만, **옛 버전에서 무엇이든 저장하는 순간 그 필드가 지워진다.** 되돌리기 전에 설정 › 백업에서 백업 파일을 받아 두면, 새 버전으로 돌아온 뒤 그 파일로 되살릴 수 있다.
@@ -50,6 +52,7 @@
 - `v0.14.9`보다 옛 버전으로 되돌리면 라벨에 선 아이콘이 다시 보이고 라벨 편집에 `아이콘` 고르기가 다시 생긴다. `icon` 값은 계속 저장해 왔으므로 예전에 고른 아이콘이 그대로 나온다. 데이터 걱정은 없다.
 - `v0.15.0`보다 옛 버전으로 되돌리면 보관함의 `meetings`를 모르는 키로 떼어 내고 읽는다. 화면은 열리고 장소·라벨·여행은 그대로지만 `약속` 탭이 없고, **옛 버전에서 무엇이든 저장하면 모든 약속이 지워진다.** 백업 파일은 원본 JSON을 담아 약속도 들어가므로, 되돌리기 전에 설정 › 백업에서 전체 백업을 받아 두면 새 버전으로 돌아온 뒤 되살릴 수 있다. 이미 보낸 `/meet#…` 링크(후보·답장·확정)는 옛 버전에서 없는 화면이 되지만 링크 안의 데이터는 그대로라 다시 올리면 같은 링크가 열린다. 공유 파일·링크(`/view`·`/import`)와 여행 저장 형식은 바뀌지 않았다. `/api/route`의 `transit`과 `/api/search`는 새 화면만 부르므로 옛 화면에는 영향이 없다.
 - `v0.16.0`보다 옛 버전으로 되돌리면 `/help` 화면·물음표 단추·처음 안내가 사라진다. 기기에 남은 `tripmap:help-seen:v1`은 읽지도 지우지도 않으므로, 다시 새 버전으로 오면 이미 본 안내는 다시 뜨지 않는다. 데이터 걱정은 없다. 도움말 그림은 `public/help/img`에서 다시 `docs/help/img`로 돌아가며 GitHub 문서 그림 경로도 함께 돌아간다.
+- `v0.17.0`보다 옛 버전으로 되돌리면 서버 함수 `/api/meet`가 사라져 온라인 약속을 더 올리거나 받을 수 없다. 이미 보낸 친구 링크 `/meet/<id>`와 주최자 링크(`#h=`)는 옛 앱이 몰라 `페이지를 찾을 수 없어요` 화면이 된다. 주최자 보관함의 약속과 그때까지 받아 둔 답장·출발지는 보관함에 있으므로 그대로 보이고, 옛 앱에서는 보통 약속(링크 방식 `#d=`·`#r=`·`#f=`)으로 다시 보낼 수 있다. 기기 키 `tripmap:meet-online:v1`(토큰)은 읽지도 지우지도 않고, D1의 약속·답장도 지우지 않으므로 다시 새 버전으로 오면 같은 링크로 이어서 쓴다(그동안 30일 보관 기한이 지나면 서버 사본은 끝난 약속이 된다). 친구 기기의 답장 초안 키 `tripmap:meet-drafts:v1`은 `v0.15.0`부터 있던 키인데, `v0.17.0`은 항목마다 `version`(온라인 초안은 `docRev`도)을 더해 저장한다. 옛 버전은 모르는 필드가 있는 항목을 버리고 읽으므로 새 버전이 저장한 초안(링크 방식·온라인 모두)은 보이지 않고, **옛 버전에서 링크 방식 답장 초안을 하나라도 저장하면 키를 다시 써서 새 버전의 초안이 모두 지워진다.** 보낸 답장과 서버의 답장은 영향이 없고, 아직 보내지 않은 초안만 잃는다. 서버 쪽 장애만 피하려면 되돌리기 대신 Pages 환경 변수 `MEET_ONLINE=off`를 넣고 다시 배포한다. 새 약속은 링크 방식으로 공유되고 이미 올린 약속의 읽기·답장은 계속 된다.
 
 ## 1. 배포만 되돌리기 (가장 빠름, 코드는 그대로)
 
@@ -78,28 +81,30 @@ PR을 만들어 CI를 통과하면 병합한다. 그 PR의 변경 일부(묶음 
 
 | 되돌리려는 PR | 먼저 되돌릴 PR(이 순서로) | 예 |
 |---|---|---|
-| #52 `edaa752` | 없음 | |
-| #48 `9467aea` | #52 | #52가 #48이 만든 `src/sections/meetings/MeetingsPage.tsx`·`MeetingEditorPage.tsx`와 `src/routes/*`·`src/sections/shell/nav-items.ts`·`src/components/icons.tsx`·`package.json`·`playwright.config.ts`·`tests/e2e/fixtures.ts`를 다시 고쳤다 |
-| #47 `7b7d5aa` | #52 → #48 | #48이 #47이 고친 `src/components/icons.tsx`·`src/domain/library/ops.ts`를, #52가 `src/components/icons.tsx`·`src/sections/labels/LabelsPage.tsx`를 다시 고쳤다 |
-| #45 `9985631` | #52 → #48 → #47 | #52가 #45가 고친 `src/sections/trips/planner/TripPlannerPage.tsx`·`src/components/icons.tsx`를 다시 고쳤다 |
-| #43 `76887c1` | #52 → #48 → #47 → #45 | #45가 #43이 고친 `src/sections/trips/planner/trip-map-layers.ts`·`src/components/icons.tsx`와 시험(`tests/unit/components/map-view.test.tsx`·`sections/trips/emoji-map-layers.test.ts`)을 다시 고쳤다 |
-| #41 `c45490e` | #52 → #48 → #47 → #45 → #43 | #43이 #41이 고친 `src/sections/library/LabelChips.tsx`·`LabelFilterDialog.tsx`, `playwright.config.ts`·`package.json`을 다시 고쳤다 |
-| #40 `b33442f` | #52 → #48 → #47 → #45 → #43 → #41 | #41이 `playwright.config.ts`(E2E 목록)를 함께 고쳤다 |
-| #39 `83aae0b` | #52 → #48 → #47 → #45 → #43 → #41 → #40 | #41이 `package.json`(`build:ci`의 `--require-lazy`)을 함께 고쳤다 |
-| #38 `cd3359d` | #52 → #48 → #47 → #45 → #43 → #41 → #40 → #39 | 시험만 고친 PR(`tests/e2e/library.spec.ts`). 겹치는 파일은 없지만 규칙대로 새 것부터 |
-| #36 `c795029` | #52 → #48 → #47 → #45 → #43 → #41 → #40 → #39 → #38 | #41이 #36이 고친 `src/sections/library/LibraryPage.tsx`, `src/sections/map/LibraryMap.tsx`, `src/routes/lazy-routes.ts`, `tests/unit/sections/map/library-map.test.tsx`, `playwright.config.ts`·`package.json`을 다시 고쳤다 |
-| #35 `8d94fd0` | #52 → #48 → #47 → #45 → #43 → #41 → #40 → #39 → #38 → #36 | #36이 #35가 고친 `src/sections/shell/AppShell.tsx`·`use-close-detail.ts`, `src/sections/map/LibraryMap.tsx`, `src/sections/library/LibraryPage.tsx`와 시험(`tests/e2e/library.spec.ts`, `tests/unit/sections/map/library-map.test.tsx`·`library/place-row.test.tsx`·`shell/app-shell.test.tsx`·`shell/close-detail.test.tsx`)을 다시 고쳤다(휴대폰에서 `useCloseDetail`이 시트 기록을 되감는다) |
-| #33 `881907a` | #52 → #48 → #47 → #45 → #43 → #41 → #40 → #39 → #38 → #36 → #35 | 겹치는 파일은 없지만 규칙대로 새 것부터 |
-| F7 `c3bc22a` | #52 → #48 → #47 → #45 → #43 → #41 → #40 → #39 → #38 → #36 → #35 → #33 | #33이 F7이 고친 `src/share-viewer/encode.ts`·`tests/e2e/fixtures.ts`·`tests/unit/share-viewer/main.test.ts`·`tests/unit/sections/trips/planner-timeline.test.tsx`를 다시 고쳤다 |
-| #29 `cf25516` | #52 → #48 → #47 → #45 → #43 → #41 → #40 → #39 → #38 → #36 → #35 → #33 → F7 | 겹치는 파일은 없지만 규칙대로 새 것부터 |
-| #30 `bf78a5d` | #52 → #48 → #47 → #45 → #43 → #41 → #40 → #39 → #38 → #36 → #35 → #33 → F7 → #29 | 겹치는 파일은 없지만 규칙대로 새 것부터 |
-| #27 `0643a95` | #52 → #48 → #47 → #45 → #43 → #41 → #40 → #39 → #38 → #36 → #35 → #33 → F7 → #29 → #30 | |
-| F6 `279cdcf` | #52 → #48 → #47 → #45 → #43 → #41 → #40 → #39 → #38 → #36 → #35 → #33 → F7 → #29 → #30 → #27 | #27이 F6의 `tests/unit/services/hours-lookup.test.ts`를 고쳤고, F7이 F6의 `DayTimeline.tsx`·`playwright.config.ts`를 고쳤다 |
-| F5 `c908b2c` | #52 → #48 → #47 → #45 → #43 → #41 → #40 → #39 → #38 → #36 → #35 → #33 → F7 → #29 → #30 → #27 → F6 | F6이 F5의 `DAY_ROLLOVER_HOUR`·`addDays`를 쓰고, F7이 F5의 `trip-dates.ts`·`use-day-plan.ts`·`schema/trip.ts`(`addDays`를 `src/lib/calendar.ts`로)·`TripsPage.tsx`·`lazy-routes.ts`를 고쳤다 |
-| F4 `553310e` | #52 → #48 → #47 → #45 → #43 → #41 → #40 → #39 → #38 → #36 → #35 → #33 → F7 → #29 → #30 → #27 → F6 → F5 | F7이 F4의 `SharePreview.tsx`를 고쳤고, #30이 F4의 `NearbyBar.tsx`·`LibraryPage.tsx`를 고쳤고, F5가 F4의 위치 서비스·`MyLocationButton`·`formatDistanceM`을 쓰고 위치 서비스를 고쳤다 |
-| F3 `7d81384` | #52 → #48 → #47 → #45 → #43 → #41 → #40 → #39 → #38 → #36 → #35 → #33 → F7 → #29 → #30 → #27 → F6 → F5 → F4 | F4 Task 6이 F3의 `FolderResync.tsx`·`FolderList.tsx`에 근처 모드 끄기를 더했다 |
-| F2 `1732bdb` | #52 → #48 → #47 → #45 → #43 → #41 → #40 → #39 → #38 → #36 → #35 → #33 → F7 → #29 → #30 → #27 → F6 → F5 → F4 → F3 | F5가 F2의 `setVisitedOn`·`visitedOnOf`를 쓰고, F3·F4가 F2의 파일을 고쳤다 |
-| F1 `9711e53` | #52 → #48 → #47 → #45 → #43 → #41 → #40 → #39 → #38 → #36 → #35 → #33 → F7 → #29 → #30 → #27 → F6 → F5 → F4 → F3 → F2 | F2·F3·F4가 F1의 `backup-state.ts`·`summary.ts` 등을 고쳤다 |
+| #57 `6144b70` | 없음 | |
+| #55 `cbe2d42` | 없음 | #57과 겹치는 코드는 없다. 다만 #56이 #55의 설계 문서를 고쳐 `docs/superpowers/specs/2026-10-25-meeting-online-design.md`가 충돌(UD)하므로 그 파일을 지워 해결한다 |
+| #52 `edaa752` | #55 | #55가 #52가 고친 `src/routes/paths.ts`·`router.tsx`·`src/sections/help/help-content.ts`·`src/sections/meetings/MeetingsPage.tsx`·`MeetingEditorPage.tsx`·`public/help/img/meetings-*.svg`·`package.json`·`playwright.config.ts`와 `tests/unit/sections/help/help-page.test.tsx`를 다시 고쳤다 |
+| #48 `9467aea` | #55 → #52 | #55가 #48이 만든 `src/sections/meetings/*`(`MeetLinkPage.tsx`·`MeetingResults.tsx`·`share-link.ts`·`meet-drafts.ts` 등)·`src/domain/meeting/ops.ts`·`src/services/errors.ts`와 시험을 다시 고쳤고, #52가 #48이 만든 `src/sections/meetings/MeetingsPage.tsx`·`MeetingEditorPage.tsx`와 `src/routes/*`·`src/sections/shell/nav-items.ts`·`src/components/icons.tsx`·`package.json`·`playwright.config.ts`·`tests/e2e/fixtures.ts`를 다시 고쳤다 |
+| #47 `7b7d5aa` | #55 → #52 → #48 | #48이 #47이 고친 `src/components/icons.tsx`·`src/domain/library/ops.ts`를, #52가 `src/components/icons.tsx`·`src/sections/labels/LabelsPage.tsx`를 다시 고쳤다 |
+| #45 `9985631` | #55 → #52 → #48 → #47 | #52가 #45가 고친 `src/sections/trips/planner/TripPlannerPage.tsx`·`src/components/icons.tsx`를 다시 고쳤다 |
+| #43 `76887c1` | #55 → #52 → #48 → #47 → #45 | #45가 #43이 고친 `src/sections/trips/planner/trip-map-layers.ts`·`src/components/icons.tsx`와 시험(`tests/unit/components/map-view.test.tsx`·`sections/trips/emoji-map-layers.test.ts`)을 다시 고쳤다 |
+| #41 `c45490e` | #55 → #52 → #48 → #47 → #45 → #43 | #43이 #41이 고친 `src/sections/library/LabelChips.tsx`·`LabelFilterDialog.tsx`, `playwright.config.ts`·`package.json`을 다시 고쳤다 |
+| #40 `b33442f` | #55 → #52 → #48 → #47 → #45 → #43 → #41 | #41이 `playwright.config.ts`(E2E 목록)를 함께 고쳤다 |
+| #39 `83aae0b` | #55 → #52 → #48 → #47 → #45 → #43 → #41 → #40 | #41이 `package.json`(`build:ci`의 `--require-lazy`)을 함께 고쳤다 |
+| #38 `cd3359d` | #55 → #52 → #48 → #47 → #45 → #43 → #41 → #40 → #39 | 시험만 고친 PR(`tests/e2e/library.spec.ts`). 겹치는 파일은 없지만 규칙대로 새 것부터 |
+| #36 `c795029` | #55 → #52 → #48 → #47 → #45 → #43 → #41 → #40 → #39 → #38 | #41이 #36이 고친 `src/sections/library/LibraryPage.tsx`, `src/sections/map/LibraryMap.tsx`, `src/routes/lazy-routes.ts`, `tests/unit/sections/map/library-map.test.tsx`, `playwright.config.ts`·`package.json`을 다시 고쳤다 |
+| #35 `8d94fd0` | #55 → #52 → #48 → #47 → #45 → #43 → #41 → #40 → #39 → #38 → #36 | #36이 #35가 고친 `src/sections/shell/AppShell.tsx`·`use-close-detail.ts`, `src/sections/map/LibraryMap.tsx`, `src/sections/library/LibraryPage.tsx`와 시험(`tests/e2e/library.spec.ts`, `tests/unit/sections/map/library-map.test.tsx`·`library/place-row.test.tsx`·`shell/app-shell.test.tsx`·`shell/close-detail.test.tsx`)을 다시 고쳤다(휴대폰에서 `useCloseDetail`이 시트 기록을 되감는다) |
+| #33 `881907a` | #55 → #52 → #48 → #47 → #45 → #43 → #41 → #40 → #39 → #38 → #36 → #35 | 겹치는 파일은 없지만 규칙대로 새 것부터 |
+| F7 `c3bc22a` | #55 → #52 → #48 → #47 → #45 → #43 → #41 → #40 → #39 → #38 → #36 → #35 → #33 | #33이 F7이 고친 `src/share-viewer/encode.ts`·`tests/e2e/fixtures.ts`·`tests/unit/share-viewer/main.test.ts`·`tests/unit/sections/trips/planner-timeline.test.tsx`를 다시 고쳤다 |
+| #29 `cf25516` | #55 → #52 → #48 → #47 → #45 → #43 → #41 → #40 → #39 → #38 → #36 → #35 → #33 → F7 | 겹치는 파일은 없지만 규칙대로 새 것부터 |
+| #30 `bf78a5d` | #55 → #52 → #48 → #47 → #45 → #43 → #41 → #40 → #39 → #38 → #36 → #35 → #33 → F7 → #29 | 겹치는 파일은 없지만 규칙대로 새 것부터 |
+| #27 `0643a95` | #55 → #52 → #48 → #47 → #45 → #43 → #41 → #40 → #39 → #38 → #36 → #35 → #33 → F7 → #29 → #30 | |
+| F6 `279cdcf` | #55 → #52 → #48 → #47 → #45 → #43 → #41 → #40 → #39 → #38 → #36 → #35 → #33 → F7 → #29 → #30 → #27 | #27이 F6의 `tests/unit/services/hours-lookup.test.ts`를 고쳤고, F7이 F6의 `DayTimeline.tsx`·`playwright.config.ts`를 고쳤다 |
+| F5 `c908b2c` | #55 → #52 → #48 → #47 → #45 → #43 → #41 → #40 → #39 → #38 → #36 → #35 → #33 → F7 → #29 → #30 → #27 → F6 | F6이 F5의 `DAY_ROLLOVER_HOUR`·`addDays`를 쓰고, F7이 F5의 `trip-dates.ts`·`use-day-plan.ts`·`schema/trip.ts`(`addDays`를 `src/lib/calendar.ts`로)·`TripsPage.tsx`·`lazy-routes.ts`를 고쳤다 |
+| F4 `553310e` | #55 → #52 → #48 → #47 → #45 → #43 → #41 → #40 → #39 → #38 → #36 → #35 → #33 → F7 → #29 → #30 → #27 → F6 → F5 | F7이 F4의 `SharePreview.tsx`를 고쳤고, #30이 F4의 `NearbyBar.tsx`·`LibraryPage.tsx`를 고쳤고, F5가 F4의 위치 서비스·`MyLocationButton`·`formatDistanceM`을 쓰고 위치 서비스를 고쳤다 |
+| F3 `7d81384` | #55 → #52 → #48 → #47 → #45 → #43 → #41 → #40 → #39 → #38 → #36 → #35 → #33 → F7 → #29 → #30 → #27 → F6 → F5 → F4 | F4 Task 6이 F3의 `FolderResync.tsx`·`FolderList.tsx`에 근처 모드 끄기를 더했다 |
+| F2 `1732bdb` | #55 → #52 → #48 → #47 → #45 → #43 → #41 → #40 → #39 → #38 → #36 → #35 → #33 → F7 → #29 → #30 → #27 → F6 → F5 → F4 → F3 | F5가 F2의 `setVisitedOn`·`visitedOnOf`를 쓰고, F3·F4가 F2의 파일을 고쳤다 |
+| F1 `9711e53` | #55 → #52 → #48 → #47 → #45 → #43 → #41 → #40 → #39 → #38 → #36 → #35 → #33 → F7 → #29 → #30 → #27 → F6 → F5 → F4 → F3 → F2 | F2·F3·F4가 F1의 `backup-state.ts`·`summary.ts` 등을 고쳤다 |
 
 2026-10-17에 `c908b2c`에서 F5 → F4 → F3 → F2 → F1 순서로 `git revert -m 1 <병합 커밋>`을 하나씩 실행했다. 다섯 번 모두 충돌이 없었고, 매번 `src`·`tests`가 그 PR이 들어오기 바로 전 커밋과 똑같았으며, typecheck와 시험이 통과했다.
 
@@ -153,6 +158,10 @@ F 묶음 사이에 다른 PR이 끼면 그 PR도 같은 기준(앞 PR의 파일�
 2026-10-24에 `72c1e7b`(최신 `main`)에서 #48 → #47 순서로 `git revert -m 1 <병합 커밋>`을 이어서 실행했다. 두 번 모두 충돌이 없었고 `src`·`tests`·`functions`가 #47 바로 전 커밋(`f465947`, `v0.14.8` 문서 병합)과 같았으며 typecheck와 시험이 통과했다(3643개).
 
 2026-10-24에 `edaa752`(#52 병합 뒤 `main`, `v0.16.0`)에서 #52를 `git revert -m 1`로 되돌렸다. 충돌이 없었고 `src`·`tests`·`functions`·`public`·`scripts`가 바로 전 커밋(`8b75dfe`)과 같았으며 typecheck와 시험이 통과했다(3955개). 그 뒤 #48 → #47 순서는 위 `72c1e7b`에서 확인한 것과 같다.
+
+2026-10-27에 `cbe2d42`(#55 병합 뒤 `main`, `v0.17.0`)에서 #55를 `git revert -m 1`로 되돌렸다. 충돌이 없었고 `src`·`tests`·`functions`·`public`·`scripts`가 바로 전 커밋(`af62631`, #54 병합)과 같았으며 typecheck와 시험이 통과했다(4013개). `af62631`은 `edaa752`에서 문서만 더했으므로 그 뒤 #52 → #48 → #47 순서는 위에서 확인한 것과 같다. D1의 표와 자료는 코드 되돌리기로 지워지지 않는다.
+
+2026-10-27에 `6144b70`(#57 병합 뒤 `main`, `v0.18.0`)에서 #57을 `git revert -m 1`로 되돌렸다. 충돌이 없었고 `src`·`tests`·`functions`·`public`·`scripts`가 바로 전 커밋(`0c48aea`, #56 병합)과 같았다. `v0.18.0`보다 옛 버전으로 되돌리면 설정의 `이 앱에 대해`와 `/third-party-notices.txt`가 사라지지만 데이터 걱정은 없다. `LICENSE`도 함께 사라지므로 라이선스만 남기려면 #57 전체가 아니라 앱 화면 파일만 되돌린다.
 
 특정 버전의 코드를 그대로 보려면 `git switch --detach v0.4.0`.
 

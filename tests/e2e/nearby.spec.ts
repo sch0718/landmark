@@ -1,5 +1,5 @@
-import { expect, test, type Locator, type Page } from '@playwright/test';
-import { SEED_PLACE_COUNT, seedStorage } from './fixtures';
+import { expect, type Locator, type Page } from '@playwright/test';
+import { test, SEED_PLACE_COUNT, seedStorage } from './fixtures';
 
 const rows = (page: Page): Locator =>
   page.getByRole('list', { name: '장소 목록' }).getByRole('listitem');

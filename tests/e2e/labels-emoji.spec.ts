@@ -1,6 +1,6 @@
-import { expect, test } from '@playwright/test';
+import { expect } from '@playwright/test';
 import type { Library } from '../../src/schema/library';
-import { isCompact, LIBRARY_KEY, seedStorage } from './fixtures';
+import { test, isCompact, LIBRARY_KEY, seedStorage } from './fixtures';
 
 test('@smoke 라벨 이모지를 고르면 칩과 지도 이름표에 보인다', async ({ page }) => {
   await seedStorage(page, { prefs: { libraryView: 'list' } });

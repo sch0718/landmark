@@ -46,6 +46,7 @@ yarn install --frozen-lockfile  # .yarnrc의 ignore-engines가 적용된다
 | -------------------------- | ----------------------------------------------------------------------------- |
 | `VITE_NAVER_MAP_CLIENT_ID` | 네이버 지도 JS API v3(NCP) Client ID. 로컬은 `.env.local`(gitignore)에 둡니다 |
 | `VITE_MAP_ADAPTER`         | `fake`면 네이버 SDK 대신 DOM 가짜 지도를 씁니다(E2E·키 없는 개발용)           |
+| `VITE_KAKAO_JS_KEY` | 카카오톡 공유 JavaScript 키. Pages **Production에만** 넣습니다. 미리보기 도메인은 카카오에 등록할 수 없어 Preview에는 넣지 않습니다. 비어 있으면 단추를 숨깁니다 |
 | `VITE_TURNSTILE_SITE_KEY` | 약속 올리기에 쓰는 Turnstile 공개 사이트 키. Pages Production·Preview의 빌드 환경 변수 |
 | `DB` | D1 바인딩. 운영은 `landmark`, 미리보기는 `landmark-preview` |
 | `TURNSTILE_SECRET` | Turnstile 검증용 비밀 키. Pages의 서버 시크릿 |
@@ -56,6 +57,8 @@ yarn install --frozen-lockfile  # .yarnrc의 ignore-engines가 적용된다
 echo 'VITE_NAVER_MAP_CLIENT_ID=<발급받은 Client ID>' > .env.local
 ```
 
+**카카오 콘솔 도메인 등록**: 앱의 JavaScript SDK 도메인과 제품 링크 관리 › 웹 도메인에 운영 앱 주소를 등록합니다. JavaScript 키 값은 저장소에 기록하지 않습니다(확인일: 2026-10-27).
+
 **NCP 콘솔 도메인 등록**: Maps 애플리케이션의 Web 서비스 URL에 아래 주소를 등록해야 지도가 뜹니다.
 
 - 운영 도메인 `https://landmark.sch0718.dev`와 Pages 기본 주소 `https://landmark-c5f.pages.dev`
@@ -65,6 +68,12 @@ echo 'VITE_NAVER_MAP_CLIENT_ID=<발급받은 Client ID>' > .env.local
 **NCP Reverse Geocoding 켜기**: 지도에서 핀으로 장소를 추가할 때 주소를 자동으로 채우려면 같은 Maps 애플리케이션에서 Reverse Geocoding API를 켜야 합니다. 꺼져 있으면 주소 칸이 비어 직접 입력해야 합니다.
 
 NCP Maps 요금·무료 사용량: **확인 필요**(배포 후 확인해 날짜와 함께 여기에 기록).
+
+### 라이선스와 오픈소스 고지
+
+- 저장소 라이선스는 [PolyForm Noncommercial 1.0.0](../LICENSE)입니다(`package.json`의 `license`).
+- 오픈소스 고지 `public/third-party-notices.txt`는 `yarn build:notices`가 `dependencies`와 앱에 묶이는 아이콘(`@iconify-json/lucide`)의 라이선스 원문을 모아 만듭니다. 의존성을 바꾸면 다시 만들어 커밋합니다. CI는 `node scripts/build-notices.mjs --check`로 어긋나면 실패합니다. 패키지에 라이선스 파일이 없으면 `scripts/licenses/`에 upstream 원문을 두고 스크립트의 `VENDORED`에 연결합니다.
+- 저작권 표기·라이선스·고지·후원 링크는 설정 › 이 앱에 대해(`src/sections/settings/AboutSection.tsx`)에 있고, 주소는 `src/config/about.ts` 한 곳에서 바꿉니다. `KOFI_URL`이 비어 있으면 후원 링크를 숨깁니다.
 
 ## 개발
 

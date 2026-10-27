@@ -1,7 +1,8 @@
 import { statSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
-import { expect, test, type Locator, type Page, type TestInfo } from '@playwright/test';
+import { expect, type Locator, type Page, type TestInfo } from '@playwright/test';
 import {
+  test,
   addButton,
   BUILD_APP_ORIGIN,
   candidatePanel,
@@ -49,7 +50,9 @@ async function exportTrip(page: Page, testInfo: TestInfo): Promise<string> {
   await expect(dialog).toContainText(`‘${TRIP_TITLE}’ 일정을 HTML 파일 하나로 만들어요`);
   await expect(dialog).toContainText(`일정 ${STOPS.length}곳`);
   // 모든 구간의 경로를 받은 뒤에 저장한다(받는 중이면 그 구간은 어림값으로 들어간다).
-  await expect(dialog.getByRole('status')).toHaveText(/^이동 시간은 \d+월 \d+일 조회 기준이에요$/);
+  await expect(dialog.getByRole('status').filter({ hasText: /^이동 시간은/ })).toHaveText(
+    /^이동 시간은 \d+월 \d+일 조회 기준이에요$/,
+  );
   const [download] = await Promise.all([
     page.waitForEvent('download'),
     dialog.getByRole('button', { name: '파일 저장' }).click(),

@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 import {
+  test,
   BUILD_APP_ORIGIN,
   emptyLibrary,
   exportSeaPlaces,

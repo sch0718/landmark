@@ -28,6 +28,14 @@ import {
 } from 'src/services/errors';
 import { ShareTemplate } from 'src/services/share-template';
 import { useShareLink } from './use-share-link';
+import {
+  useKakao,
+  kakaoUrlFits,
+  sendAppKakao,
+  KAKAO_TOO_LONG,
+  KAKAO_LOAD_FAILED,
+  KAKAO_SEND_FAILED,
+} from './kakao';
 
 const TITLE_MAX = 60;
 const TITLE_HELP = '제목은 1~60자로 써 주세요';
@@ -55,6 +63,8 @@ type Props = {
   make(template: string, opts: ShareFileOptions): Result.Result<ShareHtml, ShareDocInvalid>;
   /** 링크에 담을 문서. 파일용 HTML 틀을 기다리지 않고 만든다. */
   linkDoc?(opts: ShareFileOptions): ShareDoc | null;
+  kakaoDescription?: string;
+  kakaoButtonTitle?: string;
   /** 있으면 크기 검사를 켠다. 한도를 넘을 때 문구 끝에 붙일 줄이는 방법. */
   tooBigHint?(opts: ShareFileOptions): string;
   /** 있으면 장소 수 검사를 켠다. 가져오기 한도(1,000곳)를 넘을 때 문구 끝에 붙일 줄이는 방법. */
@@ -124,6 +134,8 @@ export function ShareFileDialog({
   children,
   make,
   linkDoc,
+  kakaoDescription,
+  kakaoButtonTitle,
   tooBigHint,
   tooManyHint,
 }: Props) {
@@ -179,7 +191,22 @@ export function ShareFileDialog({
     includeMemo,
     linkDoc,
   );
+  const kakao = useKakao(open && linksSupported);
+  const kakaoTooLong = link?.kind === 'direct' && !kakaoUrlFits(link.href);
   const linkDisabled = disabled || link?.kind !== 'direct';
+  const runKakao = () => {
+    if (linkDisabled || !kakao.ready || kakaoTooLong || link?.kind !== 'direct') return;
+    setError(null);
+    if (
+      !sendAppKakao({
+        title: trimmed,
+        url: link.href,
+        description: kakaoDescription,
+        buttonTitle: kakaoButtonTitle,
+      })
+    )
+      setError(KAKAO_SEND_FAILED);
+  };
   const runLink = async (kind: 'copy' | 'share') => {
     if (busyRef.current || linkDisabled || link?.kind !== 'direct') return;
     const runId = runIdRef.current;
@@ -330,7 +357,26 @@ export function ShareFileDialog({
                     링크 공유
                   </Button>
                 )}
+                {kakao.enabled && (
+                  <Button
+                    variant="outlined"
+                    disabled={linkDisabled || !kakao.ready || kakaoTooLong}
+                    onClick={runKakao}
+                    sx={{ minHeight: 44 }}
+                  >
+                    카카오톡
+                  </Button>
+                )}
               </Box>
+              {kakao.enabled && (kakaoTooLong || kakao.failed) && (
+                <Typography
+                  role="status"
+                  variant="body2"
+                  sx={{ color: 'var(--tm-text-secondary)' }}
+                >
+                  {kakaoTooLong ? KAKAO_TOO_LONG : KAKAO_LOAD_FAILED}
+                </Typography>
+              )}
               {includeMemo && (
                 <Typography variant="body2" sx={{ color: 'var(--tm-text-secondary)' }}>
                   링크를 받은 사람은 누구나 메모를 볼 수 있어요

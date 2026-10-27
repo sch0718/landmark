@@ -21,7 +21,8 @@ import {
   type OnlineRecord,
 } from 'src/services/meet-online/store';
 import { getTurnstileToken } from 'src/services/meet-online/turnstile-loader';
-import { shareLink, shareMeetingDoc, onlineMeetingUrl } from './share-link';
+import { shareLink, shareMeetingDoc, onlineMeetingUrl, meetingKakaoCard } from './share-link';
+import { prepareKakaoLink } from '../share-export/kakao';
 import { useMeeting } from './use-meeting';
 import type { MeetingTimes } from './use-meeting-compute';
 import { useOnlinePoll } from './use-online-poll';
@@ -628,7 +629,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
     return () => clearTimeout(timer);
   }, [hostLikesJson, mode, uploaded]);
 
-  async function share(kind: 'invite' | 'final' = 'invite') {
+  async function share(kind: 'invite' | 'final' = 'invite', channel: 'link' | 'kakao' = 'link') {
     const current = currentRecord();
     if (current?.ended) return;
     const input = latest.current;
@@ -637,6 +638,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
         (kind === 'final' ? finalFromMeeting(fresh.meeting) : null) ??
           inviteFromMeeting(fresh.meeting, fresh.compute.times, fresh.compute.unit, sentAt),
         fresh.meeting.title.value,
+        ...(channel === 'kakao' ? ([channel] as const) : []),
       );
     if (isLinkMeeting(input.meeting, current)) {
       await shareFallback(input);
@@ -713,16 +715,35 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
       toast.error('지금은 보낼 수 없어요. 잠시 뒤 다시 해 주세요');
       return;
     }
-    await shareOnlineLink(onlineMeetingUrl(meeting.id), latest.current.meeting.title.value);
+    const fresh = latest.current;
+    if (channel === 'kakao') {
+      const doc =
+        (kind === 'final' ? finalFromMeeting(fresh.meeting) : null) ??
+        inviteFromMeeting(
+          fresh.meeting,
+          fresh.compute.times,
+          fresh.compute.unit,
+          new Date().toISOString(),
+        );
+      await prepareKakaoLink({
+        url: onlineMeetingUrl(meeting.id),
+        ...meetingKakaoCard(doc, fresh.meeting.title.value),
+      });
+    } else await shareOnlineLink(onlineMeetingUrl(meeting.id), fresh.meeting.title.value);
   }
-  async function shareFinal() {
+  async function shareFinal(channel: 'link' | 'kakao' = 'link') {
     if (mode === 'online' || mode === 'local') {
-      await share('final');
+      await share('final', channel);
       return;
     }
     if (mode === 'link') {
       const doc = finalFromMeeting(latest.current.meeting);
-      if (doc) await shareMeetingDoc(doc, latest.current.meeting.title.value);
+      if (doc)
+        await shareMeetingDoc(
+          doc,
+          latest.current.meeting.title.value,
+          ...(channel === 'kakao' ? ([channel] as const) : []),
+        );
     }
   }
   async function openOnOtherDevice() {

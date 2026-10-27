@@ -1,5 +1,5 @@
-import { expect, test, type Locator, type Page } from '@playwright/test';
-import { seedStorage } from './fixtures';
+import { expect, type Locator, type Page } from '@playwright/test';
+import { test, seedStorage } from './fixtures';
 
 /**
  * 첫 로딩(D2 스펙 §7). 첫 화면이 아닌 화면은 나눠 받으므로, 메뉴 이동·직접 진입·받기 실패를 실제 앱에서 본다.
