@@ -36,6 +36,10 @@ jobs:
       - name: Lint
         run: yarn lint
 
+      # 오픈소스 고지(public/third-party-notices.txt)가 설치된 의존성과 맞는지 확인한다.
+      - name: Third-party notices
+        run: node scripts/build-notices.mjs --check
+
       # Cloudflare Pages 빌드 명령과 같다: validate → typecheck → 단위 테스트 → 빌드.
       - name: Build (build:ci)
         run: yarn build:ci
