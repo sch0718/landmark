@@ -14,17 +14,19 @@ export function CandidateTally({
   onRemove,
   onDecide,
   onRetry,
+  participantId,
 }: {
   meeting: Meeting;
   times: MeetingTimes;
   errors: Record<string, Record<string, RouteLookupErrorCode>>;
   unit: 'm' | 'min';
+  participantId?: string | null;
   onLike(cid: string): void;
-  onRemove(cid: string): void;
-  onDecide(cid: string | null): void;
+  onRemove?(cid: string): void;
+  onDecide?(cid: string | null): void;
   onRetry(cid: string, pid: string): void;
 }) {
-  const host = meeting.participants.value[0];
+  const actorId = participantId === undefined ? meeting.participants.value[0]?.id : participantId;
   return (
     <Box component="section" aria-label="후보와 집계">
       <Box component="h2" sx={{ fontSize: 18 }}>
@@ -60,9 +62,11 @@ export function CandidateTally({
               />
               <Box sx={{ display: 'flex', flexWrap: 'wrap' }}>
                 <Button
-                  disabled={!host}
+                  disabled={!actorId}
                   aria-pressed={
-                    host ? (meeting.replies.value[host.id]?.likes.includes(c.id) ?? false) : false
+                    actorId
+                      ? (meeting.replies.value[actorId]?.likes.includes(c.id) ?? false)
+                      : false
                   }
                   aria-label={`${c.name} 좋아요`}
                   onClick={() => onLike(c.id)}
@@ -70,20 +74,24 @@ export function CandidateTally({
                 >
                   좋아요
                 </Button>
-                <Button
-                  aria-label={`${c.name} ${decided ? '확정 취소' : '확정'}`}
-                  onClick={() => onDecide(decided ? null : c.id)}
-                  sx={{ minHeight: 44 }}
-                >
-                  {decided ? '확정 취소' : '확정'}
-                </Button>
-                <Button
-                  aria-label={`${c.name} 후보 빼기`}
-                  onClick={() => onRemove(c.id)}
-                  sx={{ minHeight: 44 }}
-                >
-                  후보 빼기
-                </Button>
+                {onDecide && (
+                  <Button
+                    aria-label={`${c.name} ${decided ? '확정 취소' : '확정'}`}
+                    onClick={() => onDecide(decided ? null : c.id)}
+                    sx={{ minHeight: 44 }}
+                  >
+                    {decided ? '확정 취소' : '확정'}
+                  </Button>
+                )}
+                {onRemove && (
+                  <Button
+                    aria-label={`${c.name} 후보 빼기`}
+                    onClick={() => onRemove(c.id)}
+                    sx={{ minHeight: 44 }}
+                  >
+                    후보 빼기
+                  </Button>
+                )}
               </Box>
             </Box>
           );

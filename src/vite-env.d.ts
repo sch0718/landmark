@@ -2,6 +2,8 @@
 /// <reference types="unplugin-icons/types/react" />
 
 interface ImportMetaEnv {
+  /** 약속 올리기 때 지연 로딩하는 Turnstile의 공개 사이트 키. */
+  readonly VITE_TURNSTILE_SITE_KEY?: string;
   readonly VITE_NAVER_MAP_CLIENT_ID?: string;
   /** 'fake'면 DOM 전용 가짜 지도(테스트·E2E). */
   readonly VITE_MAP_ADAPTER?: string;

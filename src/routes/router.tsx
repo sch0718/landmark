@@ -54,6 +54,7 @@ export const routes: RouteObject[] = [
       { path: paths.meetings, element: lazyElement(<MeetingsPage />, 'meetings') },
       { path: paths.meeting(':id'), element: lazyElement(<MeetingEditorPage />, 'meeting') },
       { path: paths.meet, element: lazyElement(<MeetLinkPage />, 'meet') },
+      { path: paths.meetOnline(':id'), element: lazyElement(<MeetLinkPage />, 'meet') },
       { path: paths.trips, element: lazyElement(<TripsPage />, 'trips') },
       { path: paths.trip(':id'), element: lazyElement(<TripPlannerPage />, 'trip') },
       { path: paths.tripToday(':id'), element: lazyElement(<TripTodayPage />, 'trip-today') },

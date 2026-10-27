@@ -20,7 +20,7 @@ export type MeetingOpError =
   | 'host'
   | 'invalid';
 export type MeetingError = { _tag: 'MeetingOpError'; reason: MeetingOpError };
-export const meetingFailure = (reason: MeetingOpError): OpResult => ({
+export const meetingFailure = (reason: MeetingOpError): Extract<OpResult, { ok: false }> => ({
   ok: false,
   error: { _tag: 'MeetingOpError', reason },
 });

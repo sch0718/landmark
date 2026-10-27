@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="960" height="520" viewBox="0 0 960 520" role="img" aria-labelledby="motion-title motion-desc">
 <title id="motion-title">랜드마크 도움말 — 약속</title>
-<desc id="motion-desc">약속 사용법: 1. 새 약속(이름·날짜·시각, 이동수단) 2. 참석자 출발지(‘검색’ · ‘지도에서’ · ‘보관함에서’) 3. 중간 지점 찾기(모두에게 공평한 번화가 역 순위) 4. 링크로 함께 고르기(‘후보 링크 보내기’ → 답장 모아 ‘확정’)</desc>
+<desc id="motion-desc">약속 사용법: 1. 새 약속(이름·날짜·시각, 이동수단) 2. 참석자 출발지(‘검색’ · ‘지도에서’ · ‘보관함에서’) 3. 중간 지점 찾기(모두에게 공평한 번화가 역 순위) 4. 친구 답장 자동 집계(‘후보 링크 보내기’ → 자동 집계 → ‘확정’)</desc>
 <style>
 text{font-family:'Pretendard Variable', Pretendard, 'Apple SD Gothic Neo', 'Noto Sans KR', system-ui, sans-serif}
 .sc{opacity:0;animation:scene 14.4s linear infinite backwards}
@@ -27,7 +27,7 @@ text{font-family:'Pretendard Variable', Pretendard, 'Apple SD Gothic Neo', 'Noto
 <rect x="1" y="1" width="958" height="518" rx="28" fill="#111113" stroke="#34343A"/>
 <text x="40" y="66" font-size="14" font-weight="700" fill="#8E8E98" text-anchor="start">랜드마크 도움말</text>
 <text x="40" y="110" font-size="30" font-weight="800" fill="#F4F4F5" text-anchor="start">약속</text>
-<text x="40" y="150" font-size="15" font-weight="600" fill="#B4B4BC" text-anchor="start">모두의 출발지에서 공평한 역을 찾고,</text><text x="40" y="173" font-size="15" font-weight="600" fill="#B4B4BC" text-anchor="start">후보를 링크로 보내 함께 골라요.</text>
+<text x="40" y="150" font-size="15" font-weight="600" fill="#B4B4BC" text-anchor="start">모두의 출발지에서 공평한 역을 찾고,</text><text x="40" y="173" font-size="15" font-weight="600" fill="#B4B4BC" text-anchor="start">친구 답장을 자동으로 모아 함께 골라요.</text>
 <g>
 <rect class="sc s0" style="animation-delay:0.00s" x="32" y="213" width="510" height="48" rx="14" fill="#2A3E18"/>
 <circle cx="58" cy="236" r="13" fill="none" stroke="#71717D" stroke-width="1.5"/>
@@ -54,8 +54,8 @@ text{font-family:'Pretendard Variable', Pretendard, 'Apple SD Gothic Neo', 'Noto
 <circle cx="58" cy="392" r="13" fill="none" stroke="#71717D" stroke-width="1.5"/>
 <text x="58" y="396.5" font-size="13" font-weight="800" fill="#B4B4BC" text-anchor="middle">4</text>
 <g class="sc s3" style="animation-delay:10.80s"><circle cx="58" cy="392" r="13" fill="#D9F99D"/><text x="58" y="396.5" font-size="13" font-weight="800" fill="#18181B" text-anchor="middle">4</text></g>
-<text x="82" y="390" font-size="16" font-weight="800" fill="#F4F4F5" text-anchor="start">링크로 함께 고르기</text>
-<text x="82" y="408" font-size="13" font-weight="400" fill="#8E8E98" text-anchor="start">‘후보 링크 보내기’ → 답장 모아 ‘확정’</text>
+<text x="82" y="390" font-size="16" font-weight="800" fill="#F4F4F5" text-anchor="start">친구 답장 자동 집계</text>
+<text x="82" y="408" font-size="13" font-weight="400" fill="#8E8E98" text-anchor="start">‘후보 링크 보내기’ → 자동 집계 → ‘확정’</text>
 </g>
 <rect x="600" y="20" width="300" height="480" rx="42" fill="#26262B" stroke="#71717D" stroke-width="2"/>
 <rect x="612" y="32" width="276" height="456" rx="32" fill="#1B1B1F"/>
@@ -89,5 +89,6 @@ text{font-family:'Pretendard Variable', Pretendard, 'Apple SD Gothic Neo', 'Noto
 <g class="sc s3" style="animation-delay:10.80s"><text x="630" y="72" font-size="18" font-weight="800" fill="#F4F4F5" text-anchor="start">금요일 저녁</text><text x="626" y="98" font-size="13.5" font-weight="800" fill="#F4F4F5" text-anchor="start">후보와 집계</text>
 <g class="rise" style="animation-delay:10.90s"><rect x="626" y="110" width="248" height="50" rx="12" fill="#2A3E18" stroke="#34343A"/><text x="638" y="131" font-size="13.5" font-weight="800" fill="#F4F4F5" text-anchor="start">합정역</text><text x="638" y="148" font-size="11.5" font-weight="400" fill="#B4B4BC" text-anchor="start">♥ 3 · 나, 민지, 준호</text><rect x="812" y="120" width="52" height="28" rx="14" fill="#D9F99D"/><text x="838" y="138.32" font-size="12" font-weight="800" fill="#18181B" text-anchor="middle">확정</text></g><g class="rise" style="animation-delay:11.00s"><rect x="626" y="166" width="248" height="50" rx="12" fill="#26262B" stroke="#34343A"/><text x="638" y="187" font-size="13.5" font-weight="800" fill="#F4F4F5" text-anchor="start">🍜 망원 칼국수</text><text x="638" y="204" font-size="11.5" font-weight="400" fill="#B4B4BC" text-anchor="start">♥ 1 · 민지</text><rect x="812" y="176" width="52" height="28" rx="14" fill="none" stroke="#71717D"/><text x="838" y="194.32" font-size="12" font-weight="700" fill="#F4F4F5" text-anchor="middle">확정</text></g>
 <g class="rise" style="animation-delay:11.20s"><rect x="626" y="232" width="120" height="32" rx="16" fill="none" stroke="#71717D"/><text x="686" y="252.32" font-size="12" font-weight="700" fill="#F4F4F5" text-anchor="middle">후보 링크 보내기</text><rect x="754" y="232" width="120" height="32" rx="16" fill="#D9F99D"/><text x="814" y="252.32" font-size="12" font-weight="800" fill="#18181B" text-anchor="middle">확정 링크 보내기</text></g>
+<g class="rise" style="animation-delay:11.40s"><text x="626" y="290" font-size="12" font-weight="400" fill="#8E8E98" text-anchor="start">0분 전 기준</text></g>
 <circle class="tap" style="animation-delay:11.80s" cx="838" cy="134" r="16" fill="#F4F4F5" fill-opacity=".28" stroke="#F4F4F5" stroke-opacity=".5" stroke-width="2"/><circle class="tap" style="animation-delay:12.70s" cx="814" cy="248" r="16" fill="#F4F4F5" fill-opacity=".28" stroke="#F4F4F5" stroke-opacity=".5" stroke-width="2"/><g class="rise" style="animation-delay:13.30s"><rect x="680.5" y="384" width="139" height="32" rx="16" fill="#F4F4F5"/><text x="750" y="404.5" font-size="12" font-weight="700" fill="#111113" text-anchor="middle">링크를 복사했어요</text></g></g></g>
 </svg>

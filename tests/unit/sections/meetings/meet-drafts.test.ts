@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { loadMeetDraft, saveMeetDraft, MEET_DRAFTS_KEY } from 'src/sections/meetings/meet-drafts';
+import {
+  loadMeetDraft,
+  loadMeetDraftEntry,
+  removeMeetDraft,
+  saveMeetDraft,
+  MEET_DRAFTS_KEY,
+} from 'src/sections/meetings/meet-drafts';
 import { createMemoryStorage } from 'src/repositories/edit-layer-repo';
 
 const draft = { participantId: 'person01', likes: ['choice01'], origin: null };
@@ -63,4 +69,42 @@ describe('약속 답장 초안', () => {
     expect(() => saveMeetDraft('meeting001', draft)).not.toThrow();
     expect(loadMeetDraft('meeting001')).toBeNull();
   });
+});
+
+it('같은 내용의 새 초안에도 다른 버전을 주고 읽기는 버전을 유지한다', () => {
+  const storage = createMemoryStorage();
+  const first = saveMeetDraft('meeting001', draft, storage);
+  expect(first).toEqual(expect.any(String));
+  loadMeetDraft('meeting001', storage);
+  const raw = JSON.parse(storage.getItem(MEET_DRAFTS_KEY)!);
+  expect(raw.drafts[0].version).toBe(first);
+  const second = saveMeetDraft('meeting001', draft, storage);
+  expect(second).not.toBe(first);
+});
+
+it('초안 비교 후 저장과 삭제는 요청 버전만 바꾸고 다른 약속과 새 버전은 보존한다', () => {
+  const storage = createMemoryStorage();
+  const first = saveMeetDraft('meeting001', draft, storage)!;
+  const second = saveMeetDraft('meeting001', draft, storage)!;
+  saveMeetDraft('meeting002', draft, storage);
+  expect(saveMeetDraft('meeting001', { ...draft, likes: [] }, storage, first)).toBeUndefined();
+  expect(removeMeetDraft('meeting001', first, storage)).toBe(false);
+  expect(loadMeetDraftEntry('meeting001', storage)?.version).toBe(second);
+  expect(removeMeetDraft('meeting001', second, storage)).toBe(true);
+  expect(loadMeetDraft('meeting001', storage)).toBeNull();
+  expect(loadMeetDraft('meeting002', storage)).toEqual(draft);
+});
+
+it('버전 없는 기존 초안은 내용 기준으로 읽고 다음 편집에서 버전을 붙인다', () => {
+  const storage = createMemoryStorage();
+  storage.setItem(
+    MEET_DRAFTS_KEY,
+    JSON.stringify({ drafts: [{ meetingId: 'meeting001', draft }] }),
+  );
+  const before = loadMeetDraftEntry('meeting001', storage)!;
+  expect(before.draft).toEqual(draft);
+  const version = saveMeetDraft('meeting001', { ...draft, likes: [] }, storage, before.version);
+  expect(version).toEqual(expect.any(String));
+  expect(removeMeetDraft('meeting001', before.version, storage)).toBe(false);
+  expect(loadMeetDraft('meeting001', storage)?.likes).toEqual([]);
 });
