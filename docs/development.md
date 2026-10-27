@@ -266,7 +266,7 @@ node scripts/measure-ui-assets.mjs dist/assets
 - **롤백**: 주요 변경마다 버전 태그(`v0.1.0`~)와 [GitHub Release](https://github.com/sch0718/landmark/releases)를 만듭니다. 배포만 되돌리기(Cloudflare 대시보드), 코드 되돌리기(`git revert` PR), 버전별 데이터 호환은 [롤백](rollback.md)에 있습니다.
 - SPA 라우팅은 Pages 기본 동작(404.html이 없으면 index.html)을 씁니다.
 - `public/_headers`: 전체 `X-Robots-Tag: noindex`, `/data/*`는 `Cache-Control: public, max-age=60`.
-- GitHub Actions(`.github/workflows/ci.yml`)는 push·PR마다 lint, `build:ci`, 핵심 E2E(`test:e2e:ci`)를 돌리는 보조 검증입니다(수동 실행에서 `full_e2e`를 고르면 전체 E2E). `check`(lint·`build:ci`)와 `e2e`는 따로 동시에 돌고 각각 30분 제한입니다. 배포 여부는 Pages 빌드 명령이 결정합니다.
+- GitHub Actions(`.github/workflows/ci.yml`)는 push·PR마다 lint, `build:ci`, 핵심 E2E(`test:e2e:ci`)를 돌리는 보조 검증입니다(수동 실행에서 `full_e2e`를 고르면 전체 E2E). `check`(lint·`build:ci`)와 `e2e`는 따로 동시에 돌고 각각 30분 제한입니다. `e2e`는 브라우저가 든 Playwright 공식 이미지(`mcr.microsoft.com/playwright:v<버전>-noble`)에서 돌므로 `@playwright/test`를 올리면 `ci.yml`의 이미지 태그도 같이 올립니다. 배포 여부는 Pages 빌드 명령이 결정합니다.
 
 ## 공유 파일과 지도 페이지
 
