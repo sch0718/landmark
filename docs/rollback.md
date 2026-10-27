@@ -38,6 +38,7 @@
 | `v0.17.0` | `cbe2d42` | 약속 온라인 집계: 새 약속을 처음 보낼 때 서버(Cloudflare D1)에 올리고(Turnstile) 친구 링크 `/meet/<id>`로 보냄, 친구 답장(참석자 차지·좋아요·출발지)을 10초마다 자동 집계, 주최자 메뉴 `다른 기기에서 열기`(`/meet/<id>#h=…`)·`참석자 차지 풀기`·`서버에서 지우기`, 서버 사본 30일 보관, 서버 함수 `/api/meet`, 기능 스위치 `MEET_ONLINE=off` (#55) | ⚠️ 보관함·백업 형식 그대로. 새 기기 키 `tripmap:meet-online:v1`과 탭 세션 키 `tripmap:meet-host-link:v1`은 옛 버전이 읽지 않음. 서버(D1)의 약속은 남음. 다만 친구 답장 초안(`tripmap:meet-drafts:v1`)은 옛 버전이 읽지 못하고, 옛 버전에서 초안을 저장하면 지워짐(아래) |
 | `v0.18.0` | `6144b70` | 라이선스 PolyForm Noncommercial 1.0.0(`LICENSE`·`package.json`·README), 설정 › `이 앱에 대해`(저작권·라이선스·오픈소스 고지·소스 링크, `KOFI_URL`이 있을 때만 Ko-fi 후원 링크), 오픈소스 고지 `public/third-party-notices.txt`와 `yarn build:notices`, CI 고지 확인 (#57) | ✅ 저장 형식·공유 형식 그대로. 새 저장 키 없음 |
 | `v0.19.0` | `808902c` | 카카오톡으로 보내기: 장소 내보내기·일정 공유·약속(후보·답장·확정)에 `카카오톡` 단추(카카오 SDK 2.8.4 피드 카드, 링크 2,000자까지, `VITE_KAKAO_JS_KEY`가 없으면 숨김), 앱 무관 모듈 `src/lib/kakao-share/` (#59) | ✅ 저장 형식·공유 형식 그대로. 새 저장 키 없음 |
+| `v0.19.1` | `0c28592` | 카카오톡 공유 고침: SDK 2.8.4가 `Kakao.init()` 뒤에 붙이는 `Share`를 init 전에 찾던 문제(운영에서 `카카오톡을 불러오지 못했어요`), 링크 길이 기본 한도 2,000자 → 400자(모바일 SDK 메시지 10,000자 한도 실측). 장소·일정 링크는 카카오톡 대신 `링크 복사` 안내 (#62) | ✅ 저장 형식·공유 형식 그대로. 새 저장 키 없음 |
 
 - 마지막 열은 2026-10-17에 `v0.8.0`·`v0.9.0`·`v0.10.0`의 `src/schema`로 지금 형식의 문서(`visitedOn`·`review`·`folders` 포함)를 읽어 확인했다(차례로 셋 다 지움 / `folders`만 지움 / 모두 유지). `v0.3.0`~`v0.7.2`는 `v0.8.0`과 저장 형식이 같다. 새 버전을 낼 때 저장 형식에 필드를 더했다면 그보다 옛 버전 줄을 모두 다시 본다.
 - 보관함은 각 기기의 localStorage(`tripmap:library:v2`)에만 있다. `v0.3.0`~`v0.8.0` 사이는 저장 형식이 같아 데이터 걱정 없이 오갈 수 있다. 그 뒤로는 선택 필드만 더했다(`v0.9.0` 장소의 `visitedOn`·`review`, `v0.10.0` 보관함의 `folders`). `v0.11.0`~`v0.14.6`은 보관함 저장 형식을 바꾸지 않았다. `v0.14.7`은 라벨에 선택 필드 `emoji`만 더했다(`v0.13.0`이 더한 `tripmap:hours:v1`은 지워도 다시 받는 캐시다. `v0.14.0`이 가져온 여행·장소도 지금 스키마 그대로다). `v0.15.0`은 보관함에 선택 키 `meetings`(약속)만 더했다. 옛 버전은 모르는 필드를 손상으로 보지 않고 떼어 낸 채 읽으므로 화면은 그대로 열리지만, **옛 버전에서 무엇이든 저장하는 순간 그 필드가 지워진다.** 되돌리기 전에 설정 › 백업에서 백업 파일을 받아 두면, 새 버전으로 돌아온 뒤 그 파일로 되살릴 수 있다.
@@ -82,7 +83,8 @@ PR을 만들어 CI를 통과하면 병합한다. 그 PR의 변경 일부(묶음 
 
 | 되돌리려는 PR | 먼저 되돌릴 PR(이 순서로) | 예 |
 |---|---|---|
-| #59 `808902c` | 없음 | |
+| #62 `0c28592` | 없음 | |
+| #59 `808902c` | #62 | #62가 #59가 만든 `src/lib/kakao-share/*`·`tests/e2e/fixtures.ts`·`share-link.spec.ts`·공유 대화상자 시험과 도움말을 다시 고쳤다 |
 | #57 `6144b70` | 없음 | #59와는 `docs/development.md`만 겹치고 충돌하지 않는다 |
 | #55 `cbe2d42` | #59 | #59가 #55가 고친 `src/sections/meetings/MeetingResults.tsx`·`share-link.ts`·`use-online-meeting.ts`·`src/vite-env.d.ts`·`playwright.config.ts`·`tests/e2e/meetings*.spec.ts`·`tests/unit/sections/meetings/online-host.test.tsx`·`share-link.test.ts`와 도움말을 다시 고쳤다. #57과 겹치는 코드는 없다. 다만 #56이 #55의 설계 문서를 고쳐 `docs/superpowers/specs/2026-10-25-meeting-online-design.md`가 충돌(UD)하므로 그 파일을 지워 해결한다 |
 | #52 `edaa752` | #55 | #55가 #52가 고친 `src/routes/paths.ts`·`router.tsx`·`src/sections/help/help-content.ts`·`src/sections/meetings/MeetingsPage.tsx`·`MeetingEditorPage.tsx`·`public/help/img/meetings-*.svg`·`package.json`·`playwright.config.ts`와 `tests/unit/sections/help/help-page.test.tsx`를 다시 고쳤다 |
@@ -166,6 +168,8 @@ F 묶음 사이에 다른 PR이 끼면 그 PR도 같은 기준(앞 PR의 파일�
 2026-10-27에 `6144b70`(#57 병합 뒤 `main`, `v0.18.0`)에서 #57을 `git revert -m 1`로 되돌렸다. 충돌이 없었고 `src`·`tests`·`functions`·`public`·`scripts`가 바로 전 커밋(`0c48aea`, #56 병합)과 같았다. `v0.18.0`보다 옛 버전으로 되돌리면 설정의 `이 앱에 대해`와 `/third-party-notices.txt`가 사라지지만 데이터 걱정은 없다. `LICENSE`도 함께 사라지므로 라이선스만 남기려면 #57 전체가 아니라 앱 화면 파일만 되돌린다.
 
 2026-10-27에 `808902c`(#59 병합 뒤 `main`, `v0.19.0`)에서 #59를 `git revert -m 1`로 되돌렸다. 충돌이 없었고 결과 트리가 바로 전 커밋(`586ffc9`, #58 병합)과 같았다. 이어서 #57을 되돌려도 충돌이 없었고(#59를 먼저 되돌리지 않아도 충돌 없음), #55는 #59를 먼저 되돌려야 위의 설계 문서 충돌(UD) 하나만 남는다(#59를 두고 되돌리면 `MeetingResults.tsx`·`share-link.ts`·`use-online-meeting.ts` 등 9개 파일이 충돌). `v0.19.0`보다 옛 버전으로 되돌리면 `카카오톡` 단추가 사라질 뿐 데이터 걱정은 없다. Pages의 `VITE_KAKAO_JS_KEY`는 남겨 두어도 옛 버전이 읽지 않는다.
+
+2026-10-28에 `0c28592`(#62 병합 뒤 `main`, `v0.19.1`)에서 #62를 `git revert -m 1`로 되돌렸다. 충돌이 없었고 결과 트리가 바로 전 커밋(`aafa8a4`, #61 병합)과 같았다. 이어서 #59를 되돌려도 충돌이 없었다. #62를 두고 #59를 되돌리면 `src/lib/kakao-share/*`(UD)·`tests/e2e/fixtures.ts`·`share-link.spec.ts`·도움말 등 9개 파일이 충돌한다. `v0.19.0`으로만 되돌리면 Pages에 `VITE_KAKAO_JS_KEY`가 있는 운영에서 카카오톡 단추가 다시 `카카오톡을 불러오지 못했어요`로 꺼진다(데이터 걱정은 없다). 카카오톡을 아예 감추려면 키를 지우고 다시 배포한다.
 
 특정 버전의 코드를 그대로 보려면 `git switch --detach v0.4.0`.
 
