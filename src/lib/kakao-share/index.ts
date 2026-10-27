@@ -1,7 +1,12 @@
 export const KAKAO_SDK_URL = 'https://t1.kakaocdn.net/kakao_js_sdk/2.8.4/kakao.min.js';
 export const KAKAO_SDK_INTEGRITY =
   'sha384-BGX7Wb16GmRFagri4bLJV2DgipVZaU2AI812GZtHtHzzDQJnfHasDXN5houxv45w';
-export const KAKAO_LINK_MAX = 2000;
+/**
+ * 링크 길이 기본 한도. 모바일 SDK는 보낼 메시지 JSON이 10,000자를 넘으면 오류를 내고 앱 밖 오류 화면으로 옮긴다.
+ * `webUrl`·`mobileWebUrl`을 같이 주면 링크가 메시지에 약 15번 들어간다(링크 1자당 15자). 운영 도메인에서
+ * 카카오 템플릿 검증으로 잰 값으로, 제목 60자·긴 설명이어도 링크 400자면 약 9,000자다(2026-10-27).
+ */
+export const KAKAO_LINK_MAX = 400;
 
 export type KakaoShareConfig = {
   appKey: string;

@@ -98,9 +98,9 @@ describe('카카오톡 공용 모듈', () => {
     await expect(preloadKakao(config)).rejects.toThrow();
   });
   it('링크 한도 경계와 키를 동기로 검사한다', () => {
-    expect(kakaoLinkFits('a'.repeat(2000), config)).toBe(true);
-    expect(kakaoLinkFits('a'.repeat(2001), config)).toBe(false);
-    expect(kakaoLinkFits('a'.repeat(2001), { ...config, maxLinkLength: 2100 })).toBe(true);
+    expect(kakaoLinkFits('a'.repeat(400), config)).toBe(true);
+    expect(kakaoLinkFits('a'.repeat(401), config)).toBe(false);
+    expect(kakaoLinkFits('a'.repeat(401), { ...config, maxLinkLength: 500 })).toBe(true);
     expect(kakaoLinkFits('a', { appKey: ' ' })).toBe(false);
   });
   it('feed의 링크 두 개·이미지·단추를 동기로 보내고 SDK 예외를 잡는다', async () => {
@@ -128,7 +128,7 @@ describe('카카오톡 공용 모듈', () => {
       },
       buttonTitle: '지도에서 보기',
     });
-    expect(sendKakao({ ...card, url: 'a'.repeat(2001) }, config)).toBe(false);
+    expect(sendKakao({ ...card, url: 'a'.repeat(401) }, config)).toBe(false);
     expect(sdk.Share!.sendDefault).toHaveBeenCalledTimes(1);
     sdk.Share!.sendDefault.mockImplementation(() => {
       throw new Error('카카오 오류');
