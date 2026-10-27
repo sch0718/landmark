@@ -49,19 +49,28 @@ jobs:
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # 브라우저와 시스템 패키지가 이미 든 Playwright 공식 이미지에서 돈다. 실행마다 `playwright install --with-deps`로
+    # WebKit 의존 패키지를 apt로 받으면 우분투 미러가 느린 날 8분이 걸리거나 멈췄다(2026-10-27).
+    # @playwright/test 버전을 올리면 이 태그와 아래 `Playwright version` 단계의 값을 같이 올린다.
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-          cache: yarn
+
+      # 이미지에는 yarn이 없을 수 있어 package.json의 packageManager(yarn 1)를 corepack으로 쓴다.
+      - name: Enable Yarn
+        run: corepack enable
 
       - name: Install
         run: yarn install --frozen-lockfile
 
-      - name: Install Playwright browsers
-        run: yarn playwright install --with-deps chromium webkit
+      - name: Playwright version
+        run: |
+          node -e "const v = require('@playwright/test/package.json').version; if (v !== '1.63.0') { console.error('@playwright/test ' + v + '와 컨테이너 이미지 v1.63.0이 다르다. ci.yml의 이미지 태그를 올린다.'); process.exit(1); }"
 
       - name: E2E (core flows)
         if: ${{ github.event_name != 'workflow_dispatch' || !inputs.full_e2e }}
