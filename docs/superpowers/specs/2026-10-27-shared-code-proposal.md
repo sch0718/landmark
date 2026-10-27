@@ -641,7 +641,21 @@ sch0718/sch0718-toolkit-web    # 2026-10-27 결정. Python은 sch0718-toolkit-py
 - Python CI: 패키지가 없는 가상 workspace는 `requires-python`을 실행 중인 Python으로 추정해 3.14에서 lockfile이 달라졌다. 루트에 `requires-python = ">=3.12"`를 명시하고 uv 0.13으로 다시 잠갔다.
 - `astral-sh/setup-uv`, `changesets/action`은 큰 버전 태그(`v10`, `v2`)가 없어 정확한 태그로 고정했다.
 
-**남은 일(소유자).** npm 계정·scope 확인, 첫 발행과 trusted publisher 설정, `RELEASE_ENABLED` 변수 켜기(웹 README 「첫 발행」). Python은 첫 패키지가 생길 때 PyPI pending publisher와 `pypi` 환경을 설정한다. 카카오 공유 모듈은 다른 세션의 랜드마크 작업이 끝나면 `packages/kakao-share`로 옮긴다.
+**배포 방식 변경(같은 날).** 사용자 결정(원문): "둘 다 GitHub을 최대한 활용하는 방향으로 해줘. 웹은 토큰을 사용하는 방식으로 해줘." 그래서 6.4의 "공개 npm" 추천을 아래로 바꿨다.
+
+| | 웹 | Python |
+| --- | --- | --- |
+| 배포 | **GitHub Packages**(npm 레지스트리). 릴리스 워크플로가 `GITHUB_TOKEN`(`packages: write`)으로 발행. npm 계정·trusted publisher 불필요 | **GitHub Release + git 의존성**. GitHub Packages는 PyPI를 지원하지 않는다. 태그 `<이름>-v<버전>`을 push하면 Release에 wheel·sdist를 붙인다 |
+| 서비스 설치 | `.npmrc`에 `@sch0718:registry=https://npm.pkg.github.com`과 `${GITHUB_PACKAGES_TOKEN}`. 토큰은 `read:packages` classic(공개 패키지도 토큰 필요, classic만 지원). Actions는 패키지의 Manage Actions access와 job의 `packages: read`, Cloudflare 빌드는 환경변수 | `uv add "sch0718-<이름> @ git+https://github.com/sch0718/sch0718-toolkit-python@<태그>#subdirectory=packages/<이름>"`. 공개 저장소라 토큰 불필요 |
+| 공개 범위 | 패키지는 비공개로 발행(GitHub 기본). 공개 전환은 되돌릴 수 없어 하지 않음 | 저장소 공개 |
+| 보호 | — | Rulesets `release-tags`: `*-v*` 태그 생성·이동·삭제는 관리자만 |
+
+- 웹 [PR #3](https://github.com/sch0718/sch0718-toolkit-web/pull/3)(Codex 검토 2회), Python [PR #4](https://github.com/sch0718/sch0718-toolkit-python/pull/4)(1회)를 병합했다. Codex가 찾은 것: changesets/action v2의 출력 이름은 `published-packages`다. 서비스 job에 `packages: read`가 없으면 설치가 실패한다.
+- **첫 발행 완료:** Version Packages [PR #4](https://github.com/sch0718/sch0718-toolkit-web/pull/4)를 병합해 `@sch0718/seen-store@0.1.0`을 발행했다. 같은 워크플로에서 레지스트리 설치·import 확인까지 통과했고, 태그·GitHub Release도 생겼다(2026-10-27).
+- Python은 복제본에 시험용 패키지와 태그를 만들어 `git+file://…@태그#subdirectory=…` 설치·import를 확인했다. 실제 첫 패키지 릴리스는 아직 없다.
+- 저장소 설정: 웹은 "Allow GitHub Actions to create and approve pull requests"를 켰다(Version Packages PR용).
+
+**남은 일(소유자).** 서비스에서 받으려면 `read:packages` classic 토큰을 만들어 로컬·Cloudflare 빌드 환경변수 `GITHUB_PACKAGES_TOKEN`에 넣는다. 패키지 설정의 Manage Actions access에 서비스 저장소를 추가한다(웹 README 「서비스에서 설치하기」). 카카오 공유 모듈은 다른 세션의 랜드마크 작업이 끝나면 `packages/kakao-share`로 옮긴다.
 
 ## 작성 과정
 
@@ -652,3 +666,4 @@ sch0718/sch0718-toolkit-web    # 2026-10-27 결정. Python은 sch0718-toolkit-py
 - **확인 못 한 항목:** 위 5절 끝 목록과 같다. 특히 카카오 모듈 실제 코드(다른 세션이 작업 중이고 아직 원격 브랜치 없음), 오늘 기준 두 앱의 첫 로딩 실측, Cloudflare 계정의 실제 빌드 설정, 각 공유 방식의 설치 실험, 가즈아 로컬 `origin/main`과 GitHub 최신 main의 일치 여부가 남아 있다. 이번 세션은 빌드·테스트·설치를 실행하지 않았다.
 - **6절 추가(2026-10-27, Claude Opus 5.5):** 사용자 요청 "앞으로 새로운 서비스를 계속 만들 예정이야. 공통으로 사용하는 코드들을 한 곳에서 관리하고 싶어"에 따라 별도 공용 저장소 안을 덧붙였다. Codex를 거치지 않고 Claude가 썼다. 다시 확인한 공식 문서: [npm Trusted publishing](https://docs.npmjs.com/trusted-publishers), [GitHub Reusing workflows](https://docs.github.com/en/actions/sharing-automations/reusing-workflows), [Changesets snapshot releases](https://github.com/changesets/changesets/blob/main/docs/snapshot-releases.md)(모두 2026-10-27). 확인하지 못한 것: npm 계정 `sch0718`이 있는지(npmjs.com 사용자 페이지 403, 레지스트리 검색 `maintainer:sch0718` 0건), trusted publishing 설정 전에 첫 버전을 직접 발행해야 하는지, Yarn 1의 git 의존성으로 저장소 하위 폴더를 지정할 수 있는지, npm 조직의 공개 패키지 비용. 확인된 사실이 아닌 서술(작업량 등)은 본문에서 "추정"이나 "확인 필요"로 표시했다.
 - **6.13·저장소 생성(2026-10-27, Claude Opus 5.5):** 사용자 지시로 공개 저장소 두 개를 만들고 첫 PR을 Codex(gpt-6.1-sol, high) 검토 반복 뒤 병합했다. 도구 별 수는 GitHub API, 버전은 npm·PyPI 레지스트리에서 조회했다. pnpm 11 trusted publishing은 pnpm v11.0.7 릴리스 노트, PyPI pending publisher는 warehouse 저장소의 문서 원본으로 확인했다(2026-10-27). 실제 npm·PyPI 발행은 하지 않았다.
+- **배포 방식 변경(2026-10-27, Claude Opus 5.5):** GitHub Packages 인증·지원 레지스트리·세밀한 권한·공개 전환 불가를 GitHub 공식 문서로 확인했다. changesets/action v2.1.2의 입력·출력 이름은 그 태그의 `action.yml`로 확인했다. 첫 발행은 실제 워크플로 로그로 확인했다. 이 세션의 gh 토큰에는 `read:packages`가 없어서 패키지 설정 화면(공개 범위·연결 저장소)은 직접 조회하지 못했다.
