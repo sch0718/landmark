@@ -15,7 +15,8 @@ const existingConfig: ViteUserConfig = {
     include: ['tests/unit/**/*.test.{ts,tsx}', 'src/lib/kakao-share/*.test.ts'],
     maxWorkers: 2,
     // 날짜 시험(다녀온 날 등)이 UTC 서버에서도 한국 시각 기준으로 같게 돈다.
-    env: { TZ: 'Asia/Seoul' },
+    // 카카오 키는 빌드 환경(Pages Production)에 있어도 비운다. 키가 필요한 시험은 `vi.stubEnv`로 넣는다.
+    env: { TZ: 'Asia/Seoul', VITE_KAKAO_JS_KEY: '' },
     // 테스트 하나의 제한 시간. 배포 빌드(Cloudflare Pages의 `yarn build:ci`)는 로컬보다 3~4배 느려, 로컬 1.2초인
     // 화면 테스트가 기본값 5초를 넘긴 적이 있다(2026-10-15, export-lazy). 화면 요소를 기다리는 시간(`findBy`)은 그대로다.
     testTimeout: 20_000,
