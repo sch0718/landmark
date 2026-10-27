@@ -46,6 +46,8 @@ const props = {
   heading: '링크 시험',
   summary: '시험',
   defaultTitle: '시험',
+  kakaoDescription: '장소 1곳 · 랜드마크',
+  kakaoButtonTitle: '지도에서 보기',
   emptyMessage: null,
   make,
   linkDoc: makeDoc,
@@ -199,4 +201,83 @@ it.each(['실패', '취소'])('링크 공유 %s를 구분해 안내한다', asyn
       '링크를 공유하지 못했어요. 링크 복사를 이용해 주세요',
     );
   expect(button).toBeEnabled();
+});
+
+describe('카카오톡 공유', () => {
+  function kakao() {
+    vi.stubEnv('VITE_KAKAO_JS_KEY', 'e2e-kakao-key');
+    let ready = false;
+    const sdk = {
+      init: vi.fn(() => {
+        ready = true;
+      }),
+      isInitialized: () => ready,
+      Share: { sendDefault: vi.fn() },
+    };
+    vi.stubGlobal('Kakao', sdk);
+    return sdk;
+  }
+  it('키가 없으면 단추를 그리지 않는다', async () => {
+    vi.stubEnv('VITE_KAKAO_JS_KEY', '');
+    const { d } = await setup();
+    expect(d.queryByRole('button', { name: '카카오톡' })).toBeNull();
+  });
+  it('미리 초기화한 SDK에 제목과 앱 이미지·보기 링크를 동기로 보낸다', async () => {
+    const sdk = kakao();
+    vi.stubEnv('VITE_APP_URL', 'https://app.test');
+    const { d } = await setup();
+    const button = d.getByRole('button', { name: '카카오톡' });
+    await waitFor(() => expect(button).toBeEnabled());
+    fireEvent.click(button);
+    expect(sdk.Share.sendDefault).toHaveBeenCalledWith({
+      objectType: 'feed',
+      content: {
+        title: '시험',
+        description: '장소 1곳 · 랜드마크',
+        imageUrl: 'https://app.test/icon-512.png',
+        imageWidth: 512,
+        imageHeight: 512,
+        link: {
+          webUrl: expect.stringContaining('https://app.test/view#d='),
+          mobileWebUrl: expect.stringContaining('https://app.test/view#d='),
+        },
+      },
+      buttonTitle: '지도에서 보기',
+    });
+    sdk.Share.sendDefault.mockImplementation(() => {
+      throw new Error('SDK 오류');
+    });
+    fireEvent.click(button);
+    expect(d.getByRole('alert')).toHaveTextContent(
+      '카카오톡으로 보내지 못했어요. 링크 복사를 이용해 주세요',
+    );
+  });
+  it('2000자를 넘는 직접 링크는 안내하고 카카오톡만 끈다', async () => {
+    const sdk = kakao();
+    let seed = 7;
+    const memo = Array.from({ length: 1200 }, () => {
+      seed = (seed * 1664525 + 1013904223) >>> 0;
+      return seed.toString(36);
+    }).join('');
+    const { d, copy } = await setup(() => ({ ...doc, places: [{ ...doc.places[0]!, memo }] }));
+    expect(await d.findByRole('status')).toHaveTextContent(
+      '링크가 길어 카카오톡으로 보낼 수 없어요. 링크 복사를 이용해 주세요',
+    );
+    expect(d.getByRole('button', { name: '카카오톡' })).toBeDisabled();
+    expect(copy()).toBeEnabled();
+    expect(sdk.Share.sendDefault).not.toHaveBeenCalled();
+  });
+  it('SDK를 받기 전에는 이름을 유지하고 실패하면 안내한다', async () => {
+    vi.stubEnv('VITE_KAKAO_JS_KEY', 'e2e-kakao-key');
+    const { d, copy } = await setup();
+    const button = d.getByRole('button', { name: '카카오톡' });
+    expect(button).toBeDisabled();
+    await waitFor(() => expect(document.querySelector('script[src*="kakaocdn"]')).not.toBeNull());
+    fireEvent.error(document.querySelector('script[src*="kakaocdn"]')!);
+    expect(await d.findByRole('status')).toHaveTextContent(
+      '카카오톡을 불러오지 못했어요. 링크 복사를 이용해 주세요',
+    );
+    await waitFor(() => expect(copy()).toBeEnabled());
+    expect(button).toBeDisabled();
+  });
 });

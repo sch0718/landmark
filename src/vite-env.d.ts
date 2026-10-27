@@ -2,6 +2,8 @@
 /// <reference types="unplugin-icons/types/react" />
 
 interface ImportMetaEnv {
+  /** 카카오톡 공유에 쓰는 JavaScript 키. 비어 있으면 단추를 숨긴다. */
+  readonly VITE_KAKAO_JS_KEY?: string;
   /** 약속 올리기 때 지연 로딩하는 Turnstile의 공개 사이트 키. */
   readonly VITE_TURNSTILE_SITE_KEY?: string;
   readonly VITE_NAVER_MAP_CLIENT_ID?: string;

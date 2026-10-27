@@ -1,5 +1,5 @@
-import { expect, test, type Locator, type Page } from '@playwright/test';
-import { isCompact, placeIdByName, seedStorage } from './fixtures';
+import { expect, type Locator, type Page } from '@playwright/test';
+import { test, isCompact, placeIdByName, seedStorage } from './fixtures';
 
 const marker = (page: Page, name: string): Locator =>
   page.getByTestId(`marker-${placeIdByName(name)}`);

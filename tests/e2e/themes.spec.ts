@@ -1,5 +1,5 @@
-import { expect, test } from '@playwright/test';
-import { seedStorage } from './fixtures';
+import { expect } from '@playwright/test';
+import { test, seedStorage } from './fixtures';
 
 const THEMES = ['pastel', 'paper', 'night'] as const;
 const MODES = ['light', 'dark'] as const;

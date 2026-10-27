@@ -377,3 +377,26 @@ it('친구가 긴 이름의 출발지로 고쳐도 초안과 답장에 저장한
   expect(shared).toHaveBeenCalledWith(expect.objectContaining({ origin: expected }), doc.title);
   expect(store.get(libraryAtom)).toBe(before);
 });
+
+it('답장 카카오톡은 신원 선택 뒤에만 보낼 수 있다', async () => {
+  vi.stubEnv('VITE_KAKAO_JS_KEY', 'e2e-kakao-key');
+  vi.stubGlobal('Kakao', {
+    init: vi.fn(),
+    isInitialized: () => true,
+    Share: { sendDefault: vi.fn() },
+  });
+  try {
+    await renderLinked(sampleLibrary(), { path: await link(invite()) });
+    const button = screen.getByRole('button', { name: '카카오톡' });
+    expect(button).toBeDisabled();
+    await userEvent.click(screen.getByRole('radio', { name: '친구' }));
+    await userEvent.click(button);
+    expect(shared).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'r', participantId: 'person02' }),
+      '친구 모임',
+      'kakao',
+    );
+  } finally {
+    vi.unstubAllEnvs();
+  }
+});

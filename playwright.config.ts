@@ -127,7 +127,7 @@ export default defineConfig({
   webServer: [
     {
       command: `yarn vite --port ${PORT} --strictPort`,
-      env: { VITE_MAP_ADAPTER: 'fake' },
+      env: { VITE_MAP_ADAPTER: 'fake', VITE_KAKAO_JS_KEY: 'e2e-kakao-key' },
       url: `http://localhost:${PORT}`,
       reuseExistingServer: !isCI,
       timeout: 120_000,

@@ -12,7 +12,7 @@ const existingConfig: ViteUserConfig = {
   test: {
     environment: 'jsdom',
     setupFiles: ['./tests/setup.ts'],
-    include: ['tests/unit/**/*.test.{ts,tsx}'],
+    include: ['tests/unit/**/*.test.{ts,tsx}', 'src/lib/kakao-share/*.test.ts'],
     maxWorkers: 2,
     // 날짜 시험(다녀온 날 등)이 UTC 서버에서도 한국 시각 기준으로 같게 돈다.
     env: { TZ: 'Asia/Seoul' },

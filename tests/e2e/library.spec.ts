@@ -1,5 +1,5 @@
-import { expect, test, type Locator, type Page } from '@playwright/test';
-import { placeIdByName, SEED_PLACE_COUNT, seedStorage } from './fixtures';
+import { expect, type Locator, type Page } from '@playwright/test';
+import { test, placeIdByName, SEED_PLACE_COUNT, seedStorage } from './fixtures';
 
 const markers = (page: Page): Locator => page.locator('[data-testid^="marker-"]');
 const rows = (page: Page): Locator =>

@@ -18,6 +18,7 @@ import { OriginPicker } from './OriginPicker';
 import { TimeCells } from './TimeCells';
 import { loadMeetDraft, saveMeetDraft } from './meet-drafts';
 import { shareMeetingDoc } from './share-link';
+import { useKakao } from '../share-export/kakao';
 import { useMeetingCompute } from './use-meeting-compute';
 
 type Form = { identity: string; name: string; origin?: Origin | null; likes: string[] };
@@ -43,6 +44,7 @@ function restore(doc: InviteDoc): Form {
 /** 친구의 답장은 초안 저장소에만 쓰고 보관함 문서는 읽기만 한다. */
 export function InviteView({ doc }: { doc: InviteDoc }) {
   const library = useAtomValue(libraryAtom);
+  const kakao = useKakao();
   const id = useId();
   const [form, setForm] = useState<Form>(() => restore(doc));
   const [picking, setPicking] = useState(false);
@@ -92,7 +94,7 @@ export function InviteView({ doc }: { doc: InviteDoc }) {
     form.identity === 'new' && valid && mine !== null
       ? [...doc.participants, mine]
       : doc.participants.map((p) => (p.id === mine?.id && originChanged ? mine : p));
-  const send = async () => {
+  const send = async (channel: 'link' | 'kakao' = 'link') => {
     if (!valid || sending) return;
     setSending(true);
     await shareMeetingDoc(
@@ -104,6 +106,7 @@ export function InviteView({ doc }: { doc: InviteDoc }) {
         sentAt: new Date().toISOString(),
       }),
       doc.title,
+      ...(channel === 'kakao' ? ([channel] as const) : []),
     );
     setSending(false);
   };
@@ -270,6 +273,16 @@ export function InviteView({ doc }: { doc: InviteDoc }) {
       >
         답장 링크 보내기
       </Button>
+      {kakao.enabled && (
+        <Button
+          variant="outlined"
+          disabled={!valid || sending || compute.pending}
+          onClick={() => void send('kakao')}
+          sx={{ minHeight: 44 }}
+        >
+          카카오톡
+        </Button>
+      )}
       <OriginPicker
         open={picking}
         origin={origin}

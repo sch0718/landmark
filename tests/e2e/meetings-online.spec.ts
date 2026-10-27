@@ -1,6 +1,6 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 import type { Library } from '../../src/schema/library';
-import { LIBRARY_KEY, mockRoutes, mockSearch, seedStorage } from './fixtures';
+import { test, LIBRARY_KEY, mockRoutes, mockSearch, seedStorage } from './fixtures';
 import { createMeetServer, installMeetServer } from './meet-server';
 
 declare global {

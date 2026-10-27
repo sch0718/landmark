@@ -26,6 +26,8 @@ export function ExportHtmlDialog({ open, onClose, targets }: Props) {
       open={open}
       onClose={onClose}
       heading="내보내기"
+      kakaoDescription={`장소 ${targets.ids.length}곳 · 랜드마크`}
+      kakaoButtonTitle="지도에서 보기"
       summary={targets.summary}
       defaultTitle={targets.defaultTitle}
       emptyMessage={targets.ids.length === 0 ? NOTHING_TO_EXPORT : null}
