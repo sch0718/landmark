@@ -327,21 +327,23 @@ export async function fakeKakao(page: Page): Promise<void> {
       kakaoCalls: calls,
       kakaoInitKeys: initKeys,
       kakaoInitializedChecks: 0,
-      Kakao: {
-        init: (appKey: string) => {
-          initKeys.push(appKey);
-          initialized = true;
-        },
-        isInitialized: () => {
-          window.kakaoInitializedChecks += 1;
-          return initialized;
-        },
-        Share: {
+    });
+    // 실제 SDK처럼 `init` 뒤에야 `Share`를 붙인다.
+    const kakao: Record<string, unknown> = {
+      init: (appKey: string) => {
+        initKeys.push(appKey);
+        initialized = true;
+        kakao.Share = {
           sendDefault: (card: KakaoFeed) => {
             calls.push(card);
           },
-        },
+        };
       },
-    });
+      isInitialized: () => {
+        window.kakaoInitializedChecks += 1;
+        return initialized;
+      },
+    };
+    Object.assign(window, { Kakao: kakao });
   });
 }

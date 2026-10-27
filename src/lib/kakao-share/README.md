@@ -12,9 +12,11 @@
 - `sendKakao(card, config)`: 동기로 `Share.sendDefault`를 호출합니다. 준비 전·링크 한도 초과·SDK 예외는 `false`, 호출 성공은 `true`입니다. 메시지 전달 완료를 확인하는 콜백은 없습니다.
 - `shareOrCopy(url, title, { share?, copy? })`: 공유를 먼저 시도하고 실패하면 복사합니다. 결과는 `shared`, `copied`, `cancelled`, `failed`입니다. `AbortError`는 취소로 끝내며 복사하지 않습니다. 브라우저 메서드는 호출자가 감싸거나 바인딩해 넘깁니다. 알림과 대체 정책은 앱에서 정합니다.
 
-기본 상수는 `KAKAO_SDK_URL`(2.8.4), `KAKAO_SDK_INTEGRITY`, `KAKAO_LINK_MAX`(2,000자)입니다. 다른 SDK 주소를 쓰면 그 버전의 integrity도 함께 넘겨야 합니다.
+기본 상수는 `KAKAO_SDK_URL`(2.8.4), `KAKAO_SDK_INTEGRITY`, `KAKAO_LINK_MAX`(400자)입니다. 다른 SDK 주소를 쓰면 그 버전의 integrity도 함께 넘겨야 합니다.
 
-SDK는 공유 단추를 보일 때 미리 받습니다. 준비된 뒤 클릭 처리 안에서 `sendKakao`를 동기로 호출해야 PC 팝업 차단을 피할 수 있습니다. 링크를 비동기로 만든다면 준비 완료 뒤 새 단추 클릭에서 호출합니다. 모바일 메시지 JSON 한도를 고려해 링크 기본 한도를 2,000자로 제한합니다.
+SDK는 공유 단추를 보일 때 미리 받습니다. 준비된 뒤 클릭 처리 안에서 `sendKakao`를 동기로 호출해야 PC 팝업 차단을 피할 수 있습니다. 링크를 비동기로 만든다면 준비 완료 뒤 새 단추 클릭에서 호출합니다. 모바일 SDK는 보낼 메시지 JSON이 10,000자를 넘으면 오류를 내고 카카오 오류 화면으로 이동합니다. `webUrl`·`mobileWebUrl`을 같이 주면 링크가 메시지에 약 15번 들어가므로(링크 1자당 15자) 링크 기본 한도를 400자로 둡니다. 운영 도메인에서 카카오 템플릿 검증(`/v2/api/kakaolink/talk/template/default`)으로 잰 값입니다(2026-10-27, 제목 60자·긴 설명이어도 약 9,000자).
+
+SDK 2.8.4는 스크립트를 받은 직후에는 `init`·`isInitialized`만 있고, `Kakao.init()` 뒤에 `Share`를 붙입니다.
 
 카드 이미지는 외부에서 접근할 수 있는 절대 URL(200×200px 이상·5MB 이하)을 넘깁니다. 제목과 설명은 최대 두 줄이며 단추 문구는 8자 이하를 권장합니다.
 

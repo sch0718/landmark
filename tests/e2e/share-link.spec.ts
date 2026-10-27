@@ -123,7 +123,8 @@ test('데이터 없는 /view와 손상·과대 링크는 복구 안내를 표시
   }
 });
 
-test('카카오톡 단추는 가짜 SDK에 장소 카드와 보기 링크를 보낸다', async ({ page, baseURL }) => {
+test('장소 링크가 카카오톡 한도(400자)를 넘으면 카카오톡만 끄고 안내한다', async ({ page }) => {
+  // 보내는 카드 모양은 단위 시험(share-link-dialog·kakao-share)이 본다. 장소 링크는 1곳이어도 400자를 넘는다.
   const { fakeKakao } = await import('./fixtures');
   await fakeKakao(page);
   await seedStorage(page, { prefs: { libraryView: 'list' } });
@@ -131,28 +132,11 @@ test('카카오톡 단추는 가짜 SDK에 장소 카드와 보기 링크를 보
   await page.getByRole('group', { name: '라벨' }).getByRole('button', { name: /^바다/ }).click();
   await page.getByRole('button', { name: '내보내기', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: '내보내기' });
-  await dialog.getByRole('textbox', { name: '제목' }).fill('함께 갈 바다');
-  const button = dialog.getByRole('button', { name: '카카오톡', exact: true });
-  await expect(button).toBeEnabled();
-  await button.click();
-  const calls = await page.evaluate(() => window.kakaoCalls);
+  await expect(dialog.getByRole('button', { name: '링크 복사', exact: true })).toBeEnabled();
+  await expect(
+    dialog.getByText('링크가 길어 카카오톡으로 보낼 수 없어요. 링크 복사를 이용해 주세요'),
+  ).toBeVisible();
+  await expect(dialog.getByRole('button', { name: '카카오톡', exact: true })).toBeDisabled();
   expect(await page.evaluate(() => window.kakaoInitKeys)).toEqual(['e2e-kakao-key']);
-  expect(await page.evaluate(() => window.kakaoInitializedChecks)).toBeGreaterThan(0);
-  expect(calls).toEqual([
-    {
-      objectType: 'feed',
-      content: {
-        title: '함께 갈 바다',
-        description: `장소 ${SEA_COUNT}곳 · 랜드마크`,
-        imageUrl: `${baseURL}/icon-512.png`,
-        imageWidth: 512,
-        imageHeight: 512,
-        link: {
-          webUrl: expect.stringMatching(new RegExp(`^${baseURL}/view#d=`)),
-          mobileWebUrl: expect.stringMatching(new RegExp(`^${baseURL}/view#d=`)),
-        },
-      },
-      buttonTitle: '지도에서 보기',
-    },
-  ]);
+  expect(await page.evaluate(() => window.kakaoCalls)).toEqual([]);
 });
