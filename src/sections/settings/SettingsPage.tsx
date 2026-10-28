@@ -15,6 +15,7 @@ import { RestoreDialogHost } from 'src/sections/backup/RestoreDialogHost';
 import { AboutSection } from 'src/sections/settings/AboutSection';
 import { LegacyImportDialog } from 'src/sections/settings/LegacyImportDialog';
 import { OptionGroup, type Option } from 'src/sections/settings/OptionGroup';
+import { SentLinksSection } from 'src/sections/settings/SentLinksSection';
 import { ThemePicker } from 'src/sections/settings/ThemePicker';
 import { persistState } from 'src/lib/storage-persist';
 import { persistStateAtom } from 'src/stores/backup-state';
@@ -56,7 +57,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 const approxKb = (library: unknown): number =>
   Math.max(1, Math.round((JSON.stringify(library).length * 2) / 1024));
 
-/** 설정(스펙 §4.7): 테마·모드·보관함 보기·백업·옛 여행 가져오기·데이터 정보·앱 정보(저작권·라이선스·후원). */
+/** 설정(스펙 §4.7): 테마·모드·보관함 보기·백업·보낸 짧은 링크·옛 여행 가져오기·데이터 정보·앱 정보(저작권·라이선스·후원). */
 export function SettingsPage() {
   useDocumentTitle('설정');
   const prefs = useAtomValue(prefsAtom);
@@ -142,6 +143,7 @@ export function SettingsPage() {
       <Section title="백업">
         <BackupSection onRestore={() => setRestoreOpen(true)} />
       </Section>
+      <SentLinksSection />
       <Section title="가져오기">
         <Typography variant="body2" sx={{ color: 'var(--tm-text-secondary)' }}>
           예전 여행 데이터의 장소와 라벨을 보관함으로 가져와요.

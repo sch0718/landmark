@@ -66,6 +66,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
   for (const key of ['clipboard', 'share', 'canShare']) Reflect.deleteProperty(navigator, key);
+  localStorage.clear();
 });
 
 describe('공유 창 링크 버튼', () => {
@@ -252,20 +253,124 @@ describe('카카오톡 공유', () => {
       '카카오톡으로 보내지 못했어요. 링크 복사를 이용해 주세요',
     );
   });
-  it('한도(400자)를 넘는 직접 링크는 안내하고 카카오톡만 끈다', async () => {
-    const sdk = kakao();
+  function longDoc() {
     let seed = 7;
     const memo = Array.from({ length: 1200 }, () => {
       seed = (seed * 1664525 + 1013904223) >>> 0;
       return seed.toString(36);
     }).join('');
-    const { d, copy } = await setup(() => ({ ...doc, places: [{ ...doc.places[0]!, memo }] }));
-    expect(await d.findByRole('status')).toHaveTextContent(
-      '링크가 길어 카카오톡으로 보낼 수 없어요. 링크 복사를 이용해 주세요',
+    return () => ({ ...doc, places: [{ ...doc.places[0]!, memo }] });
+  }
+  function shareServer(...responses: Array<Response | Error>) {
+    vi.stubEnv('VITE_TURNSTILE_SITE_KEY', '');
+    const fetchMock = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>(async () => {
+      const next = responses.shift() ?? new Error('응답 없음');
+      if (next instanceof Error) throw next;
+      return next;
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    return fetchMock;
+  }
+  const createdResponse = () =>
+    Response.json(
+      { id: 'AAAAAAAAAAAAAAAA', expiresAt: '2026-11-27T00:00:00.000Z', created: true },
+      { status: 201 },
     );
+
+  it('한도(400자)를 넘는 링크는 누를 때 짧은 링크를 만들고 다음 클릭에서 보낸다', async () => {
+    const sdk = kakao();
+    vi.stubEnv('VITE_APP_URL', 'https://app.test');
+    const fetchMock = shareServer(createdResponse());
+    const { d, copy } = await setup(longDoc());
+    expect(
+      await d.findByText(
+        /^카카오톡으로 보내면 짧은 링크를 위해 암호화한 사본을 Landmark 서버에 .+까지 보관해요\. 링크를 받은 사람은 누구나 볼 수 있어요$/,
+      ),
+    ).toBeVisible();
+    const button = d.getByRole('button', { name: '카카오톡' });
+    await waitFor(() => expect(button).toBeEnabled());
+    expect(fetchMock).not.toHaveBeenCalled();
+    fireEvent.click(button);
+    expect(sdk.Share.sendDefault).not.toHaveBeenCalled();
+    const send = await d.findByRole('button', { name: '카카오톡으로 보내기' });
+    expect(
+      d.getByText(
+        '짧은 링크를 만들었어요(11월 27일까지). 설정 › 보낸 짧은 링크에서 지울 수 있어요',
+      ),
+    ).toBeVisible();
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe('/api/share');
+    const sent = JSON.parse(init!.body as string) as Record<string, string>;
+    expect(sent).toMatchObject({ kind: 'places', turnstile: 'dev' });
+    expect(sent.body).toMatch(/^[A-Za-z0-9_-]+$/);
+    expect(JSON.parse(localStorage.getItem('tripmap:share-links:v1')!)).toEqual([
+      expect.objectContaining({
+        id: 'AAAAAAAAAAAAAAAA',
+        deleteToken: sent.deleteToken,
+        title: '시험',
+        kind: 'places',
+        expiresAt: '2026-11-27T00:00:00.000Z',
+      }),
+    ]);
+    fireEvent.click(send);
+    const feed = sdk.Share.sendDefault.mock.calls[0]![0] as {
+      content: { link: { webUrl: string } };
+    };
+    expect(feed.content.link.webUrl).toMatch(
+      /^https:\/\/app\.test\/s\/AAAAAAAAAAAAAAAA#k=[A-Za-z0-9_-]{22}$/,
+    );
+    expect(feed.content.link.webUrl.length).toBeLessThanOrEqual(400);
+    expect(copy()).toBeEnabled();
+  });
+
+  it('만들기가 실패하면 안내하고, 다시 누르면 같은 본문·삭제 토큰으로 보낸다', async () => {
+    kakao();
+    const fetchMock = shareServer(new TypeError('끊김'), createdResponse());
+    const { d } = await setup(longDoc());
+    const button = d.getByRole('button', { name: '카카오톡' });
+    await waitFor(() => expect(button).toBeEnabled());
+    fireEvent.click(button);
+    expect(await d.findByRole('alert')).toHaveTextContent(
+      '인터넷 연결을 확인해 주세요. 링크 복사를 이용해 주세요',
+    );
+    fireEvent.click(d.getByRole('button', { name: '카카오톡' }));
+    await d.findByRole('button', { name: '카카오톡으로 보내기' });
+    expect(d.queryByRole('alert')).toBeNull();
+    const bodies = fetchMock.mock.calls.map(([, init]) => init!.body);
+    expect(bodies[0]).toBe(bodies[1]);
+  });
+
+  it('짧은 링크가 꺼져 있으면 지금처럼 카카오톡만 끄고 안내한다', async () => {
+    const sdk = kakao();
+    shareServer(
+      Response.json(
+        { reason: 'off', error: { code: 'UNAVAILABLE', message: '꺼짐' } },
+        { status: 503 },
+      ),
+    );
+    const { d, copy } = await setup(longDoc());
+    const button = d.getByRole('button', { name: '카카오톡' });
+    await waitFor(() => expect(button).toBeEnabled());
+    fireEvent.click(button);
+    expect(
+      await d.findByText('링크가 길어 카카오톡으로 보낼 수 없어요. 링크 복사를 이용해 주세요'),
+    ).toBeVisible();
     expect(d.getByRole('button', { name: '카카오톡' })).toBeDisabled();
+    expect(d.queryByRole('alert')).toBeNull();
     expect(copy()).toBeEnabled();
     expect(sdk.Share.sendDefault).not.toHaveBeenCalled();
+  });
+
+  it('제목을 바꾸면 만든 짧은 링크를 쓰지 않고 새로 만든다', async () => {
+    kakao();
+    shareServer(createdResponse(), createdResponse());
+    const { d } = await setup(longDoc());
+    const button = d.getByRole('button', { name: '카카오톡' });
+    await waitFor(() => expect(button).toBeEnabled());
+    fireEvent.click(button);
+    await d.findByRole('button', { name: '카카오톡으로 보내기' });
+    fireEvent.change(d.getByRole('textbox', { name: '제목' }), { target: { value: '새 제목' } });
+    expect(await d.findByRole('button', { name: '카카오톡' })).toBeVisible();
   });
   it('SDK를 받기 전에는 이름을 유지하고 실패하면 안내한다', async () => {
     vi.stubEnv('VITE_KAKAO_JS_KEY', 'e2e-kakao-key');

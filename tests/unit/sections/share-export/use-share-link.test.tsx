@@ -40,9 +40,9 @@ it('제목·메모가 바뀌면 옛 압축 결과를 버리고 닫으면 결과�
   );
   rerender({ title: '새 제목', memo: false, open: true });
   await act(async () => pending[1]!({ kind: 'direct', href: '새 링크' }));
-  expect(result.current).toEqual({ kind: 'direct', href: '새 링크' });
+  expect(result.current).toMatchObject({ kind: 'direct', href: '새 링크' });
   await act(async () => pending[0]!({ kind: 'direct', href: '옛 링크' }));
-  expect(result.current).toEqual({ kind: 'direct', href: '새 링크' });
+  expect(result.current).toMatchObject({ kind: 'direct', href: '새 링크' });
   rerender({ title: '새 제목', memo: false, open: false });
   expect(result.current).toBeNull();
 });
