@@ -5,7 +5,6 @@ import { getTurnstileToken } from 'src/services/meet-online/turnstile-loader';
 import { shareApi, type ShortLinkError } from 'src/services/share-short/client';
 import { encryptShareHash, newDeleteToken } from 'src/services/share-short/crypto';
 import { sentLinks } from 'src/services/share-short/store';
-import { appUrl } from 'src/share-viewer/encode';
 
 export type ShortMeta = { kind: ShortLinkKind; keepUntil: string | null };
 export type ShortLinkState =
@@ -100,13 +99,11 @@ export function useShortLink(open: boolean, longHref: string | null) {
       expiresAt,
     });
     if (!live()) return;
-    // 긴 링크와 같은 앱 주소를 쓴다(카카오에 등록한 도메인).
-    const app = appUrl(
-      import.meta.env.VITE_APP_URL || (import.meta.env.DEV ? window.location.origin : undefined),
-    );
+    // 사본을 올린 곳(지금 출처의 `/api/share`)과 같은 주소여야 열린다. `VITE_APP_URL`이 다른 배포를 가리켜도
+    // 그 배포의 D1에는 이 링크가 없다. 카카오 SDK도 등록한 출처에서만 동작하므로 지금 출처를 쓴다.
     set(href, {
       status: 'ready',
-      url: `${app}/s/${id}#k=${attempt.key}`,
+      url: `${window.location.origin}/s/${id}#k=${attempt.key}`,
       expiresAt: new Date(expiresAt),
     });
   }, []);

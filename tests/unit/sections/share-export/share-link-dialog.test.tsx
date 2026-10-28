@@ -316,9 +316,11 @@ describe('카카오톡 공유', () => {
     const feed = sdk.Share.sendDefault.mock.calls[0]![0] as {
       content: { link: { webUrl: string } };
     };
-    expect(feed.content.link.webUrl).toMatch(
-      /^https:\/\/app\.test\/s\/AAAAAAAAAAAAAAAA#k=[A-Za-z0-9_-]{22}$/,
-    );
+    // 앱 주소(`VITE_APP_URL`)가 아니라 사본을 올린 지금 출처로 만든다.
+    expect(
+      feed.content.link.webUrl.startsWith(`${window.location.origin}/s/AAAAAAAAAAAAAAAA#k=`),
+    ).toBe(true);
+    expect(feed.content.link.webUrl).toMatch(/#k=[A-Za-z0-9_-]{22}$/);
     expect(feed.content.link.webUrl.length).toBeLessThanOrEqual(400);
     expect(copy()).toBeEnabled();
   });
