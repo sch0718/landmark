@@ -63,6 +63,7 @@ describe('STATUS', () => {
       ENDED: 410,
       RATE_LIMITED: 429,
       UNAVAILABLE: 503,
+      TOO_LARGE: 413,
     });
   });
 });
@@ -88,6 +89,7 @@ describe('errorResponse', () => {
     ['ENDED', 410],
     ['RATE_LIMITED', 429],
     ['UNAVAILABLE', 503],
+    ['TOO_LARGE', 413],
   ] as const)('%s → %i, 공유 캐시에 남기지 않는다', async (code, status) => {
     const res = errorResponse(new ApiError(code, '약속 오류'));
     expect(res.status).toBe(status);

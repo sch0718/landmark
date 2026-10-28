@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 export const SCHEMA_STATEMENTS: string[] = [
   `CREATE TABLE IF NOT EXISTS meetings (
@@ -35,4 +35,15 @@ export const SCHEMA_STATEMENTS: string[] = [
     count INTEGER NOT NULL
   )`,
   'CREATE TABLE IF NOT EXISTS schema_meta (version INTEGER NOT NULL)',
+  // 2: 공유 짧은 링크. 본문은 브라우저가 암호화한 값이라 서버는 읽을 수 없다.
+  `CREATE TABLE IF NOT EXISTS share_links (
+    id TEXT PRIMARY KEY,
+    body TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    delete_hash TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL
+  )`,
+  'CREATE UNIQUE INDEX IF NOT EXISTS share_links_delete ON share_links(delete_hash)',
+  'CREATE INDEX IF NOT EXISTS share_links_expires ON share_links(expires_at)',
 ];

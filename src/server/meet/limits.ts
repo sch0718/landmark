@@ -1,6 +1,15 @@
 import type { MeetDb } from './db';
 
-export const LIMITS = { create: 20, claim: 60, reply: 600, update: 300, read: 5000 } as const;
+export const LIMITS = {
+  create: 20,
+  claim: 60,
+  reply: 600,
+  update: 300,
+  read: 5000,
+  shareCreate: 50,
+  shareDelete: 200,
+  shareRead: 5000,
+} as const;
 export type LimitAction = keyof typeof LIMITS;
 
 export async function consumeLimit(

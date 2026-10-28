@@ -123,20 +123,62 @@ test('데이터 없는 /view와 손상·과대 링크는 복구 안내를 표시
   }
 });
 
-test('장소 링크가 카카오톡 한도(400자)를 넘으면 카카오톡만 끄고 안내한다', async ({ page }) => {
+test('@smoke 장소 링크가 카카오톡 한도(400자)를 넘으면 짧은 링크로 보내고, 받은 사람은 보기 화면으로 연다', async ({
+  page,
+  baseURL,
+}) => {
   // 보내는 카드 모양은 단위 시험(share-link-dialog·kakao-share)이 본다. 장소 링크는 1곳이어도 400자를 넘는다.
   const { fakeKakao } = await import('./fixtures');
-  await fakeKakao(page);
-  await seedStorage(page, { prefs: { libraryView: 'list' } });
-  await page.goto('/');
-  await page.getByRole('group', { name: '라벨' }).getByRole('button', { name: /^바다/ }).click();
-  await page.getByRole('button', { name: '내보내기', exact: true }).click();
-  const dialog = page.getByRole('dialog', { name: '내보내기' });
-  await expect(dialog.getByRole('button', { name: '링크 복사', exact: true })).toBeEnabled();
-  await expect(
-    dialog.getByText('링크가 길어 카카오톡으로 보낼 수 없어요. 링크 복사를 이용해 주세요'),
-  ).toBeVisible();
-  await expect(dialog.getByRole('button', { name: '카카오톡', exact: true })).toBeDisabled();
-  expect(await page.evaluate(() => window.kakaoInitKeys)).toEqual(['e2e-kakao-key']);
-  expect(await page.evaluate(() => window.kakaoCalls)).toEqual([]);
+  const { installShareServer } = await import('./share-server');
+  const close = await installShareServer(page.context());
+  try {
+    await fakeKakao(page);
+    await seedStorage(page, { prefs: { libraryView: 'list' } });
+    await page.goto('/');
+    await page.getByRole('group', { name: '라벨' }).getByRole('button', { name: /^바다/ }).click();
+    await page.getByRole('button', { name: '내보내기', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: '내보내기' });
+    await expect(dialog.getByRole('button', { name: '링크 복사', exact: true })).toBeEnabled();
+    await expect(
+      dialog.getByText(
+        /^카카오톡으로 보내면 짧은 링크를 위해 암호화한 사본을 Landmark 서버에 .+까지 보관해요/,
+      ),
+    ).toBeVisible();
+    await dialog.getByRole('button', { name: '카카오톡', exact: true }).click();
+    await dialog.getByRole('button', { name: '카카오톡으로 보내기', exact: true }).click();
+    const calls = await page.evaluate(() => window.kakaoCalls);
+    expect(calls).toHaveLength(1);
+    const link = calls[0]!.content.link.webUrl;
+    expect(link).toMatch(
+      new RegExp(
+        `^${baseURL!.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/s/[A-Za-z0-9_-]{16}#k=[A-Za-z0-9_-]{22}$`,
+      ),
+    );
+    expect(link.length).toBeLessThanOrEqual(400);
+
+    await emptyLibrary(page);
+    await page.goto(link);
+    await expect(page).toHaveURL(/\/view#d=[A-Za-z0-9_-]+$/);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('바다');
+    await expect(page.getByRole('list', { name: '장소 목록' }).locator('article')).toHaveCount(
+      SEA_COUNT,
+    );
+
+    // 키가 잘린 링크는 열지 못한다고 알린다.
+    await page.goto(link.replace(/#k=.*$/, ''));
+    await expect(
+      page.getByText('링크가 온전하지 않아요. 보낸 사람에게 링크를 다시 받아 주세요'),
+    ).toBeVisible();
+
+    // 설정에서 지우면 받은 사람도 더는 열 수 없다.
+    await page.goto('/settings');
+    const section = page.getByRole('region', { name: '보낸 짧은 링크' });
+    await section.getByRole('button', { name: '바다 링크 지우기' }).click();
+    await expect(page.getByText('짧은 링크를 지웠어요')).toBeVisible();
+    await expect(section).toHaveCount(0);
+    await page.goto(link);
+    await expect(page.getByText(/^링크를 찾을 수 없어요/)).toBeVisible();
+  } finally {
+    close();
+  }
 });

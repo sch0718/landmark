@@ -5,6 +5,7 @@ export type MeetEnv = {
   TURNSTILE_SECRET?: string;
   IP_HASH_SALT?: string;
   MEET_ONLINE?: string;
+  SHARE_SHORT?: string;
 };
 
 export type MeetContext = {

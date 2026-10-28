@@ -19,7 +19,16 @@ afterEach(() => {
 
 describe('consumeLimit', () => {
   it('동작별 일 한도는 설계와 같다', () => {
-    expect(LIMITS).toEqual({ create: 20, claim: 60, reply: 600, update: 300, read: 5000 });
+    expect(LIMITS).toEqual({
+      create: 20,
+      claim: 60,
+      reply: 600,
+      update: 300,
+      read: 5000,
+      shareCreate: 50,
+      shareDelete: 200,
+      shareRead: 5000,
+    });
   });
 
   it.each(Object.keys(LIMITS) as LimitAction[])(

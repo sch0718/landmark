@@ -52,6 +52,7 @@ yarn install --frozen-lockfile  # .yarnrc의 ignore-engines가 적용된다
 | `TURNSTILE_SECRET` | Turnstile 검증용 비밀 키. Pages의 서버 시크릿 |
 | `IP_HASH_SALT` | 일 한도에 쓰는 IP 해시의 소금. Pages의 서버 시크릿(긴 무작위 값) |
 | `MEET_ONLINE` | `off`면 새 약속의 서버 올리기만 중단하고 링크 방식으로 공유. 기존 온라인 약속 읽기·답장은 계속 동작 |
+| `SHARE_SHORT` | `off`면 카카오톡용 짧은 링크 만들기만 중단(카카오톡 단추는 예전처럼 꺼지고 `링크 복사` 안내). 이미 만든 `/s/<id>` 열기·지우기는 계속 동작 |
 
 ```bash
 echo 'VITE_NAVER_MAP_CLIENT_ID=<발급받은 Client ID>' > .env.local
@@ -136,6 +137,23 @@ curl -H 'Origin: http://localhost:8788' 'http://localhost:8788/api/place?url=htt
 - 화면이 보이고 온라인일 때 10초마다 확인합니다. 숨김·오프라인에서는 멈추며 복귀하면 바로 확인하고, 실패가 이어지면 간격을 30초·60초로 늘립니다. 친구의 변경은 1초 모아 자동 저장하며, 확인 중 건너뛴 저장은 표시를 남겼다가 확인 완료(성공·304·실패) 직후 최신 입력으로 다시 시도합니다. 화면이 숨겨질 때도 남은 저장을 한 번 시도합니다. 실패한 초안은 다음 확인 때 다시 보냅니다.
 - 보관함·백업 형식은 그대로입니다. 토큰과 마지막 확인 버전·본문 버전·마지막 동기화 본문(64KB 이내)은 별도 키 `tripmap:meet-online:v1`에 두며 백업에 넣지 않습니다. 다른 기기의 주최자 연결은 메뉴의 `다른 기기에서 열기`로 링크를 공유·복사합니다. 다시 발급하면 이전 주최자 링크는 철회됩니다.
 - 온라인 코드와 Turnstile 로더는 지연 로딩되는 약속 화면에서만 가져옵니다. Turnstile은 처음 올릴 때 불러오며, `yarn size --require-lazy …`로 첫 로딩 예산을 확인합니다.
+
+### 공유 짧은 링크(`/s/<id>`)
+
+장소 내보내기·일정 공유의 긴 링크(`/view#d=…`)는 카카오톡 한도(400자)를 넘으므로, `카카오톡`을 누르면 브라우저가 해시를 압축 바이트로 되돌려 AES-GCM(링크마다 새 128비트 키)으로 암호화해 D1에 올리고 `<지금 출처>/s/<16자 id>#k=<22자 키>`(운영 72자)를 받습니다. 링크는 `VITE_APP_URL`이 아니라 사본을 올린 지금 출처로 만듭니다(다른 배포의 D1에는 그 링크가 없다). 키는 링크의 해시에만 있어 서버로 가지 않습니다. 약속과 같은 D1·Turnstile·`IP_HASH_SALT`를 쓰므로 새 설정은 없습니다(`SHARE_SHORT`만 선택). 설계: `docs/superpowers/specs/2026-10-28-share-short-link-design.md`.
+
+| 요청 | 하는 일·성공 응답 | 권한 |
+| --- | --- | --- |
+| `POST /api/share` | `{ body, kind: 'places' \| 'trip', keepUntil?, turnstile, deleteToken }` → `201 { id, expiresAt, created: true }`. `deleteToken`(43자)은 브라우저가 먼저 만들고, 같은 토큰으로 다시 보내면 처음 링크를 `200 { …, created: false }`로 돌려준다(본문은 처음 것). `body`는 base64url 32,040자까지, 요청은 40,000바이트까지(넘으면 `413 TOO_LARGE`) | 출처·Turnstile·일 한도·`SHARE_SHORT` |
+| `GET /s/:id` | 암호문을 데이터 블록에 넣은 작은 HTML(인라인 스크립트 하나, CSP 해시로만 실행). 스크립트가 `#k=`로 풀어 `location.replace('/view#d=…')`. 없는 링크 `404`·만료 `410`·한도 `429`·설정 누락·장애 `503`은 안내 HTML | 링크 소지자(출처를 보지 않는다 — 카카오톡에서 연 화면 이동에는 `Origin`이 없다) |
+| `DELETE /api/share/:id` | `Authorization: Bearer <deleteToken>` → `204`(틀린 토큰 `401`, 없는 링크 `404`) | 출처·삭제 토큰 |
+
+- 보관 기한: 장소 30일, 일정은 `max(30일, min(180일, 마지막 여행 끝날 + 7일의 한국 자정 직전))`. 규칙은 서버와 화면이 같이 쓰는 `src/domain/share/short-link.ts` 한 곳에 있다. 만들기·열기 요청 때 만료 행을 최대 20개씩 지운다.
+- 일 한도(IP 해시당): 만들기 50, 지우기 200, 없는·만료 링크 열기 5,000(정상 열기는 세지 않는다).
+- 서버는 본문을 풀 수 없어 검사하지 않는다. 문서 검사는 지금처럼 보기 화면이 한다. 모든 응답은 `Cache-Control: private, no-store`이고, `/s/:id` HTML은 `Referrer-Policy: no-referrer`·`X-Robots-Tag: noindex`를 직접 붙인다(`public/_headers`는 함수 응답에 붙지 않는다).
+- 화면: `ShareFileDialog`의 `카카오톡`은 긴 링크가 400자를 넘을 때만 짧은 링크를 쓴다. 첫 클릭에 만들고(`짧은 링크 만드는 중…`), 다음 클릭(`카카오톡으로 보내기`)에 보낸다. 올리기가 비동기라 같은 클릭에서는 카카오톡을 열 수 없다. 창이 열려 있는 동안 긴 링크별로 기억하고, 실패 뒤 다시 누르면 같은 본문·삭제 토큰으로 보낸다. `링크 복사`·`링크 공유`는 계속 긴 링크다.
+- 기기 기록 `tripmap:share-links:v1`: `{ id, deleteToken, title, kind, createdAt, expiresAt }`(최대 100개, 만료된 것은 보이지 않음). 키 `k`는 저장하지 않는다. 설정 › `보낸 짧은 링크`에서 지운다. 백업에 넣지 않는다.
+- 코드: 진입점 `functions/api/share/*`·`functions/s/[id].ts`, 처리 `src/server/share/*`, 브라우저 `src/services/share-short/*`·`src/sections/share-export/use-short-link.ts`·`src/sections/settings/SentLinksSection.tsx`. E2E는 `tests/e2e/share-server.ts`가 요청을 진짜 처리 코드와 시험용 SQLite에 넘긴다.
 
 ### 화면 경로
 
@@ -262,7 +280,7 @@ node scripts/measure-ui-assets.mjs dist/assets
 | 환경변수 `VITE_NAVER_MAP_CLIENT_ID` | NCP Client ID (Production·Preview 모두)                          |
 
 - `yarn build:ci`는 `yarn validate && yarn typecheck && yarn test && yarn build && yarn size --require-lazy … && yarn build:map`입니다. 검증이나 테스트가 실패하거나, 첫 화면 JS가 예산(`perf-budget.json`)을 넘거나, 나눠 받아야 하는 화면(`--require-lazy`로 지정)이 첫 화면에 합쳐져 따로 나뉘지 않으면 배포되지 않습니다.
-- 저장소 루트의 `functions/`는 Pages가 자동으로 서버 함수(`/api/place`, `/api/naver-folder`, `/api/route`, `/api/search`, `/api/hours`, `/api/meet*`)로 배포합니다. 약속은 위의 D1·Turnstile·시크릿 설정이 필요합니다. 장소·폴더·경로·검색·영업시간 결과는 Cloudflare Cache API에 장소 1일·폴더 10분·경로(자동차·대중교통 1시간, 도보 7일)·검색 7일·영업시간 1일 동안 둡니다. 약속 응답은 캐시하지 않습니다.
+- 저장소 루트의 `functions/`는 Pages가 자동으로 서버 함수(`/api/place`, `/api/naver-folder`, `/api/route`, `/api/search`, `/api/hours`, `/api/meet*`, `/api/share*`, `/s/*`)로 배포합니다. 약속·짧은 링크는 위의 D1·Turnstile·시크릿 설정이 필요합니다. 장소·폴더·경로·검색·영업시간 결과는 Cloudflare Cache API에 장소 1일·폴더 10분·경로(자동차·대중교통 1시간, 도보 7일)·검색 7일·영업시간 1일 동안 둡니다. 약속·짧은 링크 응답은 캐시하지 않습니다.
 - **롤백**: 주요 변경마다 버전 태그(`v0.1.0`~)와 [GitHub Release](https://github.com/sch0718/landmark/releases)를 만듭니다. 배포만 되돌리기(Cloudflare 대시보드), 코드 되돌리기(`git revert` PR), 버전별 데이터 호환은 [롤백](rollback.md)에 있습니다.
 - SPA 라우팅은 Pages 기본 동작(404.html이 없으면 index.html)을 씁니다.
 - `public/_headers`: 전체 `X-Robots-Tag: noindex`, `/data/*`는 `Cache-Control: public, max-age=60`.
@@ -270,13 +288,14 @@ node scripts/measure-ui-assets.mjs dist/assets
 
 ## 공유 파일과 지도 페이지
 
-- **링크 공유**: 내보내기·일정 공유 창에서 `링크 복사` 또는 `링크 공유`로 보내면 `/view#d=…`에서 바로 보고 `Landmark에 담기`로 가져옵니다. 데이터는 링크 안에만 있으며 서버에 저장하지 않습니다. 메모 포함 시 링크를 받은 누구나 메모를 볼 수 있고, 너무 큰 링크는 HTML 파일로 보내세요.
+- **링크 공유**: 내보내기·일정 공유 창에서 `링크 복사` 또는 `링크 공유`로 보내면 `/view#d=…`에서 바로 보고 `Landmark에 담기`로 가져옵니다. 이 긴 링크의 데이터는 링크 안에만 있으며 서버에 저장하지 않습니다. 메모 포함 시 링크를 받은 누구나 메모를 볼 수 있고, 너무 큰 링크는 HTML 파일로 보내세요.
+- **카카오톡 짧은 링크**: 긴 링크가 카카오톡 한도(400자)를 넘으면 `카카오톡`이 암호화한 사본을 서버에 맡기고 `/s/<id>#k=…`를 보냅니다(위 "공유 짧은 링크"). 받은 사람이 열면 같은 `/view#d=…`로 바뀝니다.
 - **보기 경로**: `yarn build:viewer`가 `public/view.html`도 만듭니다. Cloudflare Pages의 정적 HTML 경로(`/view`)로 제공하며 옛 배포로 되돌리면 이 링크는 열리지 않습니다.
 - **내보내기**: 보관함에서 장소를 고르고(없으면 지금 보이는 목록) `내보내기`를 누르면 HTML 파일 하나가 만들어집니다. 받는 사람은 설치·로그인 없이 휴대폰·PC에서 열어 보기만 합니다. 파일은 미리 빌드한 보기 화면 틀(`public/share-viewer.html`, `yarn build:viewer`)에 데이터를 끼워 만듭니다.
 - **지도 페이지**: 내보낸 파일의 지도는 파일 안 iframe이 띄우는 별도 페이지(`https://sch0718.github.io/landmark/`, `yarn build:map` → `dist-map/`)입니다. 이 저장소의 `gh-pages` 브랜치(GitHub Pages)에 올라가며, 워크플로 `.github/workflows/deploy-share-map.yml`이 `main`에 지도 관련 파일(`src/share-map/**`, `src/components/map/**` 등)이 바뀔 때 자동으로, 또는 수동 실행으로 배포합니다. 저장소 변수 `NAVER_MAP_CLIENT_ID`가 비어 있으면 배포 전에 멈추고, NCP 콘솔 Web 서비스 URL에 `https://sch0718.github.io`가 등록돼 있어야 합니다.
 - **가져오기**: 받은 파일을 앱의 ＋ 시트에서 고르거나(PC는 끌어 놓기도), 보기 화면의 `Landmark에 담기`로 `/import`를 열어 미리보기에서 넣을 장소와 라벨을 정해 내 보관함에 합칩니다.
 - **약속 링크**: 새 약속의 `/meet/<id>`는 서버 사본을 읽어 답장을 자동 집계합니다. 주최자 토큰이 없고 다른 참석자의 답장이 이미 있는 약속은 기존 링크 방식을 유지합니다. 후보(`/meet#d=`)·답장(`#r=`)·확정(`#f=`) 읽기와 답장 `반영`은 그대로 남습니다. `MEET_ONLINE=off`일 때 처음 보내는 약속도 링크 방식으로 공유합니다.
-- 설계: `docs/superpowers/specs/2026-10-11-html-share-export-design.md`, `2026-10-13-share-import-design.md`, `2026-10-16-trip-share-design.md`, `2026-10-22-share-link-design.md`, `2026-10-23-meeting-place-design.md`, `2026-10-25-meeting-online-design.md`.
+- 설계: `docs/superpowers/specs/2026-10-11-html-share-export-design.md`, `2026-10-13-share-import-design.md`, `2026-10-16-trip-share-design.md`, `2026-10-22-share-link-design.md`, `2026-10-23-meeting-place-design.md`, `2026-10-25-meeting-online-design.md`, `2026-10-28-share-short-link-design.md`.
 
 ## 공개 범위 주의
 
@@ -289,7 +308,7 @@ node scripts/measure-ui-assets.mjs dist/assets
 | 집 등 사적 좌표     | customPlaces에 정확한 위치 대신 인근 역 등 대표 지점을 씁니다(구간 경로가 그 지점에서 시작하므로 좌표만 숨기는 방식은 쓰지 않음) |
 | 제목·일정·장소      | 공개를 전제로 합니다. 더 강한 보호는 PoC 이후 로그인 단계에서 다룹니다                                                           |
 
-보관함 전체를 서버로 보내지는 않습니다. 장소 추가·경로 계산에 쓰는 서버 함수는 입력한 링크·좌표를 해석하려고 받고 결과를 캐시합니다. 온라인 약속은 공유할 때 참석자 이름·출발지 좌표, 후보·소요시간과 답장을 D1에 저장합니다. 친구 링크를 받은 사람은 약속과 집계를 볼 수 있으며, 남의 출발지 좌표는 가립니다. 주최자 링크를 가진 기기는 약속을 고치고 전체 출발지 좌표를 볼 수 있습니다. 내보낸 HTML 파일에는 고른 장소(와 선택 시 메모)가 들어 있어, 그 파일을 받은 사람은 누구나 볼 수 있습니다. 보관함 전체의 기기 간 자동 동기화는 없습니다.
+보관함 전체를 서버로 보내지는 않습니다. 장소 추가·경로 계산에 쓰는 서버 함수는 입력한 링크·좌표를 해석하려고 받고 결과를 캐시합니다. 온라인 약속은 공유할 때 참석자 이름·출발지 좌표, 후보·소요시간과 답장을 D1에 저장합니다. 친구 링크를 받은 사람은 약속과 집계를 볼 수 있으며, 남의 출발지 좌표는 가립니다. 주최자 링크를 가진 기기는 약속을 고치고 전체 출발지 좌표를 볼 수 있습니다. 카카오톡으로 장소·일정을 보내면 짧은 링크를 위해 공유 문서(선택 시 메모 포함)를 브라우저에서 암호화해 D1에 장소 30일·일정 최대 180일 동안 둡니다. 푸는 키는 링크에만 있어 서버는 내용을 읽을 수 없고, 링크를 받은 사람은 누구나 볼 수 있습니다. 보낸 기기의 설정 › `보낸 짧은 링크`에서 먼저 지울 수 있습니다. 내보낸 HTML 파일에는 고른 장소(와 선택 시 메모)가 들어 있어, 그 파일을 받은 사람은 누구나 볼 수 있습니다. 보관함 전체의 기기 간 자동 동기화는 없습니다.
 
 ## 알려진 한계
 

@@ -27,7 +27,9 @@ import {
   type ShareDocInvalid,
 } from 'src/services/errors';
 import { ShareTemplate } from 'src/services/share-template';
+import { formatShortExpiry, shortExpiresAt } from 'src/domain/share/short-link';
 import { useShareLink } from './use-share-link';
+import { SHORT_FAILED, useShortLink } from './use-short-link';
 import {
   useKakao,
   kakaoUrlFits,
@@ -194,13 +196,53 @@ export function ShareFileDialog({
   const kakao = useKakao(open && linksSupported);
   const kakaoTooLong = link?.kind === 'direct' && !kakaoUrlFits(link.href);
   const linkDisabled = disabled || link?.kind !== 'direct';
+  // 긴 링크가 카카오톡 한도를 넘으면 누를 때 짧은 링크를 만들고, 다음 클릭에서 보낸다(올리기가 비동기라서).
+  const short = useShortLink(open, link?.kind === 'direct' ? link.href : null);
+  const shortState = short.state;
+  const shortMeta = link?.kind === 'direct' ? link.short : undefined;
+  const shortOff = shortState.status === 'failed' && shortState.error === 'switched-off';
+  const shortUsable = kakaoTooLong && shortMeta !== undefined && !shortOff;
+  const [openedAt, setOpenedAt] = useState(() => new Date());
+  const [shortSession, setShortSession] = useState(open);
+  if (open !== shortSession) {
+    setShortSession(open);
+    if (open) setOpenedAt(new Date());
+  }
+  const shortNotice = !shortUsable
+    ? null
+    : shortState.status === 'ready'
+      ? `짧은 링크를 만들었어요(${formatShortExpiry(shortState.expiresAt, openedAt)}까지). 설정 › 보낸 짧은 링크에서 지울 수 있어요`
+      : `카카오톡으로 보내면 짧은 링크를 위해 암호화한 사본을 Landmark 서버에 ${formatShortExpiry(
+          shortExpiresAt(shortMeta.kind, shortMeta.keepUntil, openedAt),
+          openedAt,
+        )}까지 보관해요. 링크를 받은 사람은 누구나 볼 수 있어요`;
+  const shortError =
+    shortUsable && shortState.status === 'failed' ? SHORT_FAILED[shortState.error] : null;
+  const kakaoLabel = !shortUsable
+    ? '카카오톡'
+    : shortState.status === 'creating'
+      ? '짧은 링크 만드는 중…'
+      : shortState.status === 'ready'
+        ? '카카오톡으로 보내기'
+        : '카카오톡';
+  const kakaoDisabled =
+    linkDisabled ||
+    !kakao.ready ||
+    (kakaoTooLong && !shortUsable) ||
+    shortState.status === 'creating';
   const runKakao = () => {
-    if (linkDisabled || !kakao.ready || kakaoTooLong || link?.kind !== 'direct') return;
+    if (kakaoDisabled || link?.kind !== 'direct') return;
     setError(null);
+    if (kakaoTooLong) {
+      if (shortState.status !== 'ready') {
+        if (shortMeta !== undefined) void short.create(link.href, trimmed, shortMeta);
+        return;
+      }
+    }
     if (
       !sendAppKakao({
         title: trimmed,
-        url: link.href,
+        url: shortState.status === 'ready' && kakaoTooLong ? shortState.url : link.href,
         description: kakaoDescription,
         buttonTitle: kakaoButtonTitle,
       })
@@ -360,21 +402,35 @@ export function ShareFileDialog({
                 {kakao.enabled && (
                   <Button
                     variant="outlined"
-                    disabled={linkDisabled || !kakao.ready || kakaoTooLong}
+                    disabled={kakaoDisabled}
                     onClick={runKakao}
                     sx={{ minHeight: 44 }}
                   >
-                    카카오톡
+                    {kakaoLabel}
                   </Button>
                 )}
               </Box>
-              {kakao.enabled && (kakaoTooLong || kakao.failed) && (
+              {kakao.enabled && (kakao.failed || (kakaoTooLong && !shortUsable)) && (
                 <Typography
                   role="status"
                   variant="body2"
                   sx={{ color: 'var(--tm-text-secondary)' }}
                 >
-                  {kakaoTooLong ? KAKAO_TOO_LONG : KAKAO_LOAD_FAILED}
+                  {kakao.failed ? KAKAO_LOAD_FAILED : KAKAO_TOO_LONG}
+                </Typography>
+              )}
+              {kakao.enabled && !kakao.failed && shortNotice !== null && (
+                <Typography
+                  role="status"
+                  variant="body2"
+                  sx={{ color: 'var(--tm-text-secondary)' }}
+                >
+                  {shortNotice}
+                </Typography>
+              )}
+              {kakao.enabled && shortError !== null && (
+                <Typography role="alert" variant="body2" color="error">
+                  {shortError}
                 </Typography>
               )}
               {includeMemo && (
