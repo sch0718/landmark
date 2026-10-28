@@ -33,17 +33,25 @@ export function createSentLinksStore(
   let memory: SentShortLink[] = [];
   let memoryOnly = false;
   const listeners = new Set<() => void>();
-  let snapshot: readonly SentShortLink[] | null = null;
+  // 화면이 같은 값을 받도록 저장소 원문이 같으면 같은 배열을 돌려준다. 구독하지 않는 동안 다른 탭이 바꿔도
+  // 원문이 달라지므로 다음 읽기에서 새로 만든다.
+  let snapshot: { raw: string | null; links: readonly SentShortLink[] } | null = null;
 
-  function load(): SentShortLink[] {
-    if (memoryOnly) return memory;
-    let raw: string | null;
+  function readRaw(): string | null {
+    if (memoryOnly) return null;
     try {
-      raw = storage().getItem(SHARE_LINKS_KEY);
+      return storage().getItem(SHARE_LINKS_KEY);
     } catch {
       memoryOnly = true;
-      return memory;
+      return null;
     }
+  }
+  function load(): SentShortLink[] {
+    const raw = readRaw();
+    if (memoryOnly) return memory;
+    return parse(raw);
+  }
+  function parse(raw: string | null): SentShortLink[] {
     let parsed: unknown;
     try {
       parsed = JSON.parse(raw ?? '[]');
@@ -67,12 +75,14 @@ export function createSentLinksStore(
   }
   /** 기한이 지난 것은 빼고 새것부터. */
   function list(): readonly SentShortLink[] {
-    if (snapshot) return snapshot;
+    const raw = readRaw();
+    if (snapshot && snapshot.raw === raw) return snapshot.links;
     const at = now().getTime();
-    snapshot = load()
+    const links = (memoryOnly ? memory : parse(raw))
       .filter((link) => new Date(link.expiresAt).getTime() > at)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-    return snapshot;
+    snapshot = { raw, links };
+    return links;
   }
   function add(link: SentShortLink) {
     const at = now().getTime();

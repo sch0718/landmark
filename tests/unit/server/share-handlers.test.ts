@@ -217,6 +217,28 @@ describe('POST /api/share', () => {
     expect(response.status).toBe(413);
   });
 
+  it('길이 헤더 없이 흘려 보내는 큰 본문은 한도를 넘는 순간 끊는다', async () => {
+    let pulled = 0;
+    const chunk = new TextEncoder().encode('x'.repeat(10_000));
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulled += 1;
+        if (pulled > 25) controller.close();
+        else controller.enqueue(chunk);
+      },
+    });
+    const ctx = context('POST', '/api/share');
+    ctx.request = new Request(ctx.request.url, {
+      method: 'POST',
+      headers: ctx.request.headers,
+      body: stream,
+      duplex: 'half',
+    } as RequestInit);
+    const response = await handleShareCreate(ctx, deps);
+    expect(response.status).toBe(413);
+    expect(pulled).toBeLessThan(10);
+  });
+
   it('허용하지 않는 출처는 403', async () => {
     expect((await create({}, { origin: 'https://evil.test' })).status).toBe(403);
   });

@@ -179,6 +179,28 @@ describe('보낸 짧은 링크 기록', () => {
     expect(store.list()).toEqual([link()]);
   });
 
+  it('구독하지 않는 동안 다른 탭이 더한 링크도 다음 읽기에 보이고, 그대로면 같은 배열을 준다', () => {
+    const storage = createMemoryStorage();
+    const store = createSentLinksStore(
+      () => storage,
+      () => NOW,
+    );
+    store.add(link());
+    const first = store.list();
+    expect(store.list()).toBe(first);
+    const other = createSentLinksStore(
+      () => storage,
+      () => NOW,
+    );
+    other.add(link({ id: 'BBBBBBBBBBBBBBBB' }));
+    expect(
+      store
+        .list()
+        .map((item) => item.id)
+        .sort(),
+    ).toEqual(['AAAAAAAAAAAAAAAA', 'BBBBBBBBBBBBBBBB']);
+  });
+
   it('바뀌면 구독자에게 알리고, 다른 탭의 변경도 알린다', () => {
     const storage = createMemoryStorage();
     const store = createSentLinksStore(
