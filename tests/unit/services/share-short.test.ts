@@ -201,6 +201,20 @@ describe('보낸 짧은 링크 기록', () => {
     ).toEqual(['AAAAAAAAAAAAAAAA', 'BBBBBBBBBBBBBBBB']);
   });
 
+  it('열어 둔 사이 기한이 지나면 다음 읽기에서 뺀다', () => {
+    let at = NOW;
+    const storage = createMemoryStorage();
+    const store = createSentLinksStore(
+      () => storage,
+      () => at,
+    );
+    store.add(link({ expiresAt: '2026-10-29T00:00:00.000Z' }));
+    store.add(link({ id: 'BBBBBBBBBBBBBBBB', expiresAt: '2026-11-27T00:00:00.000Z' }));
+    expect(store.list()).toHaveLength(2);
+    at = new Date('2026-10-29T00:00:00.000Z');
+    expect(store.list().map((item) => item.id)).toEqual(['BBBBBBBBBBBBBBBB']);
+  });
+
   it('바뀌면 구독자에게 알리고, 다른 탭의 변경도 알린다', () => {
     const storage = createMemoryStorage();
     const store = createSentLinksStore(

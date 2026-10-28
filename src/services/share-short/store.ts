@@ -33,9 +33,13 @@ export function createSentLinksStore(
   let memory: SentShortLink[] = [];
   let memoryOnly = false;
   const listeners = new Set<() => void>();
-  // 화면이 같은 값을 받도록 저장소 원문이 같으면 같은 배열을 돌려준다. 구독하지 않는 동안 다른 탭이 바꿔도
-  // 원문이 달라지므로 다음 읽기에서 새로 만든다.
-  let snapshot: { raw: string | null; links: readonly SentShortLink[] } | null = null;
+  // 화면이 같은 값을 받도록 저장소 원문이 같고 가장 이른 기한 전이면 같은 배열을 돌려준다. 구독하지 않는 동안
+  // 다른 탭이 바꾸면 원문이, 열어 둔 사이 기한이 지나면 시각이 달라지므로 다음 읽기에서 새로 만든다.
+  let snapshot: {
+    raw: string | null;
+    links: readonly SentShortLink[];
+    validUntil: number;
+  } | null = null;
 
   function readRaw(): string | null {
     if (memoryOnly) return null;
@@ -76,12 +80,13 @@ export function createSentLinksStore(
   /** 기한이 지난 것은 빼고 새것부터. */
   function list(): readonly SentShortLink[] {
     const raw = readRaw();
-    if (snapshot && snapshot.raw === raw) return snapshot.links;
     const at = now().getTime();
+    if (snapshot && snapshot.raw === raw && at < snapshot.validUntil) return snapshot.links;
     const links = (memoryOnly ? memory : parse(raw))
       .filter((link) => new Date(link.expiresAt).getTime() > at)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-    snapshot = { raw, links };
+    const validUntil = Math.min(...links.map((link) => new Date(link.expiresAt).getTime()));
+    snapshot = { raw, links, validUntil };
     return links;
   }
   function add(link: SentShortLink) {
