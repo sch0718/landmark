@@ -56,7 +56,7 @@ const updateSchema = Schema.Struct({
 });
 
 // 공통 오류 형식을 지키면서 이 API의 이유·현재 버전을 덧붙인다.
-class MeetError extends ApiError {
+export class MeetError extends ApiError {
   constructor(
     code: ApiErrorCode,
     message: string,
@@ -66,13 +66,13 @@ class MeetError extends ApiError {
   }
 }
 
-function validate<S extends Schema.Decoder<unknown>>(schema: S, value: unknown): S['Type'] {
+export function validate<S extends Schema.Decoder<unknown>>(schema: S, value: unknown): S['Type'] {
   const result = safeParse(schema, value, { onExcessProperty: 'error' });
   if (!result.success) throw new ApiError('BAD_REQUEST', '약속 입력이 올바르지 않아요');
   return result.data;
 }
 
-async function readJson(request: Request): Promise<unknown> {
+export async function readJson(request: Request): Promise<unknown> {
   try {
     return await request.json();
   } catch {
@@ -80,7 +80,10 @@ async function readJson(request: Request): Promise<unknown> {
   }
 }
 
-async function withRequest(ctx: MeetContext, run: () => Promise<Response>): Promise<Response> {
+export async function withRequest(
+  ctx: MeetContext,
+  run: () => Promise<Response>,
+): Promise<Response> {
   try {
     const origin = requestOrigin(ctx.request);
     if (!isAllowedOrigin(origin) || origin === null) {
@@ -100,21 +103,21 @@ async function withRequest(ctx: MeetContext, run: () => Promise<Response>): Prom
   }
 }
 
-function isLocal(request: Request): boolean {
+export function isLocal(request: Request): boolean {
   return ['localhost', '127.0.0.1', '[::1]'].includes(new URL(request.url).hostname);
 }
 
-function configurationError(): never {
+export function configurationError(): never {
   throw new MeetError('UNAVAILABLE', '서버 설정을 확인해 주세요', { reason: 'config' });
 }
 
-async function prepare(ctx: MeetContext, now: Date, action?: LimitAction): Promise<void> {
+export async function prepare(ctx: MeetContext, now: Date, action?: LimitAction): Promise<void> {
   if (!ctx.env.DB) configurationError();
   await ensureSchema(ctx.env.DB);
   if (action) await checkLimit(ctx, now, action);
 }
 
-async function checkLimit(ctx: MeetContext, now: Date, action: LimitAction): Promise<void> {
+export async function checkLimit(ctx: MeetContext, now: Date, action: LimitAction): Promise<void> {
   const salt = ctx.env.IP_HASH_SALT || (isLocal(ctx.request) ? 'dev-salt' : null);
   if (!salt) configurationError();
   const ip = ctx.request.headers.get('CF-Connecting-IP') ?? 'local';

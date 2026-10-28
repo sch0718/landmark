@@ -854,3 +854,53 @@ describe('온라인 약속 Pages 진입점', () => {
     }
   });
 });
+
+describe('짧은 링크 함수 진입점', () => {
+  it('만들기·열기·지우기를 실제 DB와 처리 함수에 연결한다', async () => {
+    const { createSqliteD1 } = await import('../../helpers/sqlite-d1');
+    const { onRequestPost: create } = await import('../../../functions/api/share/index');
+    const { onRequestDelete: remove } = await import('../../../functions/api/share/[id]');
+    const { onRequestGet: open } = await import('../../../functions/s/[id]');
+    const db = createSqliteD1();
+    const pending: Promise<unknown>[] = [];
+    const ctx = (verb: string, path: string, id?: string, init: RequestInit = {}) => ({
+      request: new Request(`http://localhost:8788${path}`, { method: verb, ...init }),
+      env: { DB: db },
+      params: (id === undefined ? {} : { id }) as Record<string, string>,
+      waitUntil: (p: Promise<unknown>) => {
+        pending.push(p);
+      },
+    });
+    const token = 'd'.repeat(43);
+    try {
+      stubFetch({});
+      const created = await create(
+        ctx('POST', '/api/share', undefined, {
+          headers: { Origin: ALLOWED_ORIGIN },
+          body: JSON.stringify({
+            body: 'AAAA',
+            kind: 'places',
+            turnstile: 'dev',
+            deleteToken: token,
+          }),
+        }),
+      );
+      expect(created.status).toBe(201);
+      const { id } = (await created.json()) as { id: string };
+      await Promise.all(pending);
+      const page = await open(ctx('GET', `/s/${id}`, id));
+      expect(page.status).toBe(200);
+      expect(page.headers.get('Content-Type')).toBe('text/html; charset=utf-8');
+      const deleted = await remove(
+        ctx('DELETE', `/api/share/${id}`, id, {
+          headers: { Origin: ALLOWED_ORIGIN, Authorization: `Bearer ${token}` },
+        }),
+      );
+      expect(deleted.status).toBe(204);
+      expect((await open(ctx('GET', `/s/${id}`, id))).status).toBe(404);
+    } finally {
+      await Promise.all(pending);
+      db.close();
+    }
+  });
+});

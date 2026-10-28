@@ -24,12 +24,12 @@ describe('ensureSchema', () => {
       expect.objectContaining({ name: 'doc_rev', type: 'INTEGER', notnull: 1 }),
     );
   });
-  it('빈 DB에 설계의 표·색인과 버전 1을 만든다', async () => {
+  it('빈 DB에 설계의 표·색인과 버전 2를 만든다', async () => {
     await ensureSchema(db);
 
-    expect(SCHEMA_VERSION).toBe(1);
+    expect(SCHEMA_VERSION).toBe(2);
     expect(await db.prepare('SELECT version FROM schema_meta').all()).toEqual({
-      results: [{ version: 1 }],
+      results: [{ version: 2 }],
     });
     expect(
       await db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all(),
@@ -40,6 +40,7 @@ describe('ensureSchema', () => {
         { name: 'meetings' },
         { name: 'rate_counters' },
         { name: 'schema_meta' },
+        { name: 'share_links' },
       ],
     });
     expect(
@@ -49,6 +50,34 @@ describe('ensureSchema', () => {
         )
         .all(),
     ).toEqual({ results: [{ name: 'meeting_tokens_guest' }, { name: 'meetings_expires' }] });
+    expect(
+      await db
+        .prepare("SELECT name FROM sqlite_master WHERE name LIKE 'share_links_%' ORDER BY name")
+        .all(),
+    ).toEqual({ results: [{ name: 'share_links_delete' }, { name: 'share_links_expires' }] });
+  });
+
+  it('버전 1 DB는 약속 자료를 그대로 두고 짧은 링크 표를 더한다', async () => {
+    // 버전 1 시점의 문장(짧은 링크 표 앞까지)만 실행한 DB.
+    const v1 = SCHEMA_STATEMENTS.filter((sql) => !sql.includes('share_links'));
+    await db.batch(v1.map((sql) => db.prepare(sql)));
+    await db.prepare('INSERT INTO schema_meta (version) VALUES (1)').run();
+    await db
+      .prepare('INSERT INTO meetings VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .bind('meeting001', '{}', 1, 1, '생성 시각', '변경 시각', '만료 시각')
+      .run();
+
+    await ensureSchema(db);
+
+    expect(await db.prepare('SELECT id FROM meetings').all()).toEqual({
+      results: [{ id: 'meeting001' }],
+    });
+    expect(await db.prepare('SELECT COUNT(*) AS count FROM share_links').first()).toEqual({
+      count: 0,
+    });
+    expect(await db.prepare('SELECT version FROM schema_meta').all()).toEqual({
+      results: [{ version: 2 }],
+    });
   });
 
   it('두 번 불러도 초기화와 버전 읽기는 한 번만 한다', async () => {
@@ -62,7 +91,7 @@ describe('ensureSchema', () => {
     expect(batch).toHaveBeenCalledTimes(1);
     expect(prepare).toHaveBeenCalledTimes(prepared);
     expect(await db.prepare('SELECT version FROM schema_meta').all()).toEqual({
-      results: [{ version: 1 }],
+      results: [{ version: 2 }],
     });
   });
 
@@ -79,7 +108,7 @@ describe('ensureSchema', () => {
     await ensureSchema(db);
 
     expect(batch).toHaveBeenCalledTimes(2);
-    expect(await db.prepare('SELECT version FROM schema_meta').first()).toEqual({ version: 1 });
+    expect(await db.prepare('SELECT version FROM schema_meta').first()).toEqual({ version: 2 });
   });
 
   it('표 없음 이외의 읽기 오류는 전파하고 다음 호출에서 다시 시도한다', async () => {
@@ -90,7 +119,7 @@ describe('ensureSchema', () => {
     await expect(ensureSchema(db)).rejects.toThrow('DB 읽기 실패');
     expect(prepare).toHaveBeenCalledTimes(1);
     await ensureSchema(db);
-    expect(await db.prepare('SELECT version FROM schema_meta').first()).toEqual({ version: 1 });
+    expect(await db.prepare('SELECT version FROM schema_meta').first()).toEqual({ version: 2 });
   });
 
   it('이전 버전의 자료는 보존하고 버전 기록만 하나로 갱신한다', async () => {
@@ -108,18 +137,18 @@ describe('ensureSchema', () => {
       doc: '{}',
     });
     expect(await db.prepare('SELECT version FROM schema_meta').all()).toEqual({
-      results: [{ version: 1 }],
+      results: [{ version: 2 }],
     });
   });
 
   it('버전 표가 비어 있어도 초기화한다', async () => {
     await db.prepare('CREATE TABLE schema_meta (version INTEGER NOT NULL)').run();
     await ensureSchema(db);
-    expect(await db.prepare('SELECT version FROM schema_meta').first()).toEqual({ version: 1 });
+    expect(await db.prepare('SELECT version FROM schema_meta').first()).toEqual({ version: 2 });
     expect(await db.prepare('SELECT * FROM rate_counters').all()).toEqual({ results: [] });
   });
 
-  it.each([1, 2])('이미 버전 %i이면 배치를 실행하지 않는다', async (version) => {
+  it.each([2, 3])('이미 버전 %i이면 배치를 실행하지 않는다', async (version) => {
     await db.prepare('CREATE TABLE schema_meta (version INTEGER NOT NULL)').run();
     await db.prepare('INSERT INTO schema_meta (version) VALUES (?)').bind(version).run();
     const batch = vi.spyOn(db, 'batch');
@@ -135,7 +164,7 @@ describe('ensureSchema', () => {
     await db.prepare('UPDATE schema_meta SET version = 0').run();
     resetSchemaMemo();
     await ensureSchema(db);
-    expect(await db.prepare('SELECT version FROM schema_meta').first()).toEqual({ version: 1 });
+    expect(await db.prepare('SELECT version FROM schema_meta').first()).toEqual({ version: 2 });
   });
 });
 

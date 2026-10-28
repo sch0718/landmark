@@ -92,6 +92,7 @@ describe('PlaceLookup.lookupLink', () => {
     ['ENDED', 410],
     ['RATE_LIMITED', 429],
     ['UNAVAILABLE', 503],
+    ['TOO_LARGE', 413],
   ] as const;
   it('경로 전용 코드(BAD_REQUEST·NO_ROUTE)는 UPSTREAM 문구로 보인다', () => {
     for (const code of ['BAD_REQUEST', 'NO_ROUTE'] as const) {

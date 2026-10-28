@@ -160,6 +160,7 @@ const API_ERROR_CODES = [
   'ENDED',
   'RATE_LIMITED',
   'UNAVAILABLE',
+  'TOO_LARGE',
 ] as const satisfies readonly ApiErrorCode[];
 // 서버 코드가 늘면 여기서 컴파일 오류가 난다(위 목록에 더하고 `userMessage`도 고친다).
 const _allCodesListed: [Exclude<ApiErrorCode, (typeof API_ERROR_CODES)[number]>] extends [never]
@@ -209,6 +210,7 @@ export class PlaceLookupError extends Schema.TaggedError<PlaceLookupError>()('Pl
       case 'ENDED':
       case 'RATE_LIMITED':
       case 'UNAVAILABLE':
+      case 'TOO_LARGE':
         return UNAVAILABLE_MESSAGE;
     }
   }
