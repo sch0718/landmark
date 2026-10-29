@@ -17,12 +17,18 @@ class SqliteD1Statement implements MeetStatement {
   }
 
   async all<T = Record<string, unknown>>(): Promise<{ results: T[] }> {
-    return { results: this.database.prepare(this.sql).all(...this.values) as T[] };
+    return Object.defineProperties(
+      { results: this.database.prepare(this.sql).all(...this.values) as T[] },
+      { success: { value: true }, meta: { value: { changes: 0 } } },
+    );
   }
 
   execute(): { meta: { changes: number } } {
     const result = this.database.prepare(this.sql).run(...this.values);
-    return { meta: { changes: Number(result.changes) } };
+    return Object.defineProperties(
+      { meta: { changes: Number(result.changes) } },
+      { results: { value: [] }, success: { value: true } },
+    );
   }
 
   async run(): Promise<{ meta: { changes: number } }> {
