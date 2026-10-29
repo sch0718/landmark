@@ -1,3 +1,6 @@
+import { useTripCollabRecord } from 'src/services/trip-collab/store';
+import { useCollabDeps } from '../collab/use-trip-collab';
+import { joinCollabAsOwner } from '../collab/owner-join';
 import { useAtomValue } from 'jotai';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -20,6 +23,7 @@ export const LIVE_RETRY_MS = [30000, 60000, 120000],
   LIVE_OFF_RETRY_MS = 300000,
   LIVE_LIMIT_RETRY_MS = 3600000;
 export type LivePublishState =
+  | 'collab'
   | 'idle'
   | 'pending'
   | 'publishing'
@@ -63,7 +67,10 @@ export function useTripLivePublish(
 } {
   const library = useAtomValue(libraryAtom),
     record = useTripLiveRecord(tripId);
-  const enabled = active && record?.status === 'live' && !record.paused;
+  const collab = useTripCollabRecord(tripId)?.status === 'live';
+  const collabDeps = useCollabDeps(tripId, false);
+  const versionJoined = useRef(false);
+  const enabled = active && record?.status === 'live' && !record.paused && !collab;
   const legs = useTripLegs(tripId, enabled);
   const [state, setState] = useState<LivePublishState>('idle');
   const latest = useRef({ library, legs, enabled });
@@ -137,6 +144,7 @@ export function useTripLivePublish(
         if (
           !alive.current ||
           !live.enabled ||
+          versionJoined.current ||
           !current ||
           current.status !== 'live' ||
           current.paused ||
@@ -218,6 +226,16 @@ export function useTripLivePublish(
           setState('published');
           return;
         }
+        if (result.error === 'version') {
+          setState('collab');
+          if (!versionJoined.current) {
+            versionJoined.current = true;
+            const shared = await tripLiveApi.get(fresh.liveId, null, fresh.ownerToken);
+            if (shared.ok && shared.value !== 'unchanged')
+              await joinCollabAsOwner(collabDeps, shared.value, false);
+          }
+          return;
+        }
         if (result.error === 'conflict') {
           overwriteChosen.current = false;
           clearTimeout(retry.current);
@@ -279,7 +297,7 @@ export function useTripLivePublish(
         if (locks.get(tripId) === work) locks.delete(tripId);
       }
     },
-    [tripId, pause],
+    [tripId, pause, collabDeps],
   );
   const overwrite = useCallback(() => {
     overwriteChosen.current = true;
@@ -288,7 +306,7 @@ export function useTripLivePublish(
   useEffect(() => {
     let disposed = false,
       timer: ReturnType<typeof setTimeout> | undefined;
-    if (!enabled || !record) return;
+    if (!enabled || !record || versionJoined.current) return;
     const trip = library.trips[tripId];
     if (!trip || trip.deletedAt !== null) return;
     const dayIds = publicationDayIds(record, trip.days.length);
@@ -357,12 +375,15 @@ export function useTripLivePublish(
       clearTimeout(retry.current);
     };
   }, [enabled, publish, tripId]);
-  const shown: LivePublishState = record?.paused
-    ? 'paused'
-    : record?.status === 'disconnected'
-      ? 'disconnected'
-      : record?.status === 'ended'
-        ? 'ended'
-        : state;
+  const shown: LivePublishState =
+    collab || versionJoined.current
+      ? 'collab'
+      : record?.paused
+        ? 'paused'
+        : record?.status === 'disconnected'
+          ? 'disconnected'
+          : record?.status === 'ended'
+            ? 'ended'
+            : state;
   return { state: shown, publishedAt: record?.publishedAt ?? null, overwrite, pause, resume };
 }

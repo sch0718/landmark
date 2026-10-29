@@ -1,3 +1,4 @@
+import { TripCollabSync } from 'src/sections/trips/collab/TripCollabSync';
 import { TripLivePublisher } from 'src/sections/trips/live/TripLivePublisher';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -237,6 +238,7 @@ function TimelinePane({
         <DetailPane placeId={detailId} onBack={onCloseDetail} />
       ) : (
         <>
+          <TripCollabSync tripId={trip.id} />
           <DayTabs trip={trip} dayIndex={dayIndex} onSelect={onSelectDay} />
           <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
             <DayTimeline trip={trip} dayIndex={dayIndex} plan={plan} />

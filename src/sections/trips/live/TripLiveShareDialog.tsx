@@ -77,7 +77,8 @@ export function TripLiveShareDialog({
     [includeCandidates, setCandidates] = useState(record?.options.includeCandidates ?? true);
   const [busy, setBusy] = useState(false),
     [message, setMessage] = useState(''),
-    [otherDevice, setOtherDevice] = useState(false);
+    [otherDevice, setOtherDevice] = useState(false),
+    [collaborative, setCollaborative] = useState(false);
   const [confirm, setConfirm] = useState<{
     kind: 'view' | 'owner' | 'delete';
     token: string;
@@ -111,6 +112,7 @@ export function TripLiveShareDialog({
       }
       if (result.value === 'unchanged') return;
       const state = result.value;
+      setCollaborative(state.doc.v === 2);
       if (state.viewToken && state.viewToken !== current.viewToken)
         tripLiveStore.update(tripId, { viewToken: state.viewToken });
       setOtherDevice(state.rev > current.rev);
@@ -313,15 +315,19 @@ export function TripLiveShareDialog({
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
           {(canMake || live) && (
             <>
-              <TextField
-                label="제목"
-                value={title}
-                slotProps={{ htmlInput: { maxLength: 60 } }}
-                onChange={(e) => {
-                  setTitle(e.target.value);
-                  changeOptions({ ...options, title: e.target.value.trim() });
-                }}
-              />
+              {collaborative ? (
+                <Typography>함께 편집 중에는 여행 이름을 따라요</Typography>
+              ) : (
+                <TextField
+                  label="제목"
+                  value={title}
+                  slotProps={{ htmlInput: { maxLength: 60 } }}
+                  onChange={(e) => {
+                    setTitle(e.target.value);
+                    changeOptions({ ...options, title: e.target.value.trim() });
+                  }}
+                />
+              )}
               <FormControlLabel
                 control={
                   <Checkbox

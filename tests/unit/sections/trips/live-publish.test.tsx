@@ -4,13 +4,18 @@ import { Provider, createStore } from 'jotai';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useTripLivePublish } from 'src/sections/trips/live/use-trip-live-publish';
+import { tripCollabStore } from 'src/services/trip-collab/store';
+import { joinCollabAsOwner } from 'src/sections/trips/collab/owner-join';
 import { tripLiveApi } from 'src/services/trip-live/client';
 import { tripLiveStore, type TripLiveRecord } from 'src/services/trip-live/store';
 import { libraryAtom } from 'src/stores/library-state';
 import { buildLiveTripDoc, ESTIMATE_ONLY, liveEditKey } from 'src/domain/trip-live/build-live-doc';
 import { buildLiveLibrary } from '../../../fixtures/builders';
 import { toast } from 'sonner';
-vi.mock('src/services/trip-live/client', () => ({ tripLiveApi: { update: vi.fn() } }));
+vi.mock('src/services/trip-live/client', () => ({
+  tripLiveApi: { update: vi.fn(), get: vi.fn() },
+}));
+vi.mock('src/sections/trips/collab/owner-join', () => ({ joinCollabAsOwner: vi.fn() }));
 vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { error: vi.fn() }) }));
 const routes = vi.hoisted(() => ({
   total: 0,
@@ -332,5 +337,54 @@ it('화면이 모두 닫힌 뒤 도착한 실패 응답은 재시도 타이머�
     await realTimeout(10);
   });
   await advance(300000);
+  expect(tripLiveApi.update).toHaveBeenCalledOnce();
+});
+
+it('연결 기록이 live면 2A 반영을 멈추고 collab을 보인다', async () => {
+  tripCollabStore.put({
+    tripId: 'trip000001',
+    liveId: 'abcdefghij',
+    role: 'owner',
+    token: null,
+    deviceId: null,
+    label: '만든 사람',
+    status: 'live',
+    rev: 2,
+    prev: 0,
+    dayIds: ['day00001', 'day00002'],
+    placeMap: {},
+    syncedAt: new Date().toISOString(),
+    title: '여행',
+    pendingProgress: [],
+  });
+  const hook = await mount();
+  await advance(20_000);
+  expect(tripLiveApi.update).not.toHaveBeenCalled();
+  expect(hook.result.current.state).toBe('collab');
+});
+it('버전 거절은 공동 편집 합류로 이어지고 다시 덮어쓰지 않는다', async () => {
+  const doc = {
+    ...buildLiveTripDoc(buildLiveLibrary(), 'trip000001', ESTIMATE_ONLY, {
+      title: '시험 여행',
+      options: record().options,
+      dayIds: record().dayIds,
+      createdAt: record().createdAt,
+    })!,
+    v: 2 as const,
+  };
+  vi.mocked(tripLiveApi.update).mockResolvedValue({ ok: false, error: 'version' });
+  vi.mocked(tripLiveApi.get).mockResolvedValue({
+    ok: true,
+    value: { role: 'owner', rev: 3, doc, updatedAt: doc.share.createdAt, expiresAt: '2026-12-31' },
+  });
+  const hook = await mount();
+  await advance(3_000);
+  expect(hook.result.current.state).toBe('collab');
+  expect(joinCollabAsOwner).toHaveBeenCalledWith(
+    expect.anything(),
+    expect.objectContaining({ doc }),
+    false,
+  );
+  await advance(20_000);
   expect(tripLiveApi.update).toHaveBeenCalledOnce();
 });

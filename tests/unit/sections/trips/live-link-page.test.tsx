@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TripLiveLinkPage } from 'src/sections/trips/live/TripLiveLinkPage';
 import { tripLiveApi } from 'src/services/trip-live/client';
+import { tripCollabStore } from 'src/services/trip-collab/store';
 import { tripLiveStore } from 'src/services/trip-live/store';
 import { libraryAtom } from 'src/stores/library-state';
 import { buildLiveTripDoc, ESTIMATE_ONLY, liveEditKey } from 'src/domain/trip-live/build-live-doc';
@@ -133,4 +134,16 @@ it('끊긴 기록이 있어도 새 소유자 링크로 공개본을 확인하고
   mount(buildLiveLibrary());
   await userEvent.click(await screen.findByRole('button', { name: '이 기기에서 관리하기' }));
   await waitFor(() => expect(tripLiveStore.byLiveId(id)?.ownerToken).toBe(owner));
+});
+
+it('v2 공동본은 소유자 연결 기록과 기준을 함께 만든다', async () => {
+  const live = state();
+  live.doc.v = 2;
+  vi.mocked(tripLiveApi.get).mockResolvedValue({ ok: true, value: live });
+  const jotai = mount();
+  await userEvent.click(await screen.findByRole('button', { name: '이 기기에서 관리하기' }));
+  await waitFor(() => expect(tripCollabStore.byLiveId(id)?.role).toBe('owner'));
+  const r = tripCollabStore.byLiveId(id)!;
+  expect(tripCollabStore.readBase(id)?.rev).toBe(live.rev);
+  expect(jotai.get(libraryAtom).trips[r.tripId]!.days[0]!.stops.value[0]!.id).toBe('stop0001');
 });

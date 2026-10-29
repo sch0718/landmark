@@ -1,3 +1,7 @@
+import { importCollabTrip } from 'src/domain/trip-collab/apply';
+import { planFromDoc } from 'src/domain/trip-collab/plan';
+import { tripCollabStore } from 'src/services/trip-collab/store';
+import { OWNER_LABEL } from 'src/domain/trip-collab/constants';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
@@ -86,9 +90,18 @@ export function TripLiveLinkPage() {
     if (!state || !token || busy) return;
     setBusy(true);
     try {
-      const imported = await run((lib, ctx) =>
-        importLiveTrip(lib, state.doc, { preferredTripId: state.sourceTripId! }, ctx),
-      );
+      const linked: { value: Extract<ReturnType<typeof importCollabTrip>, { ok: true }> | null } = {
+        value: null,
+      };
+      const imported = await run((lib, ctx) => {
+        if (state.doc.v === 2) {
+          const r = importCollabTrip(lib, state.doc, ctx);
+          if (!r.ok) return r;
+          linked.value = r;
+          return { ok: true, lib: r.lib, createdId: r.tripId };
+        }
+        return importLiveTrip(lib, state.doc, { preferredTripId: state.sourceTripId! }, ctx);
+      });
       if (!imported.ok || !imported.createdId) {
         toast.error('여행을 담지 못했어요. 다시 해 주세요');
         return;
@@ -124,6 +137,29 @@ export function TripLiveLinkPage() {
         publishedAt: state.updatedAt,
         expiresAt: state.expiresAt,
       });
+      if (linked.value) {
+        tripCollabStore.put({
+          tripId,
+          liveId: id,
+          role: 'owner',
+          token: null,
+          deviceId: null,
+          label: OWNER_LABEL,
+          status: 'live',
+          rev: state.rev,
+          prev: 0,
+          dayIds: linked.value.dayIds,
+          placeMap: linked.value.placeMap,
+          syncedAt: new Date().toISOString(),
+          title: state.doc.share.title,
+          pendingProgress: [],
+        });
+        tripCollabStore.writeBase(id, {
+          rev: state.rev,
+          plan: planFromDoc(state.doc),
+          progress: null,
+        });
+      }
       toast('이 기기에서 갱신 링크를 관리해요');
       navigate(paths.trip(tripId), { replace: true });
     } catch {
