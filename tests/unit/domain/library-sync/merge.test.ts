@@ -337,11 +337,14 @@ describe('여행과 약속 관계 병합', () => {
     expect(result.doc.startDate).toBe(b.startDate);
     expect(result.doc.endDate).toBe(b.endDate);
     expect(result.doc.title).toBe(a.title);
-    expect(result.losers.find((loser) => loser.path === 'days')).toMatchObject({
-      side: 'a',
-      value: a.days,
-      updatedAt: T0,
-    });
+    expect(result.losers.filter((loser) => loser.side === 'a')).toEqual([
+      {
+        path: 'dates',
+        side: 'a',
+        value: { startDate: a.startDate, endDate: a.endDate, days: a.days },
+        updatedAt: T0,
+      },
+    ]);
   });
 
   it('날짜 시각 동률은 날짜/날 수 문자열로 결정한다', () => {

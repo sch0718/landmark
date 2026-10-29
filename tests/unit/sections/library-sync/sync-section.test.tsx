@@ -185,3 +185,20 @@ it('빌드 변수가 없으면 설정 화면에 동기화 절이 없다', async 
   const { setAppRuntimeForTest } = await import('src/lib/effect/runtime');
   setAppRuntimeForTest(null);
 });
+
+it('여행 날짜와 일정 충돌을 한 묶음으로 표시한다', () => {
+  writeConflicts(localStorage, [
+    {
+      id: 'dates',
+      key: 'trip:trip000001',
+      kind: 'trip',
+      label: '여행',
+      path: 'dates',
+      mine: {},
+      theirs: {},
+      at: '2026-10-29T00:00:00.000Z',
+    },
+  ]);
+  show(<SyncConflictsDialog open onClose={() => {}} />);
+  expect(screen.getByText('여행 · 날짜·일정')).toBeInTheDocument();
+});

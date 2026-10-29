@@ -81,6 +81,8 @@ export function missingFromLocal(lib: Library, base: BaseMap): boolean {
   });
 }
 function atPath(doc: AnyItem, path: string): unknown {
+  if (path === 'dates' && 'days' in doc)
+    return { startDate: doc.startDate, endDate: doc.endDate, days: doc.days };
   let node: unknown = doc;
   for (const key of path.split('.')) node = (node as Record<string, unknown> | undefined)?.[key];
   return node && typeof node === 'object' && 'value' in node ? node.value : node;

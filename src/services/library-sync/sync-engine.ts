@@ -25,6 +25,7 @@ import { repairLibrary } from 'src/domain/library-sync/repair';
 import { hasAnyEntry } from 'src/domain/backup/summary';
 import { startEffect } from 'src/lib/effect/runtime';
 import { emptyLibrary, type Library } from 'src/schema/library';
+import type { Trip } from 'src/schema/trip';
 import { browserStorage } from 'src/services/browser-storage';
 import { createMemoryStorage } from 'src/repositories/edit-layer-repo';
 import { IdGen } from 'src/services/id-gen';
@@ -100,6 +101,19 @@ function reviveAsLatest(doc: AnyItem, now: string): AnyItem {
   return { ...(visit(doc) as AnyItem), deletedAt: null };
 }
 function replacePath(doc: AnyItem, path: string, value: unknown, now: string): AnyItem {
+  if (path === 'dates' && 'days' in doc) {
+    const dates = value as Pick<Trip, 'startDate' | 'endDate' | 'days'>;
+    return {
+      ...doc,
+      startDate: { ...dates.startDate, updatedAt: now },
+      endDate: { ...dates.endDate, updatedAt: now },
+      days: dates.days.map((day) => ({
+        stops: { ...day.stops, updatedAt: now },
+        lodging: { ...day.lodging, updatedAt: now },
+        startTime: { ...day.startTime, updatedAt: now },
+      })),
+    };
+  }
   const keys = path.split('.');
   const change = (node: unknown, i: number): unknown => {
     if (i === keys.length) return { value, updatedAt: now };

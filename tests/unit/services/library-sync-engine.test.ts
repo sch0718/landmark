@@ -19,6 +19,8 @@ import {
 import { createMemoryStorage } from 'src/repositories/edit-layer-repo';
 import { emptyLibrary, type Library, type Place } from 'src/schema/library';
 import { LibraryStore, LIBRARY_KEY } from 'src/services/library-store';
+import { TripSchema, checkTrip, type Trip } from 'src/schema/trip';
+import { safeParse } from 'src/schema/parse';
 import { IdGen } from 'src/services/id-gen';
 import { OFF_STATUS } from 'src/stores/sync-status';
 import { createHeldLocks } from '../../fixtures/fake-locks';
@@ -334,4 +336,75 @@ it('복원으로 사라진 항목을 전체 재동기화로 받고 다음 실행
   await a.engine.runNow('visible');
   expect(changes).toHaveBeenCalledTimes(1);
   expect(changes.mock.calls[0]?.[0]).toMatchObject({ since: cursor.rev, after: cursor.key });
+});
+
+it.each([1, 3])('여행 %s일 날짜·일정 충돌을 한 번에 되돌려 보관함에 저장한다', async (mineDays) => {
+  const makeTrip = (count: number, at: string, title = f('여행')): Trip => ({
+    id: 'trip000001',
+    title,
+    startDate: f('2026-11-01', at),
+    endDate: f(`2026-11-0${count}`, at),
+    origin: f(null),
+    candidates: f([]),
+    days: Array.from({ length: count }, () => ({
+      stops: f([], at),
+      lodging: f(null, at),
+      startTime: f('10:00', at),
+    })),
+    legModes: f({}),
+    createdAt: p.createdAt,
+    deletedAt: null,
+  });
+  const server = createSyncMemoryServer();
+  disposers.push(() => server.db.close());
+  const initial = makeTrip(1, p.createdAt);
+  const a = await device(server, { ...emptyLibrary(), trips: { [initial.id]: initial } });
+  await a.engine.connect('upload');
+  const b = await device(server);
+  await b.engine.connect('merge');
+  a.state.time += 1000;
+  b.state.time = a.state.time + 1000;
+  const mine = makeTrip(mineDays, new Date(a.state.time).toISOString());
+  const theirs = makeTrip(
+    mineDays === 1 ? 3 : 1,
+    new Date(b.state.time).toISOString(),
+    f('다른 기기의 제목', new Date(b.state.time).toISOString()),
+  );
+  for (const [d, trip] of [
+    [a, mine],
+    [b, theirs],
+  ] as const)
+    await d.runtime.runPromise(
+      Effect.flatMap(LibraryStore, (store) =>
+        store.update((current) => Effect.succeed({ ...current, trips: { [trip.id]: trip } })),
+      ),
+    );
+  await b.engine.runNow('manual');
+  expect((await a.engine.runNow('manual')).phase).toBe('conflict');
+  const conflicts = readConflicts(a.storage);
+  expect(conflicts).toHaveLength(1);
+  expect(conflicts[0]).toMatchObject({
+    path: 'dates',
+    mine: { startDate: mine.startDate, endDate: mine.endDate, days: mine.days },
+    theirs: { startDate: theirs.startDate, endDate: theirs.endDate, days: theirs.days },
+  });
+  a.state.time = b.state.time + 1000;
+  await a.engine.resolveConflict(conflicts[0]!.id, 'mine');
+  const restored = a.state.lib.trips[initial.id]!;
+  const now = new Date(a.state.time).toISOString();
+  expect(restored.startDate).toEqual(f(mine.startDate.value, now));
+  expect(restored.endDate).toEqual(f(mine.endDate.value, now));
+  expect(restored.days).toEqual(
+    mine.days.map((day) => ({
+      stops: f(day.stops.value, now),
+      lodging: f(day.lodging.value, now),
+      startTime: f(day.startTime.value, now),
+    })),
+  );
+  expect(restored.title).toEqual(theirs.title);
+  expect(safeParse(TripSchema, restored).success).toBe(true);
+  expect(checkTrip(restored, {}, [])).toEqual([]);
+  const saved = await a.runtime.runPromise(Effect.flatMap(LibraryStore, (store) => store.snapshot));
+  expect(saved.library.trips[initial.id]).toEqual(restored);
+  expect(readConflicts(a.storage)).toEqual([]);
 });
