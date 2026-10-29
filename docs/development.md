@@ -42,15 +42,20 @@ yarn install --frozen-lockfile  # .yarnrc의 ignore-engines가 적용된다
 
 ### 공용 패키지(GitHub Packages)
 
-카카오톡 공유 모듈은 `@sch0718/kakao-share@0.1.1`을 정확한 버전으로 고정해 씁니다. 원본은 `sch0718/sch0718-toolkit-web` 저장소의 `packages/kakao-share`이며 GitHub Packages의 비공개 npm 패키지입니다. `.npmrc`는 `@sch0718/*`만 GitHub Packages에서 받도록 합니다.
+공용 코드는 `sch0718/sch0718-toolkit-web` 저장소의 `packages/<이름>`에서 GitHub Packages의 비공개 npm 패키지로 받으며, 정확한 버전으로 고정해 씁니다.
+
+| 패키지 | 버전 | 쓰는 곳 |
+| --- | --- | --- |
+| `@sch0718/kakao-share` | `0.1.1` | 카카오톡 공유(`src/sections/share-export/kakao.ts`) |
+| `@sch0718/seen-store` | `0.1.0` | 처음 안내 기록(`src/services/help-seen.ts`). 기기 키 `tripmap:help-seen:v1`을 그대로 넘겨 기존 기록을 이어 씁니다 | `.npmrc`는 `@sch0718/*`만 GitHub Packages에서 받도록 합니다.
 
 GitHub Packages는 패키지 공개 여부와 관계없이 설치에 토큰이 필요하며 classic 토큰만 지원합니다. `read:packages` 권한만 준 classic 토큰을 로컬 셸의 `GITHUB_PACKAGES_TOKEN`(`export GITHUB_PACKAGES_TOKEN=…`)과 Cloudflare Pages 빌드 환경변수에 넣습니다. Pages는 Production·Preview 둘 다 비밀값으로 등록합니다. 토큰 값은 저장소·로그에 적지 않습니다.
 
-GitHub Actions는 패키지 설정의 Manage Actions access에 `sch0718/landmark`를 Read로 추가해야 합니다. `ci.yml`·`deploy-share-map.yml`은 job에 `packages: read`를 주고 설치 단계에만 `secrets.GITHUB_TOKEN`을 넣습니다.
+GitHub Actions는 패키지마다(`kakao-share`, `seen-store`) 패키지 설정의 Manage Actions access에 `sch0718/landmark`를 Read로 추가해야 합니다. `ci.yml`·`deploy-share-map.yml`은 job에 `packages: read`를 주고 설치 단계에만 `secrets.GITHUB_TOKEN`을 넣습니다.
 
 Yarn 1(1.22.22)은 `.npmrc`의 `GITHUB_PACKAGES_TOKEN`이 정의되지 않으면 설치뿐 아니라 `yarn lint`·`yarn run` 등 모든 yarn 명령을 멈춥니다(`Failed to replace env in config`). 토큰 없이 설치가 끝난 트리에서 다른 명령만 돌릴 때는 `export GITHUB_PACKAGES_TOKEN=`으로 빈 값을 둡니다. Actions도 job에는 빈 값을 두고 설치 단계에서만 토큰으로 덮습니다.
 
-토큰이 만료되면 로컬·Cloudflare 설치가 실패하므로 만료일을 관리합니다. Actions는 `GITHUB_TOKEN`을 써서 이 classic 토큰의 만료와 무관합니다. 패키지 버전은 `yarn add --exact @sch0718/kakao-share@<버전>`으로 바꾸고 lockfile·고지(`yarn build:notices`)를 함께 커밋합니다.
+토큰이 만료되면 로컬·Cloudflare 설치가 실패하므로 만료일을 관리합니다. Actions는 `GITHUB_TOKEN`을 써서 이 classic 토큰의 만료와 무관합니다. 패키지 버전은 `yarn add --exact @sch0718/<이름>@<버전>`으로 바꾸고 lockfile·고지(`yarn build:notices`)를 함께 커밋합니다.
 
 출처: [toolkit-web README 「서비스에서 설치하기」](https://github.com/sch0718/sch0718-toolkit-web#서비스에서-설치하기)(2026-10-27 확인). 이 저장소 적용: 2026-10-29.
 

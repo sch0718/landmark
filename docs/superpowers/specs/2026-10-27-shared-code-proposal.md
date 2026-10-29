@@ -659,6 +659,8 @@ sch0718/sch0718-toolkit-web    # 2026-10-27 결정. Python은 sch0718-toolkit-py
 
 **랜드마크 적용(2026-10-29).** 랜드마크는 `src/lib/kakao-share/`를 지우고 `@sch0718/kakao-share@0.1.1`(정확한 버전)로 바꿨다. 0.1.1은 #62 수정(SDK `init` 뒤에 `Share` 확인)과 링크 기본 한도 400자를 담았고, 공개 API·빌드된 JS가 랜드마크 사본과 같음을 확인했다. 단위 시험은 패키지 저장소로 옮겨졌다. `.npmrc`·CI `packages: read`·`docs/development.md` 안내를 더했다. 남은 소유자 설정은 Cloudflare Pages 빌드 환경변수 `GITHUB_PACKAGES_TOKEN`(Production·Preview)과 패키지 Manage Actions access에 `sch0718/landmark` Read 추가다(이미 했으면 확인만 한다).
 
+**랜드마크 적용(seen-store, 2026-10-29).** 랜드마크는 `src/services/help-seen.ts`의 읽기·기록·초기화 구현을 지우고 `@sch0718/seen-store@0.1.0`(정확한 버전)의 `createSeenStore`에 위임했다. 키 `tripmap:help-seen:v1`과 식별자 9개는 앱에 남기고, `createHelpSeenStore`·`helpSeen` 이름과 호출하는 쪽은 그대로다. 사본과 패키지 `dist`를 견주어 저장 형식(식별자 문자열의 JSON 배열), 깨진 값은 빈 기록으로 보고 다음 기록이 덮어쓰기, 모르는 식별자만 빼기, 저장소 접근·쓰기가 막히면 그 페이지 로드 동안 메모리만 쓰기, 읽을 때마다 저장소를 다시 읽어 다른 탭의 기록 반영이 모두 같음을 확인했다. 기존 사용자의 기록이 이어지는지는 단위 시험(옛 구현에서도 통과하는 이어 쓰기 시험)으로 잡았다. 남은 소유자 설정은 `@sch0718/seen-store` 패키지의 Manage Actions access에 `sch0718/landmark` Read 추가다(`kakao-share`는 이미 했을 수 있으나 패키지마다 따로 해야 한다).
+
 ## 작성 과정
 
 - **작성일:** 2026-10-27. 랜드마크 브랜치 `docs/shared-code-proposal`(기준 `origin/main` `cbe2d42`).

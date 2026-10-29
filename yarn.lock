@@ -1367,6 +1367,11 @@
   resolved "https://npm.pkg.github.com/download/@sch0718/kakao-share/0.1.1/b004e9d981adb6d5f1227e1120fc0b2b05988f93#b004e9d981adb6d5f1227e1120fc0b2b05988f93"
   integrity sha512-kdct0RCf/R2opgkGYnePJEIDGR7t5gH7xdaLJh8or9skqPrEyJXb/j8KZCQkxhjLqjkaSVqpWRMqPYFNtPCqNw==
 
+"@sch0718/seen-store@0.1.0":
+  version "0.1.0"
+  resolved "https://npm.pkg.github.com/download/@sch0718/seen-store/0.1.0/445958d792aba693e9f6ab294a1e1dd96d189d7d#445958d792aba693e9f6ab294a1e1dd96d189d7d"
+  integrity sha512-RHPUy1yySNSbRsmAa4jlemTl2I43mRhCOK5tMQvuNMCq+9Y0RnwpJHaaPvTIqsfdsRrAqwVfDvMDobAmWHPEAg==
+
 "@sindresorhus/is@^7.0.2":
   version "7.2.0"
   resolved "https://registry.yarnpkg.com/@sindresorhus/is/-/is-7.2.0.tgz#7c594e1a64336d2008d99d814056d459421504d4"

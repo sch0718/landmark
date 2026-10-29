@@ -1,8 +1,52 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createMemoryStorage } from 'src/repositories/edit-layer-repo';
+import { HELP_PAGES } from 'src/sections/help/help-content';
 import { createHelpSeenStore, HELP_SEEN_KEY } from 'src/services/help-seen';
 
 describe('처음 안내 기록', () => {
+  it('기존 사용자 기록을 읽고 같은 키에 식별자 JSON 배열로 이어 쓴다', () => {
+    const storage = createMemoryStorage();
+    storage.setItem('tripmap:help-seen:v1', '["library","map"]');
+    const store = createHelpSeenStore(() => storage);
+    expect([...store.read()]).toEqual(['library', 'map']);
+    store.mark('share');
+    expect(JSON.parse(storage.getItem('tripmap:help-seen:v1')!)).toEqual([
+      'library',
+      'map',
+      'share',
+    ]);
+  });
+  it('모든 도움말 페이지 식별자를 인식하고 모르는 식별자는 뺀다', () => {
+    const storage = createMemoryStorage();
+    const ids = HELP_PAGES.map((page) => page.id);
+    storage.setItem('tripmap:help-seen:v1', JSON.stringify([...ids, 'unknown']));
+    expect([...createHelpSeenStore(() => storage).read()]).toEqual(ids);
+  });
+  it('같은 저장소를 쓰는 다른 탭의 새 기록을 읽는다', () => {
+    const storage = createMemoryStorage();
+    const first = createHelpSeenStore(() => storage);
+    const second = createHelpSeenStore(() => storage);
+    expect(second.read().size).toBe(0);
+    first.mark('map');
+    expect([...second.read()]).toEqual(['map']);
+    second.mark('share');
+    expect([...first.read()]).toEqual(['map', 'share']);
+  });
+  it('인자가 없으면 window.localStorage에 기록한다', () => {
+    const key = 'tripmap:help-seen:v1';
+    const previous = window.localStorage.getItem(key);
+    try {
+      window.localStorage.removeItem(key);
+      createHelpSeenStore().mark('library');
+      expect(JSON.parse(window.localStorage.getItem(key)!)).toEqual(['library']);
+    } finally {
+      if (previous === null) window.localStorage.removeItem(key);
+      else window.localStorage.setItem(key, previous);
+    }
+  });
+  it('기존 저장소 키를 유지한다', () => {
+    expect(HELP_SEEN_KEY).toBe('tripmap:help-seen:v1');
+  });
   it('기록을 읽고 메뉴를 중복 없이 저장하며 초기화한다', () => {
     const storage = createMemoryStorage();
     storage.setItem(HELP_SEEN_KEY, '["library"]');
