@@ -4,6 +4,7 @@ export const paths = {
   place: (id: string) => `/place/${id}`,
   labels: '/labels',
   settings: '/settings',
+  authCallback: '/auth/callback',
   help: '/help',
   helpPage: (id: string) => `/help/${id}`,
   /** 설정을 열면서 옛 여행 가져오기 대화상자를 바로 연다. */

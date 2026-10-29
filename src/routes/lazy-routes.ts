@@ -156,3 +156,8 @@ export const HelpPage = lazy(() => loadHelpPage().then((m) => ({ default: m.Help
 export const HelpIntroDialog = lazy(() =>
   loadHelpIntroDialog().then((m) => ({ default: m.HelpIntroDialog })),
 );
+
+export const loadAuthCallbackPage = lazyChunk(
+  () => import('src/sections/library-sync/AuthCallbackPage'),
+);
+export const AuthCallbackPage = lazy(loadAuthCallbackPage);

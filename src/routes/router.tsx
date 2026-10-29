@@ -4,6 +4,7 @@ import { ErrorScreen } from 'src/components/ErrorScreen';
 import { LoadingNotice } from 'src/components/LoadingNotice';
 import { RouteErrorScreen } from 'src/components/RouteErrorScreen';
 import {
+  AuthCallbackPage,
   HelpIndexPage,
   HelpPage,
   LabelsPage,
@@ -38,6 +39,7 @@ export const routes: RouteObject[] = [
     element: <ShellRoute />,
     errorElement: <RouteErrorScreen />,
     children: [
+      { path: paths.authCallback, element: lazyElement(<AuthCallbackPage />, 'auth-callback') },
       { path: paths.library, element: null },
       { path: paths.map, element: null },
       { path: paths.place(':id'), element: null },

@@ -18,7 +18,8 @@ import {
   SyncStorageError,
   type SyncProvider,
 } from './storage';
-export const AUTH_CALLBACK_PATH = '/auth/callback';
+import { AUTH_CALLBACK_PATH } from './callback-capture';
+export { AUTH_CALLBACK_PATH } from './callback-capture';
 export type LoginOutcome =
   | { ok: true; provider: SyncProvider; next: 'resume' | 'choose' }
   | { ok: false; reason: 'not-allowed'; account?: string; email?: string }
