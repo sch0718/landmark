@@ -381,6 +381,21 @@ export function createLibrarySyncEngine(deps: EngineDeps): LibrarySyncEngine {
         queued = true;
         return;
       }
+      if (reason === 'save' && readSyncMeta(storage).enabled) {
+        publish({
+          phase: status.conflicts + status.held + status.rejected > 0 ? 'conflict' : 'local',
+          progress: null,
+        });
+        void snapshot()
+          .then(({ library }) => {
+            if (status.phase === 'local')
+              publish({
+                dirty: dirtyItems(library, readBase(storage).items, readSyncMeta(storage).rejected)
+                  .length,
+              });
+          })
+          .catch(() => {});
+      }
       cancelTimer();
       timer = deps.setTimer(
         () => {

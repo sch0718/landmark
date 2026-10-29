@@ -273,3 +273,12 @@ it('동기화 Web Lock을 얻은 뒤에만 서버에 요청한다', async () => 
   await run;
   expect(changes).toHaveBeenCalledTimes(1);
 });
+it('저장 직후 서버 확인 전에는 완료로 표시하지 않는다', async () => {
+  const server = createSyncMemoryServer();
+  disposers.push(() => server.db.close());
+  const a = await device(server, { ...emptyLibrary(), places: { [p.id]: p } });
+  await a.engine.connect('upload');
+  await a.edit('저장됨');
+  a.engine.schedule('save');
+  expect(a.state.status.phase).toBe('local');
+});
