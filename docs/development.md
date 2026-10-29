@@ -40,6 +40,20 @@ nvm use                         # Node 24
 yarn install --frozen-lockfile  # .yarnrc의 ignore-engines가 적용된다
 ```
 
+### 공용 패키지(GitHub Packages)
+
+카카오톡 공유 모듈은 `@sch0718/kakao-share@0.1.1`을 정확한 버전으로 고정해 씁니다. 원본은 `sch0718/sch0718-toolkit-web` 저장소의 `packages/kakao-share`이며 GitHub Packages의 비공개 npm 패키지입니다. `.npmrc`는 `@sch0718/*`만 GitHub Packages에서 받도록 합니다.
+
+GitHub Packages는 패키지 공개 여부와 관계없이 설치에 토큰이 필요하며 classic 토큰만 지원합니다. `read:packages` 권한만 준 classic 토큰을 로컬 셸의 `GITHUB_PACKAGES_TOKEN`(`export GITHUB_PACKAGES_TOKEN=…`)과 Cloudflare Pages 빌드 환경변수에 넣습니다. Pages는 Production·Preview 둘 다 비밀값으로 등록합니다. 토큰 값은 저장소·로그에 적지 않습니다.
+
+GitHub Actions는 패키지 설정의 Manage Actions access에 `sch0718/landmark`를 Read로 추가해야 합니다. `ci.yml`·`deploy-share-map.yml`은 job에 `packages: read`를 주고 설치 단계에만 `secrets.GITHUB_TOKEN`을 넣습니다.
+
+Yarn 1(1.22.22)은 `.npmrc`의 `GITHUB_PACKAGES_TOKEN`이 정의되지 않으면 설치뿐 아니라 `yarn lint`·`yarn run` 등 모든 yarn 명령을 멈춥니다(`Failed to replace env in config`). 토큰 없이 설치가 끝난 트리에서 다른 명령만 돌릴 때는 `export GITHUB_PACKAGES_TOKEN=`으로 빈 값을 둡니다. Actions도 job에는 빈 값을 두고 설치 단계에서만 토큰으로 덮습니다.
+
+토큰이 만료되면 로컬·Cloudflare 설치가 실패하므로 만료일을 관리합니다. Actions는 `GITHUB_TOKEN`을 써서 이 classic 토큰의 만료와 무관합니다. 패키지 버전은 `yarn add --exact @sch0718/kakao-share@<버전>`으로 바꾸고 lockfile·고지(`yarn build:notices`)를 함께 커밋합니다.
+
+출처: [toolkit-web README 「서비스에서 설치하기」](https://github.com/sch0718/sch0718-toolkit-web#서비스에서-설치하기)(2026-10-27 확인). 이 저장소 적용: 2026-10-29.
+
 ### 환경변수
 
 | 이름                       | 용도                                                                          |
@@ -48,6 +62,7 @@ yarn install --frozen-lockfile  # .yarnrc의 ignore-engines가 적용된다
 | `VITE_MAP_ADAPTER`         | `fake`면 네이버 SDK 대신 DOM 가짜 지도를 씁니다(E2E·키 없는 개발용)           |
 | `VITE_KAKAO_JS_KEY` | 카카오톡 공유 JavaScript 키. Pages **Production에만** 넣습니다. 미리보기 도메인은 카카오에 등록할 수 없어 Preview에는 넣지 않습니다. 비어 있으면 단추를 숨깁니다 |
 | `VITE_TURNSTILE_SITE_KEY` | 약속 올리기에 쓰는 Turnstile 공개 사이트 키. Pages Production·Preview의 빌드 환경 변수 |
+| `GITHUB_PACKAGES_TOKEN` | GitHub Packages 빌드·설치용 토큰. 앱 번들에는 들어가지 않습니다 |
 | `DB` | D1 바인딩. 운영은 `landmark`, 미리보기는 `landmark-preview` |
 | `TURNSTILE_SECRET` | Turnstile 검증용 비밀 키. Pages의 서버 시크릿 |
 | `IP_HASH_SALT` | 일 한도에 쓰는 IP 해시의 소금. Pages의 서버 시크릿(긴 무작위 값) |
@@ -154,6 +169,7 @@ curl -H 'Origin: http://localhost:8788' 'http://localhost:8788/api/place?url=htt
 - 화면: `ShareFileDialog`의 `카카오톡`은 긴 링크가 400자를 넘을 때만 짧은 링크를 쓴다. 첫 클릭에 만들고(`짧은 링크 만드는 중…`), 다음 클릭(`카카오톡으로 보내기`)에 보낸다. 올리기가 비동기라 같은 클릭에서는 카카오톡을 열 수 없다. 창이 열려 있는 동안 긴 링크별로 기억하고, 실패 뒤 다시 누르면 같은 본문·삭제 토큰으로 보낸다. `링크 복사`·`링크 공유`는 계속 긴 링크다.
 - 기기 기록 `tripmap:share-links:v1`: `{ id, deleteToken, title, kind, createdAt, expiresAt }`(최대 100개, 만료된 것은 보이지 않음). 키 `k`는 저장하지 않는다. 설정 › `보낸 짧은 링크`에서 지운다. 백업에 넣지 않는다.
 - 코드: 진입점 `functions/api/share/*`·`functions/s/[id].ts`, 처리 `src/server/share/*`, 브라우저 `src/services/share-short/*`·`src/sections/share-export/use-short-link.ts`·`src/sections/settings/SentLinksSection.tsx`. E2E는 `tests/e2e/share-server.ts`가 요청을 진짜 처리 코드와 시험용 SQLite에 넘긴다.
+- D1 무료 한도(Workers Free, 계정 전체 합계): 하루 읽은 행 500만·쓴 행 10만·저장 5 GB입니다. 매일 00:00 UTC에 초기화되며 한도를 넘으면 D1 쿼리가 오류를 냅니다. 출처: [Cloudflare D1 가격 문서](https://developers.cloudflare.com/d1/platform/pricing/)(문서 갱신일 2026-04-21, 조회일 2026-10-29). 운영 확인(2026-10-29): `share_links` 표가 생겼고 행 3개, DB 크기 111 kB입니다. 사용량은 Cloudflare 대시보드의 D1 Metrics에서 봅니다. `wrangler d1 info`의 24시간 조회·쓰기 수는 0으로 나와 집계 지연으로 보입니다.
 
 ### 화면 경로
 
@@ -278,13 +294,14 @@ node scripts/measure-ui-assets.mjs dist/assets
 | 출력 디렉터리                       | `dist`                                                           |
 | 환경변수 `NODE_VERSION`             | `24` (engines 검사는 `.yarnrc`의 `ignore-engines true`로 건너뜀) |
 | 환경변수 `VITE_NAVER_MAP_CLIENT_ID` | NCP Client ID (Production·Preview 모두)                          |
+| 환경변수 `GITHUB_PACKAGES_TOKEN` | `read:packages` classic 토큰(비밀값, Production·Preview 모두). 없으면 `yarn install`이 실패해 배포되지 않음 |
 
 - `yarn build:ci`는 `yarn validate && yarn typecheck && yarn test && yarn build && yarn size --require-lazy … && yarn build:map`입니다. 검증이나 테스트가 실패하거나, 첫 화면 JS가 예산(`perf-budget.json`)을 넘거나, 나눠 받아야 하는 화면(`--require-lazy`로 지정)이 첫 화면에 합쳐져 따로 나뉘지 않으면 배포되지 않습니다.
 - 저장소 루트의 `functions/`는 Pages가 자동으로 서버 함수(`/api/place`, `/api/naver-folder`, `/api/route`, `/api/search`, `/api/hours`, `/api/meet*`, `/api/share*`, `/s/*`)로 배포합니다. 약속·짧은 링크는 위의 D1·Turnstile·시크릿 설정이 필요합니다. 장소·폴더·경로·검색·영업시간 결과는 Cloudflare Cache API에 장소 1일·폴더 10분·경로(자동차·대중교통 1시간, 도보 7일)·검색 7일·영업시간 1일 동안 둡니다. 약속·짧은 링크 응답은 캐시하지 않습니다.
 - **롤백**: 주요 변경마다 버전 태그(`v0.1.0`~)와 [GitHub Release](https://github.com/sch0718/landmark/releases)를 만듭니다. 배포만 되돌리기(Cloudflare 대시보드), 코드 되돌리기(`git revert` PR), 버전별 데이터 호환은 [롤백](rollback.md)에 있습니다.
 - SPA 라우팅은 Pages 기본 동작(404.html이 없으면 index.html)을 씁니다.
 - `public/_headers`: 전체 `X-Robots-Tag: noindex`, `/data/*`는 `Cache-Control: public, max-age=60`.
-- GitHub Actions(`.github/workflows/ci.yml`)는 push·PR마다 lint, `build:ci`, 핵심 E2E(`test:e2e:ci`)를 돌리는 보조 검증입니다(수동 실행에서 `full_e2e`를 고르면 전체 E2E). `check`(lint·`build:ci`)와 `e2e`는 따로 동시에 돌고 각각 30분 제한입니다. `e2e`는 브라우저가 든 Playwright 공식 이미지(`mcr.microsoft.com/playwright:v<버전>-noble`)에서 돌므로 `@playwright/test`를 올리면 `ci.yml`의 이미지 태그도 같이 올립니다. 배포 여부는 Pages 빌드 명령이 결정합니다.
+- GitHub Actions(`.github/workflows/ci.yml`)는 push·PR마다 lint, `build:ci`, 핵심 E2E(`test:e2e:ci`)를 돌리는 보조 검증입니다(수동 실행에서 `full_e2e`를 고르면 전체 E2E). `check`(lint·`build:ci`)와 `e2e`는 따로 동시에 돌고 각각 30분 제한입니다. `e2e`는 브라우저가 든 Playwright 공식 이미지(`mcr.microsoft.com/playwright:v<버전>-noble`)에서 돌므로 `@playwright/test`를 올리면 `ci.yml`의 이미지 태그도 같이 올립니다. 공용 패키지를 설치하려면 job의 `packages: read`와 패키지 Manage Actions access의 `sch0718/landmark` Read 등록이 필요합니다. 배포 여부는 Pages 빌드 명령이 결정합니다.
 
 ## 공유 파일과 지도 페이지
 

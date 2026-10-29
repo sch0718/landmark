@@ -22,6 +22,13 @@ jobs:
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # 공용 패키지 @sch0718/* 설치에는 packages: read와 패키지의 Manage Actions access에 이 저장소 등록이 필요하다.
+    permissions:
+      contents: read
+      packages: read
+    # Yarn 1은 .npmrc 변수가 정의되지 않으면 모든 명령을 멈춘다. 토큰은 설치 단계에만 주고 나머지는 빈 값으로 둔다.
+    env:
+      GITHUB_PACKAGES_TOKEN: ''
     steps:
       - uses: actions/checkout@v4
 
@@ -33,6 +40,8 @@ jobs:
       # 개발 의존성 engines가 package.json engines보다 좁은 문제는 저장소의 .yarnrc(ignore-engines true)가
       # 처리한다. Cloudflare Pages와 같은 명령으로 설치한다(README 참고).
       - name: Install
+        env:
+          GITHUB_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: yarn install --frozen-lockfile
 
       - name: Lint
@@ -49,6 +58,13 @@ jobs:
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # 공용 패키지 @sch0718/* 설치에는 packages: read와 패키지의 Manage Actions access에 이 저장소 등록이 필요하다.
+    permissions:
+      contents: read
+      packages: read
+    # Yarn 1은 .npmrc 변수가 정의되지 않으면 모든 명령을 멈춘다. 토큰은 설치 단계에만 주고 나머지는 빈 값으로 둔다.
+    env:
+      GITHUB_PACKAGES_TOKEN: ''
     # 브라우저와 시스템 패키지가 이미 든 Playwright 공식 이미지에서 돈다. 실행마다 `playwright install --with-deps`로
     # WebKit 의존 패키지를 apt로 받으면 우분투 미러가 느린 날 8분이 걸리거나 멈췄다(2026-10-27).
     # @playwright/test 버전을 올리면 이 태그와 아래 `Playwright version` 단계의 값을 같이 올린다.
@@ -66,6 +82,8 @@ jobs:
         run: corepack enable
 
       - name: Install
+        env:
+          GITHUB_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: yarn install --frozen-lockfile
 
       - name: Playwright version

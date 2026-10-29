@@ -207,6 +207,8 @@ CREATE INDEX IF NOT EXISTS share_links_expires ON share_links(expires_at);
 
 `LIMITS`에 `shareCreate`·`shareDelete`·`shareRead`를 더해 약속 카운터와 섞이지 않게 한다. D1 무료 사용량(저장 용량·하루 쓰기 행)은 구현 전에 Cloudflare 문서에서 다시 확인해 날짜와 함께 `docs/development.md`에 적는다.
 
+**확인(2026-10-29).** [Cloudflare D1 가격 문서](https://developers.cloudflare.com/d1/platform/pricing/)(문서 갱신일 2026-04-21, 조회일 2026-10-29)에서 Workers Free 한도는 계정 전체 합계로 하루 읽은 행 500만·쓴 행 10만·저장 5 GB다. 무료 한도는 매일 00:00 UTC에 초기화되며 넘으면 D1 쿼리가 오류를 낸다. 같은 내용을 [개발 문서](../../development.md)의 공유 짧은 링크 절에 적었다.
+
 ## 어떤 단추가 짧은 링크를 쓰나 — 결정 2
 
 결정: **카카오톡 단추만**.
@@ -229,6 +231,12 @@ CREATE INDEX IF NOT EXISTS share_links_expires ON share_links(expires_at);
 - 기능 스위치 `SHARE_SHORT=off`(Pages 환경 변수)는 새로 만들기만 멈춘다. `MEET_ONLINE`과 따로 둔다.
 - 앱은 `503 reason: 'off'`를 받으면 그 창에서는 카카오톡 단추를 다시 지금처럼 끈다.
 
+## 배포 뒤 확인(2026-10-29)
+
+[#67](https://github.com/sch0718/landmark/pull/67) PR 본문 「배포 뒤 확인할 것」의 세 항목(운영 D1 표 생성, D1 무료 사용량 재확인·날짜 기록, 실기기 확인)에 대한 결과다. 무료 한도는 위 「크기·요청 한도와 Turnstile」과 `docs/development.md`, 실기기 결과는 아래 「시험」에 적었다.
+
+`wrangler d1 execute landmark --remote`로 운영 D1의 `share_links` 표 생성과 `schema_meta` 버전 2를 확인했다. 행은 3개이고 첫 `created_at`은 `2026-10-28T18:35:22Z`다. `wrangler d1 info`에서 DB 크기는 111 kB였다. 24시간 조회·쓰기 수는 0으로 나왔지만 행이 있으므로 집계 지연으로 보인다. 정확한 사용량은 Cloudflare 대시보드의 D1 Metrics에서 확인한다.
+
 ## 롤백 영향(`docs/rollback.md`)
 
 이 기능을 `v0.20.0`으로 낸다고 할 때, 그보다 옛 배포·코드로 되돌리면:
@@ -246,7 +254,7 @@ CREATE INDEX IF NOT EXISTS share_links_expires ON share_links(expires_at);
 - 단위: `node:sqlite` 어댑터(`tests/helpers/sqlite-d1.ts`)로 만들기·같은 토큰 재시도·id 충돌 재시도·크기 초과·Turnstile 실패·일 한도·만료(`410`)·삭제(`204`·틀린 토큰 `401`)·만료 정리·`SHARE_SHORT=off`. 암호화·풀기 왕복, 여는 쪽 페이지의 CSP 해시가 실제 스크립트와 맞는지.
 - 공유 창: 카카오톡 단추 상태(긴 링크·만드는 중·준비됨·실패별 문구), 같은 입력 재사용, 입력이 바뀌면 다시 만들기, 메모 안내.
 - E2E: `tests/e2e/meet-server.ts`처럼 `page.route`로 `/api/share`·`/s/*`를 진짜 처리 코드와 시험용 SQLite에 넘겨, 짧은 링크를 열면 `/view`가 같은 장소·일정을 보이는지.
-- 실기기(운영 배포 뒤, 카카오 키는 Production에만 있다): 안드로이드·iOS 카카오톡에서 카드 누르기 → 보기 화면, PC 카카오톡. 결과를 날짜와 함께 `src/lib/kakao-share/README.md`에 적는다.
+- 실기기(운영 배포 뒤, 카카오 키는 Production에만 있다): 안드로이드·iOS 카카오톡에서 카드 누르기 → 보기 화면, PC 카카오톡. 결과를 날짜와 함께 이 설계 문서에 적는다. **확인(2026-10-28~29): 사용자가 실기기 카카오톡에서 짧은 링크 보내기·열기를 확인했다.**
 
 ## 결정 항목
 

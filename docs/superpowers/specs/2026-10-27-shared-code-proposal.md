@@ -657,6 +657,8 @@ sch0718/sch0718-toolkit-web    # 2026-10-27 결정. Python은 sch0718-toolkit-py
 
 **남은 일(소유자).** 서비스에서 받으려면 `read:packages` classic 토큰을 만들어 로컬·Cloudflare 빌드 환경변수 `GITHUB_PACKAGES_TOKEN`에 넣는다. 패키지 설정의 Manage Actions access에 서비스 저장소를 추가한다(웹 README 「서비스에서 설치하기」). 카카오 공유 모듈은 랜드마크 [#59](https://github.com/sch0718/landmark/pull/59)(`src/lib/kakao-share/`, 2026-10-27 병합)로 먼저 들어갔고, 이것을 `packages/kakao-share`로 옮기는 일이 남았다.
 
+**랜드마크 적용(2026-10-29).** 랜드마크는 `src/lib/kakao-share/`를 지우고 `@sch0718/kakao-share@0.1.1`(정확한 버전)로 바꿨다. 0.1.1은 #62 수정(SDK `init` 뒤에 `Share` 확인)과 링크 기본 한도 400자를 담았고, 공개 API·빌드된 JS가 랜드마크 사본과 같음을 확인했다. 단위 시험은 패키지 저장소로 옮겨졌다. `.npmrc`·CI `packages: read`·`docs/development.md` 안내를 더했다. 남은 소유자 설정은 Cloudflare Pages 빌드 환경변수 `GITHUB_PACKAGES_TOKEN`(Production·Preview)과 패키지 Manage Actions access에 `sch0718/landmark` Read 추가다(이미 했으면 확인만 한다).
+
 ## 작성 과정
 
 - **작성일:** 2026-10-27. 랜드마크 브랜치 `docs/shared-code-proposal`(기준 `origin/main` `cbe2d42`).

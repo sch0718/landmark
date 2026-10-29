@@ -1362,6 +1362,11 @@
   resolved "https://registry.yarnpkg.com/@rolldown/pluginutils/-/pluginutils-1.0.1.tgz#e3fcee093fbb5ce765e1ad088ff4de2889f6f9be"
   integrity sha512-2j9bGt5Jh8hj+vPtgzPtl72j0yRxHAyumoo6TNfAjsLB04UtpSvPbPcDcBMxz7n+9CYB0c1GxQFxYRg2jimqGw==
 
+"@sch0718/kakao-share@0.1.1":
+  version "0.1.1"
+  resolved "https://npm.pkg.github.com/download/@sch0718/kakao-share/0.1.1/b004e9d981adb6d5f1227e1120fc0b2b05988f93#b004e9d981adb6d5f1227e1120fc0b2b05988f93"
+  integrity sha512-kdct0RCf/R2opgkGYnePJEIDGR7t5gH7xdaLJh8or9skqPrEyJXb/j8KZCQkxhjLqjkaSVqpWRMqPYFNtPCqNw==
+
 "@sindresorhus/is@^7.0.2":
   version "7.2.0"
   resolved "https://registry.yarnpkg.com/@sindresorhus/is/-/is-7.2.0.tgz#7c594e1a64336d2008d99d814056d459421504d4"

@@ -127,7 +127,8 @@ test('@smoke 장소 링크가 카카오톡 한도(400자)를 넘으면 짧은 �
   page,
   baseURL,
 }) => {
-  // 보내는 카드 모양은 단위 시험(share-link-dialog·kakao-share)이 본다. 장소 링크는 1곳이어도 400자를 넘는다.
+  // 보내는 카드 모양은 단위 시험(share-link-dialog)과 `@sch0718/kakao-share` 패키지 시험이 본다.
+  // 장소 링크는 1곳이어도 400자를 넘는다.
   const { fakeKakao } = await import('./fixtures');
   const { installShareServer } = await import('./share-server');
   const close = await installShareServer(page.context());

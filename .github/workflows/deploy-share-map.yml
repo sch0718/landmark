@@ -20,9 +20,11 @@ on:
       - '.github/workflows/deploy-share-map.yml'
   workflow_dispatch:
 
-# gh-pages 브랜치에 푸시하므로 쓰기 권한이 필요하다(GITHUB_TOKEN).
+# GITHUB_TOKEN으로 gh-pages에 쓰고 공용 패키지 @sch0718/*를 읽는다.
+# 패키지의 Manage Actions access에도 이 저장소를 등록해야 한다.
 permissions:
   contents: write
+  packages: read
 
 # 배포가 겹치면 차례로 실행한다. 진행 중인 배포는 취소하지 않는다(gh-pages 푸시가 중간에 끊기지 않게).
 concurrency:
@@ -35,6 +37,9 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # Yarn 1은 .npmrc 변수가 정의되지 않으면 모든 명령을 멈춘다. 토큰은 설치 단계에만 주고 나머지는 빈 값으로 둔다.
+    env:
+      GITHUB_PACKAGES_TOKEN: ''
     steps:
       - uses: actions/checkout@v4
 
@@ -44,6 +49,8 @@ jobs:
           cache: yarn
 
       - name: Install
+        env:
+          GITHUB_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: yarn install --frozen-lockfile
 
       # 지도는 네이버 지도 JS v3다. 클라이언트 ID는 저장소 변수 NAVER_MAP_CLIENT_ID(공개 값, NCP 콘솔에

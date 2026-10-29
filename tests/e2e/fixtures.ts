@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import type { KakaoFeed } from '../../src/lib/kakao-share';
+import type { KakaoFeed } from '@sch0718/kakao-share';
 import { test as base, expect, type Locator, type Page, type TestInfo } from '@playwright/test';
 
 declare global {
