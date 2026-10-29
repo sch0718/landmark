@@ -1,5 +1,6 @@
+import { at, motionCss, svgDocument, text } from '@sch0718/motion-kit';
 import { pastel } from '../../src/theme/tokens/pastel.ts';
-import { at, motionCss, svgDocument, text } from './kit.mjs';
+import { MOTION_EFFECTS } from './kit.mjs';
 import { PAGES } from './help-pages.mjs';
 
 // 메뉴별 도움말 그림. 왼쪽에 단계 목록, 오른쪽에 휴대폰 화면을 두고 단계마다 실제 화면 흐름을 보여 준다.
@@ -110,7 +111,7 @@ ${screens}</g>`;
     desc: plain(
       `${page.title} 사용법: ${page.steps.map((s, i) => `${i + 1}. ${s.title}(${s.sub})`).join(' ')}`,
     ),
-    css: motionCss({ sceneLength: STEP, scenes: page.steps.length, font }),
+    css: motionCss({ sceneLength: STEP, scenes: page.steps.length, font, effects: MOTION_EFFECTS }),
     body,
   });
 }

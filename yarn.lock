@@ -1367,6 +1367,11 @@
   resolved "https://npm.pkg.github.com/download/@sch0718/kakao-share/0.1.1/b004e9d981adb6d5f1227e1120fc0b2b05988f93#b004e9d981adb6d5f1227e1120fc0b2b05988f93"
   integrity sha512-kdct0RCf/R2opgkGYnePJEIDGR7t5gH7xdaLJh8or9skqPrEyJXb/j8KZCQkxhjLqjkaSVqpWRMqPYFNtPCqNw==
 
+"@sch0718/motion-kit@0.1.0":
+  version "0.1.0"
+  resolved "https://npm.pkg.github.com/download/@sch0718/motion-kit/0.1.0/d8cde1651a14c577d909277d022f5c4b18a184d3#d8cde1651a14c577d909277d022f5c4b18a184d3"
+  integrity sha512-XrHb+CtScRVxSNlgpK8HpaoEpTvd9lWg3rzRVLA5rzHxHk+24A4+3WOVwGVM6LN6v7w4mPKFTqCN1XJIOnSR0A==
+
 "@sindresorhus/is@^7.0.2":
   version "7.2.0"
   resolved "https://registry.yarnpkg.com/@sindresorhus/is/-/is-7.2.0.tgz#7c594e1a64336d2008d99d814056d459421504d4"
