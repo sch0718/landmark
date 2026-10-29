@@ -1,35 +1,16 @@
-// README·도움말의 움직이는 그림(애니메이션 SVG)이 함께 쓰는 그리기 도구.
+// 랜드마크만 쓰는 그리기 도구, 기반 함수는 @sch0718/motion-kit에 있음
 // GitHub는 SVG를 <img>로 보여 주므로 스크립트·웹 글꼴 없이 CSS 애니메이션만 쓴다.
 
-export const esc = (s) =>
-  String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+import { effects as baseEffects, text, textWidth } from '@sch0718/motion-kit';
 
-/** 장면 `scene`(0부터)이 시작하고 `offset`초 뒤에 움직임을 시작한다. */
-export const at =
-  (sceneLength) =>
-  (scene, offset = 0) =>
-    `animation-delay:${(scene * sceneLength + offset).toFixed(2)}s`;
-
-export function text(
-  x,
-  y,
-  value,
-  { size = 14, weight = 400, fill, anchor = 'start', cls = '', style = '' } = {},
-) {
-  const extra = `${cls ? ` class="${cls}"` : ''}${style ? ` style="${style}"` : ''}`;
-  return `<text x="${x}" y="${y}" font-size="${size}" font-weight="${weight}" fill="${fill}" text-anchor="${anchor}"${extra}>${esc(value)}</text>`;
-}
-
-/** 글자 폭 근사(한글 1em, 이모지 1.2em, 그 밖 0.6em). */
-export function textWidth(label, size) {
-  let w = 0;
-  for (const ch of label) {
-    if (/\p{Extended_Pictographic}/u.test(ch)) w += size * 1.2;
-    else if (/[\u3131-\uD79D]/u.test(ch)) w += size;
-    else if (ch !== '\uFE0F') w += size * 0.6;
-  }
-  return Math.round(w);
-}
+export const MOTION_EFFECTS = [
+  baseEffects.rise,
+  baseEffects.pop,
+  baseEffects.draw({ seconds: 0.9, keepDasharray: true }),
+  baseEffects.slide,
+  baseEffects.pulse,
+  baseEffects.tap,
+];
 
 /** 라벨 칩. `tone`은 라벨 색 토큰(`fill`·`text`). */
 export function chip(x, y, label, tone, { size = 13, h = 26, stroke } = {}) {
@@ -89,46 +70,4 @@ export function button(x, y, w, label, t, { variant = 'filled', h = 34, size = 1
 /** 누르는 곳을 알리는 동그라미. 장면이 시작하고 `offset`초 뒤에 퍼진다. */
 export function tap(x, y, t, style) {
   return `<circle class="tap" style="${style}" cx="${x}" cy="${y}" r="16" fill="${t.text.primary}" fill-opacity=".28" stroke="${t.text.primary}" stroke-opacity=".5" stroke-width="2"/>`;
-}
-
-/**
- * 애니메이션 CSS. 장면 길이 `sceneLength`초, 장면 수 `scenes`. 각 장면의 요소는 `at(scene, offset)`으로 늦춘다.
- * 모든 움직임은 한 바퀴(`cycle`) 동안 한 번 일어나고, 장면 그룹(`.sc`)이 자기 차례에만 보인다.
- */
-export function motionCss({ sceneLength, scenes, font }) {
-  const cycle = sceneLength * scenes;
-  const p = (s) => `${((s / cycle) * 100).toFixed(3)}%`;
-  return `
-text{font-family:${font}}
-.sc{opacity:0;animation:scene ${cycle}s linear infinite backwards}
-.rise{transform-box:fill-box;animation:rise ${cycle}s cubic-bezier(.2,.8,.2,1) infinite backwards}
-.pop{transform-box:fill-box;transform-origin:center;animation:pop ${cycle}s ease-out infinite backwards}
-.draw{stroke-dasharray:1;stroke-dashoffset:1;animation:draw ${cycle}s ease-out infinite backwards}
-.slide{transform-box:fill-box;animation:slide ${cycle}s cubic-bezier(.2,.8,.2,1) infinite backwards}
-.pulse{transform-box:fill-box;transform-origin:center;opacity:0;animation:pulse ${cycle}s ease-out infinite backwards}
-.tap{transform-box:fill-box;transform-origin:center;opacity:0;animation:tap ${cycle}s ease-out infinite backwards}
-@keyframes scene{0%{opacity:0}${p(0.35)}{opacity:1}${p(sceneLength - 0.35)}{opacity:1}${p(sceneLength)}{opacity:0}100%{opacity:0}}
-@keyframes rise{0%{opacity:0;transform:translateY(14px)}${p(0.45)}{opacity:1;transform:none}100%{opacity:1;transform:none}}
-@keyframes pop{0%{transform:scale(0)}${p(0.3)}{transform:scale(1.15)}${p(0.45)}{transform:scale(1)}100%{transform:scale(1)}}
-@keyframes draw{0%{stroke-dashoffset:1}${p(0.9)}{stroke-dashoffset:0}100%{stroke-dashoffset:0}}
-@keyframes slide{0%{opacity:0;transform:translateX(-120px)}${p(0.6)}{opacity:1;transform:none}100%{opacity:1;transform:none}}
-@keyframes pulse{0%{opacity:.7;transform:scale(1)}${p(0.9)}{opacity:0;transform:scale(2.4)}100%{opacity:0;transform:scale(2.4)}}
-@keyframes tap{0%{opacity:0;transform:scale(.4)}${p(0.12)}{opacity:1;transform:scale(1)}${p(0.7)}{opacity:0;transform:scale(1.9)}100%{opacity:0;transform:scale(1.9)}}
-@media (prefers-reduced-motion:reduce){
-*{animation:none!important}
-.s0{opacity:1}
-.rise,.slide{opacity:1;transform:none}
-.pop{transform:none}
-.draw{stroke-dashoffset:0}
-}`;
-}
-
-export function svgDocument({ w, h, title, desc, css, body }) {
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-labelledby="motion-title motion-desc">
-<title id="motion-title">${esc(title)}</title>
-<desc id="motion-desc">${esc(desc)}</desc>
-<style>${css}</style>
-${body}
-</svg>
-`;
 }

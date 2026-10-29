@@ -48,12 +48,15 @@ yarn install --frozen-lockfile  # .yarnrc의 ignore-engines가 적용된다
 | --- | --- | --- |
 | `@sch0718/kakao-share` | `0.1.1` | 카카오톡 공유(`src/sections/share-export/kakao.ts`) |
 | `@sch0718/seen-store` | `0.1.0` | 처음 안내 기록(`src/services/help-seen.ts`). 기기 키 `tripmap:help-seen:v1`을 그대로 넘겨 기존 기록을 이어 씁니다 |
+| `@sch0718/motion-kit` | `0.1.0`(devDependency) | 움직이는 그림 생성기(`scripts/motion/`, 아래) |
 
 `.npmrc`는 `@sch0718/*`만 GitHub Packages에서 받도록 합니다.
 
+README·도움말의 움직이는 그림 생성기(`yarn build:motion`)의 기반 함수(`at`·`text`·`textWidth`·`effects`·`motionCss`·`svgDocument`)는 `@sch0718/motion-kit@0.1.0`을 정확한 버전으로 고정한 devDependency로 씁니다. 원본은 같은 저장소의 `packages/motion-kit`이며 Node 빌드 스크립트 전용이라 앱 JS에는 들어가지 않습니다. 장면 문구·좌표·팔레트와 `chip`·`card`·`mapBase` 같은 랜드마크 고유 그리기 도구는 `scripts/motion/`에 남깁니다. 패키지 버전을 올릴 때는 `yarn add --dev --exact @sch0718/motion-kit@<버전>`으로 바꾼 뒤(`--dev`를 빼면 dependencies로 옮겨져 고지 대상이 됩니다) `yarn build:motion`을 돌리고 `git diff`로 생성물 변화가 의도한 것인지 확인합니다.
+
 GitHub Packages는 패키지 공개 여부와 관계없이 설치에 토큰이 필요하며 classic 토큰만 지원합니다. `read:packages` 권한만 준 classic 토큰을 로컬 셸의 `GITHUB_PACKAGES_TOKEN`(`export GITHUB_PACKAGES_TOKEN=…`)과 Cloudflare Pages 빌드 환경변수에 넣습니다. Pages는 Production·Preview 둘 다 비밀값으로 등록합니다. 토큰 값은 저장소·로그에 적지 않습니다.
 
-GitHub Actions는 패키지마다(`kakao-share`, `seen-store`) 패키지 설정의 Manage Actions access에 `sch0718/landmark`를 Read로 추가해야 합니다. `ci.yml`·`deploy-share-map.yml`은 job에 `packages: read`를 주고 설치 단계에만 `secrets.GITHUB_TOKEN`을 넣습니다.
+GitHub Actions는 패키지마다(`kakao-share`, `seen-store`, `motion-kit`) 패키지 설정의 Manage Actions access에 `sch0718/landmark`를 Read로 추가해야 합니다. `ci.yml`·`deploy-share-map.yml`은 job에 `packages: read`를 주고 설치 단계에만 `secrets.GITHUB_TOKEN`을 넣습니다.
 
 Yarn 1(1.22.22)은 `.npmrc`의 `GITHUB_PACKAGES_TOKEN`이 정의되지 않으면 설치뿐 아니라 `yarn lint`·`yarn run` 등 모든 yarn 명령을 멈춥니다(`Failed to replace env in config`). 토큰 없이 설치가 끝난 트리에서 다른 명령만 돌릴 때는 `export GITHUB_PACKAGES_TOKEN=`으로 빈 값을 둡니다. Actions도 job에는 빈 값을 두고 설치 단계에서만 토큰으로 덮습니다.
 
@@ -217,7 +220,7 @@ curl -H 'Origin: http://localhost:8788' 'http://localhost:8788/api/place?url=htt
 | `yarn build:viewer`  | 공유 파일의 보기 화면 틀을 `public/share-viewer.html`로 빌드(gitignore). `dev`·`dev:full`·`build`가 먼저 실행                                                     |
 | `yarn build:map`     | 공유 파일 안 iframe이 띄우는 지도 페이지를 `dist-map/`으로 빌드(아래 "공유 파일과 지도 페이지")                                                                   |
 | `yarn build:icons`   | `docs/branding/icon-a.svg`(앱 아이콘 원본)에서 `public/favicon.svg`와 홈 화면·manifest용 PNG 아이콘을 다시 만듭니다                                               |
-| `yarn build:motion` | README 소개 그림(`docs/readme/hero-*.svg`), 앱·문서 공용 도움말 그림(`public/help/img/*.svg`), 도움말 문서(`docs/help/*.md`), 앱 도움말 데이터(`src/sections/help/help-content.ts`)를 다시 만듭니다. 원본은 `scripts/motion/help-pages.mjs`이고 색은 파스텔 테마 토큰을 읽습니다 |
+| `yarn build:motion` | README 소개 그림(`docs/readme/hero-*.svg`), 앱·문서 공용 도움말 그림(`public/help/img/*.svg`), 도움말 문서(`docs/help/*.md`), 앱 도움말 데이터(`src/sections/help/help-content.ts`)를 다시 만듭니다. 원본은 `scripts/motion/help-pages.mjs`이고 색은 파스텔 테마 토큰을 읽고, 글자·장면·움직임 CSS·SVG 틀 같은 기반 함수는 `@sch0718/motion-kit`에서 가져옵니다 |
 | `yarn build`         | 보기 화면 틀 + 타입 검사 + Vite 빌드 → `dist`                                                                                                                     |
 | `yarn size`          | 첫 화면 JS·전체 JS 크기(원본·gzip)를 재고 `perf-budget.json` 예산을 넘으면 실패(`docs/ui-performance.md`)                                                         |
 | `yarn build:ci`      | `validate → typecheck → test → build → size → build:map` (배포 빌드 명령)                                                                                         |

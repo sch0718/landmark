@@ -1,5 +1,6 @@
+import { at, motionCss, svgDocument, text } from '@sch0718/motion-kit';
 import { pastel } from '../../src/theme/tokens/pastel.ts';
-import { at, card, chip, chipRow, mapBase, motionCss, pin, svgDocument, text } from './kit.mjs';
+import { card, chip, chipRow, mapBase, MOTION_EFFECTS, pin } from './kit.mjs';
 
 // README 맨 위의 소개 그림. 장면 넷(모으기 → 계획하기 → 약속 잡기 → 나누기)이 이어서 돈다.
 
@@ -176,7 +177,7 @@ ${places
 <g class="rise" style="${delay(3, 2.5)}"><rect x="${phone.x + 12}" y="${phone.y + 232}" width="${phone.w - 24}" height="36" rx="18" fill="${t.accent.main}"/>${text(phone.x + phone.w / 2, phone.y + 255, 'Landmark에 담기', { size: 13, weight: 800, fill: t.accent.contrast, anchor: 'middle' })}</g>
 </g>`;
 
-  const css = motionCss({ sceneLength: SCENE, scenes: SCENES, font });
+  const css = motionCss({ sceneLength: SCENE, scenes: SCENES, font, effects: MOTION_EFFECTS });
 
   return svgDocument({
     w: W,
