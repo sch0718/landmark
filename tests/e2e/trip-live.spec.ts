@@ -33,7 +33,7 @@ async function prepare(page: Page) {
   await openSheetTab(page, 'Day 1');
   await timeline(page).getByRole('button', { name: '일정 공유', exact: true }).click();
   await page.getByRole('button', { name: '갱신 링크…' }).click();
-  const dialog = page.getByRole('dialog', { name: '갱신 링크', exact: true });
+  const dialog = page.getByRole('dialog', { name: /^갱신 링크/ });
   await dialog.getByRole('button', { name: '갱신 링크 만들기' }).click();
   await expect(dialog.getByRole('textbox', { name: '보기 링크' })).toBeVisible();
   await dialog.getByRole('button', { name: '링크 복사', exact: true }).click();
@@ -64,22 +64,34 @@ test.describe('여행 갱신 공유 @desktop', () => {
       .getByRole('dialog', { name: '일정 공유', exact: true })
       .getByRole('button', { name: '닫기', exact: true })
       .click();
+    await viewer.evaluate(() => {
+      const w = window as unknown as { sawChanged: boolean };
+      w.sawChanged = false;
+      new MutationObserver(() => {
+        if (document.querySelector('.live-bar')?.textContent?.includes('일정이 바뀌었어요'))
+          w.sawChanged = true;
+      }).observe(document.body, { subtree: true, childList: true, characterData: true });
+    });
+    const readRev = () =>
+      page.evaluate(() => {
+        const records = JSON.parse(localStorage.getItem('tripmap:trip-live:v1') ?? '{}') as Record<
+          string,
+          { rev: number }
+        >;
+        return Object.values(records)[0]?.rev ?? 0;
+      });
+    // 만들기 직후 반영으로 이미 revision이 오를 수 있으므로, 고치기 전 값보다 커질 때까지 기다린다.
+    const before = await readRev();
     await timeline(page).getByLabel('출발 시각').fill('10:00');
-    // 표시 시각은 분 단위이므로 같은 분에 올려도 증가하는 revision으로 완료를 기다린다.
-    await expect
-      .poll(
-        () =>
-          page.evaluate(() => {
-            const records = JSON.parse(
-              localStorage.getItem('tripmap:trip-live:v1') ?? '{}',
-            ) as Record<string, { rev: number }>;
-            return Object.values(records)[0]?.rev ?? 0;
-          }),
-        { timeout: 20000 },
-      )
-      .toBeGreaterThan(1);
-    await viewer.clock.runFor(10000);
-    await expect(viewer.locator('.live-bar')).toContainText('일정이 바뀌었어요');
+    await expect.poll(readRev, { timeout: 20000 }).toBeGreaterThan(before);
+    // 시계가 실제 시간과 함께 흘러 10초 확인이 먼저 일어날 수 있고, 띠 문구는 다음 확인(304)에서 되돌아간다.
+    // 그래서 띠가 한 번이라도 바뀜을 보였는지 기록하고, 10초 확인을 반복하며 기다린다.
+    await expect(async () => {
+      await viewer.clock.runFor(10000);
+      expect(
+        await viewer.evaluate(() => (window as unknown as { sawChanged: boolean }).sawChanged),
+      ).toBe(true);
+    }).toPass({ timeout: 40000 });
     await expect(viewer.getByRole('list', { name: 'Day 1 일정' })).toContainText('10:00');
   });
   test('보기 링크를 다시 만들거나 지우면 받는 화면이 멈추고 마지막 일정을 남긴다', async ({
