@@ -13,6 +13,7 @@ import {
   LegacyImportPage,
   SettingsPage,
   TripPlannerPage,
+  TripLiveLinkPage,
   TripsPage,
   TripTodayPage,
 } from 'src/routes/lazy-routes';
@@ -56,6 +57,7 @@ export const routes: RouteObject[] = [
       { path: paths.meet, element: lazyElement(<MeetLinkPage />, 'meet') },
       { path: paths.meetOnline(':id'), element: lazyElement(<MeetLinkPage />, 'meet') },
       { path: paths.trips, element: lazyElement(<TripsPage />, 'trips') },
+      { path: paths.tripLive(':id'), element: lazyElement(<TripLiveLinkPage />, 'trip-live') },
       { path: paths.trip(':id'), element: lazyElement(<TripPlannerPage />, 'trip') },
       { path: paths.tripToday(':id'), element: lazyElement(<TripTodayPage />, 'trip-today') },
     ],
