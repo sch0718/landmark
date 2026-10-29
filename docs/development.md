@@ -78,6 +78,7 @@ Yarn 1(1.22.22)은 `.npmrc`의 `GITHUB_PACKAGES_TOKEN`이 정의되지 않으면
 | `IP_HASH_SALT` | 일 한도에 쓰는 IP 해시의 소금. Pages의 서버 시크릿(긴 무작위 값) |
 | `MEET_ONLINE` | `off`면 새 약속의 서버 올리기만 중단하고 링크 방식으로 공유. 기존 온라인 약속 읽기·답장은 계속 동작 |
 | `SHARE_SHORT` | `off`면 카카오톡용 짧은 링크 만들기만 중단(카카오톡 단추는 예전처럼 꺼지고 `링크 복사` 안내). 이미 만든 `/s/<id>` 열기·지우기는 계속 동작 |
+| `TRIP_SHARE_LIVE` | `off`면 갱신 링크 만들기·올리기만 중단(`503`). 이미 보낸 링크 읽기·지우기·링크 다시 만들기는 계속 동작 |
 
 ```bash
 echo 'VITE_NAVER_MAP_CLIENT_ID=<발급받은 Client ID>' > .env.local
@@ -181,6 +182,54 @@ curl -H 'Origin: http://localhost:8788' 'http://localhost:8788/api/place?url=htt
 - 코드: 진입점 `functions/api/share/*`·`functions/s/[id].ts`, 처리 `src/server/share/*`, 브라우저 `src/services/share-short/*`·`src/sections/share-export/use-short-link.ts`·`src/sections/settings/SentLinksSection.tsx`. E2E는 `tests/e2e/share-server.ts`가 요청을 진짜 처리 코드와 시험용 SQLite에 넘긴다.
 - D1 무료 한도(Workers Free, 계정 전체 합계): 하루 읽은 행 500만·쓴 행 10만·저장 5 GB입니다. 매일 00:00 UTC에 초기화되며 한도를 넘으면 D1 쿼리가 오류를 냅니다. 출처: [Cloudflare D1 가격 문서](https://developers.cloudflare.com/d1/platform/pricing/)(문서 갱신일 2026-04-21, 조회일 2026-10-29). 운영 확인(2026-10-29): `share_links` 표가 생겼고 행 3개, DB 크기 111 kB입니다. 사용량은 Cloudflare 대시보드의 D1 Metrics에서 봅니다. `wrangler d1 info`의 24시간 조회·쓰기 수는 0으로 나와 집계 지연으로 보입니다.
 
+### 여행 갱신 공유(`/view#t=`)
+
+여행 일정 공유 창의 `갱신 링크…`에서 서버에 공개본을 만들고, 계획 화면이나 갱신 링크 창이 열린 동안 고친 내용을 자동으로 올립니다. 받은 사람은 보이는 동안 10초마다 최신 revision을 확인합니다. 설계: [여행 갱신 공유(2A)](superpowers/specs/2026-10-29-trip-live-share-design.md).
+
+| API | 내용 | 권한 |
+| --- | --- | --- |
+| `POST /api/trip-live` | 공유 id·소유자/보기 토큰·문서·Turnstile로 만들기. 처음 `201`, 같은 id와 소유자 토큰 재시도는 처음 문서 그대로 `200` | 출처·Turnstile·일 한도·기능 스위치 |
+| `GET /api/trip-live/:id?since=<rev>` | 공개본·revision 읽기. 같은 revision이면 본문 없이 `304`. 소유자에게만 보기 토큰과 원래 여행 id도 반환 | 보기 또는 소유자 토큰 |
+| `PUT /api/trip-live/:id` | `{ doc, baseRev }` 올리기. 성공하면 revision +1, 다른 기기가 먼저 바꿨으면 `409 { rev }` | 소유자·일 한도·기능 스위치 |
+| `POST /api/trip-live/:id/rotate` | `{ view: 새 토큰 }` 또는 `{ owner: 새 토큰 }`. 이전 링크 즉시 철회, revision 유지, 같은 새 토큰 재시도 가능 | 소유자·일 한도 |
+| `DELETE /api/trip-live/:id` | 서버 공개본과 토큰 삭제. 보관함 여행은 남음 | 소유자 |
+
+- 보관 기한: `min(갱신 + 180일, max(갱신 + 30일, 여행 끝날 한국 23:59:59.999 + 30일))`. 만들기·올리기 때 다시 계산하며 읽기는 늘리지 않습니다.
+- UTC 날짜·IP 해시별 일 한도: 만들기 20, 올리기 600, 링크 다시 만들기 60, 없는·끝난 공유 읽기 5,000. 정상 읽기·304·401은 읽기 한도를 쓰지 않습니다. 요청 때 만료 공유 최대 20개와 지난 날짜 카운터를 정리합니다.
+- 정규화 문서 524,288바이트, 요청 600,000바이트, 경로선 전체 10,000점(구간당 기존 500점). 큰 문서는 경로선을 빼고, 그래도 크면 보내지 않습니다.
+- 보기 화면은 숨김·오프라인에서 멈추고, 5분 입력이 없거나 연속 실패하면 60초로 늦춥니다. 소유자 반영은 3초 모으기·구간 조회 최대 15초 기다리기·최소 10초 간격입니다. 409 뒤에는 덮어쓰기와 반영 멈추기 중 직접 고릅니다.
+- 기기 기록 `tripmap:trip-live:v1`은 여행 id별 소유자/보기 토큰·공유 옵션·revision·Day id·마지막 편집 지문을 보관합니다(최대 100개). 보관함 schema 2·백업에는 토큰을 넣지 않습니다. 소유자 링크는 해시(`#h=`)를 읽자마자 지우고 공개본을 새 여행으로 담습니다.
+- 모든 API 응답은 `Cache-Control: private, no-store`. 코드: `functions/api/trip-live/*`, `src/server/trip-live/handlers.ts`, `src/domain/trip-live/*`, `src/services/trip-live/*`, `src/sections/trips/live/*`, `src/sections/settings/LiveTripsSection.tsx`, `src/share-viewer/{live,live-view,show}.ts`.
+
+#### 로컬에서 키 없이 해 보기
+
+
+- `yarn dev:full`(로컬 D1, `http://localhost:8788`)을 띄운다. `VITE_TURNSTILE_SITE_KEY`를 비워 두면 브라우저는 Turnstile을 부르지 않고(`dev` 토큰), 로컬 서버는 시크릿이 없어 검증을 건너뛴다. `IP_HASH_SALT`가 없으면 개발용 소금을 쓴다.
+- 소유자는 보통 창, 받는 사람은 다른 브라우저(또는 시크릿 창), 소유자 다른 기기는 또 다른 시크릿 창으로 연다(기기 저장소가 달라야 한다).
+- Turnstile 위젯까지 보려면 Cloudflare의 공개 시험 키를 쓴다(확인 2026-10-29, [Turnstile 시험 문서](https://developers.cloudflare.com/turnstile/troubleshooting/testing/)): `.env.local`에 `VITE_TURNSTILE_SITE_KEY=1x00000000000000000000BB`(보이지 않음·늘 통과), `.dev.vars`에 `TURNSTILE_SECRET=1x0000000000000000000000000000000AA`(늘 통과). 실패를 보려면 각각 `2x00000000000000000000BB`·`2x0000000000000000000000000000000AA`.
+- 기능 스위치는 `.dev.vars`에 `TRIP_SHARE_LIVE=off`를 넣고 `yarn dev:full`을 다시 띄워 본다.
+- 로컬 D1 확인: `sqlite3 "$(find .wrangler/state -name '*.sqlite' | head -1)" "SELECT id, rev, expires_at FROM trip_shares"`.
+- 한계: 허용 출처가 `localhost:5173`·`localhost:8788`뿐이라 같은 망의 휴대폰(IP 주소 출처)에서는 `/api/trip-live`가 `403`이다. 휴대폰 확인은 미리보기 배포로 한다.
+
+
+기존 개발 서버의 5173·5174를 쓰면 안 되는 경우, 사용자가 직접 아래처럼 Vite를 4180으로 옮기고 **브라우저는 허용 출처 8788**로 열 수 있습니다. 에이전트는 이 로컬 서버 확인을 실행하지 않습니다.
+
+```sh
+npx wrangler pages dev --d1 DB --port 8788 --proxy 4180 -- npx vite --port 4180 --strictPort
+```
+
+#### 사용자가 할 일
+
+
+새 외부 계정·키는 없다. D1(`DB`)·Turnstile(`VITE_TURNSTILE_SITE_KEY`·`TURNSTILE_SECRET`)·`IP_HASH_SALT`는 약속 온라인 집계 때 만든 것을 그대로 쓴다.
+
+1. (선택) 비상 스위치가 필요할 때만 Cloudflare 대시보드 › Workers & Pages › `landmark` › Settings › Variables and Secrets에서 Production·Preview에 `TRIP_SHARE_LIVE`=`off`를 넣고 다시 배포한다. 평소에는 넣지 않는다(없거나 `off`가 아니면 켜짐).
+2. 표 만들기는 첫 요청 때 서버 코드가 스스로 한다(`SCHEMA_VERSION` 3). 배포 뒤 확인만 한다:
+   `npx wrangler d1 execute landmark --remote --command "SELECT version FROM schema_meta; SELECT name FROM sqlite_master WHERE name LIKE 'trip_share%'"` → `3`, `trip_shares`, `trip_share_tokens`, `trip_shares_expires`, `trip_share_tokens_share`.
+3. 미리보기 배포에서 큰 일정(경로선 많은 30일 여행)을 올려 Workers 지표의 CPU 시간이 10ms 안인지 본다.
+4. 휴대폰 두 대(또는 PC와 휴대폰)로 갱신 링크를 보내고, 고친 내용이 받는 화면에 10초 안팎에 들어오는지, 카카오톡에서 링크가 열리는지 확인한다.
+
+
 ### 화면 경로
 
 | 경로               | 화면                                                                                             |
@@ -202,6 +251,8 @@ curl -H 'Origin: http://localhost:8788' 'http://localhost:8788/api/place?url=htt
 | `/view`            | 받은 공유 링크 보기(`#d=…`, `Landmark에 담기`)                                                   |
 | `/t/:publicId`     | 옛 여행 가져오기                                                                                 |
 | `/import`          | 받은 공유 파일 가져오기(`/`로 바뀌고 고르기·미리보기 칸이 열림)                                  |
+| `/view#t=<id>.<토큰>` | 갱신 링크 보기(10초마다 최신 일정, `파일로 저장`·`Landmark에 담기`) |
+| `/trips/live/:id` | 갱신 링크 소유자 링크(`#h=`)로 다른 기기 연결 |
 
 - 화면 폭에 따라 ≥1280px 3단, 768–1279px 2단 + 상세 오버레이, 768px 미만 하단 탭(보관함·지도·＋·여행·약속·설정)입니다. 휴대폰의 장소 상세는 지도·목록 위 아래쪽 시트로 열립니다.
 - **메모 자동 저장**: 입력을 멈춘 뒤 저장하고, 다른 화면으로 이동하거나 탭을 백그라운드로 보낼 때 대기 중인 초안을 먼저 저장합니다. 탭·브라우저를 바로 닫을 때는 저장이 비동기 Web Lock 안에서 실행되므로 **최선 노력(best-effort)** 입니다. 백그라운드 전환과 앱 안 이동에서는 안정적으로 저장됩니다.
@@ -336,6 +387,9 @@ node scripts/measure-ui-assets.mjs dist/assets
 | 제목·일정·장소      | 공개를 전제로 합니다. 더 강한 보호는 PoC 이후 로그인 단계에서 다룹니다                                                           |
 
 보관함 전체를 서버로 보내지는 않습니다. 장소 추가·경로 계산에 쓰는 서버 함수는 입력한 링크·좌표를 해석하려고 받고 결과를 캐시합니다. 온라인 약속은 공유할 때 참석자 이름·출발지 좌표, 후보·소요시간과 답장을 D1에 저장합니다. 친구 링크를 받은 사람은 약속과 집계를 볼 수 있으며, 남의 출발지 좌표는 가립니다. 주최자 링크를 가진 기기는 약속을 고치고 전체 출발지 좌표를 볼 수 있습니다. 카카오톡으로 장소·일정을 보내면 짧은 링크를 위해 공유 문서(선택 시 메모 포함)를 브라우저에서 암호화해 D1에 장소 30일·일정 최대 180일 동안 둡니다. 푸는 키는 링크에만 있어 서버는 내용을 읽을 수 없고, 링크를 받은 사람은 누구나 볼 수 있습니다. 보낸 기기의 설정 › `보낸 짧은 링크`에서 먼저 지울 수 있습니다. 내보낸 HTML 파일에는 고른 장소(와 선택 시 메모)가 들어 있어, 그 파일을 받은 사람은 누구나 볼 수 있습니다. 보관함 전체의 기기 간 자동 동기화는 없습니다.
+
+
+갱신 링크를 만들면 제목·장소 이름·주소·좌표·라벨·Day·시간·체류·구간 시간·경로선·처음 기기 여행 id와 선택 시 메모·한 줄 평을 서버에 **암호화하지 않고** 둡니다. 여행 끝 30일 뒤(최소 갱신 후 30일·최대 180일)까지 보관하고 고칠 때마다 다시 계산합니다. 링크를 받은 사람은 누구나 최신 공개본을 볼 수 있습니다. `보기 링크 다시 만들기`로 이전 링크를 닫거나 `서버에서 지우기`·설정 › `갱신 링크`로 서버 사본을 지울 수 있습니다. 이미 저장한 HTML 파일이나 가져간 여행 사본은 남습니다.
 
 ## 알려진 한계
 
