@@ -15,15 +15,17 @@ function ShellDialog({
   open,
   onClose,
   children,
+  title,
 }: {
   open: boolean;
   onClose(): void;
   children: ReactNode;
+  title: string;
 }) {
   const titleId = useId();
   return (
     <Dialog open={open} onClose={onClose} aria-labelledby={titleId} fullWidth maxWidth="xs">
-      <DialogTitle id={titleId}>백업에서 되살리기</DialogTitle>
+      <DialogTitle id={titleId}>{title}</DialogTitle>
       <DialogContent>{children}</DialogContent>
       <DialogActions>
         <Button onClick={onClose} sx={{ minHeight: 44 }}>
@@ -48,14 +50,22 @@ export function RestoreDialogHost(props: RestoreDialogProps) {
   return (
     <ChunkErrorBoundary
       fallback={
-        <ShellDialog open={open} onClose={onClose}>
+        <ShellDialog
+          open={open}
+          onClose={onClose}
+          title={props.remote?.title ?? '백업에서 되살리기'}
+        >
           <ChunkErrorNotice />
         </ShellDialog>
       }
     >
       <Suspense
         fallback={
-          <ShellDialog open={open} onClose={onClose}>
+          <ShellDialog
+            open={open}
+            onClose={onClose}
+            title={props.remote?.title ?? '백업에서 되살리기'}
+          >
             <LoadingNotice />
           </ShellDialog>
         }

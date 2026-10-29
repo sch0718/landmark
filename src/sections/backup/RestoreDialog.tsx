@@ -1,3 +1,5 @@
+import Checkbox from '@mui/material/Checkbox';
+import FormControlLabel from '@mui/material/FormControlLabel';
 import Box from '@mui/material/Box';
 import { readBootFlag } from 'src/services/library-sync/boot';
 import Button from '@mui/material/Button';
@@ -10,6 +12,7 @@ import { Effect } from 'effect';
 import { isEqual } from 'es-toolkit';
 import { useAtomValue } from 'jotai';
 import {
+  useCallback,
   useId,
   useLayoutEffect,
   useMemo,
@@ -36,6 +39,12 @@ import { PreviousNotKept, StorageQuotaExceeded } from 'src/services/errors';
 import { LibraryStore } from 'src/services/library-store';
 import { useRestoreActions } from 'src/stores/backup-state';
 import { libraryAtom } from 'src/stores/library-state';
+
+export const REMOTE_PREVIOUS_NOTE =
+  "지금 보관함은 이 기기에 '되살리기 전 보관함'으로도 남아요. 설정 › 백업 › 되살리기 전으로 되돌리기로 돌아갈 수 있어요.";
+export const REMOTE_SYNC_NOTE = '이 백업 뒤에 만든 장소·여행은 동기화로 다시 들어와요.';
+export const FILE_COPY_FAILED =
+  '지금 보관함을 파일로 받지 못했어요. 체크를 풀고 바꾸거나 다시 해 주세요';
 
 const TITLE = '백업에서 되살리기';
 const PICK_HELP = 'Landmark 백업 파일(.json)을 고르세요. 손상 화면에서 받은 옛 백업 파일도 돼요.';
@@ -69,7 +78,17 @@ const UNDO_MS = 10_000;
 
 type Mode = 'normal' | 'corrupt';
 
+export type RemoteRestoreSource = {
+  title: string;
+  loadingText: string;
+  load(): Promise<
+    { ok: true; backup: ReadBackup; header: string } | { ok: false; message: string }
+  >;
+  syncNote: boolean;
+};
+
 export type RestoreDialogProps = {
+  remote?: RemoteRestoreSource;
   open: boolean;
   onClose(): void;
   mode: Mode;
@@ -125,10 +144,17 @@ export function RestoreDialog({
   savedText: savedTextProp,
   onDownloadCurrent,
   onRestored,
+  remote,
 }: RestoreDialogProps) {
   const library = useAtomValue(libraryAtom);
   const { replace, undo } = useRestoreActions();
   const backupFile = useBackupFile();
+  const remoteRef = useRef(remote);
+  useLayoutEffect(() => {
+    remoteRef.current = remote;
+  });
+  const [downloadBefore, setDownloadBefore] = useState(true);
+  const [remoteHeader, setRemoteHeader] = useState<string | null>(null);
   const titleId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const pickRef = useRef<HTMLButtonElement>(null);
@@ -166,9 +192,35 @@ export function RestoreDialog({
       setError(null);
       setBusy(false);
       setDownloaded(null);
+      setDownloadBefore(true);
+      setRemoteHeader(null);
       setCorruptSavedText(savedTextProp);
     }
   }
+
+  const loadRemote = useCallback(async () => {
+    const source = remoteRef.current;
+    if (!source) return;
+    const runId = ++runIdRef.current;
+    setStep({ kind: 'reading' });
+    setReadError(null);
+    try {
+      const result = await source.load();
+      if (runIdRef.current !== runId) return;
+      if (result.ok) {
+        setRemoteHeader(result.header);
+        setStep({ kind: 'preview', backup: result.backup });
+      } else {
+        setStep({ kind: 'pick' });
+        setReadError(result.message);
+      }
+    } catch {
+      if (runIdRef.current === runId) {
+        setStep({ kind: 'pick' });
+        setReadError('서버 백업을 받지 못했어요');
+      }
+    }
+  }, []);
 
   // 열고 닫을 때 앞 작업을 무효로 한다. 열 때는 저장소 원문을 읽어 둔다(`파일 고르기` 포커스는 `autoFocus`).
   useLayoutEffect(() => {
@@ -176,7 +228,11 @@ export function RestoreDialog({
     busyRef.current = false;
     if (!open) return;
     if (mode === 'normal') openTextRef.current = startEffect(readOpenText);
-  }, [open, mode]);
+    if (remoteRef.current) void loadRemote();
+    return () => {
+      runIdRef.current += 1;
+    };
+  }, [open, mode, loadRemote]);
 
   // 단계가 바뀐 그림이 그려진 뒤 그 단계의 첫 조작 요소로 포커스한다(꺼져 있으면 `fallback`).
   const focusLater = (
@@ -234,26 +290,38 @@ export function RestoreDialog({
 
   const doReplace = async (backup: ReadBackup) => {
     if (busyRef.current) return;
+    const savedPromise =
+      remote && live && downloadBefore && downloaded === null ? backupFile.save() : null;
     const runId = runIdRef.current;
     busyRef.current = true;
     setBusy(true);
     setError(null);
     let outcome;
     try {
+      let saved = downloaded;
+      if (savedPromise !== null) {
+        saved = await savedPromise;
+        if (runIdRef.current !== runId) return;
+        if (saved === null) {
+          setError({ message: FILE_COPY_FAILED, downloadCurrent: false });
+          return;
+        }
+        setDownloaded(saved);
+      }
       let options: { requirePrevious: boolean; savedText?: string | null };
       if (mode === 'corrupt') {
         options =
           corruptSavedText === undefined
             ? { requirePrevious: true }
             : { requirePrevious: false, savedText: corruptSavedText };
-      } else if (downloaded !== null) {
-        options = { requirePrevious: false, savedText: downloaded.savedText };
+      } else if (saved !== null) {
+        options = { requirePrevious: false, savedText: saved.savedText };
       } else if (live) {
         options = { requirePrevious: true };
       } else {
         options = { requirePrevious: false, savedText: await openTextRef.current };
       }
-      outcome = await replace(backup, options);
+      outcome = await replace(remote ? { ...backup, exportedAt: null } : backup, options);
     } finally {
       if (runIdRef.current === runId) {
         busyRef.current = false;
@@ -341,41 +409,50 @@ export function RestoreDialog({
 
   return (
     <Dialog open={open} onClose={close} aria-labelledby={titleId} fullWidth maxWidth="xs">
-      <DialogTitle id={titleId}>{TITLE}</DialogTitle>
+      <DialogTitle id={titleId}>{remote?.title ?? TITLE}</DialogTitle>
       <DialogContent>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
           {preview === null ? (
             <>
-              <Typography variant="body2" sx={{ color: 'var(--tm-text-secondary)' }}>
-                {PICK_HELP}
-              </Typography>
-              <input
-                ref={inputRef}
-                type="file"
-                accept=".json,application/json"
-                hidden
-                aria-label="백업 파일 선택"
-                onChange={(event) => void onPick(event)}
-              />
-              <Box>
-                <Button
-                  ref={pickRef}
-                  autoFocus
-                  variant="contained"
-                  disabled={step.kind === 'reading'}
-                  onClick={() => inputRef.current?.click()}
-                  sx={{ minHeight: 44 }}
-                >
-                  파일 고르기
+              {!remote && (
+                <>
+                  <Typography variant="body2" sx={{ color: 'var(--tm-text-secondary)' }}>
+                    {PICK_HELP}
+                  </Typography>
+                  <input
+                    ref={inputRef}
+                    type="file"
+                    accept=".json,application/json"
+                    hidden
+                    aria-label="백업 파일 선택"
+                    onChange={(event) => void onPick(event)}
+                  />
+                  <Box>
+                    <Button
+                      ref={pickRef}
+                      autoFocus
+                      variant="contained"
+                      disabled={step.kind === 'reading'}
+                      onClick={() => inputRef.current?.click()}
+                      sx={{ minHeight: 44 }}
+                    >
+                      파일 고르기
+                    </Button>
+                  </Box>
+                </>
+              )}
+              {remote && readError !== null && (
+                <Button onClick={() => void loadRemote()} sx={{ minHeight: 44 }}>
+                  다시 시도
                 </Button>
-              </Box>
+              )}
               {step.kind === 'reading' && (
                 <Typography
                   role="status"
                   variant="body2"
                   sx={{ color: 'var(--tm-text-secondary)' }}
                 >
-                  {READING}
+                  {remote?.loadingText ?? READING}
                 </Typography>
               )}
               {readError !== null && (
@@ -387,9 +464,10 @@ export function RestoreDialog({
           ) : (
             <>
               <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                {preview.exportedAt === null
-                  ? LEGACY_HEADER
-                  : `${formatLocalDateTime(preview.exportedAt)}에 만든 백업`}
+                {remoteHeader ??
+                  (preview.exportedAt === null
+                    ? LEGACY_HEADER
+                    : `${formatLocalDateTime(preview.exportedAt)}에 만든 백업`)}
               </Typography>
               <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
                 <Typography component="li" variant="body2">
@@ -418,6 +496,22 @@ export function RestoreDialog({
                 <Typography role="alert" variant="body2">
                   {UNKNOWN_WARNING}
                 </Typography>
+              )}
+              {remote && live && (
+                <>
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        checked={downloadBefore}
+                        disabled={working}
+                        onChange={(_, checked) => setDownloadBefore(checked)}
+                      />
+                    }
+                    label="바꾸기 전에 지금 보관함을 파일로 받기"
+                  />
+                  <Typography variant="body2">{REMOTE_PREVIOUS_NOTE}</Typography>
+                  {remote.syncNote && <Typography variant="body2">{REMOTE_SYNC_NOTE}</Typography>}
+                </>
               )}
               {same && (
                 <Typography variant="body2" sx={{ color: 'var(--tm-text-secondary)' }}>
@@ -455,7 +549,7 @@ export function RestoreDialog({
         <Button ref={cancelRef} onClick={close} disabled={busy} sx={{ minHeight: 44 }}>
           취소
         </Button>
-        {preview !== null && live && (
+        {preview !== null && live && !remote && (
           <Button
             variant="outlined"
             disabled={working}
