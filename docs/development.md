@@ -47,7 +47,9 @@ yarn install --frozen-lockfile  # .yarnrc의 ignore-engines가 적용된다
 | 패키지 | 버전 | 쓰는 곳 |
 | --- | --- | --- |
 | `@sch0718/kakao-share` | `0.1.1` | 카카오톡 공유(`src/sections/share-export/kakao.ts`) |
-| `@sch0718/seen-store` | `0.1.0` | 처음 안내 기록(`src/services/help-seen.ts`). 기기 키 `tripmap:help-seen:v1`을 그대로 넘겨 기존 기록을 이어 씁니다 | `.npmrc`는 `@sch0718/*`만 GitHub Packages에서 받도록 합니다.
+| `@sch0718/seen-store` | `0.1.0` | 처음 안내 기록(`src/services/help-seen.ts`). 기기 키 `tripmap:help-seen:v1`을 그대로 넘겨 기존 기록을 이어 씁니다 |
+
+`.npmrc`는 `@sch0718/*`만 GitHub Packages에서 받도록 합니다.
 
 GitHub Packages는 패키지 공개 여부와 관계없이 설치에 토큰이 필요하며 classic 토큰만 지원합니다. `read:packages` 권한만 준 classic 토큰을 로컬 셸의 `GITHUB_PACKAGES_TOKEN`(`export GITHUB_PACKAGES_TOKEN=…`)과 Cloudflare Pages 빌드 환경변수에 넣습니다. Pages는 Production·Preview 둘 다 비밀값으로 등록합니다. 토큰 값은 저장소·로그에 적지 않습니다.
 
