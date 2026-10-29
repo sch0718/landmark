@@ -50,6 +50,7 @@
     "@mui/material": "^7",
     "@mui/utils": "^7.3.11",
     "@sch0718/kakao-share": "0.1.1",
+    "@sch0718/seen-store": "0.1.0",
     "@tanstack/react-virtual": "3.14.13",
     "dayjs": "^1.11.23",
     "effect": "4.0.2",
