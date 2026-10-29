@@ -5,6 +5,7 @@ import { alignDayIds } from 'src/domain/trip-live/live-doc';
 import { buildLiveTripDoc, fitLiveDoc, liveEditKey } from 'src/domain/trip-live/build-live-doc';
 import { useTripLegs } from 'src/sections/share-export/use-trip-legs';
 import { tripLiveApi } from 'src/services/trip-live/client';
+import { rotateLiveOwner } from 'src/services/trip-live/rotate-owner';
 import {
   tripLiveStore,
   useTripLiveRecord,
@@ -197,7 +198,7 @@ export function useTripLivePublish(
           return;
         }
         setState('publishing');
-        const result = await tripLiveApi.update(
+        let result = await tripLiveApi.update(
           fresh.liveId,
           doc,
           force && serverRev.current !== null ? serverRev.current : fresh.rev,
@@ -217,6 +218,26 @@ export function useTripLivePublish(
           });
           setState('published');
           return;
+        }
+        if (result.error === 'unauthorized') {
+          const current = tripLiveStore.get(tripId);
+          if (!current || current.liveId !== fresh.liveId) return;
+          if (current.ownerToken !== fresh.ownerToken) {
+            setState('pending');
+            clearTimeout(retry.current);
+            retry.current = setTimeout(() => void send(force), 0);
+            return;
+          }
+          if (current?.nextOwnerToken) {
+            const recovered = await rotateLiveOwner(current, current.nextOwnerToken);
+            if (recovered.ok) {
+              setState('pending');
+              clearTimeout(retry.current);
+              retry.current = setTimeout(() => void send(force), 0);
+              return;
+            }
+            result = recovered;
+          }
         }
         if (result.error === 'conflict') {
           overwriteChosen.current = false;

@@ -10,7 +10,7 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { Effect } from 'effect';
 import { useAtomValue } from 'jotai';
-import { useEffect, useId, useState } from 'react';
+import { useCallback, useEffect, useId, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { HelpButton } from 'src/components/HelpButton';
@@ -34,6 +34,7 @@ import { legStatus, useTripLegs } from 'src/sections/share-export/use-trip-legs'
 import { getTurnstileToken } from 'src/services/meet-online/turnstile-loader';
 import { ShareTemplate } from 'src/services/share-template';
 import { tripLiveApi, type TripLiveError } from 'src/services/trip-live/client';
+import { rotateLiveOwner, withLiveOwnerRecovery } from 'src/services/trip-live/rotate-owner';
 import {
   tripLiveStore,
   useTripLiveRecord,
@@ -86,21 +87,38 @@ export function TripLiveShareDialog({
   const validTitle = title.trim().length > 0 && title.trim().length <= 60;
   const live = record?.status === 'live';
   const links = record ? liveLinks(location.origin, record.liveId, record) : null;
-  function statusError(error: TripLiveError) {
-    if (error === 'unauthorized') {
-      tripLiveStore.update(tripId, { status: 'disconnected' });
-      setMessage(LIVE_DISCONNECTED);
-    } else if (error === 'ended' || error === 'not-found') {
-      tripLiveStore.update(tripId, { status: 'ended' });
-      setMessage(LIVE_ENDED);
-    } else setMessage(createError(error));
-  }
+  const statusError = useCallback(
+    (error: TripLiveError, fallback: string) => {
+      if (error === 'unauthorized') {
+        tripLiveStore.update(tripId, { status: 'disconnected' });
+        setMessage(LIVE_DISCONNECTED);
+      } else if (error === 'ended' || error === 'not-found') {
+        tripLiveStore.update(tripId, { status: 'ended' });
+        setMessage(LIVE_ENDED);
+      } else setMessage(error === 'offline' ? '인터넷 연결을 확인하고 다시 해 주세요' : fallback);
+    },
+    [tripId],
+  );
   useEffect(() => {
     if (!open) return;
     const current = tripLiveStore.get(tripId);
-    if (current?.status !== 'live') return;
+    if (!current || (current.status !== 'live' && !current.nextOwnerToken)) return;
     let stale = false;
-    void tripLiveApi.get(current.liveId, null, current.ownerToken).then((result) => {
+    void (async () => {
+      let result = await tripLiveApi.get(current.liveId, null, current.ownerToken);
+      if (stale) return;
+      if (current.nextOwnerToken && (result.ok || result.error === 'unauthorized')) {
+        const recovered = await rotateLiveOwner(current, current.nextOwnerToken);
+        if (stale) return;
+        if (!recovered.ok) {
+          statusError(
+            recovered.error,
+            '소유자 링크를 다시 만들지 못했어요. 잠시 뒤 다시 해 주세요',
+          );
+          return;
+        }
+        result = await tripLiveApi.get(current.liveId, null, current.nextOwnerToken);
+      }
       if (stale) return;
       if (!result.ok) {
         if (result.error === 'unauthorized')
@@ -114,11 +132,11 @@ export function TripLiveShareDialog({
       if (state.viewToken && state.viewToken !== current.viewToken)
         tripLiveStore.update(tripId, { viewToken: state.viewToken });
       setOtherDevice(state.rev > current.rev);
-    });
+    })();
     return () => {
       stale = true;
     };
-  }, [open, tripId]);
+  }, [open, tripId, statusError]);
   const options = { title: title.trim(), includeMemo, includeCandidates };
   function changeOptions(next: typeof options) {
     if (live && next.title.length > 0 && next.title.length <= 60)
@@ -148,8 +166,8 @@ export function TripLiveShareDialog({
       tripLiveStore.put(current);
     }
     try {
-      const turnstile = await getTurnstileToken();
       for (let attempt = 0; attempt < 2; attempt++) {
+        const turnstile = await getTurnstileToken();
         const dayIds = alignDayIds(current.dayIds, trip.days.length, newDayId);
         current = { ...current, options, dayIds };
         tripLiveStore.put(current);
@@ -235,26 +253,26 @@ export function TripLiveShareDialog({
     setMessage('');
     try {
       if (confirm.kind === 'delete') {
-        const result = await tripLiveApi.remove(record.liveId, record.ownerToken);
+        const result = await withLiveOwnerRecovery(record, (token) =>
+          tripLiveApi.remove(record.liveId, token),
+        );
         if (result.ok) {
           tripLiveStore.remove(tripId);
           setConfirm(null);
           toast('갱신 링크를 지웠어요');
-        } else setMessage(createError(result.error));
+        } else statusError(result.error, '갱신 링크를 지우지 못했어요. 잠시 뒤 다시 해 주세요');
       } else {
-        const result = await tripLiveApi.rotate(
-          record.liveId,
-          confirm.kind === 'view' ? { view: confirm.token } : { owner: confirm.token },
-          record.ownerToken,
-        );
+        const result =
+          confirm.kind === 'owner'
+            ? await rotateLiveOwner(record, record.nextOwnerToken ?? confirm.token)
+            : await withLiveOwnerRecovery(record, (token) =>
+                tripLiveApi.rotate(record.liveId, { view: confirm.token }, token),
+              );
         if (result.ok) {
-          tripLiveStore.update(
-            tripId,
-            confirm.kind === 'view' ? { viewToken: confirm.token } : { ownerToken: confirm.token },
-          );
+          if (confirm.kind === 'view') tripLiveStore.update(tripId, { viewToken: confirm.token });
           if (confirm.kind === 'view') toast('새 보기 링크를 만들었어요');
           setConfirm(null);
-        } else statusError(result.error);
+        } else statusError(result.error, '링크를 다시 만들지 못했어요. 잠시 뒤 다시 해 주세요');
       }
     } finally {
       setBusy(false);
@@ -265,9 +283,11 @@ export function TripLiveShareDialog({
     setBusy(true);
     setMessage('');
     try {
-      const result = await tripLiveApi.get(record.liveId, null, record.ownerToken);
+      const result = await withLiveOwnerRecovery(record, (token) =>
+        tripLiveApi.get(record.liveId, null, token),
+      );
       if (!result.ok) {
-        statusError(result.error);
+        statusError(result.error, '공개본을 불러오지 못했어요. 잠시 뒤 다시 해 주세요');
         return;
       }
       if (result.value === 'unchanged') return;
