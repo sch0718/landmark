@@ -22,6 +22,7 @@ export function createSyncServer() {
     log: () => {},
   };
   return {
+    db,
     async handle(request: Request): Promise<Response | null> {
       if (!new URL(request.url).pathname.startsWith('/api/sync/')) return null;
       const pending: Promise<unknown>[] = [];
