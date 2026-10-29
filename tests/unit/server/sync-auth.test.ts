@@ -91,3 +91,10 @@ it('로그인 61번째는 공급자 호출 전에 제한한다', async () => {
   expect(response?.status).toBe(429);
   db.close();
 });
+it('기존 개발 포트 출처도 운영 요청에는 허용하지 않는다', () => {
+  expect(
+    isSyncOrigin(
+      new Request('https://landmark.sch0718.dev', { headers: { Origin: 'http://localhost:5173' } }),
+    ),
+  ).toBe(false);
+});

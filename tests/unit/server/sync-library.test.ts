@@ -282,3 +282,23 @@ it('인증 라우트는 사용자 한도·본문 상한·off에서도 계정 삭
   env.LIBRARY_SYNC = '';
   expect((await call('/v1/me')).status).toBe(401);
 });
+it('묘비 목록을 읽은 뒤 되살아난 행은 정리하지 않는다', async () => {
+  const p = place();
+  await pushItems(db, user, body([{ ...p, deletedAt: t }]), now);
+  await db
+    .prepare('UPDATE library_items SET deleted_at = ? WHERE user_id = ?')
+    .bind(now - TOMBSTONE_KEEP_MS - 1, user.userId)
+    .run();
+  const batch = db.batch.bind(db);
+  vi.spyOn(db, 'batch').mockImplementationOnce(async (statements) => {
+    await db
+      .prepare(
+        'UPDATE library_items SET deleted = 0, deleted_at = NULL, rev = rev + 1 WHERE user_id = ?',
+      )
+      .bind(user.userId)
+      .run();
+    return batch(statements);
+  });
+  expect(await purgeTombstones(db, user.userId, now)).toBe(0);
+  expect((await readMe(db, user)).library.live).toBe(1);
+});

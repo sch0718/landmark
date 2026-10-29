@@ -78,6 +78,12 @@ Yarn 1(1.22.22)은 `.npmrc`의 `GITHUB_PACKAGES_TOKEN`이 정의되지 않으면
 | `TURNSTILE_SECRET` | Turnstile 검증용 비밀 키. Pages의 서버 시크릿 |
 | `IP_HASH_SALT` | 일 한도에 쓰는 IP 해시의 소금. Pages의 서버 시크릿(긴 무작위 값) |
 | `MEET_ONLINE` | `off`면 새 약속의 서버 올리기만 중단하고 링크 방식으로 공유. 기존 온라인 약속 읽기·답장은 계속 동작 |
+| `LIBRARY_SYNC` | `off`면 보관함 로그인·받기·올리기를 중단합니다. 연결 해제·서버 자료 지우기는 계속됩니다 |
+| `VITE_FIREBASE_*`, `VITE_KAKAO_LOGIN_CLIENT_ID`, `VITE_NAVER_LOGIN_CLIENT_ID` | 동기화 공급자 공개 설정. 아래 보관함 동기화 절 참고 |
+| `FIREBASE_PROJECT_ID`, `KAKAO_CLIENT_ID`, `NAVER_CLIENT_ID` | 서버 로그인 공급자 설정 |
+| `KAKAO_CLIENT_SECRET`, `NAVER_CLIENT_SECRET`, `ALLOWED_EMAILS`, `ALLOWED_ACCOUNTS` | Pages 서버 시크릿. 값은 저장소에 넣지 않습니다 |
+| `SYNC_REDIRECT_URIS` | 허용 콜백 URI 목록(콤마). 기본은 요청 출처 + `/auth/callback` |
+| `VITE_SYNC_DEV_FAKE`, `SYNC_DEV_FAKE_SOCIAL` | 각각 개발 UI·localhost 서버 가짜 카카오·네이버 스위치(`1`) |
 | `SHARE_SHORT` | `off`면 카카오톡용 짧은 링크 만들기만 중단(카카오톡 단추는 예전처럼 꺼지고 `링크 복사` 안내). 이미 만든 `/s/<id>` 열기·지우기는 계속 동작 |
 
 ```bash
@@ -164,6 +170,84 @@ curl -H 'Origin: http://localhost:8788' 'http://localhost:8788/api/place?url=htt
 - 보관함·백업 형식은 그대로입니다. 토큰과 마지막 확인 버전·본문 버전·마지막 동기화 본문(64KB 이내)은 별도 키 `tripmap:meet-online:v1`에 두며 백업에 넣지 않습니다. 다른 기기의 주최자 연결은 메뉴의 `다른 기기에서 열기`로 링크를 공유·복사합니다. 다시 발급하면 이전 주최자 링크는 철회됩니다.
 - 온라인 코드와 Turnstile 로더는 지연 로딩되는 약속 화면에서만 가져옵니다. Turnstile은 처음 올릴 때 불러오며, `yarn size --require-lazy …`로 첫 로딩 예산을 확인합니다.
 
+### 보관함 동기화 설정과 API
+
+본인이 설정에서 켠 기기끼리 장소·라벨·여행·약속·폴더 연결을 D1으로 맞춥니다. 서버에는 암호화하지 않고 저장하므로 운영자가 내용을 볼 수 있습니다. 화면 설정과 약속 주최자 연결은 기기별입니다. [설계서](superpowers/specs/2026-10-29-library-sync-design.md)의 「사용자가 할 일」에 Firebase·카카오·네이버 앱 등록, 허용 계정 등록 및 미리보기 확인 절차가 있습니다. 외부 계정·키 생성과 Pages 변수 등록은 사용자가 직접 합니다.
+
+Pages 대시보드의 Variables and Secrets에서 Production과 Preview에 각각 등록합니다. 실제 값과 시크릿은 저장소에 기록하지 않습니다.
+
+| 이름 | 종류 | 값 |
+| --- | --- | --- |
+| `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_APP_ID` | 빌드 변수(Plaintext) | Firebase 웹 앱의 공개 값. Preview의 AUTH_DOMAIN은 `<projectId>.firebaseapp.com` |
+| `VITE_KAKAO_LOGIN_CLIENT_ID` | 빌드 변수 | 카카오 REST API 키 |
+| `VITE_NAVER_LOGIN_CLIENT_ID` | 빌드 변수 | 네이버 Client ID |
+| `FIREBASE_PROJECT_ID` | 변수 | Firebase 프로젝트 ID |
+| `KAKAO_CLIENT_ID` | 변수 | 카카오 REST API 키 |
+| `NAVER_CLIENT_ID` | 변수 | 네이버 Client ID |
+| `KAKAO_CLIENT_SECRET` | 시크릿(Encrypt) | 카카오 클라이언트 시크릿 |
+| `NAVER_CLIENT_SECRET` | 시크릿 | 네이버 Client Secret |
+| `ALLOWED_EMAILS` | 시크릿 | 허용 Google 이메일(콤마) |
+| `ALLOWED_ACCOUNTS` | 시크릿 | 허용 `kakao:<sub>,naver:<sub>` 목록. 비어 있으면 허용하지 않음 |
+| `LIBRARY_SYNC` | 변수(선택) | 끌 때만 `off` |
+| `SYNC_REDIRECT_URIS` | 변수(선택) | 기본(요청 출처 + `/auth/callback`)과 다를 때만 |
+
+Google 공급자를 쓰지 않으면 Firebase 변수는 생략합니다. 설정이 없는 공급자는 로그인 버튼을 숨깁니다. 카카오·네이버의 허용 밖 계정은 화면에 나온 계정 값을 관리자가 허용 목록에 더한 뒤 재배포해야 합니다. 공급자가 다르면 별도 사용자이며 자동으로 연결하지 않습니다. 동기화 API는 Turnstile을 쓰지 않습니다.
+
+#### 로컬에서 키 없이 해 보기
+
+```bash
+yarn dev:sync
+# 포트를 바꾸려면:
+SYNC_DEV_PORT=8795 SYNC_VITE_PORT=4185 yarn dev:sync
+```
+
+Vite 4185와 wrangler 8795를 사용합니다. 사용자 개발 서버인 5173·5174를 건드리지 않습니다. `.wrangler/`는 gitignore에 있으며 저장소에 `wrangler.toml`을 만들지 않습니다.
+
+1. 기기 A는 `http://localhost:8795`, 기기 B는 `http://127.0.0.1:8795`를 엽니다. 출처가 달라 보관함이 따로입니다.
+2. 설정 › 동기화 › `카카오로 로그인`(또는 네이버)을 누릅니다. 가짜 화면의 계정은 `me`가 허용되며, 다른 값을 입력하면 허용 밖 안내를 확인할 수 있습니다. 결과 라디오로 취소·공급자 오류·코드 거절·장애도 시험합니다.
+3. A에서 `올리기`, B에서 `서버 보관함 받기`를 누릅니다. 한쪽 메모를 고치고 다른 쪽을 새로고침하면 들어옵니다.
+4. 충돌은 개발 도구 Network › Offline으로 한쪽을 끊은 뒤 양쪽의 같은 메모를 고쳐 시험합니다. 다시 온라인으로 바꾸고 새로고침하면 설정의 충돌 목록에서 `내 값으로 되돌리기`를 누를 수 있습니다.
+5. `동기화 끄기`는 이 기기만 멈춥니다. `연결 해제`는 세션을 철회하고 보관함·맞춘 기록은 남깁니다. `서버 자료 모두 지우기`는 이 계정의 서버 자료와 모든 세션을 지우며 기기 보관함은 남깁니다.
+
+가짜 공급자는 **요청 주소가 localhost 계열이고 `SYNC_DEV_FAKE_SOCIAL=1`일 때만** 열립니다. PKCE·nonce·서명 검증을 실제 패키지 코드로 통과하며 외부 통신은 없습니다. 가짜 Google 로그인은 없습니다. Google은 Firebase 설정을 넣은 미리보기에서 확인합니다. 지도도 키 없이 보려면 `VITE_MAP_ADAPTER=fake yarn dev:sync`를 씁니다.
+
+상태 확인(로컬 서버를 띄운 뒤):
+
+```bash
+curl -s -H 'Origin: http://localhost:8795' http://localhost:8795/api/sync/v1/status
+```
+
+로컬 D1을 비우려면 서버를 끈 뒤 `rm -rf .wrangler/state`를 실행합니다. 이 명령은 로컬의 다른 서버 기능 시험 자료도 지웁니다.
+
+#### API와 한도
+
+모든 경로는 `/api/sync` 아래이며 응답은 `Cache-Control: private, no-store`입니다. 세션 헤더는 `X-Landmark-Session`, Google은 Firebase ID 토큰도 보냅니다. 보관함 schema 2와 백업 형식은 그대로이고 동기화 기록·세션은 백업에 넣지 않습니다.
+
+| 요청 | 동작 |
+| --- | --- |
+| `GET /v1/status` | 기능 스위치·공급자·개발 가짜 상태 |
+| `POST /v1/session`, `POST /v1/session/social` | Google·소셜 로그인 후 기기 세션 만들기 |
+| `DELETE /v1/session` | 이 기기 연결 해제 |
+| `GET /v1/sessions` | 기기 세션 목록 |
+| `DELETE /v1/sessions?others=1`, `DELETE /v1/sessions/:id` | 다른 기기 연결 철회 |
+| `GET /v1/me` | 서버 보관함 개수·기기 기록 |
+| `GET /v1/library/changes?since=0&after=&limit=500&device=<16자>` | 변경 커서로 받기. `410 resync`면 전체 다시 받기 |
+| `POST /v1/library/push` | `{ v: 1, deviceId, items: [{kind,id,baseRev,baseDeleted,doc}] }` 올리기 |
+| `DELETE /v1/account` | `{ confirm: 'delete' }`로 계정 서버 자료 모두 지우기 |
+| `GET /dev/fake-social/authorize`, `GET /dev/fake-social/approve` | localhost 개발 전용 공급자 화면 |
+
+UTC 날짜별 한도는 로그인 IP 해시당 60회, 사용자당 받기 5,000회·올리기 2,000회·항목 30,000개입니다. 본문 1,000,000바이트·올리기 100개·항목 문서 200,000자·받기 500개 상한이며 미래 10분을 넘긴 시각은 거절합니다. 삭제 묘비는 90일 뒤 요청 때 정리하되 여행이 참조하는 장소는 남깁니다. Cron은 없습니다.
+
+D1 표는 `users`, `sessions`, `library_state`, `library_items`, `library_devices`이며 기존 `rate_counters`를 함께 씁니다. 첫 동기화 요청의 `ensureSchema`가 버전 5 표를 멱등 생성하므로 원격 마이그레이션 명령은 필요 없습니다. 사용자가 원격 버전을 확인할 때만 다음 읽기 명령을 씁니다(Preview는 `landmark-preview`).
+
+```bash
+npx wrangler d1 execute landmark --remote --command "SELECT version FROM schema_meta"
+```
+
+비상 중단은 Pages의 `LIBRARY_SYNC=off` 후 재배포입니다. 로그인·받기·올리기가 503 `off`가 되고 이 기기 저장과 연결 해제·서버 자료 지우기는 계속됩니다. 옛 앱으로 롤백하면 동기화 UI·엔진이 없어져 멈추며 각 기기의 보관함과 D1 자료는 남습니다. `docs/rollback.md`의 버전 행은 병합 뒤 별도 문서 PR에서 추가합니다.
+
+검증은 `yarn typecheck`, `yarn lint`, `yarn test`, `yarn build:ci`와 `E2E_PORT=4181 E2E_MAP_PORT=4182 yarn test:e2e tests/e2e/library-sync.spec.ts --project desktop`입니다. 전체 핵심 E2E는 같은 포트 변수로 `yarn test:e2e:ci`를 실행합니다. 미리보기에서는 실제 Google·카카오·네이버 로그인, 100개 올리기 CPU 시간(무료 CPU 한도를 넘으면 `PUSH_MAX_ITEMS`를 50으로), iOS Safari·카카오톡 인앱 복귀를 사람이 확인합니다.
+
 ### 공유 짧은 링크(`/s/<id>`)
 
 장소 내보내기·일정 공유의 긴 링크(`/view#d=…`)는 카카오톡 한도(400자)를 넘으므로, `카카오톡`을 누르면 브라우저가 해시를 압축 바이트로 되돌려 AES-GCM(링크마다 새 128비트 키)으로 암호화해 D1에 올리고 `<지금 출처>/s/<16자 id>#k=<22자 키>`(운영 72자)를 받습니다. 링크는 `VITE_APP_URL`이 아니라 사본을 올린 지금 출처로 만듭니다(다른 배포의 D1에는 그 링크가 없다). 키는 링크의 해시에만 있어 서버로 가지 않습니다. 약속과 같은 D1·Turnstile·`IP_HASH_SALT`를 쓰므로 새 설정은 없습니다(`SHARE_SHORT`만 선택). 설계: `docs/superpowers/specs/2026-10-28-share-short-link-design.md`.
@@ -190,6 +274,7 @@ curl -H 'Origin: http://localhost:8788' 'http://localhost:8788/api/place?url=htt
 | `/map`             | 보관함 지도(라벨 색 마커·이모지, 보관함과 같은 거르기, 내 위치)                                  |
 | `/place/:id`       | 장소 상세(이름·분류 편집, 라벨 바꾸기, 메모 자동 저장, 다녀옴·한 줄 평, 영업시간, 삭제 되돌리기) |
 | `/labels`          | 라벨 관리(이름·색·이모지·순서·병합·삭제, 이름으로 이모지 정하기, 네이버 폴더 다시 가져오기)      |
+| `/auth/callback` | 로그인 콜백. 코드·state를 렌더 전에 주소에서 지웁니다 |
 | `/settings`        | 설정(테마·모드, 보관함 보기, 백업·되살리기, 옛 여행 가져오기, 데이터 정보)                       |
 | `/help`            | 메뉴별 도움말 모음                                                                               |
 | `/help/:id`        | 메뉴별 도움말(움직이는 그림, 단계별 사용법, 알아 둘 점)                                            |

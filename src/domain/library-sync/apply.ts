@@ -175,6 +175,10 @@ export function applyRemote(
     const key = itemKey(r.kind, r.id);
     const b = base[key];
     if (b && b.rev >= r.rev) continue;
+    if (opts.skip?.has(key)) {
+      nextBase[key] = { rev: r.rev, hash: hashItem(r.doc), deleted: r.deleted };
+      continue;
+    }
     const decoded = decodeItem(r.kind, r.id, r.doc);
     if (!decoded.ok) {
       held.push({ key, rev: r.rev, reason: 'decode' });

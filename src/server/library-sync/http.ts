@@ -30,9 +30,6 @@ export function isLocalRequest(request: Request): boolean {
 }
 export function isSyncOrigin(request: Request): boolean {
   const origin = requestOrigin(request);
-  return (
-    isAllowedOrigin(origin) ||
-    (isLocalRequest(request) &&
-      /^http:\/\/(localhost|127\.0\.0\.1|\[::1\]):\d{1,5}$/.test(origin ?? ''))
-  );
+  const localOrigin = /^http:\/\/(localhost|127\.0\.0\.1|\[::1\]):\d{1,5}$/.test(origin ?? '');
+  return localOrigin ? isLocalRequest(request) : isAllowedOrigin(origin);
 }

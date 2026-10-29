@@ -340,11 +340,12 @@ export function createLibrarySyncEngine(deps: EngineDeps): LibrarySyncEngine {
       save(meta, base.items, conflicts);
     }
     if (!isCurrent()) return status;
-    meta = { ...meta, lastSyncAt: new Date(deps.now()).toISOString() };
+    const remaining = dirtyItems((await snapshot()).library, base.items, meta.rejected).length;
+    // 아직 확인받지 않은 수정은 이전 동기화 뒤의 변경으로 계속 남긴다.
+    if (remaining === 0) meta = { ...meta, lastSyncAt: new Date(deps.now()).toISOString() };
     save(meta, base.items, conflicts);
     retry = 0;
     cancelTimer();
-    const remaining = dirtyItems((await snapshot()).library, base.items, meta.rejected).length;
     const problem = readConflicts(storage).length + meta.held.length + meta.rejected.length;
     return publish({
       phase: problem ? 'conflict' : remaining ? 'local' : 'synced',
@@ -510,11 +511,13 @@ export function createLibrarySyncEngine(deps: EngineDeps): LibrarySyncEngine {
       const meta = readSyncMeta(storage);
       const p = parseItemKey(key);
       if (!p) return;
+      let skip = action === 'skip';
       if (action === 'mine') {
         const lib = await deps.runLibrary(
           Effect.flatMap(LibraryStore, (store) =>
             store.update((current) => {
               const doc = getItem(current, p.kind, p.id);
+              if (!doc) skip = true;
               return Effect.succeed(
                 doc
                   ? putItems(current, [
@@ -530,7 +533,7 @@ export function createLibrarySyncEngine(deps: EngineDeps): LibrarySyncEngine {
       writeSyncMeta(storage, {
         ...meta,
         held: meta.held.filter((h) => h.key !== key),
-        skipped: action === 'skip' ? [...new Set([...meta.skipped, key])] : meta.skipped,
+        skipped: skip ? [...new Set([...meta.skipped, key])] : meta.skipped,
       });
       engine.schedule('manual');
     },

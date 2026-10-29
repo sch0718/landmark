@@ -10,6 +10,7 @@
   },
   "scripts": {
     "dev": "yarn build:viewer && vite",
+    "dev:sync": "yarn build:viewer && VITE_SYNC_DEV_FAKE=1 wrangler pages dev --d1 DB --port ${SYNC_DEV_PORT:-8795} --binding SYNC_DEV_FAKE_SOCIAL=1 --binding ALLOWED_ACCOUNTS=kakao:dev-me,naver:dev-me --proxy ${SYNC_VITE_PORT:-4185} -- vite --port ${SYNC_VITE_PORT:-4185} --strictPort",
     "dev:full": "yarn build:viewer && wrangler pages dev --d1 DB --proxy 5173 -- vite --port 5173 --strictPort",
     "build": "yarn build:viewer && tsc -b && vite build",
     "build:icons": "node scripts/build-icons.mjs",

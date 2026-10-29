@@ -298,19 +298,25 @@ export async function purgeTombstones(db: MeetDb, userId: string, now: number): 
       .bind(userId, now - TOMBSTONE_KEEP_MS)
       .all<{ kind: ItemKind; id: string; rev: number }>()
   ).results;
-  await db.batch([
+  const keys = JSON.stringify(rows.map((r) => itemKey(r.kind, r.id)));
+  // 읽기와 정리 사이에 복원되거나 여행에서 참조된 행은 같은 배치 안에서 다시 거른다.
+  const predicate = `i.user_id = ?1 AND (i.kind || ':' || i.item_id) IN (SELECT value FROM json_each(?2))
+    AND i.deleted = 1 AND i.deleted_at <= ?3
+    AND NOT (i.kind = 'place' AND EXISTS (SELECT 1 FROM library_items t
+      WHERE t.user_id = ?1 AND t.kind = 'trip' AND instr(t.refs, ',' || i.item_id || ',') > 0))`;
+  const results = (await db.batch([
     db
       .prepare(
-        "DELETE FROM library_items WHERE user_id = ? AND (kind || ':' || item_id) IN (SELECT value FROM json_each(?))",
+        `UPDATE library_state SET purged_rev = max(purged_rev,
+      coalesce((SELECT max(i.rev) FROM library_items i WHERE ${predicate}), 0)),
+      purged_at = ?4 WHERE user_id = ?1`,
       )
-      .bind(userId, JSON.stringify(rows.map((r) => itemKey(r.kind, r.id)))),
+      .bind(userId, keys, now - TOMBSTONE_KEEP_MS, now),
     db
-      .prepare(
-        'UPDATE library_state SET purged_rev = max(purged_rev, ?), purged_at = ? WHERE user_id = ?',
-      )
-      .bind(Math.max(0, ...rows.map((r) => r.rev)), now, userId),
-  ]);
-  return rows.length;
+      .prepare(`DELETE FROM library_items AS i WHERE ${predicate}`)
+      .bind(userId, keys, now - TOMBSTONE_KEEP_MS),
+  ])) as { meta: { changes: number } }[];
+  return results[1]!.meta.changes;
 }
 export async function deleteAccountData(db: MeetDb, userId: string): Promise<void> {
   await db.batch([

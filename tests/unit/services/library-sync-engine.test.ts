@@ -246,7 +246,8 @@ it('실행 중 예약은 한 번만 이어지고 장애 재시도는 정해진 �
   a.engine.schedule('visible');
   release!();
   await run;
-  await vi.advanceTimersByTimeAsync(2000);
+  vi.advanceTimersByTime(2000);
+  await a.engine.runNow('manual');
   expect(a.api.changes).toHaveBeenCalledTimes(2);
   vi.useRealTimers();
   const timer = vi.spyOn(a.deps, 'setTimer');
@@ -281,4 +282,33 @@ it('저장 직후 서버 확인 전에는 완료로 표시하지 않는다', asy
   await a.edit('저장됨');
   a.engine.schedule('save');
   expect(a.state.status.phase).toBe('local');
+});
+it('전송 중 수정이 남았으면 마지막 동기화 시각을 앞당겨 유실을 숨기지 않는다', async () => {
+  const server = createSyncMemoryServer();
+  disposers.push(() => server.db.close());
+  const a = await device(server, { ...emptyLibrary(), places: { [p.id]: p } });
+  await a.engine.connect('upload');
+  const before = readSyncMeta(a.storage).lastSyncAt;
+  await a.edit('전송 값');
+  const push = a.api.push.bind(a.api);
+  vi.spyOn(a.api, 'push').mockImplementationOnce(async (body) => {
+    await a.edit('아직 안 올린 값');
+    a.state.time += 1000;
+    return push(body);
+  });
+  await a.engine.runNow('manual');
+  expect(readSyncMeta(a.storage).lastSyncAt).toBe(before);
+});
+it('이 기기에 없는 보류 항목을 내 값으로 맞추면 건너뛰기로 처리한다', async () => {
+  const server = createSyncMemoryServer();
+  disposers.push(() => server.db.close());
+  const a = await device(server);
+  await a.engine.connect('merge');
+  const key = 'place:missing001';
+  writeSyncMeta(a.storage, {
+    ...readSyncMeta(a.storage),
+    held: [{ key, rev: 2, reason: 'decode' }],
+  });
+  await a.engine.resolveHeld(key, 'mine');
+  expect(readSyncMeta(a.storage).skipped).toContain(key);
 });

@@ -115,3 +115,12 @@ it('올리는 중 수정은 서버 확인 후에도 다음 큐에 남는다', ()
   expect(result.lib.places[p.id]?.memo.value).toBe('추가 수정');
   expect(dirtyItems(result.lib, result.base, [])).toHaveLength(1);
 });
+it('건너뛴 해석 불가 항목은 다시 보류하지 않고 base만 갱신한다', () => {
+  const result = applyRemote(lib, base, [remote({ future: '알 수 없는 문서' })], {
+    ...opts,
+    skip: new Set(['place:place00001']),
+  });
+  expect(result.held).toEqual([]);
+  expect(result.lib).toBe(lib);
+  expect(result.base['place:place00001']?.rev).toBe(2);
+});
