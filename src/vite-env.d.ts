@@ -2,6 +2,7 @@
 /// <reference types="unplugin-icons/types/react" />
 
 interface ImportMetaEnv {
+  readonly VITE_AUTO_BACKUP_INTERVAL_MS?: string;
   readonly VITE_FIREBASE_API_KEY?: string;
   readonly VITE_FIREBASE_AUTH_DOMAIN?: string;
   readonly VITE_FIREBASE_PROJECT_ID?: string;
