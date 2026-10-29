@@ -6,11 +6,28 @@ import {
 } from '@sch0718/firebase-session/worker';
 import { ensureSchema } from '../meet/db';
 import { pruneLimits } from '../meet/limits';
-import { devFakeEnabled, providerStatus, redirectUrisFor, sessionAuthFor } from './auth';
+import {
+  devFakeEnabled,
+  providerStatus,
+  redirectUrisFor,
+  requireSyncUser,
+  sessionAuthFor,
+} from './auth';
 import { createFakeSocial } from './dev-fake-social';
 import type { SyncContext, SyncDeps } from './env';
 import { isSyncOrigin, syncError, SyncHttpError, syncJson } from './http';
-import { consumeLoginLimit } from './limits';
+import { consumeLoginLimit, consumeCounter, counterKey, SYNC_LIMITS } from './limits';
+import {
+  readMe,
+  pullChanges,
+  parsePullQuery,
+  parsePushBody,
+  pushItems,
+  purgeTombstones,
+  deleteAccountData,
+  PURGE_INTERVAL_MS,
+  PUSH_MAX_BYTES,
+} from './library';
 export type SyncRoute = {
   method: 'GET' | 'POST' | 'DELETE';
   path: RegExp;
@@ -47,6 +64,80 @@ async function revoke(
   return syncJson(200, { revoked });
 }
 export const SYNC_ROUTES: SyncRoute[] = [
+  {
+    method: 'GET',
+    path: /^\/v1\/me$/,
+    pattern: '/v1/me',
+    async run(c, d) {
+      return syncJson(200, await readMe(c.env.DB!, await requireSyncUser(c, d)));
+    },
+  },
+  {
+    method: 'GET',
+    path: /^\/v1\/library\/changes$/,
+    pattern: '/v1/library/changes',
+    async run(c, d, _p, url) {
+      const user = await requireSyncUser(c, d);
+      const now = d.now();
+      if (
+        !(await consumeCounter(
+          c.env.DB!,
+          counterKey('sync-pull', user.userId, now),
+          1,
+          SYNC_LIMITS.pull,
+        ))
+      )
+        throw new SyncHttpError(429, 'rate-limited');
+      const result = await pullChanges(c.env.DB!, user, parsePullQuery(url), now);
+      if ('resync' in result) return syncJson(410, { error: 'resync', purgedRev: result.resync });
+      if (result.purgedAt <= now - PURGE_INTERVAL_MS)
+        c.waitUntil(purgeTombstones(c.env.DB!, user.userId, now));
+      return new Response(result.body, {
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Cache-Control': 'private, no-store',
+        },
+      });
+    },
+  },
+  {
+    method: 'POST',
+    path: /^\/v1\/library\/push$/,
+    pattern: '/v1/library/push',
+    async run(c, d) {
+      const user = await requireSyncUser(c, d);
+      const body = parsePushBody(await readJson(c.request, PUSH_MAX_BYTES));
+      const now = d.now();
+      for (const [action, amount, max] of [
+        ['sync-push', 1, SYNC_LIMITS.push],
+        ['sync-items', body.items.length, SYNC_LIMITS.items],
+      ] as const)
+        if (!(await consumeCounter(c.env.DB!, counterKey(action, user.userId, now), amount, max)))
+          throw new SyncHttpError(429, 'rate-limited');
+      return syncJson(200, await pushItems(c.env.DB!, user, body, now));
+    },
+  },
+  {
+    method: 'DELETE',
+    path: /^\/v1\/account$/,
+    pattern: '/v1/account',
+    allowWhenOff: true,
+    async run(c, d) {
+      const user = await requireSyncUser(c, d);
+      const body = await readJson(c.request);
+      if (
+        !body ||
+        typeof body !== 'object' ||
+        Array.isArray(body) ||
+        Object.keys(body).length !== 1 ||
+        (body as { confirm?: string }).confirm !== 'delete'
+      )
+        throw new SyncHttpError(422, 'invalid');
+      await deleteAccountData(c.env.DB!, user.userId);
+      return syncJson(204, null);
+    },
+  },
+
   {
     method: 'GET',
     path: /^\/v1\/status$/,

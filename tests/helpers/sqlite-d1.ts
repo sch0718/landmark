@@ -12,19 +12,41 @@ class SqliteD1Statement implements MeetStatement {
     return new SqliteD1Statement(this.database, this.sql, values);
   }
 
+  private parameters(): (string | number | null)[] {
+    const numbered = [...this.sql.matchAll(/\?(\d+)/g)];
+    return numbered.length
+      ? numbered.map((match) => this.values[Number(match[1]) - 1]!)
+      : this.values;
+  }
+
   async first<T = Record<string, unknown>>(): Promise<T | null> {
-    return (this.database.prepare(this.sql).get(...this.values) as T | undefined) ?? null;
+    return (
+      (this.database.prepare(this.sql.replace(/\?\d+/g, '?')).get(...this.parameters()) as
+        T | undefined) ?? null
+    );
   }
 
   async all<T = Record<string, unknown>>(): Promise<{ results: T[] }> {
     return Object.defineProperties(
-      { results: this.database.prepare(this.sql).all(...this.values) as T[] },
+      {
+        results: this.database
+          .prepare(this.sql.replace(/\?\d+/g, '?'))
+          .all(...this.parameters()) as T[],
+      },
       { success: { value: true }, meta: { value: { changes: 0 } } },
     );
   }
 
   execute(): { meta: { changes: number } } {
-    const result = this.database.prepare(this.sql).run(...this.values);
+    const stmt = this.database.prepare(this.sql.replace(/\?\d+/g, '?'));
+    if (stmt.columns().length > 0) {
+      const results = stmt.all(...this.parameters());
+      return Object.defineProperties(
+        { meta: { changes: 0 } },
+        { results: { value: results }, success: { value: true } },
+      );
+    }
+    const result = stmt.run(...this.parameters());
     return Object.defineProperties(
       { meta: { changes: Number(result.changes) } },
       { results: { value: [] }, success: { value: true } },
