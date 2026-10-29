@@ -25,14 +25,12 @@ import { repairLibrary } from 'src/domain/library-sync/repair';
 import { hasAnyEntry } from 'src/domain/backup/summary';
 import { startEffect } from 'src/lib/effect/runtime';
 import { emptyLibrary, type Library } from 'src/schema/library';
-import { browserStorage } from 'src/services/browser-storage';
-import { createMemoryStorage } from 'src/repositories/edit-layer-repo';
 import { IdGen } from 'src/services/id-gen';
 import { LibraryStore } from 'src/services/library-store';
 import { libraryAtom } from 'src/stores/library-state';
 import { OFF_STATUS, syncStatusAtom, type SyncStatus } from 'src/stores/sync-status';
-import { createSyncApi, googleAuth, type SyncApi, type SyncFail } from './api';
-import { readSyncClientConfig } from './config';
+import { createSyncApi, type SyncApi, type SyncFail } from './api';
+import { getSharedSyncApi, getSharedSyncStorage } from './shared-api';
 import {
   readSyncMeta,
   writeSyncMeta,
@@ -591,21 +589,23 @@ export function createLibrarySyncEngine(deps: EngineDeps): LibrarySyncEngine {
 let singleton: LibrarySyncEngine | undefined;
 export function ensureLibrarySyncEngine(): LibrarySyncEngine {
   if (singleton) return singleton;
-  const storage = browserStorage() ?? createMemoryStorage();
-  const config = readSyncClientConfig(import.meta.env, location.origin);
+  const storage = getSharedSyncStorage();
+  const api = getSharedSyncApi();
   const store = getDefaultStore();
   singleton = createLibrarySyncEngine({
-    api: createSyncApi({
-      config: config ?? {
-        apiBase: location.origin + '/api/sync',
-        firebase: null,
-        kakao: null,
-        naver: null,
-        devFake: false,
-      },
-      storage,
-      auth: config ? googleAuth(config) : null,
-    }),
+    api:
+      api ??
+      createSyncApi({
+        config: {
+          apiBase: location.origin + '/api/sync',
+          firebase: null,
+          kakao: null,
+          naver: null,
+          devFake: false,
+        },
+        storage,
+        auth: null,
+      }),
     storage,
     locks: navigator.locks,
     runLibrary: startEffect,
@@ -625,6 +625,6 @@ export function ensureLibrarySyncEngine(): LibrarySyncEngine {
     events: window,
     newConflictId: () => crypto.randomUUID(),
   });
-  if (!config) singleton.disable();
+  if (!api) singleton.disable();
   return singleton;
 }
