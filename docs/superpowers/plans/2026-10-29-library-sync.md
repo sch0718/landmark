@@ -568,7 +568,7 @@
 - Consumes: Task 5·6·7 전부(엔진은 `loadSyncEngine()`으로만 받아 `ensureLibrarySyncEngine()`을 부른다), `useBackupFile`(`src/sections/backup/use-backup-file.ts`의 `save`·`busy`), `libraryCounts`(`src/domain/backup/summary.ts`), `syncStatusAtom`, `DeviceSession`(패키지).
 - Produces:
   - `SyncSection()`(기본 내보내기 이름 `SyncSection`) — 상태별 화면:
-    - 꺼짐·로그인 전: 설명 세 줄(설계 §처음 켜기 1의 문구 그대로), `먼저 백업 파일 받기`(`useBackupFile().save`), 로그인 단추. 단추는 `readSyncClientConfig`와 `api.status()`의 `providers`가 모두 참인 공급자만(`Google로 로그인`·`카카오로 로그인`·`네이버로 로그인`). `status.enabled === false`면 단추 대신 "지금은 동기화를 쓸 수 없어요". 카카오톡 인앱(`/KAKAOTALK/i`)이면 Google 단추 아래 안내 한 줄. 상태 요청이 실패하면 "동기화 서버에 연결하지 못했어요".
+    - 꺼짐·로그인 전: 설명 세 줄(설계 §처음 켜기 1의 문구 그대로), `백업 먼저 받기`(`useBackupFile().save`), 로그인 단추. 단추는 `readSyncClientConfig`와 `api.status()`의 `providers`가 모두 참인 공급자만(`Google로 로그인`·`카카오로 로그인`·`네이버로 로그인`). `status.enabled === false`면 단추 대신 "지금은 동기화를 쓸 수 없어요". 카카오톡 인앱(`/KAKAOTALK/i`)이면 Google 단추 아래 안내 한 줄. 상태 요청이 실패하면 "동기화 서버에 연결하지 못했어요".
     - 화면이 열릴 때 메타에 `pendingChoice`가 참이면 `SyncConnectDialog`를 연다. Google 리다이렉트에서 돌아온 경우를 위해 `googleRedirectResult`를 한 번 부른다(Firebase 설정이 있고 세션이 없을 때만).
     - 켜짐: 한 줄 상태(`syncPhaseText` 굵게 + 설계 표의 뒤 설명), 계정 표시(`accountLabel`, 공급자 이름), 단추 `지금 동기화`(`runNow('manual')`), `동기화 끄기`/`다시 켜기`, `연결 해제`, 충돌·보류·거절이 있으면 `확인`(→ `SyncConflictsDialog`), `SyncDevices`, `서버 자료 모두 지우기`(→ `SyncDeleteDialog`).
     - `auth`: "다시 로그인해 주세요" + 로그인 단추(같은 계정이면 이어 감). `not-allowed`: 허용 안내.

@@ -146,7 +146,7 @@ export default function SyncSection() {
             }}
             sx={{ minHeight: 44, justifySelf: 'start' }}
           >
-            먼저 백업 파일 받기
+            백업 먼저 받기
           </Button>
           {loginButtons}
           {services?.config.firebase && /KAKAOTALK/i.test(navigator.userAgent) && (
