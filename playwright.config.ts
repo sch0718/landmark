@@ -61,6 +61,7 @@ export default defineConfig({
         'trip-today.spec.ts',
         'business-hours.spec.ts',
         'trip-share.spec.ts',
+        'trip-live.spec.ts',
         'mobile-sheet.spec.ts',
       ],
       use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 } },

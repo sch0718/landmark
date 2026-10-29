@@ -241,3 +241,13 @@ it('다른 링크 해시로 이동하면 새 문서를 읽도록 같은 탭을 �
   window.dispatchEvent(new HashChangeEvent('hashchange'));
   expect(reload).toHaveBeenCalledTimes(1);
 });
+
+it('#t= 해시면 갱신 모드로 읽는다', async () => {
+  document.body.replaceChildren();
+  window.history.replaceState(null, '', `/view#t=abcdefghij.${'v'.repeat(43)}`);
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 410 })));
+  await import('src/share-viewer/main');
+  await flush();
+  expect(fetch).toHaveBeenCalledWith('/api/trip-live/abcdefghij', expect.anything());
+  expect(document.body).toHaveTextContent('공유가 끝난 일정이에요');
+});

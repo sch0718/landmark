@@ -45,10 +45,13 @@ function newShareId(): string {
  * 본문을 읽기 전에 길이 헤더를 보고, 헤더가 없거나 틀려도 조금씩 읽으며 세어 한도를 넘는 순간 끊는다
  * (큰 본문을 통째로 메모리에 받지 않는다).
  */
-async function readLimitedJson(request: Request): Promise<unknown> {
+export async function readLimitedJson(
+  request: Request,
+  maxBytes: number = SHARE_REQUEST_MAX_BYTES,
+): Promise<unknown> {
   const tooLarge = () => new ApiError('TOO_LARGE', '공유 문서가 너무 커요');
   const declared = Number(request.headers.get('Content-Length'));
-  if (declared > SHARE_REQUEST_MAX_BYTES) throw tooLarge();
+  if (declared > maxBytes) throw tooLarge();
   const parts: Uint8Array[] = [];
   let size = 0;
   try {
@@ -58,7 +61,7 @@ async function readLimitedJson(request: Request): Promise<unknown> {
       const { done, value } = await reader.read();
       if (done) break;
       size += value.byteLength;
-      if (size > SHARE_REQUEST_MAX_BYTES) {
+      if (size > maxBytes) {
         void reader.cancel().catch(() => undefined);
         throw tooLarge();
       }

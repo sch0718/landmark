@@ -536,3 +536,18 @@ describe('안전', () => {
     expect(root.querySelector('h1')!.textContent).toBe('<b>제목</b>');
   });
 });
+
+it('initialTab을 유지하고 없어진 Day는 Day 1로 돌아가며 현재 탭을 돌려준다', () => {
+  const handle = renderTripViewer(root, makeShareV2Doc(), map as unknown as MapPort, {
+    app: APP,
+    compact: () => false,
+    initialTab: { kind: 'day', dayIndex: 1 },
+  });
+  expect(handle.currentTab()).toEqual({ kind: 'day', dayIndex: 1 });
+  const fallback = renderTripViewer(root, makeShareV2Doc(), map as unknown as MapPort, {
+    app: APP,
+    compact: () => false,
+    initialTab: { kind: 'day', dayIndex: 99 },
+  });
+  expect(fallback.currentTab()).toEqual({ kind: 'day', dayIndex: 0 });
+});
