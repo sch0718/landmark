@@ -4,7 +4,9 @@ import Typography from '@mui/material/Typography';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { formatShortExpiry } from 'src/domain/share/short-link';
+import { LIVE_DISCONNECTED } from 'src/sections/trips/live/texts';
 import { tripLiveApi } from 'src/services/trip-live/client';
+import { withLiveOwnerRecovery } from 'src/services/trip-live/rotate-owner';
 import {
   tripLiveStore,
   useTripLiveRecords,
@@ -19,12 +21,15 @@ export function LiveTripsSection() {
     setBusy(record.tripId);
     const result =
       record.status === 'live' || record.status === 'pending'
-        ? await tripLiveApi.remove(record.liveId, record.ownerToken)
+        ? await withLiveOwnerRecovery(record, (token) => tripLiveApi.remove(record.liveId, token))
         : { ok: true as const };
     setBusy(null);
     if (result.ok) {
       tripLiveStore.remove(record.tripId);
       toast('갱신 링크를 지웠어요');
+    } else if (result.error === 'unauthorized') {
+      tripLiveStore.update(record.tripId, { status: 'disconnected' });
+      toast.error(LIVE_DISCONNECTED);
     } else
       toast.error(
         result.error === 'offline'

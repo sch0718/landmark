@@ -5,7 +5,9 @@ import { LiveTripsSection } from 'src/sections/settings/LiveTripsSection';
 import { tripLiveStore, type TripLiveRecord } from 'src/services/trip-live/store';
 import { tripLiveApi } from 'src/services/trip-live/client';
 import { toast } from 'sonner';
-vi.mock('src/services/trip-live/client', () => ({ tripLiveApi: { remove: vi.fn() } }));
+vi.mock('src/services/trip-live/client', () => ({
+  tripLiveApi: { remove: vi.fn(), rotate: vi.fn() },
+}));
 vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { error: vi.fn() }) }));
 const record = (status: TripLiveRecord['status'] = 'live'): TripLiveRecord => ({
   tripId: 'trip000001',
@@ -46,6 +48,37 @@ describe('설정 갱신 링크', () => {
     await userEvent.click(screen.getByRole('button', { name: '시험 여행 링크 지우기' }));
     expect(tripLiveStore.list()).toEqual([]);
     expect(tripLiveApi.remove).not.toHaveBeenCalled();
+  });
+  it('삭제가 401이면 연결 끊김을 알리고 다음 삭제는 기기 기록만 지운다', async () => {
+    tripLiveStore.put(record());
+    vi.mocked(tripLiveApi.remove).mockResolvedValueOnce({ ok: false, error: 'unauthorized' });
+    render(<LiveTripsSection />);
+    await userEvent.click(screen.getByRole('button', { name: '시험 여행 링크 지우기' }));
+    expect(await screen.findByText('관리 연결 끊김')).toBeVisible();
+    expect(tripLiveStore.get('trip000001')?.status).toBe('disconnected');
+    expect(toast.error).toHaveBeenCalledWith(
+      '이 기기의 갱신 링크 관리 연결이 끊겼어요. 소유자 링크로 다시 연결하세요',
+    );
+    await userEvent.click(screen.getByRole('button', { name: '시험 여행 링크 지우기' }));
+    expect(tripLiveStore.list()).toEqual([]);
+    expect(tripLiveApi.remove).toHaveBeenCalledOnce();
+  });
+  it('재발급 응답 유실로 삭제가 401이면 대기 토큰을 복구해 서버에서도 지운다', async () => {
+    const nextOwnerToken = 'n'.repeat(43);
+    tripLiveStore.put({ ...record(), nextOwnerToken });
+    vi.mocked(tripLiveApi.remove).mockResolvedValueOnce({ ok: false, error: 'unauthorized' });
+    vi.mocked(tripLiveApi.rotate).mockResolvedValueOnce({ ok: true, value: { rev: 1 } });
+    render(<LiveTripsSection />);
+    await userEvent.click(screen.getByRole('button', { name: '시험 여행 링크 지우기' }));
+    await waitFor(() => expect(tripLiveApi.remove).toHaveBeenCalledTimes(2));
+    expect(tripLiveApi.rotate).toHaveBeenCalledWith(
+      record().liveId,
+      { owner: nextOwnerToken },
+      record().ownerToken,
+    );
+    expect(vi.mocked(tripLiveApi.remove).mock.calls[1]).toEqual([record().liveId, nextOwnerToken]);
+    expect(tripLiveStore.list()).toEqual([]);
+    expect(toast.error).not.toHaveBeenCalled();
   });
   it.each([
     ['offline', '인터넷 연결을 확인하고 다시 해 주세요'],
