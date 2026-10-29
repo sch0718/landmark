@@ -1,14 +1,14 @@
 import { Effect } from 'effect';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { startEffect } from 'src/lib/effect/runtime';
 import {
   kakaoLinkFits,
   kakaoReady,
   preloadKakao,
   sendKakao,
   type KakaoCard,
-} from 'src/lib/kakao-share';
+} from '@sch0718/kakao-share';
+import { startEffect } from 'src/lib/effect/runtime';
 import { appUrl } from 'src/share-viewer/encode';
 
 export const KAKAO_TOO_LONG = '링크가 길어 카카오톡으로 보낼 수 없어요. 링크 복사를 이용해 주세요';
