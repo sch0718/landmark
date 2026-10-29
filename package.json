@@ -10,6 +10,7 @@
   },
   "scripts": {
     "dev": "yarn build:viewer && vite",
+    "dev:sync": "yarn build:viewer && VITE_SYNC_DEV_FAKE=1 wrangler pages dev --d1 DB --port ${SYNC_DEV_PORT:-8795} --binding SYNC_DEV_FAKE_SOCIAL=1 --binding ALLOWED_ACCOUNTS=kakao:dev-me,naver:dev-me --proxy ${SYNC_VITE_PORT:-4185} -- vite --port ${SYNC_VITE_PORT:-4185} --strictPort",
     "dev:full": "yarn build:viewer && wrangler pages dev --d1 DB --proxy 5173 -- vite --port 5173 --strictPort",
     "build": "yarn build:viewer && tsc -b && vite build",
     "build:icons": "node scripts/build-icons.mjs",
@@ -30,7 +31,7 @@
     "effect:source": "node scripts/effect-source.mjs",
     "orphans": "node scripts/find-orphans.mjs",
     "size": "node scripts/check-bundle-size.mjs",
-    "build:ci": "yarn validate && yarn typecheck && yarn test && yarn build && yarn size --require-lazy MeetingsPage --require-lazy MeetingEditorPage --require-lazy MeetLinkPage --require-lazy TripsPage --require-lazy TripPlannerPage --require-lazy SettingsPage --require-lazy LabelsPage --require-lazy LegacyImportPage --require-lazy LinkInputPanel --require-lazy CandidateCard --require-lazy FolderPreview --require-lazy PinCard --require-lazy SharePickPanel --require-lazy SharePreview --require-lazy ExportHtmlDialog --require-lazy RestoreDialog --require-lazy TripTodayPage --require-lazy TripShareDialog --require-lazy LabelPickerDialog --require-lazy LabelFilterDialog --require-lazy ChipScrollButton --require-lazy TripPickerDialog --require-lazy TripFormDialog --require-lazy label-create --require-lazy HelpIndexPage --require-lazy HelpPage --require-lazy HelpIntroDialog && yarn build:map",
+    "build:ci": "yarn validate && yarn typecheck && yarn test && yarn build && yarn size --require-lazy MeetingsPage --require-lazy MeetingEditorPage --require-lazy MeetLinkPage --require-lazy TripsPage --require-lazy TripPlannerPage --require-lazy SettingsPage --require-lazy LabelsPage --require-lazy LegacyImportPage --require-lazy LinkInputPanel --require-lazy CandidateCard --require-lazy FolderPreview --require-lazy PinCard --require-lazy SharePickPanel --require-lazy SharePreview --require-lazy ExportHtmlDialog --require-lazy RestoreDialog --require-lazy TripTodayPage --require-lazy TripShareDialog --require-lazy LabelPickerDialog --require-lazy LabelFilterDialog --require-lazy ChipScrollButton --require-lazy TripPickerDialog --require-lazy TripFormDialog --require-lazy label-create --require-lazy HelpIndexPage --require-lazy HelpPage --require-lazy HelpIntroDialog --require-lazy SyncSection --require-lazy AuthCallbackPage --require-lazy sync-engine --require-lazy firebaseImpl && yarn build:map",
     "prepare": "husky"
   },
   "lint-staged": {
@@ -49,12 +50,14 @@
     "@fontsource/gowun-batang": "^5.3.0",
     "@mui/material": "^7",
     "@mui/utils": "^7.3.11",
+    "@sch0718/firebase-session": "0.2.1",
     "@sch0718/kakao-share": "0.1.1",
     "@sch0718/seen-store": "0.1.0",
     "@tanstack/react-virtual": "3.14.13",
     "dayjs": "^1.11.23",
     "effect": "4.0.2",
     "es-toolkit": "^1.52.0",
+    "firebase": "^12.19.0",
     "jotai": "^3.0.1",
     "pretendard": "^1.3.9",
     "react": "^19.3.0",

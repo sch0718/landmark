@@ -1,4 +1,5 @@
 import Box from '@mui/material/Box';
+import { readBootFlag } from 'src/services/library-sync/boot';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
@@ -403,6 +404,11 @@ export function RestoreDialog({
               <Typography role="alert" variant="body2">
                 {REPLACE_WARNING}
               </Typography>
+              {readBootFlag() && (
+                <Typography variant="body2">
+                  동기화가 켜져 있어요. 되살린 내용은 다른 기기에도 반영돼요.
+                </Typography>
+              )}
               {preview.prefs !== null && (
                 <Typography variant="body2" sx={{ color: 'var(--tm-text-secondary)' }}>
                   {PREFS_NOTE}

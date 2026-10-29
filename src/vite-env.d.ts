@@ -2,6 +2,14 @@
 /// <reference types="unplugin-icons/types/react" />
 
 interface ImportMetaEnv {
+  readonly VITE_FIREBASE_API_KEY?: string;
+  readonly VITE_FIREBASE_AUTH_DOMAIN?: string;
+  readonly VITE_FIREBASE_PROJECT_ID?: string;
+  readonly VITE_FIREBASE_APP_ID?: string;
+  readonly VITE_KAKAO_LOGIN_CLIENT_ID?: string;
+  readonly VITE_NAVER_LOGIN_CLIENT_ID?: string;
+  readonly VITE_SYNC_DEV_FAKE?: string;
+
   /** 카카오톡 공유에 쓰는 JavaScript 키. 비어 있으면 단추를 숨긴다. */
   readonly VITE_KAKAO_JS_KEY?: string;
   /** 약속 올리기 때 지연 로딩하는 Turnstile의 공개 사이트 키. */
