@@ -174,7 +174,8 @@ export function applyRemote(
   for (const r of remote) {
     const key = itemKey(r.kind, r.id);
     const b = base[key];
-    if (b && b.rev >= r.rev) continue;
+    // 복원으로 로컬 항목만 사라졌으면 같은 revision도 다시 넣어 전체 받기를 끝낸다.
+    if (b && b.rev >= r.rev && getItem(next, r.kind, r.id)) continue;
     if (opts.skip?.has(key)) {
       nextBase[key] = { rev: r.rev, hash: hashItem(r.doc), deleted: r.deleted };
       continue;

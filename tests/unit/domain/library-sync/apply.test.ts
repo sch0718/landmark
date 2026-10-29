@@ -124,3 +124,15 @@ it('건너뛴 해석 불가 항목은 다시 보류하지 않고 base만 갱신�
   expect(result.lib).toBe(lib);
   expect(result.base['place:place00001']?.rev).toBe(2);
 });
+
+it('복원으로 사라진 항목은 같은 revision의 전체 받기로 돌아오고 다음에는 차분만 받는다', () => {
+  const restored = emptyLibrary();
+  expect(missingFromLocal(restored, base)).toBe(true);
+  const result = applyRemote(restored, base, [remote(p, 1)], { ...opts, fullResync: true });
+  expect(result.lib.places[p.id]).toEqual(p);
+  expect(result.base).toEqual(base);
+  expect(result.conflicts).toEqual([]);
+  expect(result.held).toEqual([]);
+  expect(missingFromLocal(result.lib, result.base)).toBe(false);
+  expect(dirtyItems(result.lib, result.base, [])).toEqual([]);
+});

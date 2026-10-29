@@ -312,3 +312,26 @@ it('이 기기에 없는 보류 항목을 내 값으로 맞추면 건너뛰기�
   await a.engine.resolveHeld(key, 'mine');
   expect(readSyncMeta(a.storage).skipped).toContain(key);
 });
+
+it('복원으로 사라진 항목을 전체 재동기화로 받고 다음 실행은 기존 커서를 쓴다', async () => {
+  const server = createSyncMemoryServer();
+  disposers.push(() => server.db.close());
+  const a = await device(server, { ...emptyLibrary(), places: { [p.id]: p } });
+  await a.engine.connect('upload');
+  await a.engine.runNow('manual'); // 첫 올리기의 메아리를 받아 차분 커서를 확정한다.
+  const cursor = readSyncMeta(a.storage).cursor!;
+  expect(cursor.rev).toBeGreaterThan(0);
+  await a.runtime.runPromise(
+    Effect.flatMap(LibraryStore, (store) =>
+      store.replace(emptyLibrary(), { requirePrevious: true }),
+    ),
+  );
+  const changes = vi.spyOn(a.api, 'changes');
+  expect((await a.engine.runNow('open')).phase).toBe('synced');
+  expect(changes.mock.calls[0]?.[0]).toMatchObject({ since: 0, after: '' });
+  expect(a.state.lib.places[p.id]).toEqual(p);
+  changes.mockClear();
+  await a.engine.runNow('visible');
+  expect(changes).toHaveBeenCalledTimes(1);
+  expect(changes.mock.calls[0]?.[0]).toMatchObject({ since: cursor.rev, after: cursor.key });
+});
