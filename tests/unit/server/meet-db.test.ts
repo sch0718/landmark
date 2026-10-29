@@ -24,17 +24,19 @@ describe('ensureSchema', () => {
       expect.objectContaining({ name: 'doc_rev', type: 'INTEGER', notnull: 1 }),
     );
   });
-  it('빈 DB에 설계의 표·색인과 버전 5를 만든다', async () => {
+  it('빈 DB에 설계의 표·색인과 버전 6을 만든다', async () => {
     await ensureSchema(db);
 
-    expect(SCHEMA_VERSION).toBe(5);
+    expect(SCHEMA_VERSION).toBe(6);
     expect(await db.prepare('SELECT version FROM schema_meta').all()).toEqual({
-      results: [{ version: 5 }],
+      results: [{ version: 6 }],
     });
     expect(
       await db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all(),
     ).toEqual({
       results: [
+        { name: 'library_backup_parts' },
+        { name: 'library_backups' },
         { name: 'library_devices' },
         { name: 'library_items' },
         { name: 'library_state' },
@@ -81,7 +83,7 @@ describe('ensureSchema', () => {
       count: 0,
     });
     expect(await db.prepare('SELECT version FROM schema_meta').all()).toEqual({
-      results: [{ version: 5 }],
+      results: [{ version: 6 }],
     });
   });
 
@@ -96,7 +98,7 @@ describe('ensureSchema', () => {
     expect(batch).toHaveBeenCalledTimes(1);
     expect(prepare).toHaveBeenCalledTimes(prepared);
     expect(await db.prepare('SELECT version FROM schema_meta').all()).toEqual({
-      results: [{ version: 5 }],
+      results: [{ version: 6 }],
     });
   });
 
@@ -113,7 +115,7 @@ describe('ensureSchema', () => {
     await ensureSchema(db);
 
     expect(batch).toHaveBeenCalledTimes(2);
-    expect(await db.prepare('SELECT version FROM schema_meta').first()).toEqual({ version: 5 });
+    expect(await db.prepare('SELECT version FROM schema_meta').first()).toEqual({ version: 6 });
   });
 
   it('표 없음 이외의 읽기 오류는 전파하고 다음 호출에서 다시 시도한다', async () => {
@@ -124,7 +126,7 @@ describe('ensureSchema', () => {
     await expect(ensureSchema(db)).rejects.toThrow('DB 읽기 실패');
     expect(prepare).toHaveBeenCalledTimes(1);
     await ensureSchema(db);
-    expect(await db.prepare('SELECT version FROM schema_meta').first()).toEqual({ version: 5 });
+    expect(await db.prepare('SELECT version FROM schema_meta').first()).toEqual({ version: 6 });
   });
 
   it('이전 버전의 자료는 보존하고 버전 기록만 하나로 갱신한다', async () => {
@@ -142,18 +144,18 @@ describe('ensureSchema', () => {
       doc: '{}',
     });
     expect(await db.prepare('SELECT version FROM schema_meta').all()).toEqual({
-      results: [{ version: 5 }],
+      results: [{ version: 6 }],
     });
   });
 
   it('버전 표가 비어 있어도 초기화한다', async () => {
     await db.prepare('CREATE TABLE schema_meta (version INTEGER NOT NULL)').run();
     await ensureSchema(db);
-    expect(await db.prepare('SELECT version FROM schema_meta').first()).toEqual({ version: 5 });
+    expect(await db.prepare('SELECT version FROM schema_meta').first()).toEqual({ version: 6 });
     expect(await db.prepare('SELECT * FROM rate_counters').all()).toEqual({ results: [] });
   });
 
-  it.each([5, 6])('이미 버전 %i이면 배치를 실행하지 않는다', async (version) => {
+  it.each([6, 7])('이미 버전 %i이면 배치를 실행하지 않는다', async (version) => {
     await db.prepare('CREATE TABLE schema_meta (version INTEGER NOT NULL)').run();
     await db.prepare('INSERT INTO schema_meta (version) VALUES (?)').bind(version).run();
     const batch = vi.spyOn(db, 'batch');
@@ -169,7 +171,7 @@ describe('ensureSchema', () => {
     await db.prepare('UPDATE schema_meta SET version = 0').run();
     resetSchemaMemo();
     await ensureSchema(db);
-    expect(await db.prepare('SELECT version FROM schema_meta').first()).toEqual({ version: 5 });
+    expect(await db.prepare('SELECT version FROM schema_meta').first()).toEqual({ version: 6 });
   });
 });
 

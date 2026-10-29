@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 
 export const SCHEMA_STATEMENTS: string[] = [
   `CREATE TABLE IF NOT EXISTS meetings (
@@ -98,5 +98,31 @@ CREATE TABLE IF NOT EXISTS users (
   last_sync_at INTEGER NOT NULL,
   created_at INTEGER NOT NULL,
   PRIMARY KEY (user_id, device_id)
+)`,
+  `-- 6: 서버 백업. 사용자(=보관함)당 스냅샷 하나. data는 tripmap-backup v1 텍스트를 gzip한 바이트의 base64 조각
+CREATE TABLE IF NOT EXISTS library_backups (
+  user_id TEXT PRIMARY KEY,
+  id TEXT NOT NULL,                      -- 스냅샷 id(16자 hex). 조각과 잇고 조건부 덮어쓰기에 쓴다
+  format INTEGER NOT NULL,               -- 1
+  parts INTEGER NOT NULL,                -- 조각 수(1~3)
+  stored_bytes INTEGER NOT NULL,         -- gzip 바이트 수
+  raw_bytes INTEGER NOT NULL,            -- 원문 UTF-8 바이트 수(브라우저가 알림)
+  content_hash TEXT NOT NULL,            -- hashItem(보관함)
+  places INTEGER NOT NULL,
+  labels INTEGER NOT NULL,
+  trips INTEGER NOT NULL,
+  meetings INTEGER NOT NULL,
+  exported_at TEXT NOT NULL,             -- 봉투 exportedAt(기기 시각 ISO)
+  device_id TEXT NOT NULL,
+  device_label TEXT NOT NULL,
+  reason TEXT NOT NULL,                  -- 'manual' | 'auto'
+  created_at INTEGER NOT NULL            -- 서버 ms
+)`,
+  `CREATE TABLE IF NOT EXISTS library_backup_parts (
+  user_id TEXT NOT NULL,
+  backup_id TEXT NOT NULL,
+  idx INTEGER NOT NULL,                  -- 0부터
+  data TEXT NOT NULL,                    -- base64 조각(524,288자 이하)
+  PRIMARY KEY (user_id, backup_id, idx)
 )`,
 ];
