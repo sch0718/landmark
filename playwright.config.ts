@@ -6,7 +6,7 @@ import { defineConfig, devices } from '@playwright/test';
  */
 const PORT = Number(process.env.E2E_PORT) || 5173;
 /** 지도 페이지(`dist-map/`) 포트. `tests/e2e/fixtures.ts`의 `SHARE_MAP_URL`과 같아야 한다. */
-const MAP_PORT = 5174;
+const MAP_PORT = Number(process.env.E2E_MAP_PORT) || 5174;
 const isCI = !!process.env.CI;
 
 /**
@@ -41,6 +41,7 @@ export default defineConfig({
       grepInvert: /@mobile/,
       testMatch: [
         'library.spec.ts',
+        'library-sync.spec.ts',
         'labels-emoji.spec.ts',
         'large-library.spec.ts',
         'first-load.spec.ts',
@@ -129,7 +130,11 @@ export default defineConfig({
   webServer: [
     {
       command: `yarn vite --port ${PORT} --strictPort`,
-      env: { VITE_MAP_ADAPTER: 'fake', VITE_KAKAO_JS_KEY: 'e2e-kakao-key' },
+      env: {
+        VITE_SYNC_DEV_FAKE: '1',
+        VITE_MAP_ADAPTER: 'fake',
+        VITE_KAKAO_JS_KEY: 'e2e-kakao-key',
+      },
       url: `http://localhost:${PORT}`,
       reuseExistingServer: !isCI,
       timeout: 120_000,
