@@ -40,6 +40,14 @@ test('@desktop 두 기기가 로그인·메모 동기화·충돌 복원·계정 
       timezoneId: 'Asia/Seoul',
     });
     contexts.push(context);
+    // Vite는 public/_headers를 적용하지 않으므로 운영 콜백 문서 정책을 재현한다.
+    await context.route('**/auth/callback?**', async (route) => {
+      const response = await route.fetch();
+      await route.fulfill({
+        response,
+        headers: { ...response.headers(), 'referrer-policy': 'no-referrer' },
+      });
+    });
     await installSyncServer(context, server);
     const page = await context.newPage();
     await seedStorage(page, { library: seed, prefs: { libraryView: 'list' } });
@@ -51,6 +59,20 @@ test('@desktop 두 기기가 로그인·메모 동기화·충돌 복원·계정 
     const b = await device(false);
     const c = await device(false);
     await login(a);
+    await expect(a.getByRole('dialog', { name: '연결 방식' })).toBeVisible();
+    const afterLogin = server.getRequests.length;
+    expect(await a.evaluate(async () => (await fetch('/api/sync/v1/status')).status)).toBe(200);
+    const afterCallback = server.getRequests.slice(afterLogin);
+    expect(afterCallback.length).toBeGreaterThan(0);
+    for (const request of afterCallback) {
+      // 예외 허용 여부와 별개로 기존 GET 처리기도 받을 수 있는 출처가 돌아와야 한다.
+      expect(
+        request.browser.origin ??
+          (request.browser.referer && new URL(request.browser.referer).origin),
+      ).toBe(new URL(baseURL!).origin);
+      expect(request.forwarded).toEqual(request.browser);
+      expect(request.status).toBe(200);
+    }
     await a
       .getByRole('dialog', { name: '연결 방식' })
       .getByRole('button', { name: '올리기', exact: true })
@@ -105,6 +127,10 @@ test('@desktop 두 기기가 로그인·메모 동기화·충돌 복원·계정 
     await b.reload();
     await expect(syncSection(b).getByText('다시 로그인해 주세요', { exact: true })).toBeVisible();
   } finally {
+    await test.info().attach('동기화 GET 출처 헤더', {
+      body: JSON.stringify(server.getRequests, null, 2),
+      contentType: 'application/json',
+    });
     for (const context of contexts) await context.close();
     server.close();
   }

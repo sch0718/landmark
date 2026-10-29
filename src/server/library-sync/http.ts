@@ -33,8 +33,13 @@ export function isSyncOrigin(request: Request): boolean {
     (request.method === 'GET' || request.method === 'HEAD') &&
     !request.headers.has('Origin') &&
     !request.headers.has('Referer')
-  )
-    return true;
+  ) {
+    // 리퍼러를 생략한 같은 출처 요청과 직접 탐색만 허용한다.
+    // Fetch Metadata도 없으면 출처를 확인할 수 없으므로 거절한다.
+    // 세션 없이 부수 효과를 일으키는 GET은 앞으로도 추가하지 않는다.
+    const site = request.headers.get('Sec-Fetch-Site');
+    return site === 'same-origin' || site === 'none';
+  }
   const origin = requestOrigin(request);
   const localOrigin = /^http:\/\/(localhost|127\.0\.0\.1|\[::1\]):\d{1,5}$/.test(origin ?? '');
   return localOrigin ? isLocalRequest(request) : isAllowedOrigin(origin);

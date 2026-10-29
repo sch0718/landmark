@@ -271,7 +271,8 @@ CREATE TABLE IF NOT EXISTS library_devices (
 
 진입점 `functions/api/sync/[[path]].ts`(모든 메서드) → `handleSync(ctx, deps)`. `/api/sync` 뒤 경로로 고른다. 응답은 모두 `Cache-Control: private, no-store`, 오류 본문은 패키지 형식 `{ error: '<code>', ...extra }`(패키지 클라이언트 `toResult`가 401·403·413·422·429·503을 해석한다).
 출처 검사: `isAllowedOrigin(origin)` 또는 (요청 주소 호스트가 `localhost`·`127.0.0.1`·`[::1]`이고 출처가 `http://(localhost|127.0.0.1|[::1]):<포트>`). 실패 `403 { error: 'origin' }`.
-단, `GET`·`HEAD`이고 `Origin`·`Referer` 헤더가 모두 없으면 허용하며, 헤더가 있거나 다른 메서드이면 기존 출처 검사를 적용한다.
+단, `GET`·`HEAD`이고 `Origin`·`Referer` 헤더가 모두 없으면 `Sec-Fetch-Site`가 `same-origin` 또는 `none`일 때만 허용한다. 리퍼러를 생략한 같은 출처 요청과 직접 탐색을 지원하기 위한 예외이며, Fetch Metadata도 없으면 출처를 확인할 수 없어 거절한다. 출처 헤더가 있거나 다른 메서드이면 기존 출처 검사를 적용한다. 세션 없이 부수 효과를 일으키는 GET은 추가하지 않는다.
+`/auth/callback`은 코드가 주소에 있는 동안 `Referrer-Policy: no-referrer`로 보호한다. 렌더 전 코드·state를 주소에서 지우고, 로그인 성공이나 오류 화면의 복귀 링크는 전체 문서를 열어 기본 리퍼러 정책을 회복한다. `resume`의 엔진 시작은 새 문서의 부트 흐름이 담당한다.
 인증 헤더: Google은 `Authorization: Bearer <Firebase ID 토큰>` + `X-Landmark-Session`, 카카오·네이버는 `X-Landmark-Session`만. 쿠키를 쓰지 않는다(`credentials: 'omit'`).
 
 | 요청 | 하는 일 | 권한·한도 | 성공 |
