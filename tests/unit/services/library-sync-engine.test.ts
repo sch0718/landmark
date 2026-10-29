@@ -8,6 +8,7 @@ import {
 } from 'src/services/library-sync/sync-engine';
 import { createSyncApi } from 'src/services/library-sync/api';
 import {
+  SyncStorageError,
   newDeviceMeta,
   readSyncMeta,
   writeSyncMeta,
@@ -18,6 +19,7 @@ import {
 } from 'src/services/library-sync/storage';
 import { createMemoryStorage } from 'src/repositories/edit-layer-repo';
 import { emptyLibrary, type Library, type Place } from 'src/schema/library';
+import { LibraryInvalid, LibraryCorrupt, StorageQuotaExceeded } from 'src/services/errors';
 import { LibraryStore, LIBRARY_KEY } from 'src/services/library-store';
 import { TripSchema, checkTrip, type Trip } from 'src/schema/trip';
 import { safeParse } from 'src/schema/parse';
@@ -446,4 +448,89 @@ it('연결 실패 때는 구독하지 않고 다음 연결 성공 때 시작한�
   expect(add).not.toHaveBeenCalled();
   expect((await a.engine.connect('merge')).phase).toBe('synced');
   expect(add).toHaveBeenCalledTimes(2);
+});
+
+it.each([
+  [new StorageQuotaExceeded({ bytes: 1 }), '저장 공간이 부족해 동기화를 멈췄어요'],
+  [new SyncStorageError(), '저장 공간이 부족해 동기화를 멈췄어요'],
+  [new LibraryInvalid({ issues: [] }), '보관함 형식이 맞지 않아 동기화를 멈췄어요'],
+  [new LibraryCorrupt({ issues: [], backupKey: null }), '보관함을 읽지 못해 동기화를 멈췄어요'],
+  [
+    new Error('예상하지 못한 내부 오류'),
+    '예상하지 못한 오류로 동기화를 멈췄어요. 다시 시도해 주세요',
+  ],
+] as const)('저장·검증 오류 %s는 실제 원인에 맞게 안내한다', async (error, message) => {
+  const server = createSyncMemoryServer();
+  disposers.push(() => server.db.close());
+  const a = await device(server);
+  await a.engine.connect('merge');
+  a.engine.stop();
+  vi.spyOn(a.deps, 'runLibrary').mockImplementationOnce(() =>
+    a.runtime.runPromise(Effect.fail(error)),
+  );
+  const timer = vi.spyOn(a.deps, 'setTimer');
+  expect(await a.engine.runNow('manual')).toMatchObject({
+    phase: 'error',
+    message,
+    progress: null,
+  });
+  expect(timer).not.toHaveBeenCalled();
+});
+it.each(['connect', 'run'] as const)(
+  '메모리 저장소의 %s는 공간 부족 대신 저장소 사용 불가를 안내한다',
+  async (action) => {
+    const server = createSyncMemoryServer();
+    disposers.push(() => server.db.close());
+    const a = await device(server);
+    if (action === 'run') {
+      await a.engine.connect('merge');
+      a.engine.stop();
+    }
+    const memory = ManagedRuntime.make(
+      Layer.mergeAll(LibraryStore.layerWith({ storage: undefined }), IdGen.layer),
+    );
+    disposers.push(() => memory.dispose());
+    a.deps.runLibrary = (effect) => memory.runPromise(effect);
+    const result = await (action === 'connect'
+      ? a.engine.connect('merge')
+      : a.engine.runNow('manual'));
+    expect(result).toMatchObject({
+      phase: 'error',
+      message: '이 브라우저의 저장소를 쓸 수 없어 동기화를 켤 수 없어요',
+    });
+  },
+);
+it('서버 보관함을 모두 해석하지 못하면 바꾸지 않았다는 원인을 안내한다', async () => {
+  const server = createSyncMemoryServer();
+  disposers.push(() => server.db.close());
+  const a = await device(server, { ...emptyLibrary(), places: { [p.id]: p } });
+  vi.spyOn(a.api, 'changes').mockResolvedValueOnce({
+    ok: true,
+    data: {
+      rev: 1,
+      purgedRev: 0,
+      next: { rev: 1, key: 'place:place00001' },
+      more: false,
+      items: [{ kind: 'place', id: p.id, rev: 1, deleted: false, doc: {} }],
+    },
+  });
+  const before = a.storage.getItem(LIBRARY_KEY);
+  expect(await a.engine.connect('replace-local')).toMatchObject({
+    phase: 'error',
+    message: '서버 보관함을 모두 읽지 못해 바꾸지 않았어요',
+  });
+  expect(a.storage.getItem(LIBRARY_KEY)).toBe(before);
+  expect(readSyncMeta(a.storage).pendingChoice).toBe(true);
+});
+it('통신 밖의 예외도 저장 공간 부족으로 표시하지 않는다', async () => {
+  const server = createSyncMemoryServer();
+  disposers.push(() => server.db.close());
+  const a = await device(server);
+  await a.engine.connect('merge');
+  a.engine.stop();
+  vi.spyOn(a.api, 'changes').mockRejectedValueOnce(new Error('처리 중 예외'));
+  expect(await a.engine.runNow('manual')).toMatchObject({
+    phase: 'error',
+    message: '예상하지 못한 오류로 동기화를 멈췄어요. 다시 시도해 주세요',
+  });
 });
