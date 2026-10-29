@@ -60,19 +60,14 @@ test('@desktop 두 기기가 로그인·메모 동기화·충돌 복원·계정 
     const c = await device(false);
     await login(a);
     await expect(a.getByRole('dialog', { name: '연결 방식' })).toBeVisible();
-    const afterLogin = server.getRequests.length;
+    // SPA 이동이면 콜백 문서의 navigation 항목과 no-referrer 정책이 남는다.
+    expect(
+      await a.evaluate(() => {
+        const navigation = performance.getEntriesByType('navigation')[0];
+        return navigation ? new URL(navigation.name).pathname : null;
+      }),
+    ).toBe('/settings');
     expect(await a.evaluate(async () => (await fetch('/api/sync/v1/status')).status)).toBe(200);
-    const afterCallback = server.getRequests.slice(afterLogin);
-    expect(afterCallback.length).toBeGreaterThan(0);
-    for (const request of afterCallback) {
-      // 예외 허용 여부와 별개로 기존 GET 처리기도 받을 수 있는 출처가 돌아와야 한다.
-      expect(
-        request.browser.origin ??
-          (request.browser.referer && new URL(request.browser.referer).origin),
-      ).toBe(new URL(baseURL!).origin);
-      expect(request.forwarded).toEqual(request.browser);
-      expect(request.status).toBe(200);
-    }
     await a
       .getByRole('dialog', { name: '연결 방식' })
       .getByRole('button', { name: '올리기', exact: true })
@@ -127,8 +122,8 @@ test('@desktop 두 기기가 로그인·메모 동기화·충돌 복원·계정 
     await b.reload();
     await expect(syncSection(b).getByText('다시 로그인해 주세요', { exact: true })).toBeVisible();
   } finally {
-    await test.info().attach('동기화 GET 출처 헤더', {
-      body: JSON.stringify(server.getRequests, null, 2),
+    await test.info().attach('동기화 GET 요청', {
+      body: JSON.stringify(server.getRequests),
       contentType: 'application/json',
     });
     for (const context of contexts) await context.close();

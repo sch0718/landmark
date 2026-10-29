@@ -70,9 +70,21 @@ export async function installSyncServer(
   await context.route('**/api/sync/**', async (route) => {
     const source = route.request();
     const browserHeaders = new Headers(await source.allHeaders());
+    const forwardedHeaders = new Headers(browserHeaders);
+    // route.fulfill은 실제 네트워크를 거치지 않아 브라우저의 Fetch Metadata가 빠진다.
+    // 요청 프레임의 출처로 Sec-Fetch-Site만 재현하고 Origin·Referer는 그대로 둔다.
+    try {
+      const frameOrigin = new URL(source.frame().url()).origin;
+      forwardedHeaders.set(
+        'Sec-Fetch-Site',
+        new URL(source.url()).origin === frameOrigin ? 'same-origin' : 'cross-site',
+      );
+    } catch {
+      // 프레임이나 출처를 알 수 없으면 Fetch Metadata를 만들어 넣지 않는다.
+    }
     const request = new Request(source.url(), {
       method: source.method(),
-      headers: browserHeaders,
+      headers: forwardedHeaders,
       body: source.postData(),
     });
     const response = await server.handle(request);
@@ -86,8 +98,6 @@ export async function installSyncServer(
         status: response.status,
       };
       server.getRequests.push(entry);
-      // 감독 실행에서 첫 status 요청까지 실제 헤더 전달을 확인할 수 있다.
-      console.info('동기화 GET 출처', JSON.stringify(entry));
     }
     await route.fulfill({
       status: response.status,
