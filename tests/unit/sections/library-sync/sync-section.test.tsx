@@ -17,6 +17,7 @@ import {
 } from 'src/services/library-sync/storage';
 import { emptyLibrary } from 'src/schema/library';
 import { place } from '../../domain/backup/fixtures';
+import { buildMeeting } from '../../../fixtures/builders';
 const mock = vi.hoisted(() => ({
   status: vi.fn(),
   me: vi.fn(),
@@ -202,3 +203,30 @@ it('여행 날짜와 일정 충돌을 한 묶음으로 표시한다', () => {
   show(<SyncConflictsDialog open onClose={() => {}} />);
   expect(screen.getByText('여행 · 날짜·일정')).toBeInTheDocument();
 });
+
+it.each([0, 2])(
+  '연결 안내는 약속 %i개도 표시하고 서버 합계는 항목 단위로 안내한다',
+  async (count) => {
+    mock.me.mockResolvedValue({ ok: true, data: { library: { live: 3 }, devices: [] } });
+    const { store } = show(<SyncConnectDialog open onClose={() => {}} />);
+    const meetings = Object.fromEntries(
+      Array.from({ length: count }, (_, index) => {
+        const id = `meeting00${index + 1}`;
+        return [id, buildMeeting({ id })];
+      }),
+    );
+    act(() =>
+      store.set(libraryAtom, {
+        ...emptyLibrary(),
+        meetings: {
+          ...meetings,
+          meeting003: buildMeeting({ id: 'meeting003', deletedAt: '2026-10-29T00:00:00.000Z' }),
+        },
+      }),
+    );
+    expect(
+      screen.getByText(`이 기기 보관함: 장소 0곳 · 라벨 0개 · 여행 0개 · 약속 ${count}개`),
+    ).toBeInTheDocument();
+    expect(await screen.findByText('서버 보관함: 항목 3개')).toBeInTheDocument();
+  },
+);
