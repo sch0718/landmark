@@ -1,3 +1,6 @@
+import { loadServerBackupSection } from 'src/services/server-backup/boot';
+import { ChunkErrorBoundary } from 'src/components/ChunkErrorBoundary';
+import { ChunkErrorNotice } from 'src/components/ChunkErrorNotice';
 import { loadSyncSection, syncFeatureVisible } from 'src/services/library-sync/boot';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -22,6 +25,10 @@ import { persistState } from 'src/lib/storage-persist';
 import { persistStateAtom } from 'src/stores/backup-state';
 import { libraryAtom } from 'src/stores/library-state';
 import { prefsAtom, setPrefsAtom } from 'src/stores/prefs-state';
+
+const ServerBackupSection = lazy(() =>
+  loadServerBackupSection().then((m) => ({ default: m.ServerBackupSection })),
+);
 
 const SyncSection = lazy(loadSyncSection);
 
@@ -149,6 +156,13 @@ export function SettingsPage() {
       </Section>
       <Section title="백업">
         <BackupSection onRestore={() => setRestoreOpen(true)} />
+        {syncFeatureVisible() && (
+          <ChunkErrorBoundary fallback={<ChunkErrorNotice />}>
+            <Suspense fallback={null}>
+              <ServerBackupSection />
+            </Suspense>
+          </ChunkErrorBoundary>
+        )}
       </Section>
       {syncFeatureVisible() && (
         <Section title="동기화" id="sync">

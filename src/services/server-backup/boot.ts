@@ -9,3 +9,7 @@ export function readAutoBackupFlag(storage?: Storage): boolean {
   }
 }
 export const loadAutoBackup = lazyChunk(() => import('src/services/server-backup/auto-backup'));
+
+export const loadServerBackupSection = lazyChunk(
+  () => import('src/sections/server-backup/ServerBackupSection'),
+);
