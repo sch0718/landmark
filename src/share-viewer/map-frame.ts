@@ -55,7 +55,7 @@ export function toMapPlaces(doc: ShareDoc): MapPlace[] {
 export function connectMapFrame(
   host: HTMLElement,
   opts: { mapUrl: string; places: MapPlace[]; onSelect(id: string): void; win?: Window },
-): MapPort {
+): MapPort & { stop(): void } {
   const win = opts.win ?? window;
   const d = host.ownerDocument;
   const origin = new URL(opts.mapUrl).origin;
@@ -119,7 +119,7 @@ export function connectMapFrame(
     if (!ready) showMap(false);
   }, READY_TIMEOUT_MS);
 
-  win.addEventListener('message', (event: MessageEvent) => {
+  const onMessage = (event: MessageEvent) => {
     if (event.source !== iframe.contentWindow || event.origin !== origin) return;
     const msg = parseFromMap(event.data);
     if (msg === null) return;
@@ -151,9 +151,15 @@ export function connectMapFrame(
         showMap(false);
         break;
     }
-  });
+  };
+  win.addEventListener('message', onMessage);
 
   return {
+    stop() {
+      win.clearTimeout(timer);
+      win.removeEventListener('message', onMessage);
+      latest.length = 0;
+    },
     focus(id) {
       send({ kind: 'focus', placeId: id });
     },

@@ -39,8 +39,9 @@ export function renderTripViewer(
   root: HTMLElement,
   doc: ShareDocV2,
   map: MapPort,
-  opts: { app: string; compact(): boolean },
+  opts: { app: string; compact(): boolean; initialTab?: TripTab },
 ): {
+  currentTab(): TripTab;
   highlight(id: string): void;
   setImportLink(link: ImportLink): void;
   /** 화면 폭(`compact`)이 바뀐 뒤 부른다. 지금 패널의 길찾기 링크를 다시 정한다(스펙 §4.4). */
@@ -367,7 +368,9 @@ export function renderTripViewer(
     return list;
   }
 
+  let selected: TripTab = { kind: 'day', dayIndex: 0 };
   function select(tab: TripTab) {
+    selected = tab;
     const at = tabs.findIndex((t) =>
       tab.kind === 'day'
         ? t.tab.kind === 'day' && t.tab.dayIndex === tab.dayIndex
@@ -406,9 +409,20 @@ export function renderTripViewer(
     row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }
 
-  select({ kind: 'day', dayIndex: 0 });
+  const initial = opts.initialTab;
+  select(
+    initial &&
+      tabs.some(({ tab }) =>
+        initial.kind === 'day'
+          ? tab.kind === 'day' && tab.dayIndex === initial.dayIndex
+          : tab.kind === 'candidates',
+      )
+      ? initial
+      : { kind: 'day', dayIndex: 0 },
+  );
 
   return {
+    currentTab: () => selected,
     highlight(id: string) {
       // 1) 지금 탭에 그 핀 id의 행이 있으면 강조한다.
       if (rows.has(id)) {
