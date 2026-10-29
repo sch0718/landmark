@@ -41,6 +41,7 @@
 | `v0.19.1` | `0c28592` | 카카오톡 공유 고침: SDK 2.8.4가 `Kakao.init()` 뒤에 붙이는 `Share`를 init 전에 찾던 문제(운영에서 `카카오톡을 불러오지 못했어요`), 링크 길이 기본 한도 2,000자 → 400자(모바일 SDK 메시지 10,000자 한도 실측). 장소·일정 링크는 카카오톡 대신 `링크 복사` 안내 (#62) | ✅ 저장 형식·공유 형식 그대로. 새 저장 키 없음 |
 | `v0.20.0` | `98956c2` | 카카오톡용 공유 짧은 링크: 장소 내보내기·일정 공유의 긴 링크가 400자를 넘으면 `카카오톡`이 브라우저에서 암호화한 사본을 D1에 올리고 `/s/<id>#k=<키>`(72자)를 보냄(누르면 만들고 다음 클릭에 보냄), 받는 쪽은 `/s/<id>`가 키로 풀어 `/view#d=…`로, 장소 30일·일정 여행 끝 + 7일(최대 180일) 보관, 설정 › `보낸 짧은 링크`에서 지우기, 서버 함수 `/api/share`·`/s/*`, D1 표 `share_links`(스키마 2), 기능 스위치 `SHARE_SHORT=off` (#67) | ✅ 보관함·백업·공유 문서 형식 그대로. 새 기기 키 `tripmap:share-links:v1`은 옛 버전이 읽지 않음. 서버(D1)의 짧은 링크 사본은 남음(아래) |
 | `v0.20.1` | `58278d5` | 카카오 공유 모듈을 앱 안 사본(`src/lib/kakao-share/`) 대신 공용 패키지 `@sch0718/kakao-share` 0.1.1(GitHub Packages)로. 화면·동작은 그대로(0.1.1의 소스·타입·빌드 결과가 사본과 같음), 저장소 `.npmrc`와 빌드 토큰 `GITHUB_PACKAGES_TOKEN`(Pages Production·Preview, Actions는 `packages: read`) (#69) | ✅ 저장 형식·공유 형식 그대로. 새 저장 키 없음 |
+| `v0.20.2` | `dd2964d` | 처음 안내 기록(`src/services/help-seen.ts`)을 공용 패키지 `@sch0718/seen-store` 0.1.0에 맡김(기기 키 `tripmap:help-seen:v1`·형식 그대로, #71), README·도움말 움직이는 그림 생성기의 기반 함수를 `@sch0718/motion-kit` 0.1.0(devDependency)에서 가져옴(생성물 31개 바이트 같음, #72) | ✅ 저장 형식·공유 형식 그대로. 처음 안내 기록 키·형식 그대로 |
 
 - 마지막 열은 2026-10-17에 `v0.8.0`·`v0.9.0`·`v0.10.0`의 `src/schema`로 지금 형식의 문서(`visitedOn`·`review`·`folders` 포함)를 읽어 확인했다(차례로 셋 다 지움 / `folders`만 지움 / 모두 유지). `v0.3.0`~`v0.7.2`는 `v0.8.0`과 저장 형식이 같다. 새 버전을 낼 때 저장 형식에 필드를 더했다면 그보다 옛 버전 줄을 모두 다시 본다.
 - 보관함은 각 기기의 localStorage(`tripmap:library:v2`)에만 있다. `v0.3.0`~`v0.8.0` 사이는 저장 형식이 같아 데이터 걱정 없이 오갈 수 있다. 그 뒤로는 선택 필드만 더했다(`v0.9.0` 장소의 `visitedOn`·`review`, `v0.10.0` 보관함의 `folders`). `v0.11.0`~`v0.14.6`은 보관함 저장 형식을 바꾸지 않았다. `v0.14.7`은 라벨에 선택 필드 `emoji`만 더했다(`v0.13.0`이 더한 `tripmap:hours:v1`은 지워도 다시 받는 캐시다. `v0.14.0`이 가져온 여행·장소도 지금 스키마 그대로다). `v0.15.0`은 보관함에 선택 키 `meetings`(약속)만 더했다. 옛 버전은 모르는 필드를 손상으로 보지 않고 떼어 낸 채 읽으므로 화면은 그대로 열리지만, **옛 버전에서 무엇이든 저장하는 순간 그 필드가 지워진다.** 되돌리기 전에 설정 › 백업에서 백업 파일을 받아 두면, 새 버전으로 돌아온 뒤 그 파일로 되살릴 수 있다.
@@ -59,6 +60,7 @@
 - `v0.17.0`보다 옛 버전으로 되돌리면 서버 함수 `/api/meet`가 사라져 온라인 약속을 더 올리거나 받을 수 없다. 이미 보낸 친구 링크 `/meet/<id>`와 주최자 링크(`#h=`)는 옛 앱이 몰라 `페이지를 찾을 수 없어요` 화면이 된다. 주최자 보관함의 약속과 그때까지 받아 둔 답장·출발지는 보관함에 있으므로 그대로 보이고, 옛 앱에서는 보통 약속(링크 방식 `#d=`·`#r=`·`#f=`)으로 다시 보낼 수 있다. 기기 키 `tripmap:meet-online:v1`(토큰)은 읽지도 지우지도 않고, D1의 약속·답장도 지우지 않으므로 다시 새 버전으로 오면 같은 링크로 이어서 쓴다(그동안 30일 보관 기한이 지나면 서버 사본은 끝난 약속이 된다). 친구 기기의 답장 초안 키 `tripmap:meet-drafts:v1`은 `v0.15.0`부터 있던 키인데, `v0.17.0`은 항목마다 `version`(온라인 초안은 `docRev`도)을 더해 저장한다. 옛 버전은 모르는 필드가 있는 항목을 버리고 읽으므로 새 버전이 저장한 초안(링크 방식·온라인 모두)은 보이지 않고, **옛 버전에서 링크 방식 답장 초안을 하나라도 저장하면 키를 다시 써서 새 버전의 초안이 모두 지워진다.** 보낸 답장과 서버의 답장은 영향이 없고, 아직 보내지 않은 초안만 잃는다. 서버 쪽 장애만 피하려면 되돌리기 대신 Pages 환경 변수 `MEET_ONLINE=off`를 넣고 다시 배포한다. 새 약속은 링크 방식으로 공유되고 이미 올린 약속의 읽기·답장은 계속 된다.
 - `v0.20.0`보다 옛 버전으로 되돌리면 서버 함수 `/api/share`·`/s/<id>`가 사라진다. 이미 보낸 카카오톡 짧은 링크는 SPA 기본 동작으로 앱 화면이 열려 `페이지를 찾을 수 없어요`가 되고, 장소·일정 공유 창의 `카카오톡`은 다시 꺼져 `링크 복사`를 안내한다. D1의 `share_links` 행과 `schema_meta` 버전 2는 남는다. 옛 코드의 `ensureSchema`는 버전이 1 이상이면 아무것도 하지 않으므로 약속은 그대로 동작한다. 옛 코드에는 짧은 링크 만료 정리가 없어 되돌린 동안 기한이 지난 행이 남는다(열리지 않고, 암호문이라 내용도 읽을 수 없다). 오래 되돌려 둘 때는 `wrangler d1 execute landmark --remote --command "DELETE FROM share_links WHERE expires_at <= strftime('%Y-%m-%dT%H:%M:%fZ','now')"`로 지운다. 기기 키 `tripmap:share-links:v1`(삭제 토큰)은 옛 버전이 읽지도 지우지도 않으므로, 다시 새 버전으로 오면 설정 › `보낸 짧은 링크`에 그대로 보이고 기한 안의 링크도 다시 열린다. 서버 쪽 문제만 피하려면 되돌리기 대신 Pages 환경 변수 `SHARE_SHORT=off`를 넣고 다시 배포한다. 새로 만들기만 멈추고 이미 보낸 링크는 계속 열린다.
 - `v0.20.1`보다 옛 버전으로 되돌리면 카카오 공유 모듈이 다시 앱 안 사본(`src/lib/kakao-share/`)이 되고 저장소 `.npmrc`가 사라진다. 사본은 패키지 0.1.1과 같은 코드라 화면·동작·데이터 걱정은 없다. Pages의 `GITHUB_PACKAGES_TOKEN`은 남겨 두어도 옛 버전 빌드가 쓰지 않는다. 반대로 `v0.20.1` 이상을 다시 빌드하려면 이 토큰이 Production·Preview 모두에 있어야 한다(없으면 `yarn install`이 `Failed to replace env in config: ${GITHUB_PACKAGES_TOKEN}`으로 멈춘다). 배포만 되돌리기(1절)는 빌드를 다시 하지 않으므로 토큰과 상관없다.
+- `v0.20.2`보다 옛 버전으로 되돌리면 처음 안내 기록과 그림 생성기 기반 함수가 다시 앱 안 코드가 된다. 패키지와 같은 코드·같은 키(`tripmap:help-seen:v1`)·같은 저장 형식이라 이미 본 안내는 다시 뜨지 않고 생성물도 같다. 데이터 걱정은 없다.
 
 ## 1. 배포만 되돌리기 (가장 빠름, 코드는 그대로)
 
@@ -87,14 +89,16 @@ PR을 만들어 CI를 통과하면 병합한다. 그 PR의 변경 일부(묶음 
 
 | 되돌리려는 PR | 먼저 되돌릴 PR(이 순서로) | 예 |
 |---|---|---|
-| #69 `58278d5` | 없음 | |
-| #67 `98956c2` | #69 | #69가 #67이 고친 `tests/e2e/share-link.spec.ts`·`docs/development.md`를 다시 고쳤다 |
-| #65 `fad26d5` | #69 | #69가 #65가 고친 `.github/workflows/ci.yml`·`docs/development.md`를 다시 고쳤다 |
-| #64 `701abc1` | #69 → #65 | #65가 #64가 고친 `.github/workflows/ci.yml`·`docs/development.md`를 다시 고쳤다 |
-| #62 `0c28592` | #69 → #67 | #67이 #62가 고친 도움말(`scripts/motion/help-pages.mjs`·`src/sections/help/help-content.ts`·`docs/help/share.md`)·`tests/e2e/share-link.spec.ts`·`tests/unit/sections/share-export/share-link-dialog.test.tsx`를 다시 고쳤다 |
-| #59 `808902c` | #69 → #67 → #62 | #62가 #59가 만든 `src/lib/kakao-share/*`·`tests/e2e/fixtures.ts`·`share-link.spec.ts`·공유 대화상자 시험과 도움말을 다시 고쳤다 |
-| #57 `6144b70` | #69 → #67 | #67이 #57이 고친 `src/sections/settings/SettingsPage.tsx`를 다시 고쳤다. #59와는 `docs/development.md`만 겹치고 충돌하지 않는다 |
-| #55 `cbe2d42` | #69 → #67 → #62 → #59 | #67이 #55가 만든 `src/server/meet/schema-sql.ts`·`limits.ts`·`handlers.ts`·`env.ts`를 고쳤다. #59가 #55가 고친 `src/sections/meetings/MeetingResults.tsx`·`share-link.ts`·`use-online-meeting.ts`·`src/vite-env.d.ts`·`playwright.config.ts`·`tests/e2e/meetings*.spec.ts`·`tests/unit/sections/meetings/online-host.test.tsx`·`share-link.test.ts`와 도움말을 다시 고쳤다. #57과 겹치는 코드는 없다. 다만 #56이 #55의 설계 문서를 고쳐 `docs/superpowers/specs/2026-10-25-meeting-online-design.md`가 충돌(UD)하므로 그 파일을 지워 해결한다 |
+| #72 `dd2964d` | 없음 | |
+| #71 `4fe011e` | #72 | #72가 #71이 고친 `docs/development.md`·공통화 문서·`yarn.lock`을 다시 고쳤다(#72 브랜치에 #71 뒤 main을 병합) |
+| #69 `58278d5` | #72 → #71 | #71·#72가 #69가 고친 `docs/development.md`·공통화 문서·`package.json`·`yarn.lock`을, #71이 `public/third-party-notices.txt`를 다시 고쳤다 |
+| #67 `98956c2` | #72 → #71 → #69 | #69가 #67이 고친 `tests/e2e/share-link.spec.ts`·`docs/development.md`를 다시 고쳤다 |
+| #65 `fad26d5` | #72 → #71 → #69 | #69가 #65가 고친 `.github/workflows/ci.yml`·`docs/development.md`를 다시 고쳤다 |
+| #64 `701abc1` | #72 → #71 → #69 → #65 | #65가 #64가 고친 `.github/workflows/ci.yml`·`docs/development.md`를 다시 고쳤다 |
+| #62 `0c28592` | #72 → #71 → #69 → #67 | #67이 #62가 고친 도움말(`scripts/motion/help-pages.mjs`·`src/sections/help/help-content.ts`·`docs/help/share.md`)·`tests/e2e/share-link.spec.ts`·`tests/unit/sections/share-export/share-link-dialog.test.tsx`를 다시 고쳤다 |
+| #59 `808902c` | #72 → #71 → #69 → #67 → #62 | #62가 #59가 만든 `src/lib/kakao-share/*`·`tests/e2e/fixtures.ts`·`share-link.spec.ts`·공유 대화상자 시험과 도움말을 다시 고쳤다 |
+| #57 `6144b70` | #72 → #71 → #69 → #67 | #67이 #57이 고친 `src/sections/settings/SettingsPage.tsx`를 다시 고쳤다. #59와는 `docs/development.md`만 겹치고 충돌하지 않는다 |
+| #55 `cbe2d42` | #72 → #71 → #69 → #67 → #62 → #59 | #67이 #55가 만든 `src/server/meet/schema-sql.ts`·`limits.ts`·`handlers.ts`·`env.ts`를 고쳤다. #59가 #55가 고친 `src/sections/meetings/MeetingResults.tsx`·`share-link.ts`·`use-online-meeting.ts`·`src/vite-env.d.ts`·`playwright.config.ts`·`tests/e2e/meetings*.spec.ts`·`tests/unit/sections/meetings/online-host.test.tsx`·`share-link.test.ts`와 도움말을 다시 고쳤다. #57과 겹치는 코드는 없다. 다만 #56이 #55의 설계 문서를 고쳐 `docs/superpowers/specs/2026-10-25-meeting-online-design.md`가 충돌(UD)하므로 그 파일을 지워 해결한다 |
 | #52 `edaa752` | #55 | #55가 #52가 고친 `src/routes/paths.ts`·`router.tsx`·`src/sections/help/help-content.ts`·`src/sections/meetings/MeetingsPage.tsx`·`MeetingEditorPage.tsx`·`public/help/img/meetings-*.svg`·`package.json`·`playwright.config.ts`와 `tests/unit/sections/help/help-page.test.tsx`를 다시 고쳤다 |
 | #48 `9467aea` | #55 → #52 | #55가 #48이 만든 `src/sections/meetings/*`(`MeetLinkPage.tsx`·`MeetingResults.tsx`·`share-link.ts`·`meet-drafts.ts` 등)·`src/domain/meeting/ops.ts`·`src/services/errors.ts`와 시험을 다시 고쳤고, #52가 #48이 만든 `src/sections/meetings/MeetingsPage.tsx`·`MeetingEditorPage.tsx`와 `src/routes/*`·`src/sections/shell/nav-items.ts`·`src/components/icons.tsx`·`package.json`·`playwright.config.ts`·`tests/e2e/fixtures.ts`를 다시 고쳤다 |
 | #47 `7b7d5aa` | #55 → #52 → #48 | #48이 #47이 고친 `src/components/icons.tsx`·`src/domain/library/ops.ts`를, #52가 `src/components/icons.tsx`·`src/sections/labels/LabelsPage.tsx`를 다시 고쳤다 |
@@ -182,6 +186,8 @@ F 묶음 사이에 다른 PR이 끼면 그 PR도 같은 기준(앞 PR의 파일�
 2026-10-28에 `98956c2`(#67 병합 뒤 `main`, `v0.20.0`)에서 #67을 `git revert -m 1`로 되돌렸다. 충돌이 없었고 결과 트리가 바로 전 커밋(`d8fb072`, #66 병합)과 같았다. 이어서 #66(설계 문서만)을 되돌려도 충돌이 없었고 결과가 `fad26d5`(#65 병합)와 같았다. #67을 두고 되돌리면 #62는 도움말·`share-link.spec.ts`·`share-link-dialog.test.tsx` 등 5개 파일이, #57은 `SettingsPage.tsx`가 충돌한다. #67을 먼저 되돌리면 #62·#57·(#62 뒤) #59는 충돌이 없고, #55는 위의 설계 문서 충돌(UD) 하나만 남는다. #65는 혼자 되돌려도 충돌이 없고, #64는 #65를 두면 `ci.yml`·`docs/development.md`가 충돌한다(#65를 먼저 되돌리면 충돌 없음). `v0.20.0`보다 옛 버전으로 되돌리면 짧은 링크가 열리지 않을 뿐 보관함 데이터 걱정은 없다.
 
 2026-10-29에 `58278d5`(#69 병합 뒤 `main`, `v0.20.1`)에서 #69를 `git revert -m 1`로 되돌렸다. 충돌이 없었고 결과 트리가 바로 전 커밋(`d450de1`, #68 병합)과 같았다. 이어서 #67을 되돌려도 충돌이 없었고 `src`·`tests`·`functions`가 #67 바로 전 커밋과 같았다. #69를 두고 되돌리면 #67은 `docs/development.md`·`tests/e2e/share-link.spec.ts`가, #65·#64는 `.github/workflows/ci.yml`·`docs/development.md`가, #62는 `src/lib/kakao-share/*`(UD)·도움말 등 8개 파일이, #59는 `kakao.ts`·`tests/e2e/fixtures.ts` 등 8개 파일이, #57은 `public/third-party-notices.txt`·`SettingsPage.tsx`가 충돌한다. #69 → #65 → #64, #69 → #67 → #62 → #59, #69 → #67 → #57 순서로는 모두 충돌이 없었고, 그 뒤 #55는 위의 설계 문서 충돌(UD) 하나만 남는다.
+
+2026-10-29에 `dd2964d`(#72 병합 뒤 `main`, `v0.20.2`)에서 #72를 `git revert -m 1`로 되돌렸다. 충돌이 없었고 결과 트리가 바로 전 커밋(`4fe011e`, #71 병합)과 같았다. 이어서 #71을 되돌려도 충돌이 없었고 결과 트리가 `34eac32`(#70 병합)와 같았다. #72를 두고 #71을 되돌리면 `docs/development.md`·공통화 문서·`yarn.lock`이, #72·#71을 두고 #69를 되돌리면 `docs/development.md`·공통화 문서·`package.json`·`public/third-party-notices.txt`·`yarn.lock`이 충돌한다. #72 → #71 → #69 → #67 → #62 → #59, #72 → #71 → #69 → #65 → #64, #72 → #71 → #69 → #67 → #57 순서로는 모두 충돌이 없었다.
 
 특정 버전의 코드를 그대로 보려면 `git switch --detach v0.4.0`.
 
