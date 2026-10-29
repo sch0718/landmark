@@ -1,3 +1,4 @@
+import { folderNoticeText, type FolderNotice } from 'src/stores/folder-watch';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
@@ -16,6 +17,7 @@ import { labelRejectionMessage } from 'src/sections/labels/rejection-message';
 import { useLibraryAction } from 'src/stores/library-state';
 
 type Props = {
+  notices?: ReadonlyMap<string, FolderNotice | null>;
   label: Label;
   /** 합칠 다른 라벨이 있는가. 없으면 합치기 버튼을 끈다. */
   canMerge: boolean;
@@ -36,7 +38,8 @@ function FolderSection({
   onResync,
   onUnlink,
   resyncRef,
-}: Pick<Props, 'folders' | 'onResync'> & {
+  notices = new Map(),
+}: Pick<Props, 'folders' | 'onResync' | 'notices'> & {
   onUnlink(shareId: string): void;
   /** 폴더마다 `새로 저장한 곳 가져오기` 단추. 연결을 끊은 뒤 포커스를 옮길 곳으로 쓴다. */
   resyncRef(shareId: string, node: HTMLButtonElement | null): void;
@@ -49,6 +52,7 @@ function FolderSection({
       </Box>
       <Box component="ul" sx={{ m: 0, p: 0, listStyle: 'none' }}>
         {folders.map((folder) => {
+          const notice = notices.get(folder.shareId);
           const name = folder.name.value === '' ? '이름 없는 폴더' : folder.name.value;
           return (
             <Box component="li" key={folder.shareId} sx={{ mt: 1 }}>
@@ -56,6 +60,9 @@ function FolderSection({
               <Box sx={{ fontSize: 13, color: 'var(--tm-text-secondary)' }}>
                 {`${localDate(folder.checkedAt)} 확인`}
               </Box>
+              {notice && (
+                <Box sx={{ fontSize: 13, fontWeight: 700 }}>{folderNoticeText(notice)}</Box>
+              )}
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
                 <Button
                   variant="outlined"
@@ -96,6 +103,7 @@ export function LabelEditor({
   folders,
   onResync,
   onUnlink,
+  notices,
 }: Props) {
   const { run } = useLibraryAction();
   const [name, setName] = useState(label.name.value);
@@ -201,6 +209,7 @@ export function LabelEditor({
         {folders.length > 0 && (
           <FolderSection
             folders={folders}
+            notices={notices}
             onResync={onResync}
             onUnlink={(shareId) => void unlink(shareId)}
             resyncRef={(shareId, node) => {

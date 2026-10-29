@@ -1,3 +1,4 @@
+import { folderWatchAtom, folderNotice, labelNoticeText } from 'src/stores/folder-watch';
 import { createLabel } from 'src/domain/library/label-create';
 import {
   closestCenter,
@@ -66,13 +67,14 @@ type RowProps = {
   count: number;
   /** 연결된 네이버 폴더가 있는가. 있으면 개수 글자에 `네이버 폴더`를 붙인다. */
   linked: boolean;
+  notice: string | null;
   onOpen(): void;
   /** 편집기를 여는 단추. 다시 가져오기 칸을 닫을 때 포커스를 돌려줄 곳으로 쓴다. */
   openerRef(node: HTMLButtonElement | null): void;
 };
 
 /** 라벨 한 줄: 드래그 손잡이 · 이모지 · 이름 · 장소 수 · 색 점. 손잡이 말고 줄을 누르면 편집기가 열린다. */
-function LabelRow({ label, count, linked, onOpen, openerRef }: RowProps) {
+function LabelRow({ label, count, linked, notice, onOpen, openerRef }: RowProps) {
   const {
     attributes,
     listeners,
@@ -167,7 +169,7 @@ function LabelRow({ label, count, linked, onOpen, openerRef }: RowProps) {
           component="span"
           sx={{ flex: 'none', fontSize: 13, color: 'var(--tm-text-secondary)' }}
         >
-          {linked ? `장소 ${count}곳 · 네이버 폴더` : `장소 ${count}곳`}
+          {linked ? `장소 ${count}곳 · 네이버 폴더${notice ?? ''}` : `장소 ${count}곳`}
         </Box>
         <Box
           component="span"
@@ -185,6 +187,7 @@ type Open = { kind: 'edit' | 'merge' | 'delete'; id: string };
 export function LabelsPage() {
   useDocumentTitle('라벨 관리');
   const library = useAtomValue(libraryAtom);
+  const watch = useAtomValue(folderWatchAtom);
   const { run } = useLibraryAction();
   const labels = useMemo(() => liveLabels(library), [library]);
   const counts = useMemo(() => {
@@ -353,6 +356,11 @@ export function LabelsPage() {
                   label={label}
                   count={counts.get(label.id) ?? 0}
                   linked={(folders.get(label.id) ?? NO_FOLDERS).length > 0}
+                  notice={labelNoticeText(
+                    (folders.get(label.id) ?? NO_FOLDERS).map((link) =>
+                      folderNotice(link, watch.folders[link.shareId]),
+                    ),
+                  )}
                   onOpen={() => setDialog({ kind: 'edit', id: label.id })}
                   openerRef={(node) => {
                     if (node === null) openers.current.delete(label.id);
@@ -374,6 +382,14 @@ export function LabelsPage() {
           onMerge={() => setDialog({ kind: 'merge', id: target.id })}
           onDelete={() => setDialog({ kind: 'delete', id: target.id })}
           folders={folders.get(target.id) ?? NO_FOLDERS}
+          notices={
+            new Map(
+              (folders.get(target.id) ?? NO_FOLDERS).map((link) => [
+                link.shareId,
+                folderNotice(link, watch.folders[link.shareId]),
+              ]),
+            )
+          }
           onResync={(shareId) => resync(target.id, shareId)}
           onUnlink={unlink}
         />

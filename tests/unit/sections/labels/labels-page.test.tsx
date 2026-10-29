@@ -705,3 +705,40 @@ it('토스트 되돌리기도 다른 탭의 새 이모지를 유지한다', asyn
   expect(stored(storage).labels[L_FOOD]!.emoji?.value).toBeNull();
   expect(toastMock).toHaveBeenCalledWith('다른 곳에서 바뀐 부분은 그대로 두었어요');
 });
+
+describe('LabelsPage — 폴더 변경 기록', () => {
+  it.each([
+    [2, 1, false, 1000, ' · 새로 저장한 곳 2곳', '네이버에 새로 저장한 곳 2곳 · 빠진 곳 1곳'],
+    [0, 1, false, 1000, ' · 폴더에서 빠진 곳 1곳', '네이버 폴더에서 빠진 곳 1곳'],
+    [0, 0, true, 1000, '', '마지막 확인 때 폴더를 찾지 못했어요'],
+    [2, 1, false, -1000, '', null],
+  ] as const)(
+    '기록 %i·%i·%s·%i를 줄과 편집기에 보인다',
+    async (fresh, missing, notFound, delta, tail, detail) => {
+      const { store } = await openLinked();
+      const { folderWatchAtom } = await import('src/stores/folder-watch');
+      act(() =>
+        store.set(folderWatchAtom, {
+          v: 1,
+          enabled: false,
+          lastRunAt: null,
+          lastManualAt: null,
+          folders: {
+            [SHARE_ID]: {
+              checkedAt: Date.parse(CHECKED_AT) + delta,
+              fresh,
+              missing,
+              signature: null,
+              notified: null,
+              error: notFound ? 'not-found' : null,
+            },
+          },
+        }),
+      );
+      expect(foodRow()).toHaveAccessibleName(new RegExp(`장소 2곳 · 네이버 폴더${tail}$`));
+      await userEvent.click(foodRow());
+      if (detail) expect(within(editor()).getByText(new RegExp(detail))).toBeInTheDocument();
+      else expect(within(editor()).queryByText(/네이버에 새로 저장한 곳/)).not.toBeInTheDocument();
+    },
+  );
+});

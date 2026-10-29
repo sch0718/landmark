@@ -1,3 +1,4 @@
+import { FolderWatchSetting } from 'src/sections/folder-watch/FolderWatchSetting';
 import { loadServerBackupSection } from 'src/services/server-backup/boot';
 import { ChunkErrorBoundary } from 'src/components/ChunkErrorBoundary';
 import { ChunkErrorNotice } from 'src/components/ChunkErrorNotice';
@@ -188,6 +189,7 @@ export function SettingsPage() {
             공유 파일 가져오기
           </Button>
         </Box>
+        <FolderWatchSetting />
       </Section>
       <Section title="도움말">
         <Typography variant="body2" sx={{ color: 'var(--tm-text-secondary)' }}>
