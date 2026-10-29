@@ -1,4 +1,4 @@
-import { injectShareDoc, shareFileName } from '../domain/share/inject';
+import { serializeShareDoc, shareFileName } from '../domain/share/inject';
 import type { LiveTripDoc } from '../domain/trip-live/live-doc';
 import { createLivePoll, fetchLive } from './live';
 import { showShareDoc } from './show';
@@ -16,6 +16,13 @@ export const LIVE_TEXT = {
   saveFailed: '파일을 만들지 못했어요. 잠시 뒤 다시 해 주세요',
   keepHint: '마지막 일정은 파일로 저장할 수 있어요',
 };
+// 보기 화면 번들에 데이터 자리 표시 문자열이 한 번 더 들어가면 틀의 자리가 2개가 되어
+// 앱의 파일 저장이 깨진다. 그래서 자리 표시 문자열을 쓰지 않고 데이터 스크립트 요소를 찾아 채운다.
+const DATA_SCRIPT = /(<script[^>]*id="tripmap-share"[^>]*>)[\s\S]*?(<\/script>)/;
+function fillTemplate(template: string, json: string): string {
+  if (!DATA_SCRIPT.test(template)) throw new Error('공유 틀의 데이터 자리를 찾지 못했어요');
+  return template.replace(DATA_SCRIPT, (_all, open: string, close: string) => open + json + close);
+}
 export async function startLiveViewer(
   root: HTMLElement,
   live: { id: string; token: string },
@@ -47,7 +54,7 @@ export async function startLiveViewer(
       try {
         const response = await fetcher('/share-viewer.html');
         if (!response.ok) throw Error();
-        const html = injectShareDoc(await response.text(), current.share),
+        const html = fillTemplate(await response.text(), serializeShareDoc(current.share)),
           url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
         try {
           const a = d.createElement('a');

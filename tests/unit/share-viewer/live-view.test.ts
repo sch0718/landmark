@@ -80,7 +80,11 @@ describe('갱신 일정 보기', () => {
     const f = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(response())
-      .mockResolvedValue(new Response('<script>__TRIPMAP_DATA__</script>'));
+      .mockResolvedValue(
+        new Response(
+          '<script type="application/json" id="tripmap-share">__TRIPMAP_DATA__</script>',
+        ),
+      );
     let blob: Blob | undefined;
     vi.stubGlobal(
       'Blob',
