@@ -19,6 +19,53 @@ const ctx = (
   params: {},
   waitUntil: () => {},
 });
+it.each(['GET', 'HEAD'])('출처 헤더가 없는 %s 요청은 허용한다', (method) => {
+  expect(isSyncOrigin(new Request('https://landmark.sch0718.dev', { method }))).toBe(true);
+});
+it.each(['POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'])(
+  '출처 헤더가 없는 %s 요청은 거절한다',
+  (method) => {
+    expect(isSyncOrigin(new Request('https://landmark.sch0718.dev', { method }))).toBe(false);
+  },
+);
+it.each<[string, string]>([
+  ['Origin', 'https://evil.example'],
+  ['Referer', 'https://evil.example/library'],
+  ['Referer', 'invalid-url'],
+  ['Origin', 'null'],
+  ['Origin', ''],
+  ['Referer', ''],
+])('허용되지 않는 출처 헤더가 있는 GET은 403이다: %s=%s', async (header, value) => {
+  const context = ctx('/v1/status');
+  context.request = new Request('https://landmark.sch0718.dev/api/sync/v1/status', {
+    headers: { [header]: value },
+  });
+  const deps = productionDeps();
+  deps.log = () => {};
+  const response = await handleSync(context, deps);
+  expect(response.status).toBe(403);
+  expect(await response.json()).toEqual({ error: 'origin' });
+});
+it('출처 헤더가 없는 운영 status GET은 200이다', async () => {
+  const context = ctx('/v1/status');
+  context.request = new Request('https://landmark.sch0718.dev/api/sync/v1/status');
+  const deps = productionDeps();
+  deps.log = () => {};
+  const response = await handleSync(context, deps);
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({ enabled: false, reason: 'config' });
+});
+it('출처 헤더가 없는 운영 로그인 POST는 403이다', async () => {
+  const context = ctx('/v1/session/social', {}, 'POST');
+  context.request = new Request('https://landmark.sch0718.dev/api/sync/v1/session/social', {
+    method: 'POST',
+  });
+  const deps = productionDeps();
+  deps.log = () => {};
+  const response = await handleSync(context, deps);
+  expect(response.status).toBe(403);
+  expect(await response.json()).toEqual({ error: 'origin' });
+});
 it('로컬 임의 포트는 로컬 요청에만 허용한다', () => {
   for (const origin of ['http://localhost:4185', 'http://127.0.0.1:8795']) {
     expect(

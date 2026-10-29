@@ -29,6 +29,12 @@ export function isLocalRequest(request: Request): boolean {
   return ['localhost', '127.0.0.1', '[::1]'].includes(new URL(request.url).hostname);
 }
 export function isSyncOrigin(request: Request): boolean {
+  if (
+    (request.method === 'GET' || request.method === 'HEAD') &&
+    !request.headers.has('Origin') &&
+    !request.headers.has('Referer')
+  )
+    return true;
   const origin = requestOrigin(request);
   const localOrigin = /^http:\/\/(localhost|127\.0\.0\.1|\[::1\]):\d{1,5}$/.test(origin ?? '');
   return localOrigin ? isLocalRequest(request) : isAllowedOrigin(origin);
