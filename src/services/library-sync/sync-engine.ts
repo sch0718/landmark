@@ -445,7 +445,12 @@ export function createLibrarySyncEngine(deps: EngineDeps): LibrarySyncEngine {
     },
     async connect(mode) {
       let meta = readSyncMeta(storage);
-      if (!meta.pendingChoice) return engine.runNow('connect');
+      const syncAndStart = async () => {
+        const result = await engine.runNow('connect');
+        if (['synced', 'conflict', 'local'].includes(result.phase)) engine.start();
+        return result;
+      };
+      if (!meta.pendingChoice) return syncAndStart();
       try {
         const loaded = await deps.runLibrary(Effect.flatMap(LibraryStore, (store) => store.load));
         if (loaded.persistence !== 'local') throw Error('메모리 저장소');
@@ -488,7 +493,7 @@ export function createLibrarySyncEngine(deps: EngineDeps): LibrarySyncEngine {
           meta = { ...meta, cursor };
         } else if (readBase(storage).userId !== meta.userId) writeBase(storage, meta.userId!, {});
         writeSyncMeta(storage, { ...meta, enabled: true, pendingChoice: false });
-        return engine.runNow('connect');
+        return syncAndStart();
       } catch (error) {
         return failed(error);
       }

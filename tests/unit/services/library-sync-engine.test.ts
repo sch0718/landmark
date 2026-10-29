@@ -408,3 +408,42 @@ it.each([1, 3])('여행 %s일 날짜·일정 충돌을 한 번에 되돌려 보�
   expect(saved.library.trips[initial.id]).toEqual(restored);
   expect(readConflicts(a.storage)).toEqual([]);
 });
+
+it('첫 연결 성공 뒤 탭·온라인 복귀를 구독하고 중복 시작은 한 번만 구독한다', async () => {
+  const server = createSyncMemoryServer();
+  disposers.push(() => server.db.close());
+  const a = await device(server);
+  const events = new EventTarget();
+  a.deps.events = events;
+  const add = vi.spyOn(events, 'addEventListener');
+  const remove = vi.spyOn(events, 'removeEventListener');
+  vi.useFakeTimers();
+  expect((await a.engine.connect('merge')).phase).toBe('synced');
+  expect(add).toHaveBeenCalledWith('visibilitychange', expect.any(Function));
+  expect(add).toHaveBeenCalledWith('online', expect.any(Function));
+  a.engine.start();
+  expect(add).toHaveBeenCalledTimes(2);
+  const schedule = vi.spyOn(a.engine, 'schedule');
+  events.dispatchEvent(new Event('visibilitychange'));
+  expect(schedule).toHaveBeenCalledWith('visible');
+  events.dispatchEvent(new Event('online'));
+  expect(schedule).toHaveBeenCalledWith('online');
+  a.engine.stop();
+  expect(remove).toHaveBeenCalledTimes(2);
+  schedule.mockClear();
+  events.dispatchEvent(new Event('online'));
+  events.dispatchEvent(new Event('visibilitychange'));
+  expect(schedule).not.toHaveBeenCalled();
+});
+it('연결 실패 때는 구독하지 않고 다음 연결 성공 때 시작한다', async () => {
+  const server = createSyncMemoryServer();
+  disposers.push(() => server.db.close());
+  const a = await device(server);
+  a.deps.events = new EventTarget();
+  const add = vi.spyOn(a.deps.events, 'addEventListener');
+  vi.spyOn(a.api, 'changes').mockResolvedValueOnce({ ok: false, kind: 'server', status: 500 });
+  expect((await a.engine.connect('merge')).phase).toBe('unavailable');
+  expect(add).not.toHaveBeenCalled();
+  expect((await a.engine.connect('merge')).phase).toBe('synced');
+  expect(add).toHaveBeenCalledTimes(2);
+});
