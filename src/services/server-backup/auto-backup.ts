@@ -16,6 +16,7 @@ import { buildSnapshot, libraryContentHash } from './snapshot';
 import { readServerBackupLocal, writeServerBackupLocal, type AutoOutcome } from './storage';
 export const AUTO_BACKUP_INTERVAL_MS = 86_400_000;
 export const AUTO_RETRY_MS = 3_600_000;
+export const AUTO_CANCEL_RETRY_MS = 5 * 60_000;
 export const AUTO_SHRINK_MIN = 20;
 export const AUTO_BACKUP_LOCK = 'tripmap:server-backup';
 export function autoBackupInterval(
@@ -67,12 +68,22 @@ export async function runAutoBackup(
   }
   if (status.phase !== 'synced') return 'not-synced';
   if (local.nextCheckAt !== null && deps.now() < local.nextCheckAt) return 'waiting';
+  let requested = false;
   const cancelled = (): AutoStep | null => {
     const latest = readServerBackupLocal(deps.storage);
-    if (!latest.auto) return 'disabled';
-    if (status.phase !== 'synced') return 'not-synced';
-    if (deps.syncUserId() !== userId || latest.userId !== userId) return 'auth';
-    return null;
+    const step = !latest.auto
+      ? 'disabled'
+      : status.phase !== 'synced'
+        ? 'not-synced'
+        : deps.syncUserId() !== userId || latest.userId !== userId
+          ? 'auth'
+          : null;
+    if (step && requested)
+      writeServerBackupLocal(deps.storage, {
+        ...latest,
+        nextCheckAt: deps.now() + AUTO_CANCEL_RETRY_MS,
+      });
+    return step;
   };
   const interval = deps.interval ?? autoBackupInterval();
   const run = async (): Promise<AutoStep> => {
@@ -93,6 +104,7 @@ export async function runAutoBackup(
       return step;
     };
     try {
+      requested = true;
       const reply = await deps.api.meta();
       const afterMeta = cancelled();
       if (afterMeta) return afterMeta;

@@ -219,5 +219,49 @@ it.each(['account', 'auto', 'phase'] as const)(
       change === 'account' ? 'auth' : change === 'auto' ? 'disabled' : 'not-synced',
     );
     expect(d.api.upload).not.toHaveBeenCalled();
+    expect(readServerBackupLocal(localStorage).nextCheckAt).toBe(now + 5 * 60000);
+  },
+);
+it.each(['meta', 'read', 'build', 'upload', 'throw'] as const)(
+  '요청 뒤 %s 단계에서 취소되면 5분 뒤 다시 확인한다',
+  async (stage) => {
+    const d = deps();
+    const status = { phase: 'synced' as SyncStatus['phase'] };
+    const stop = () => {
+      status.phase = 'syncing';
+    };
+    if (stage === 'meta' || stage === 'throw') {
+      const meta = d.api.meta;
+      d.api.meta = async () => {
+        stop();
+        if (stage === 'throw') throw Error('연결 실패');
+        return meta();
+      };
+    } else if (stage === 'read') {
+      const read = d.readLibrary;
+      d.readLibrary = async () => {
+        stop();
+        return read();
+      };
+    } else if (stage === 'build') {
+      const build = d.build!;
+      d.build = async (input) => {
+        stop();
+        return build(input);
+      };
+    } else {
+      const upload = d.api.upload;
+      d.api.upload = async (body) => {
+        stop();
+        return upload(body);
+      };
+    }
+    expect(await runAutoBackup(status, d)).toBe('not-synced');
+    expect(readServerBackupLocal(localStorage)).toMatchObject({
+      nextCheckAt: now + 5 * 60000,
+      last: null,
+    });
+    status.phase = 'synced';
+    expect(await runAutoBackup(status, d)).toBe('waiting');
   },
 );
