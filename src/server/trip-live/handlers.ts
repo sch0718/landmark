@@ -27,6 +27,7 @@ import { readLimitedJson } from '../share/handlers';
 import { ApiError, jsonResponse } from '../http';
 
 const headers = { 'Cache-Control': 'private, no-store' };
+const LIVE_INPUT_ERROR = '공유 일정 요청이 올바르지 않아요';
 const idSchema = Schema.String.check(Schema.isPattern(LIVE_ID_PATTERN));
 const tokenSchema = Schema.String.check(Schema.isPattern(LIVE_TOKEN_PATTERN));
 const revision = Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(1));
@@ -51,7 +52,7 @@ type Row = {
   expires_at: string;
 };
 const reply = (body: unknown, status = 200) => jsonResponse(body, { status, headers });
-const readId = (ctx: MeetContext) => validate(idSchema, ctx.params.id);
+const readId = (ctx: MeetContext) => validate(idSchema, ctx.params.id, LIVE_INPUT_ERROR);
 function switchedOff(ctx: MeetContext) {
   if (ctx.env.TRIP_SHARE_LIVE === 'off')
     throw new MeetError('UNAVAILABLE', '갱신 링크 만들기와 반영이 꺼져 있어요', { reason: 'off' });
@@ -127,6 +128,7 @@ export function handleLiveCreate(ctx: MeetContext, deps: MeetDeps): Promise<Resp
     const input = validate(
       createSchema,
       await readLimitedJson(ctx.request, LIVE_REQUEST_MAX_BYTES),
+      LIVE_INPUT_ERROR,
     );
     if (input.ownerToken === input.viewToken)
       throw new ApiError('BAD_REQUEST', '서로 다른 토큰이 필요해요');
@@ -247,6 +249,7 @@ export function handleLiveUpdate(ctx: MeetContext, deps: MeetDeps): Promise<Resp
     const input = validate(
         updateSchema,
         await readLimitedJson(ctx.request, LIVE_REQUEST_MAX_BYTES),
+        LIVE_INPUT_ERROR,
       ),
       doc = checkedDoc(input.doc);
     if (doc.v === 2 && ctx.env.TRIP_COLLAB === 'off')
@@ -290,6 +293,7 @@ export function handleLiveRotate(ctx: MeetContext, deps: MeetDeps): Promise<Resp
     const input = validate(
       rotateSchema,
       await readLimitedJson(ctx.request, LIVE_REQUEST_MAX_BYTES),
+      LIVE_INPUT_ERROR,
     );
     // 응답 유실 뒤에는 이전 소유자 토큰으로 같은 새 토큰을 다시 보낼 수 있다.
     if ('owner' in input && (await isOwner(ctx, id, input.owner))) return reply({ rev: row.rev });

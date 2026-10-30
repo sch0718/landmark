@@ -66,11 +66,18 @@ export class MeetError extends ApiError {
   }
 }
 
-export function validate<S extends Schema.Decoder<unknown>>(schema: S, value: unknown): S['Type'] {
+// 갱신 공유·함께 편집·짧은 링크도 쓰므로 400 문구는 부르는 기능이 정한다.
+export function validate<S extends Schema.Decoder<unknown>>(
+  schema: S,
+  value: unknown,
+  message: string,
+): S['Type'] {
   const result = safeParse(schema, value, { onExcessProperty: 'error' });
-  if (!result.success) throw new ApiError('BAD_REQUEST', '약속 입력이 올바르지 않아요');
+  if (!result.success) throw new ApiError('BAD_REQUEST', message);
   return result.data;
 }
+
+const MEET_INPUT_ERROR = '약속 입력이 올바르지 않아요';
 
 export async function readJson(request: Request): Promise<unknown> {
   try {
@@ -127,7 +134,7 @@ export async function checkLimit(ctx: MeetContext, now: Date, action: LimitActio
 }
 
 export function readMeetingId(ctx: MeetContext): string {
-  return validate(MeetingId, ctx.params.id);
+  return validate(MeetingId, ctx.params.id, MEET_INPUT_ERROR);
 }
 
 async function activeMeeting(db: MeetDb, id: string, now: Date): Promise<MeetingRow> {
@@ -211,7 +218,7 @@ export function handleCreate(ctx: MeetContext, deps: MeetDeps): Promise<Response
     await prepare(ctx, now, 'create');
     const secret = ctx.env.TURNSTILE_SECRET;
     if (!secret && !isLocal(ctx.request)) configurationError();
-    const input = validate(createSchema, await readJson(ctx.request));
+    const input = validate(createSchema, await readJson(ctx.request), MEET_INPUT_ERROR);
     if (
       secret &&
       !(await verifyTurnstile(
@@ -225,7 +232,7 @@ export function handleCreate(ctx: MeetContext, deps: MeetDeps): Promise<Response
         reason: 'turnstile',
       });
     }
-    const doc = validate(MeetingDocSchema, input.doc);
+    const doc = validate(MeetingDocSchema, input.doc, MEET_INPUT_ERROR);
     const db = ctx.env.DB;
     const token = input.hostToken;
     const hash = await hashToken(token);
@@ -342,7 +349,7 @@ export function handleUpdate(ctx: MeetContext, deps: MeetDeps): Promise<Response
       baseRev,
       removed: requestedRemoved = [],
       clearReplyOrigins = [],
-    } = validate(updateSchema, await readJson(ctx.request));
+    } = validate(updateSchema, await readJson(ctx.request), MEET_INPUT_ERROR);
     if (doc.meetingId !== id) throw new ApiError('BAD_REQUEST', '약속 id가 경로와 달라요');
     const conflict = (docRev: number): never => {
       throw new MeetError('CONFLICT', '약속이 바뀌었어요. 다시 확인해 주세요', { docRev });
@@ -512,8 +519,11 @@ export function handleClaim(ctx: MeetContext, deps: MeetDeps): Promise<Response>
     await prepare(ctx, now, 'claim');
     // 만료·없는 약속을 입력 오류보다 먼저 알린다.
     await activeMeeting(ctx.env.DB, id, now);
-    const input = validate(claimSchema, await readJson(ctx.request));
-    const name = 'newName' in input ? validate(MeetingName, normalizeName(input.newName)) : null;
+    const input = validate(claimSchema, await readJson(ctx.request), MEET_INPUT_ERROR);
+    const name =
+      'newName' in input
+        ? validate(MeetingName, normalizeName(input.newName), MEET_INPUT_ERROR)
+        : null;
     const guestToken = input.guestToken;
     const guestHash = await hashToken(guestToken);
     return changeMeeting(ctx, id, now, async (row, doc) => {
@@ -611,7 +621,7 @@ export function handleReply(ctx: MeetContext, deps: MeetDeps): Promise<Response>
       if (!token || (token.kind === 'guest' && !token.participant_id)) {
         throw new ApiError('UNAUTHORIZED', '참석자 연결을 확인해 주세요');
       }
-      input ??= validate(ReplyInputSchema, await readJson(ctx.request));
+      input ??= validate(ReplyInputSchema, await readJson(ctx.request), MEET_INPUT_ERROR);
       const host = token.kind === 'host';
       const timesDropped =
         !host && input.times !== undefined && input.times !== null && input.docRev !== row.doc_rev;
@@ -676,7 +686,7 @@ export function handleRelease(ctx: MeetContext, deps: MeetDeps): Promise<Respons
     await prepare(ctx, now);
     let input: typeof releaseSchema.Type | undefined;
     return changeMeeting(ctx, id, now, async (row) => {
-      input ??= validate(releaseSchema, await readJson(ctx.request));
+      input ??= validate(releaseSchema, await readJson(ctx.request), MEET_INPUT_ERROR);
       const db = ctx.env.DB;
       if ('host' in input) {
         const existing = await db
