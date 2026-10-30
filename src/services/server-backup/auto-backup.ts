@@ -141,9 +141,11 @@ export async function runAutoBackup(
           backup?.id ?? null,
         ),
       );
+      if (deps.syncUserId() !== userId || readServerBackupLocal(deps.storage).userId !== userId)
+        return 'auth';
+      if (result.ok) return finish('uploaded', interval, 'uploaded');
       const afterUpload = cancelled();
       if (afterUpload) return afterUpload;
-      if (result.ok) return finish('uploaded', interval, 'uploaded');
       if (result.reason === 'auth' || result.reason === 'not-allowed') return 'auth';
       if (result.reason === 'changed') return finish('changed', AUTO_RETRY_MS);
       if (result.reason === 'limit' || result.reason === 'off')

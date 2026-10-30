@@ -223,7 +223,7 @@ it.each(['account', 'auto', 'phase'] as const)(
   },
 );
 it.each(['meta', 'read', 'build', 'upload', 'throw'] as const)(
-  '요청 뒤 %s 단계에서 취소되면 5분 뒤 다시 확인한다',
+  '요청 뒤 %s 단계에서 상태가 바뀌면 완료된 업로드를 기록하고 나머지는 5분 뒤 다시 확인한다',
   async (stage) => {
     const d = deps();
     const status = { phase: 'synced' as SyncStatus['phase'] };
@@ -256,13 +256,91 @@ it.each(['meta', 'read', 'build', 'upload', 'throw'] as const)(
         return upload(body);
       };
     }
-    expect(await runAutoBackup(status, d)).toBe('not-synced');
+    // 업로드가 끝난 뒤에는 서버 쓰기를 기록한다(cascade-fix r1-01 결정 a).
+    const uploaded = stage === 'upload';
+    expect(await runAutoBackup(status, d)).toBe(uploaded ? 'uploaded' : 'not-synced');
     expect(readServerBackupLocal(localStorage)).toMatchObject({
-      nextCheckAt: now + 5 * 60000,
-      last: null,
+      nextCheckAt: now + (uploaded ? AUTO_BACKUP_INTERVAL_MS : 5 * 60000),
+      last: uploaded ? { at: now, outcome: 'uploaded' } : null,
     });
     status.phase = 'synced';
     expect(await runAutoBackup(status, d)).toBe('waiting');
+  },
+);
+
+it.each(['phase', 'auto'] as const)(
+  '업로드 중 %s가 바뀌어도 성공한 서버 쓰기를 기록한다(cascade-fix r1-01 결정 a)',
+  async (change) => {
+    const d = deps();
+    const interval = 60000;
+    d.interval = interval;
+    const status = { phase: 'synced' as SyncStatus['phase'] };
+    const upload = d.api.upload;
+    d.api.upload = async (body) => {
+      if (change === 'phase') status.phase = 'syncing';
+      else
+        writeServerBackupLocal(localStorage, {
+          ...readServerBackupLocal(localStorage),
+          auto: false,
+        });
+      return upload(body);
+    };
+    expect(await runAutoBackup(status, d)).toBe('uploaded');
+    expect(readServerBackupLocal(localStorage)).toEqual({
+      ...EMPTY_SERVER_BACKUP_LOCAL,
+      auto: change !== 'auto',
+      userId: 'me',
+      nextCheckAt: now + interval,
+      last: { at: now, outcome: 'uploaded' },
+    });
+  },
+);
+
+it.each(['sync-user', 'stored-user'] as const)(
+  '업로드 중 %s 계정이 바뀌면 꺼짐·동기화 상태보다 먼저 확인해 결과를 기록하지 않는다',
+  async (change) => {
+    const d = deps();
+    let userId = 'me';
+    d.syncUserId = () => userId;
+    const status = { phase: 'synced' as SyncStatus['phase'] };
+    const next = {
+      ...EMPTY_SERVER_BACKUP_LOCAL,
+      auto: false,
+      userId: change === 'stored-user' ? 'you' : 'me',
+    };
+    const upload = d.api.upload;
+    d.api.upload = async (body) => {
+      if (change === 'sync-user') userId = 'you';
+      status.phase = 'syncing';
+      writeServerBackupLocal(localStorage, next);
+      return upload(body);
+    };
+    expect(await runAutoBackup(status, d)).toBe('auth');
+    expect(readServerBackupLocal(localStorage)).toEqual(next);
+  },
+);
+
+it.each(['phase', 'auto'] as const)(
+  '업로드 중 %s가 바뀌고 실패 응답을 받으면 기존처럼 5분 뒤 다시 확인한다',
+  async (change) => {
+    const d = deps();
+    const status = { phase: 'synced' as SyncStatus['phase'] };
+    d.api.upload = vi.fn(async () => {
+      if (change === 'phase') status.phase = 'syncing';
+      else
+        writeServerBackupLocal(localStorage, {
+          ...readServerBackupLocal(localStorage),
+          auto: false,
+        });
+      return { ok: false, reason: 'server' } as const;
+    });
+    expect(await runAutoBackup(status, d)).toBe(change === 'phase' ? 'not-synced' : 'disabled');
+    expect(readServerBackupLocal(localStorage)).toMatchObject({
+      auto: change !== 'auto',
+      userId: 'me',
+      nextCheckAt: now + 5 * 60000,
+      last: null,
+    });
   },
 );
 
