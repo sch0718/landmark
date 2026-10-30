@@ -177,11 +177,20 @@ function analyze(
         if (other.days.length <= n) continue;
         const cut = lists.filter(
           (id) =>
-            id !== 'c' &&
-            Number(id.slice(1)) >= n &&
-            (listOf(base, id) === undefined
-              ? (listOf(other, id)?.length ?? 0) > 0
-              : !equal(listOf(base, id), listOf(other, id))),
+            (id !== 'c' &&
+              Number(id.slice(1)) >= n &&
+              (listOf(base, id) === undefined
+                ? (listOf(other, id)?.length ?? 0) > 0
+                : !equal(listOf(base, id), listOf(other, id)))) ||
+            (id !== 'c' &&
+              Number(id.slice(1)) >= n &&
+              (['startTime', 'lodging'] as const).some(
+                (key) =>
+                  !equal(
+                    base.days[Number(id.slice(1))]?.[key],
+                    other.days[Number(id.slice(1))]?.[key],
+                  ),
+              )),
         );
         if (cut.length) link(['period', 'c', ...cut]);
       }
@@ -245,8 +254,9 @@ function analyze(
     b: T | undefined,
     m: T,
     t: T,
+    hasBase = base !== null,
   ): T {
-    const result = pick(b, m, t, base !== null);
+    const result = pick(b, m, t, hasBase);
     if (!result.conflict) return result.value;
     fields.push({ kind: 'field', ...info, mine: m, theirs: t });
     return choices[info.id] === 'theirs' ? t : m;
@@ -289,9 +299,9 @@ function analyze(
     const sourceStops = row.source.days[i]?.stops ?? [];
     const stops = (row.value ?? []).map((placeId) => {
       const stop = sourceStops.find((s) => s.placeId === placeId)!;
-      const ms = mStops.get(stop.id),
-        ts = tStops.get(stop.id),
-        bs = bStops.get(stop.id);
+      const ms = mStops.get(stop.id) ?? [...mStops.values()].find((s) => s.placeId === placeId),
+        ts = tStops.get(stop.id) ?? [...tStops.values()].find((s) => s.placeId === placeId),
+        bs = ms?.id === ts?.id ? bStops.get(stop.id) : undefined;
       if (!ms || !ts) return { ...stop };
       return {
         ...stop,
@@ -303,6 +313,7 @@ function analyze(
               bs?.[key],
               ms[key],
               ts[key],
+              bs !== undefined,
             ),
           ]),
         ),

@@ -672,3 +672,45 @@ it('선택 뒤 같은 id의 겹침 값이 바뀌면 적용하지 않고 다시 �
   expect(s.engine.getSnapshot().merge?.theirs.days[0]!.startTime).toBe('07:00');
   expect(s.api.putDoc).not.toHaveBeenCalled();
 });
+it('동시 추가한 같은 장소의 값을 고른 뒤 결과 Stop id를 보관함에 반영한다', async () => {
+  const s = setup();
+  const base = planFromDoc(s.doc);
+  base.candidates.push(base.days[1]!.stops.pop()!.placeId);
+  s.store.writeBase(s.record.liveId, { rev: 2, plan: base, progress: null });
+  await s.deps.run((lib) => {
+    const trip = lib.trips.trip000001!;
+    const day = trip.days[1]!;
+    return {
+      ...lib,
+      trips: {
+        ...lib.trips,
+        [trip.id]: {
+          ...trip,
+          days: [
+            trip.days[0]!,
+            {
+              ...day,
+              stops: {
+                ...day.stops,
+                value: day.stops.value.map((stop) => ({
+                  ...stop,
+                  id: 'mine0001',
+                  note: '내 메모',
+                })),
+              },
+            },
+          ],
+        },
+      },
+    };
+  });
+  s.doc.ids.stops[1] = ['thrs0001'];
+  await s.engine.sync();
+  expect(s.engine.getSnapshot().state).toBe('conflict');
+  await s.engine.resolve({ 'stop.thrs0001.note': 'mine' });
+  expect(s.engine.getSnapshot().state).toBe('synced');
+  expect(s.get().trips.trip000001!.days[1]!.stops.value[0]).toMatchObject({
+    id: 'thrs0001',
+    note: '내 메모',
+  });
+});
