@@ -42,7 +42,8 @@ export async function startLiveViewer(
     now().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
   const bar = d.createElement('div'),
     message = d.createElement('p'),
-    save = d.createElement('button');
+    save = d.createElement('button'),
+    saveError = d.createElement('p');
   bar.className = 'live-bar';
   bar.setAttribute('role', 'status');
   bar.setAttribute('aria-live', 'polite');
@@ -51,23 +52,27 @@ export async function startLiveViewer(
   bar.append(message, save);
   save.addEventListener('click', () => {
     void (async () => {
+      saveError.remove();
       try {
         const response = await fetcher('/share-viewer.html');
         if (!response.ok) throw Error();
-        const html = fillTemplate(await response.text(), serializeShareDoc(current.share)),
-          url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+        const html = fillTemplate(await response.text(), serializeShareDoc(current.share));
+        const a = d.createElement('a');
+        a.download = shareFileName(current.share.title, now());
+        const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+        a.href = url;
+        // 문서에 붙여 누르고, 주소는 브라우저가 파일을 가져갈 시간을 준 뒤 해제한다(WebKit은 바로 해제하면
+        // 빈 파일이 되거나 실패한다).
         try {
-          const a = d.createElement('a');
-          a.href = url;
-          a.download = shareFileName(current.share.title, now());
+          d.body.append(a);
           a.click();
         } finally {
-          URL.revokeObjectURL(url);
+          a.remove();
+          win.setTimeout(() => URL.revokeObjectURL(url), 30_000);
         }
       } catch {
-        const p = d.createElement('p');
-        p.textContent = LIVE_TEXT.saveFailed;
-        bar.append(p);
+        saveError.textContent = LIVE_TEXT.saveFailed;
+        bar.append(saveError);
       }
     })();
   });

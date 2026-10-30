@@ -105,7 +105,12 @@ describe('갱신 일정 보기', () => {
         revokeObjectURL: vi.fn(),
       }),
     );
-    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    let connectedOnClick: boolean | undefined;
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      connectedOnClick = this.isConnected;
+    });
     handle = await startLiveViewer(root, live, { fetch: f });
     root.querySelector<HTMLButtonElement>('.live-bar button')!.click();
     await vi.advanceTimersByTimeAsync(0);
@@ -113,5 +118,9 @@ describe('갱신 일정 보기', () => {
     expect(String((blob as unknown as { text: string }).text)).toContain(
       JSON.stringify(buildLiveDoc().share),
     );
+    expect(connectedOnClick).toBe(true);
+    expect(URL.revokeObjectURL).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:시험');
   });
 });
