@@ -326,7 +326,7 @@ export class CollabEngine {
       }
       let response = await d.api.state(record.liveId, token, {
         rev: this.doc ? this.docRev : null,
-        prev: this.doc ? record.prev : null,
+        prev: this.doc ? (this.snapshot.progress?.prev ?? null) : null,
       });
       if (this.disposed) return;
       // 다른 탭의 기록이 캐시보다 새로우면 문서 없는 응답을 병합에 쓰지 않는다.

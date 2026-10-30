@@ -65,7 +65,10 @@ function setup() {
   };
   const api = {
     ...tripCollabApi,
-    state: vi.fn(async () => ({ ok: true as const, value: remote })),
+    state: vi.fn<CollabEngineDeps['api']['state']>(async () => ({
+      ok: true as const,
+      value: remote,
+    })),
     putDoc: vi.fn<CollabEngineDeps['api']['putDoc']>(async () => ({
       ok: true as const,
       value: { rev: 3, expiresAt: '2026-12-31' },
@@ -753,4 +756,39 @@ it('맞추는 중 편집해도 끝난 뒤 3초 모아 다시 맞춘다', async (
   await vi.advanceTimersByTimeAsync(7000);
   expect(s.api.putDoc).toHaveBeenCalledTimes(2);
   expect(s.api.putDoc.mock.calls[1]![2].share.trips[0]!.days[1]!.startTime).toBe('11:00');
+});
+
+it('계획·당일 두 엔진의 진행도 메모리 판으로 받아 체크와 다음 장소를 놓치지 않는다', async () => {
+  const s = setup();
+  await s.engine.sync();
+  const progress = {
+    prev: 1,
+    marks: [
+      {
+        stopId: 'stop0001',
+        date: '2026-12-09',
+        at: new Date().toISOString(),
+        by: { device: 'device01', label: '내 폰' },
+      },
+    ],
+    next: { stopId: 'stop0002', date: '2026-12-10', at: new Date().toISOString(), label: '내 폰' },
+  };
+  const otherStore = createTripCollabStore();
+  const other = new CollabEngine({ ...s.deps, store: otherStore });
+  s.api.progress.mockResolvedValueOnce({ ok: true, value: progress });
+  other.queueProgress({ stopId: 'stop0001', visited: true, date: '2026-12-09' });
+  await vi.advanceTimersByTimeAsync(0);
+  expect(otherStore.get(s.record.tripId)?.prev).toBe(1);
+  s.api.state.mockImplementation(async (_id, _token, since) =>
+    since.prev === 1
+      ? { ok: true, value: 'unchanged' }
+      : { ok: true, value: { ...s.remote(), doc: undefined, progress } },
+  );
+  await s.engine.sync();
+  expect(s.engine.getSnapshot().progress).toEqual(progress);
+  expect(s.store.readBase(s.record.liveId)?.progress).toEqual(progress);
+  expect(s.api.state).toHaveBeenLastCalledWith(s.record.liveId, s.record.token, {
+    rev: 2,
+    prev: 0,
+  });
 });
