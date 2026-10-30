@@ -1367,6 +1367,14 @@ describe('공통 입력 검사', () => {
       expect(batch).not.toHaveBeenCalled();
     },
   );
+  it('경로 id·본문 형식이 틀리면 약속 문구로 400이다', async () => {
+    const invalid = { error: { code: 'BAD_REQUEST', message: '약속 입력이 올바르지 않아요' } };
+    const badId = await handleGet(context('GET', undefined, { id: 'bad' }), deps);
+    expect(await badId.json()).toEqual(invalid);
+    const badBody = await handleCreate(context('POST', { doc: doc(), turnstile: 'dev' }), deps);
+    expect(badBody.status).toBe(400);
+    expect(await badBody.json()).toEqual(invalid);
+  });
   it('readMeetingId는 10자 id만 허용하고 배열·누락을 거부한다', () => {
     expect(readMeetingId(context('GET'))).toBe('meeting001');
     const cases: MeetContext['params'][] = [{}, { id: ['meeting001'] }, { id: 'MEETING001' }];

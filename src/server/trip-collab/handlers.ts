@@ -38,6 +38,7 @@ import { readLimitedJson } from '../share/handlers';
 import { pruneExpiredLive } from '../trip-live/handlers';
 
 const headers = { 'Cache-Control': 'private, no-store' };
+const COLLAB_INPUT_ERROR = '함께 편집 요청이 올바르지 않아요';
 const reply = (body: unknown, status = 200) => jsonResponse(body, { status, headers });
 const empty = () => new Response(null, { status: 204, headers });
 const tokenSchema = Schema.String.check(Schema.isPattern(LIVE_TOKEN_PATTERN));
@@ -165,6 +166,7 @@ export function handleCollabInviteCreate(ctx: MeetContext, deps: MeetDeps): Prom
     const input = validate(
       inviteSchema,
       await readLimitedJson(ctx.request, LIVE_REQUEST_MAX_BYTES),
+      COLLAB_INPUT_ERROR,
     );
     const stored = await ctx.env.DB.prepare(
       "SELECT json_extract(doc, '$.v') AS v FROM trip_shares WHERE id = ?",
@@ -269,6 +271,7 @@ export function handleCollabAccept(ctx: MeetContext, deps: MeetDeps): Promise<Re
     const input = validate(
         acceptSchema,
         await readLimitedJson(ctx.request, LIVE_REQUEST_MAX_BYTES),
+        COLLAB_INPUT_ERROR,
       ),
       label = normalizeDeviceLabel(input.label);
     if (label === null || input.deviceToken === bearer(ctx))
@@ -443,7 +446,11 @@ export function handleCollabPutDoc(ctx: MeetContext, deps: MeetDeps): Promise<Re
     await liveShare(ctx, id, now);
     const role = await resolveRole(ctx, id),
       db = ctx.env.DB;
-    const input = validate(docSchema, await readLimitedJson(ctx.request, LIVE_REQUEST_MAX_BYTES)),
+    const input = validate(
+        docSchema,
+        await readLimitedJson(ctx.request, LIVE_REQUEST_MAX_BYTES),
+        COLLAB_INPUT_ERROR,
+      ),
       doc = parseLiveDoc(input.doc);
     if (!doc || doc.v !== 2)
       throw new MeetError('BAD_REQUEST', '일정 문서가 올바르지 않아요', { reason: 'doc' });
@@ -488,6 +495,7 @@ export function handleCollabProgress(ctx: MeetContext, deps: MeetDeps): Promise<
     const input = validate(
       progressSchema,
       await readLimitedJson(ctx.request, COLLAB_LIMITS.progressRequestBytes),
+      COLLAB_INPUT_ERROR,
     );
     if (!input.ops.length && !input.next) throw new ApiError('BAD_REQUEST', '진행 변경이 없어요');
     const existing = await db

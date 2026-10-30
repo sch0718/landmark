@@ -286,6 +286,16 @@ describe('POST /api/share', () => {
   });
 });
 
+describe('짧은 링크 형식 오류 문구', () => {
+  it('만들기 본문 형식이 틀리면 짧은 링크 문구로 400이다', async () => {
+    const response = await create({ kind: 'meeting' });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: 'BAD_REQUEST', message: '짧은 링크 요청이 올바르지 않아요' },
+    });
+  });
+});
+
 describe('GET /s/:id', () => {
   it('출처 없이 열리고 암호문을 데이터 블록에 넣은 페이지를 준다', async () => {
     const { id } = await created();

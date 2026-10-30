@@ -25,6 +25,7 @@ import { messagePageResponse, OPEN_TEXT, openPageResponse } from './open-page';
 
 type ShareRow = { id: string; body: string; expires_at: string };
 const PRIVATE_HEADERS = { 'Cache-Control': 'private, no-store' };
+const SHARE_INPUT_ERROR = '짧은 링크 요청이 올바르지 않아요';
 /** 본문(32,040자)과 나머지 필드를 넉넉히 담는 요청 크기. */
 export const SHARE_REQUEST_MAX_BYTES = 40_000;
 const createSchema = Schema.Struct({
@@ -110,7 +111,7 @@ export function handleShareCreate(ctx: MeetContext, deps: MeetDeps): Promise<Res
     await prepare(ctx, now, 'shareCreate');
     const secret = ctx.env.TURNSTILE_SECRET;
     if (!secret && !isLocal(ctx.request)) configurationError();
-    const input = validate(createSchema, await readLimitedJson(ctx.request));
+    const input = validate(createSchema, await readLimitedJson(ctx.request), SHARE_INPUT_ERROR);
     if (
       secret &&
       !(await verifyTurnstile(

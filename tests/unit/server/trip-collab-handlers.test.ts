@@ -512,3 +512,30 @@ it('소유자는 v1을 읽어 병합한 v2를 공동본 경로로 올린 뒤 초
   expect(await (await state(owner)).json()).toMatchObject({ rev: 2, doc: { v: 2 } });
   expect((await createInvite()).status).toBe(201);
 });
+describe('함께 편집 형식 오류 문구', () => {
+  const invalid = { error: { code: 'BAD_REQUEST', message: '함께 편집 요청이 올바르지 않아요' } };
+  it('경로 id 형식이 틀리면 공유 id 문구로 400이다', async () => {
+    const r = await handleCollabState(
+      {
+        ...ctx('GET', device),
+        params: { id: 'zzzznotexist0000' },
+      },
+      deps,
+    );
+    expect(r.status).toBe(400);
+    expect(await r.json()).toEqual({
+      error: { code: 'BAD_REQUEST', message: '공유 id가 올바르지 않아요' },
+    });
+  });
+  it.each([
+    ['초대 만들기', () => handleCollabInviteCreate(ctx('POST', owner, { token: 'short' }), deps)],
+    ['초대 수락', () => handleCollabAccept(ctx('POST', invite, { deviceToken: 'short' }), deps)],
+    ['공동본 쓰기', () => handleCollabPutDoc(ctx('PUT', owner, { doc: doc(), baseRev: 0 }), deps)],
+    ['진행 쓰기', () => handleCollabProgress(ctx('POST', owner, { ops: 'x' }), deps)],
+  ])('%s 본문 형식이 틀리면 함께 편집 문구로 400이다', async (_label, run) => {
+    await setup();
+    const r = await run();
+    expect(r.status).toBe(400);
+    expect(await r.json()).toEqual(invalid);
+  });
+});

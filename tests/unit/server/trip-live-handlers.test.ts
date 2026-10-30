@@ -524,3 +524,29 @@ it('이미 v2인 여행도 공동 편집 off 동안 2A PUT으로 바꾸지 못�
   expect(await response.json()).toMatchObject({ reason: 'off' });
   expect(await (await get()).json()).toMatchObject({ rev: 2, doc: { v: 2 } });
 });
+describe('갱신 공유 형식 오류 문구', () => {
+  const invalid = { error: { code: 'BAD_REQUEST', message: '공유 일정 요청이 올바르지 않아요' } };
+  const badId = (c: MeetContext): MeetContext => ({ ...c, params: { id: 'zzzznotexist0000' } });
+  it.each([
+    ['GET', handleLiveGet],
+    ['PUT', handleLiveUpdate],
+    ['POST', handleLiveRotate],
+    ['DELETE', handleLiveDelete],
+  ] as const)('%s 경로 id 형식이 틀리면 공유 일정 문구로 400이다', async (method, handler) => {
+    const r = await handler(badId(ctx(method, {}, owner)), deps);
+    expect(r.status).toBe(400);
+    expect(await r.json()).toEqual(invalid);
+  });
+  it('만들기·반영·토큰 교체 본문 형식이 틀리면 공유 일정 문구로 400이다', async () => {
+    const created = await handleLiveCreate(ctx('POST', { ...input(), viewToken: 'short' }), deps);
+    expect(created.status).toBe(400);
+    expect(await created.json()).toEqual(invalid);
+    await create();
+    const updated = await handleLiveUpdate(ctx('PUT', { doc: doc(), baseRev: 0 }, owner), deps);
+    expect(updated.status).toBe(400);
+    expect(await updated.json()).toEqual(invalid);
+    const rotated = await rotate({ view: 'short' });
+    expect(rotated.status).toBe(400);
+    expect(await rotated.json()).toEqual(invalid);
+  });
+});
