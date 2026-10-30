@@ -230,7 +230,7 @@ export function useTripLivePublish(
             expiresAt: result.value.expiresAt,
             dayIds,
           });
-          tripLivePlanStore.put(tripId, fresh.liveId, planKey);
+          tripLivePlanStore.put(tripId, fresh.liveId, planKey, key);
           setState('published');
           return;
         }

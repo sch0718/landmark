@@ -51,14 +51,14 @@ export function createTripLivePlanStore(
     return plan && matches(tripId, plan) ? plan.planKey : undefined;
   }
 
-  function put(tripId: string, liveId: string, planKey: string) {
+  function put(tripId: string, liveId: string, planKey: string, publishedKey: string) {
     const record = liveStore.get(tripId);
-    if (!record || record.liveId !== liveId || record.publishedKey === undefined) return;
+    if (!record || record.liveId !== liveId || record.publishedKey !== publishedKey) return;
     // 삭제·상한 정리·공유 다시 만들기 뒤의 값을 빼고 2A의 최대 100개에 맞춘다.
     memory = Object.fromEntries(
       Object.entries({
         ...read(),
-        [tripId]: { liveId, planKey, publishedKey: record.publishedKey },
+        [tripId]: { liveId, planKey, publishedKey },
       }).filter(([key, plan]) => matches(key, plan)),
     );
     if (!memoryOnly)

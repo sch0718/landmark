@@ -91,7 +91,7 @@ async function setup(
   liveStore.put(record);
   const livePlanStore = createTripLivePlanStore(liveStore);
   if (routes && !routes.legacy)
-    livePlanStore.put(record.tripId, record.liveId, await livePlanKey(doc));
+    livePlanStore.put(record.tripId, record.liveId, await livePlanKey(doc), record.publishedKey);
   const live = {
     rev: 1,
     updatedAt: doc.share.createdAt,

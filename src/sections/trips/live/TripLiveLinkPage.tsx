@@ -143,7 +143,7 @@ export function TripLiveLinkPage() {
         publishedAt: state.updatedAt,
         expiresAt: state.expiresAt,
       });
-      tripLivePlanStore.put(tripId, id, planKey);
+      tripLivePlanStore.put(tripId, id, planKey, publishedKey);
       if (linked.value) {
         tripCollabStore.put({
           tripId,

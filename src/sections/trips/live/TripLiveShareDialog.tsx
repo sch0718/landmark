@@ -241,7 +241,7 @@ export function TripLiveShareDialog({
             publishedAt: new Date().toISOString(),
             publishedKey,
           });
-          tripLivePlanStore.put(tripId, current.liveId, planKey);
+          tripLivePlanStore.put(tripId, current.liveId, planKey, publishedKey);
           return;
         }
         if (result.error === 'taken' && attempt === 0) {
