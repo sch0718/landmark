@@ -1,7 +1,7 @@
 import Box from '@mui/material/Box';
 import MenuItem from '@mui/material/MenuItem';
 import { useAtomValue } from 'jotai';
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useParams } from 'react-router';
 import { toast } from 'sonner';
 import { OWNER_DEVICE, OWNER_LABEL } from 'src/domain/trip-collab/constants';
@@ -80,14 +80,23 @@ function Today({ trip }: { trip: Trip }) {
   // 내 위치는 이 화면 상태로만 둔다(보이는 동안만 지켜봄). 받은 지 2분이 지난 위치는 `useToday`가 버린다.
   const location = useMyLocation();
   const collab = useTripCollab(trip.id, true);
-  const shared =
-    collab.record?.status === 'live'
-      ? {
-          progress: collab.progress,
-          myDevice: collab.record.deviceId ?? OWNER_DEVICE,
-          myLabel: collab.record.role === 'owner' ? OWNER_LABEL : collab.record.label,
-        }
-      : null;
+  const progress = collab.progress;
+  const live = collab.record?.status === 'live';
+  const deviceId = collab.record?.deviceId;
+  const isOwner = collab.record?.role === 'owner';
+  const label = collab.record?.label;
+  // `useToday`의 useMemo 의존 배열에 들어가므로 값이 같으면 같은 객체를 돌려준다.
+  const shared = useMemo(
+    () =>
+      live
+        ? {
+            progress,
+            myDevice: deviceId ?? OWNER_DEVICE,
+            myLabel: isOwner ? OWNER_LABEL : label,
+          }
+        : null,
+    [live, progress, deviceId, isOwner, label],
+  );
   const model = useToday(trip, viewDay, lastFixOf(location.state), shared);
   // 화면 켜 두기·오프라인 안내(스펙 §4.9·§4.10)는 머리·띠의 슬롯으로만 끼운다.
   const wake = useWakeLock();
