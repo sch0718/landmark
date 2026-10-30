@@ -14,10 +14,23 @@ import { tripLivePlanStore } from 'src/services/trip-live/plan-store';
 import { newDayId } from 'src/services/trip-live/tokens';
 import { collabEngineFor, type CollabEngineDeps } from './collab-engine';
 
+function isCurrentOwnerRecord(
+  existing: { status: string; liveId: string },
+  liveId: string,
+): boolean {
+  return existing.status === 'live' && existing.liveId === liveId;
+}
+
 export async function joinCollabAsOwner(deps: CollabEngineDeps, live: LiveState): Promise<void> {
   const { tripId, store } = deps;
   const record = deps.liveStore.get(tripId);
-  if (!record || store.get(tripId)) return;
+  if (!record) return;
+  const existing = store.get(tripId);
+  if (existing) {
+    if (isCurrentOwnerRecord(existing, record.liveId)) return;
+    // 끝났거나 권한을 잃었거나 다른 공유의 낡은 기록은 지우고 새 공유로 합류한다.
+    store.remove(tripId);
+  }
   let placeMap: Record<string, string> = {};
   const result = await deps.run((lib, ctx) => {
     const r = mapServerPlaces(lib, live.doc, {}, ctx);
@@ -123,7 +136,8 @@ export async function enableCollabAsOwner(
     trip = deps.getLibrary().trips[deps.tripId];
   if (!record || record.status !== 'live' || !trip || trip.deletedAt !== null)
     return { ok: false, error: 'empty' };
-  if (!deps.store.get(deps.tripId)) {
+  const existing = deps.store.get(deps.tripId);
+  if (!existing || !isCurrentOwnerRecord(existing, record.liveId)) {
     const result = await tripLiveApi.get(record.liveId, null, record.ownerToken);
     if (!result.ok) return result;
     if (result.value === 'unchanged') return { ok: false, error: 'invalid' };
