@@ -120,7 +120,7 @@ export function ServerBackupSection() {
     window.addEventListener('storage', changed);
     return () => window.removeEventListener('storage', changed);
   }, []);
-  const lastAt = useRef<number | null>(readServerBackupLocal(storage).last?.at ?? null);
+  const lastAt = useRef<number | null>(local.last?.at ?? null);
   useEffect(() => {
     const read = () => {
       const next = readServerBackupLocal(storage);
