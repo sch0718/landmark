@@ -13,6 +13,12 @@ export const LIMITS = {
   tripUpdate: 600,
   tripRotate: 60,
   tripRead: 5000,
+  collabInvite: 60,
+  collabAccept: 30,
+  collabUpdate: 1200,
+  collabProgress: 2000,
+  collabManage: 300,
+  collabRead: 5000,
 } as const;
 export type LimitAction = keyof typeof LIMITS;
 

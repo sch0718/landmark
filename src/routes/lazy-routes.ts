@@ -157,6 +157,11 @@ export const HelpIntroDialog = lazy(() =>
   loadHelpIntroDialog().then((m) => ({ default: m.HelpIntroDialog })),
 );
 
+export const loadAuthCallbackPage = lazyChunk(
+  () => import('src/sections/library-sync/AuthCallbackPage'),
+);
+export const AuthCallbackPage = lazy(loadAuthCallbackPage);
+
 export const loadTripLiveShareDialog = lazyChunk(
   () => import('src/sections/trips/live/TripLiveShareDialog'),
 );
@@ -171,7 +176,22 @@ export const TripLiveLinkPage = lazy(() =>
   loadTripLiveLinkPage().then((m) => ({ default: m.TripLiveLinkPage })),
 );
 
-export const loadAuthCallbackPage = lazyChunk(
-  () => import('src/sections/library-sync/AuthCallbackPage'),
+export const loadTripCollabDialog = lazyChunk(
+  () => import('src/sections/trips/collab/TripCollabDialog'),
 );
-export const AuthCallbackPage = lazy(loadAuthCallbackPage);
+export const TripCollabDialog = lazy(() =>
+  loadTripCollabDialog().then((m) => ({ default: m.TripCollabDialog })),
+);
+export const loadCollabConflictDialog = lazyChunk(
+  () => import('src/sections/trips/collab/CollabConflictDialog'),
+);
+export const CollabConflictDialog = lazy(() =>
+  loadCollabConflictDialog().then((m) => ({ default: m.CollabConflictDialog })),
+);
+
+export const loadTripCollabJoinPage = lazyChunk(
+  () => import('src/sections/trips/collab/TripCollabJoinPage'),
+);
+export const TripCollabJoinPage = lazy(() =>
+  loadTripCollabJoinPage().then((m) => ({ default: m.TripCollabJoinPage })),
+);

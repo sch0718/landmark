@@ -47,6 +47,9 @@ describe('ensureSchema', () => {
         { name: 'schema_meta' },
         { name: 'sessions' },
         { name: 'share_links' },
+        { name: 'trip_collab_devices' },
+        { name: 'trip_collab_meta' },
+        { name: 'trip_progress' },
         { name: 'trip_share_tokens' },
         { name: 'trip_shares' },
         { name: 'users' },
@@ -281,13 +284,44 @@ it('버전 2 DB에서 갱신 공유 표와 색인을 더하고 기존 행을 지
   for (const name of ['meetings', 'share_links'])
     expect(await db.prepare(`SELECT COUNT(*) AS count FROM ${name}`).first()).toEqual({ count: 1 });
 });
-it('갱신 공유(2A) 네 문장은 이어져 있고 멱등이다', () => {
-  // 병합 순서(2A → 3 → 4)에 따라 2A 문장 뒤에 보관함 동기화·서버 백업 문장이 붙는다.
-  const start = SCHEMA_STATEMENTS.findIndex((sql) => sql.includes('trip_share'));
-  const block = SCHEMA_STATEMENTS.slice(start, start + 4);
-  expect(SCHEMA_STATEMENTS.filter((sql) => sql.includes('trip_share'))).toEqual(block);
-  for (const sql of block) {
-    expect(sql).toContain('trip_share');
-    expect(sql).toContain('IF NOT EXISTS');
-  }
+it('갱신 공유 문장 네 개는 멱등 표와 색인이다', () => {
+  const tripShare = SCHEMA_STATEMENTS.filter((sql) => sql.includes('trip_share'));
+  expect(tripShare).toHaveLength(4);
+  for (const sql of tripShare) expect(sql).toContain('IF NOT EXISTS');
+});
+
+it('버전 3 DB에서 함께 편집 표·색인을 더하고 기존 공동본을 지킨다', async () => {
+  await db.batch(
+    SCHEMA_STATEMENTS.filter(
+      (sql) => !sql.includes('trip_collab') && !sql.includes('trip_progress'),
+    ).map((sql) => db.prepare(sql)),
+  );
+  await db.prepare('INSERT INTO schema_meta VALUES (3)').run();
+  await db
+    .prepare(
+      "INSERT INTO trip_shares VALUES ('abcdefghij', '{}', 1, '시험보기', 'trip000001', '생성', '변경', '만료')",
+    )
+    .run();
+  await ensureSchema(db);
+  expect(await db.prepare('SELECT id FROM trip_shares').first()).toEqual({ id: 'abcdefghij' });
+  for (const name of [
+    'trip_collab_devices',
+    'trip_collab_devices_token',
+    'trip_collab_meta',
+    'trip_progress',
+  ])
+    expect(
+      await db.prepare('SELECT name FROM sqlite_master WHERE name = ?').bind(name).first(),
+    ).toEqual({ name });
+});
+it('함께 편집 문장 네 개는 표·색인이며 모두 멱등이다', () => {
+  const collab = SCHEMA_STATEMENTS.filter(
+    (s) => s.includes('trip_collab') || s.includes('trip_progress'),
+  );
+  expect(collab.map((s) => /IF NOT EXISTS (\w+)/.exec(s)?.[1])).toEqual([
+    'trip_collab_devices',
+    'trip_collab_devices_token',
+    'trip_collab_meta',
+    'trip_progress',
+  ]);
 });

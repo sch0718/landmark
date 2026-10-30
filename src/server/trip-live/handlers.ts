@@ -110,10 +110,13 @@ export async function pruneExpiredLive(db: MeetDb, now: Date, max: number): Prom
     'SELECT id FROM trip_shares WHERE expires_at <= ? ORDER BY expires_at, id LIMIT ?';
   const values = [now.toISOString(), Math.floor(max)] as const;
   const result = await db.batch([
+    ...['trip_progress', 'trip_collab_meta', 'trip_collab_devices'].map((table) =>
+      db.prepare(`DELETE FROM ${table} WHERE share_id IN (${expired})`).bind(...values),
+    ),
     db.prepare(`DELETE FROM trip_share_tokens WHERE share_id IN (${expired})`).bind(...values),
     db.prepare(`DELETE FROM trip_shares WHERE id IN (${expired})`).bind(...values),
   ]);
-  return (result[1] as { meta: { changes: number } }).meta.changes;
+  return (result[4] as { meta: { changes: number } }).meta.changes;
 }
 export function handleLiveCreate(ctx: MeetContext, deps: MeetDeps): Promise<Response> {
   return withRequest(ctx, async () => {
@@ -246,6 +249,15 @@ export function handleLiveUpdate(ctx: MeetContext, deps: MeetDeps): Promise<Resp
         await readLimitedJson(ctx.request, LIVE_REQUEST_MAX_BYTES),
       ),
       doc = checkedDoc(input.doc);
+    if (doc.v === 2 && ctx.env.TRIP_COLLAB === 'off')
+      throw new MeetError('UNAVAILABLE', '지금은 함께 편집이 잠시 멈췄어요', { reason: 'off' });
+    const stored = await ctx.env.DB.prepare(
+      "SELECT json_extract(doc, '$.v') AS v FROM trip_shares WHERE id = ?",
+    )
+      .bind(id)
+      .first<{ v: number | null }>();
+    if (doc.v < (stored?.v ?? 1))
+      throw new MeetError('CONFLICT', '새 버전의 앱이 필요해요', { reason: 'version' });
     const expiresAt = liveExpiresAt(doc.share.trips[0]!.endDate, now).toISOString();
     const result = await ctx.env.DB.prepare(
       `UPDATE trip_shares SET doc = ?, rev = rev + 1, updated_at = ?, expires_at = ? WHERE id = ? AND rev = ?
@@ -317,7 +329,13 @@ export function handleLiveDelete(ctx: MeetContext, deps: MeetDeps): Promise<Resp
     await prepare(ctx, now);
     await readRow(ctx, id, now, { expired: true });
     await requireOwner(ctx, id);
+    const ownerHash = await hashToken(bearer(ctx)!);
     const results = await ctx.env.DB.batch([
+      ...['trip_progress', 'trip_collab_meta', 'trip_collab_devices'].map((table) =>
+        ctx.env.DB.prepare(
+          `DELETE FROM ${table} WHERE share_id = ? AND EXISTS (SELECT 1 FROM trip_share_tokens WHERE share_id = ? AND kind = 'owner' AND hash = ?)`,
+        ).bind(id, id, ownerHash),
+      ),
       ctx.env.DB.prepare(
         `DELETE FROM trip_shares WHERE id = ? AND EXISTS
         (SELECT 1 FROM trip_share_tokens WHERE share_id = trip_shares.id AND kind = 'owner' AND hash = ?)`,
@@ -326,7 +344,7 @@ export function handleLiveDelete(ctx: MeetContext, deps: MeetDeps): Promise<Resp
         'DELETE FROM trip_share_tokens WHERE share_id = ? AND NOT EXISTS (SELECT 1 FROM trip_shares WHERE id = ?)',
       ).bind(id, id),
     ]);
-    if (!(results[0] as { meta: { changes: number } }).meta.changes) {
+    if (!(results[3] as { meta: { changes: number } }).meta.changes) {
       await readRow(ctx, id, now, { expired: true });
       await requireOwner(ctx, id);
     }

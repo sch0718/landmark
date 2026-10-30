@@ -18,6 +18,7 @@ export type SyncMeta = {
   lastSyncAt: string | null;
   held: HeldItem[];
   skipped: string[];
+  skippedAt?: Record<string, string>;
   rejected: RejectedItem[];
 };
 export class SyncStorageError extends Error {
@@ -74,6 +75,7 @@ export function newDeviceMeta(): SyncMeta {
     lastSyncAt: null,
     held: [],
     skipped: [],
+    skippedAt: {},
     rejected: [],
   };
 }
@@ -107,6 +109,13 @@ export function readSyncMeta(storage: Storage = localStorage): SyncMeta {
     ) ||
     !Array.isArray(v.skipped) ||
     !v.skipped.every(itemKeyValid) ||
+    !(
+      v.skippedAt === undefined ||
+      (record(v.skippedAt) &&
+        Object.entries(v.skippedAt).every(
+          ([key, at]) => itemKeyValid(key) && typeof at === 'string',
+        ))
+    ) ||
     !Array.isArray(v.rejected) ||
     !v.rejected.every(
       (r) =>
@@ -117,7 +126,7 @@ export function readSyncMeta(storage: Storage = localStorage): SyncMeta {
     )
   )
     return newDeviceMeta();
-  return v as unknown as SyncMeta;
+  return { ...v, skippedAt: v.skippedAt ?? {} } as unknown as SyncMeta;
 }
 export function writeSyncMeta(storage: Storage, meta: SyncMeta): void {
   write(storage, SYNC_META_KEY, meta);
@@ -195,6 +204,7 @@ export function clearSyncRecords(storage: Storage): void {
     lastSyncAt: null,
     held: [],
     skipped: [],
+    skippedAt: {},
     rejected: [],
   });
 }

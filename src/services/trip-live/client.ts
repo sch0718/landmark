@@ -9,6 +9,7 @@ import { safeParse } from 'src/schema/parse';
 export type TripLiveError =
   | 'offline'
   | 'unauthorized'
+  | 'version'
   | 'conflict'
   | 'taken'
   | 'ended'
@@ -69,9 +70,11 @@ function failure(status: number, body: unknown): LiveResult<never> {
         : status === 404
           ? 'not-found'
           : status === 409
-            ? reason === 'taken'
-              ? 'taken'
-              : 'conflict'
+            ? reason === 'version'
+              ? 'version'
+              : reason === 'taken'
+                ? 'taken'
+                : 'conflict'
             : status === 410
               ? 'ended'
               : status === 413

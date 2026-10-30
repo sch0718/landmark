@@ -438,3 +438,89 @@ it.each(['view', 'owner', 'delete'])(
     expect((await get(fresh)).status).toBe(200);
   },
 );
+
+it('v1에서 v2로 올린 뒤 v1 PUT은 버전 오류이고 v2는 된다', async () => {
+  await create();
+  const v2 = { ...doc(), v: 2 };
+  expect((await handleLiveUpdate(ctx('PUT', { doc: v2, baseRev: 1 }, owner), deps)).status).toBe(
+    200,
+  );
+  const lower = await update(2);
+  expect(lower.status).toBe(409);
+  expect(await lower.json()).toMatchObject({ reason: 'version' });
+  expect((await handleLiveUpdate(ctx('PUT', { doc: v2, baseRev: 2 }, owner), deps)).status).toBe(
+    200,
+  );
+});
+async function addCollabRows(shareId: string) {
+  await db
+    .prepare('INSERT INTO trip_collab_devices VALUES (?, ?, ?, ?, ?, ?)')
+    .bind(shareId, 'device01', `해시${shareId}`, '시험 기기', now.toISOString(), now.toISOString())
+    .run();
+  await db
+    .prepare('INSERT INTO trip_collab_meta (share_id, progress_rev) VALUES (?, 0)')
+    .bind(shareId)
+    .run();
+  await db
+    .prepare('INSERT INTO trip_progress VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .bind(shareId, 'stop0001', 1, '2026-11-01', 'device01', '시험 기기', now.toISOString())
+    .run();
+}
+it('공유 지우기는 함께 편집 기기·메타·진행도 지운다', async () => {
+  await create();
+  await Promise.all(pending);
+  await addCollabRows(id);
+  expect((await handleLiveDelete(ctx('DELETE', null, owner), deps)).status).toBe(204);
+  for (const table of ['trip_collab_devices', 'trip_collab_meta', 'trip_progress'])
+    expect(await db.prepare(`SELECT count(*) AS n FROM ${table}`).first()).toEqual({ n: 0 });
+});
+it('만료 정리는 만료된 함께 편집 자료만 지운다', async () => {
+  await create();
+  await Promise.all(pending);
+  await addCollabRows(id);
+  await db
+    .prepare(
+      'INSERT INTO trip_shares SELECT ?,doc,rev,view_token,source_trip_id,created_at,updated_at,? FROM trip_shares WHERE id = ?',
+    )
+    .bind('expired000', now.toISOString(), id)
+    .run();
+  await addCollabRows('expired000');
+  expect(await pruneExpiredLive(db, now, 20)).toBe(1);
+  for (const table of ['trip_collab_devices', 'trip_collab_meta', 'trip_progress'])
+    expect(await db.prepare(`SELECT share_id FROM ${table}`).all()).toEqual({
+      results: [{ share_id: id }],
+    });
+});
+it('공동 편집 스위치가 꺼지면 2A PUT의 v2만 막고 v1·읽기는 유지한다', async () => {
+  await create();
+  const response = await handleLiveUpdate(
+    ctx('PUT', { doc: { ...doc(), v: 2 }, baseRev: 1 }, owner, '', { TRIP_COLLAB: 'off' }),
+    deps,
+  );
+  expect(response.status).toBe(503);
+  expect(await response.json()).toMatchObject({ reason: 'off' });
+  expect((await get()).status).toBe(200);
+  expect(
+    (
+      await handleLiveUpdate(
+        ctx('PUT', { doc: doc(), baseRev: 1 }, owner, '', { TRIP_COLLAB: 'off' }),
+        deps,
+      )
+    ).status,
+  ).toBe(200);
+});
+
+it('이미 v2인 여행도 공동 편집 off 동안 2A PUT으로 바꾸지 못한다', async () => {
+  await create();
+  expect(
+    (await handleLiveUpdate(ctx('PUT', { doc: { ...doc(), v: 2 }, baseRev: 1 }, owner), deps))
+      .status,
+  ).toBe(200);
+  const response = await handleLiveUpdate(
+    ctx('PUT', { doc: { ...doc(), v: 2 }, baseRev: 2 }, owner, '', { TRIP_COLLAB: 'off' }),
+    deps,
+  );
+  expect(response.status).toBe(503);
+  expect(await response.json()).toMatchObject({ reason: 'off' });
+  expect(await (await get()).json()).toMatchObject({ rev: 2, doc: { v: 2 } });
+});

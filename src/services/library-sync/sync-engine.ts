@@ -74,6 +74,7 @@ export interface LibrarySyncEngine {
   connect(mode: ConnectMode): Promise<SyncStatus>;
   resolveConflict(id: string, action: 'mine' | 'keep'): Promise<void>;
   resolveHeld(key: string, action: 'mine' | 'skip'): Promise<void>;
+  unskipAll(): Promise<void>;
   disable(): void;
   enable(): void;
   disconnect(): Promise<void>;
@@ -98,8 +99,11 @@ function errorMessage(error: unknown): string {
   return '예상하지 못한 오류로 동기화를 멈췄어요. 다시 시도해 주세요';
 }
 
-/** 문서 전체를 되살릴 때 모든 LWW 시각을 새 명령의 시각으로 바꾼다. */
-function reviveAsLatest(doc: AnyItem, now: string): AnyItem {
+/**
+ * 문서 전체를 되살릴 때 모든 LWW 시각을 새 명령의 시각으로 바꾼다.
+ * keepDeleted면 묘비는 묘비로 두고 삭제 시각만 새 명령의 시각으로 갱신한다.
+ */
+function reviveAsLatest(doc: AnyItem, now: string, keepDeleted = false): AnyItem {
   const visit = (v: unknown): unknown => {
     if (Array.isArray(v)) return v.map(visit);
     if (!v || typeof v !== 'object') return v;
@@ -110,7 +114,7 @@ function reviveAsLatest(doc: AnyItem, now: string): AnyItem {
       ]),
     );
   };
-  return { ...(visit(doc) as AnyItem), deletedAt: null };
+  return { ...(visit(doc) as AnyItem), deletedAt: keepDeleted && doc.deletedAt ? now : null };
 }
 function replacePath(doc: AnyItem, path: string, value: unknown, now: string): AnyItem {
   if (path === 'dates' && 'days' in doc) {
@@ -140,6 +144,7 @@ export function createLibrarySyncEngine(deps: EngineDeps): LibrarySyncEngine {
   const { storage, api } = deps;
   let status = { ...OFF_STATUS };
   let active: Promise<SyncStatus> | null = null;
+  let handling: Promise<unknown> | null = null;
   let queued = false;
   let timer: unknown;
   let retry = 0;
@@ -188,6 +193,22 @@ export function createLibrarySyncEngine(deps: EngineDeps): LibrarySyncEngine {
     writeConflicts(storage, conflicts);
     writeBase(storage, meta.userId!, base);
     writeSyncMeta(storage, meta);
+  }
+  /**
+   * 진행 중인 실행이 끝난 뒤, 같은 잠금 안에서만 저장소의 충돌·보류를 바꾼다.
+   * 운영 대상 브라우저(빌드 대상 Safari 16.4 이상)에는 navigator.locks가 항상 있다고 전제한다.
+   * 잠금이 없는 시험·구형 환경에서도 처리 중인 promise를 추적해 같은 엔진의 실행을 기다리게 한다.
+   */
+  async function whenIdle<T>(fn: () => Promise<T>): Promise<T> {
+    while (active || handling) await (active ?? handling)!.catch(() => {});
+    if (deps.locks) return deps.locks.request(SYNC_LOCK, fn);
+    const work = Promise.resolve().then(fn);
+    handling = work;
+    try {
+      return await work;
+    } finally {
+      handling = null;
+    }
   }
   async function failed(error: unknown): Promise<SyncStatus> {
     const fail = error as SyncFail;
@@ -273,11 +294,15 @@ export function createLibrarySyncEngine(deps: EngineDeps): LibrarySyncEngine {
     const options = (ids: { next: IdGen['Service']['next'] }): ApplyOptions => ({
       ctx: { now: new Date(deps.now()).toISOString(), newId: ids.next },
       lastSyncAt: meta.lastSyncAt,
+      sinceFor: (key) => meta.skippedAt?.[key] ?? null,
       fullResync,
       conflictId: deps.newConflictId,
       skip: new Set(meta.skipped),
     });
-    async function apply(make: (current: Library, opts: ApplyOptions) => ApplyResult) {
+    async function apply(
+      make: (current: Library, opts: ApplyOptions) => ApplyResult,
+      received: readonly { kind: RemoteItem['kind']; id: string; rev: number }[],
+    ) {
       let result: ApplyResult | undefined;
       const lib = await deps.runLibrary(
         Effect.gen(function* () {
@@ -292,16 +317,34 @@ export function createLibrarySyncEngine(deps: EngineDeps): LibrarySyncEngine {
       if (!result) return;
       base = { userId: meta.userId, items: result.base };
       conflicts = [...conflicts, ...result.conflicts];
-      meta = { ...meta, held: result.held };
+      const skippedAt = { ...meta.skippedAt };
+      // 보관함 저장에 성공한 수신 키만 평소 충돌 기준으로 돌아간다.
+      // 건너뛰는 동안의 base 갱신과 검증 실패로 되돌린 항목은 반영으로 보지 않는다.
+      for (const r of received) {
+        const key = itemKey(r.kind, r.id);
+        if (
+          !meta.skipped.includes(key) &&
+          !result.held.some((h) => h.key === key) &&
+          (result.base[key]?.rev ?? -1) >= r.rev
+        )
+          delete skippedAt[key];
+      }
+      meta = { ...meta, held: result.held, skippedAt };
       setLibrary(lib);
     }
     if (remote.length || fullResync)
-      await apply((current, opts) => applyRemote(current, base.items, remote, opts));
+      await apply((current, opts) => applyRemote(current, base.items, remote, opts), remote);
     if (meta.held.length)
       cursor = { rev: Math.max(0, Math.min(...meta.held.map((h) => h.rev)) - 1), key: '' };
     meta = { ...meta, cursor };
     save(meta, base.items, conflicts);
-    const dirty = dirtyItems((await snapshot()).library, base.items, meta.rejected);
+    const dirty = dirtyItems(
+      (await snapshot()).library,
+      base.items,
+      meta.rejected,
+      // 보류 항목은 사용자가 맞추기/건너뛰기를 고르기 전에는 올리지 않는다.
+      new Set([...meta.skipped, ...meta.held.map((h) => h.key)]),
+    );
     const send: DirtyItem[] = [];
     const currentLib = (await snapshot()).library;
     meta = {
@@ -352,11 +395,13 @@ export function createLibrarySyncEngine(deps: EngineDeps): LibrarySyncEngine {
       if (!isCurrent()) return status;
       if (!reply.ok) throw reply;
       const held = meta.held;
-      await apply((current, opts) =>
-        applyPushResults(current, base.items, chunk, reply.data.results, {
-          ...opts,
-          fullResync: false,
-        }),
+      await apply(
+        (current, opts) =>
+          applyPushResults(current, base.items, chunk, reply.data.results, {
+            ...opts,
+            fullResync: false,
+          }),
+        reply.data.results,
       );
       meta = { ...meta, held: [...held, ...meta.held] };
       for (const r of reply.data.rejected) {
@@ -367,7 +412,12 @@ export function createLibrarySyncEngine(deps: EngineDeps): LibrarySyncEngine {
       save(meta, base.items, conflicts);
     }
     if (!isCurrent()) return status;
-    const remaining = dirtyItems((await snapshot()).library, base.items, meta.rejected).length;
+    const remaining = dirtyItems(
+      (await snapshot()).library,
+      base.items,
+      meta.rejected,
+      new Set(meta.skipped),
+    ).length;
     // 아직 확인받지 않은 수정은 이전 동기화 뒤의 변경으로 계속 남긴다.
     if (remaining === 0) meta = { ...meta, lastSyncAt: new Date(deps.now()).toISOString() };
     save(meta, base.items, conflicts);
@@ -416,10 +466,15 @@ export function createLibrarySyncEngine(deps: EngineDeps): LibrarySyncEngine {
         });
         void snapshot()
           .then(({ library }) => {
+            const meta = readSyncMeta(storage);
             if (status.phase === 'local')
               publish({
-                dirty: dirtyItems(library, readBase(storage).items, readSyncMeta(storage).rejected)
-                  .length,
+                dirty: dirtyItems(
+                  library,
+                  readBase(storage).items,
+                  meta.rejected,
+                  new Set(meta.skipped),
+                ).length,
               });
           })
           .catch(() => {});
@@ -434,6 +489,7 @@ export function createLibrarySyncEngine(deps: EngineDeps): LibrarySyncEngine {
       );
     },
     runNow(reason) {
+      if (handling) return handling.catch(() => {}).then(() => engine.runNow(reason));
       if (active) return active;
       return engine.runThen(reason, async (result) => result);
     },
@@ -443,7 +499,8 @@ export function createLibrarySyncEngine(deps: EngineDeps): LibrarySyncEngine {
       const userId = readSyncMeta(storage).userId;
       const sessionId = readSession(storage)?.sessionId;
       // 앞 실행의 결과를 재사용하지 않고, 새 잠금 안에서 최신 변경부터 받는다.
-      while (active) await active;
+      // 충돌·보류 처리(whenIdle)와도 겹치지 않게 기다린다.
+      while (active || handling) await (active ?? handling)!.catch(() => {});
       cancelTimer();
       const run = async () => {
         let result: SyncStatus;
@@ -545,60 +602,92 @@ export function createLibrarySyncEngine(deps: EngineDeps): LibrarySyncEngine {
       }
     },
     async resolveConflict(id, action) {
-      const conflicts = readConflicts(storage);
-      const c = conflicts.find((c) => c.id === id);
-      if (!c) return;
-      if (action === 'mine') {
-        const lib = await deps.runLibrary(
-          Effect.flatMap(LibraryStore, (store) =>
-            store.update((current) => {
-              const p = parseItemKey(c.key)!;
-              const doc = getItem(current, p.kind, p.id);
-              if (!doc) return Effect.succeed(current);
-              const now = new Date(deps.now()).toISOString();
-              const next =
-                c.whole || c.deleted
-                  ? reviveAsLatest(c.mine as AnyItem, now)
-                  : replacePath(doc, c.path, c.mine, now);
-              return Effect.succeed(putItems(current, [{ ...p, doc: next }]));
-            }),
-          ),
+      await whenIdle(async () => {
+        const conflicts = readConflicts(storage);
+        const c = conflicts.find((c) => c.id === id);
+        if (!c) return;
+        if (action === 'mine') {
+          const lib = await deps.runLibrary(
+            Effect.flatMap(LibraryStore, (store) =>
+              store.update((current) => {
+                const p = parseItemKey(c.key)!;
+                const doc = getItem(current, p.kind, p.id);
+                if (!doc) return Effect.succeed(current);
+                const now = new Date(deps.now()).toISOString();
+                const next =
+                  c.whole || c.deleted
+                    ? reviveAsLatest(c.mine as AnyItem, now)
+                    : replacePath(doc, c.path, c.mine, now);
+                return Effect.succeed(putItems(current, [{ ...p, doc: next }]));
+              }),
+            ),
+          );
+          setLibrary(lib);
+        }
+        writeConflicts(
+          storage,
+          conflicts.filter((c) => c.id !== id),
         );
-        setLibrary(lib);
-      }
-      writeConflicts(
-        storage,
-        conflicts.filter((c) => c.id !== id),
-      );
+      });
       engine.schedule('manual');
     },
     async resolveHeld(key, action) {
-      const meta = readSyncMeta(storage);
-      const p = parseItemKey(key);
-      if (!p) return;
-      let skip = action === 'skip';
-      if (action === 'mine') {
-        const lib = await deps.runLibrary(
-          Effect.flatMap(LibraryStore, (store) =>
-            store.update((current) => {
-              const doc = getItem(current, p.kind, p.id);
-              if (!doc) skip = true;
-              return Effect.succeed(
-                doc
-                  ? putItems(current, [
-                      { ...p, doc: reviveAsLatest(doc, new Date(deps.now()).toISOString()) },
-                    ])
-                  : current,
-              );
-            }),
-          ),
-        );
-        setLibrary(lib);
-      }
-      writeSyncMeta(storage, {
-        ...meta,
-        held: meta.held.filter((h) => h.key !== key),
-        skipped: skip ? [...new Set([...meta.skipped, key])] : meta.skipped,
+      await whenIdle(async () => {
+        const meta = readSyncMeta(storage);
+        const p = parseItemKey(key);
+        if (!p) return;
+        let skip = action === 'skip';
+        if (action === 'mine') {
+          const lib = await deps.runLibrary(
+            Effect.flatMap(LibraryStore, (store) =>
+              store.update((current) => {
+                const doc = getItem(current, p.kind, p.id);
+                if (!doc) skip = true;
+                return Effect.succeed(
+                  doc
+                    ? putItems(current, [
+                        {
+                          ...p,
+                          doc: reviveAsLatest(doc, new Date(deps.now()).toISOString(), true),
+                        },
+                      ])
+                    : current,
+                );
+              }),
+            ),
+          );
+          setLibrary(lib);
+        }
+        let skippedAt = meta.skippedAt;
+        if (skip && skippedAt?.[key] === undefined) {
+          const current = (await snapshot()).library;
+          const doc = getItem(current, p.kind, p.id);
+          // decode 보류는 base를 유지하고 library 보류는 반영 전 base로 되돌린다.
+          // 로컬 항목이 없으면 확인받은 값과 같은지 알 수 없어 과거 기준을 유지한다.
+          // 한계: 올리기 응답에서 생긴 decode 보류는 base가 올리기 전 값이라 보수적으로 lastSyncAt을 쓴다
+          // (풀기 뒤 이미 맞춰진 값이 거짓 충돌로 남을 수 있다).
+          const synced = doc !== undefined && readBase(storage).items[key]?.hash === hashItem(doc);
+          const now = new Date(deps.now()).toISOString();
+          skippedAt = { ...skippedAt, [key]: synced ? now : (meta.lastSyncAt ?? now) };
+        }
+        writeSyncMeta(storage, {
+          ...meta,
+          held: meta.held.filter((h) => h.key !== key),
+          skipped: skip ? [...new Set([...meta.skipped, key])] : meta.skipped,
+          skippedAt,
+        });
+      });
+      engine.schedule('manual');
+    },
+    async unskipAll() {
+      await whenIdle(async () => {
+        const meta = readSyncMeta(storage);
+        const base = readBase(storage);
+        const items = { ...base.items };
+        for (const key of meta.skipped) delete items[key];
+        writeBase(storage, base.userId!, items);
+        // 이미 커서가 지난 서버 항목도 같은 revision으로 다시 받는다.
+        writeSyncMeta(storage, { ...meta, skipped: [], cursor: { rev: 0, key: '' } });
       });
       engine.schedule('manual');
     },

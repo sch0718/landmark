@@ -1,3 +1,4 @@
+import { tripLivePlanStore } from 'src/services/trip-live/plan-store';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Provider, createStore } from 'jotai';
@@ -5,12 +6,18 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TripLiveLinkPage } from 'src/sections/trips/live/TripLiveLinkPage';
 import { tripLiveApi } from 'src/services/trip-live/client';
-import { tripLiveStore } from 'src/services/trip-live/store';
+import { tripCollabStore } from 'src/services/trip-collab/store';
+import { TRIP_LIVE_KEY, tripLiveStore } from 'src/services/trip-live/store';
 import { libraryAtom } from 'src/stores/library-state';
-import { buildLiveTripDoc, ESTIMATE_ONLY, liveEditKey } from 'src/domain/trip-live/build-live-doc';
+import {
+  buildLiveTripDoc,
+  ESTIMATE_ONLY,
+  liveEditKey,
+  livePlanKey,
+} from 'src/domain/trip-live/build-live-doc';
 import { emptyLibrary } from 'src/schema/library';
 import { buildLiveLibrary } from '../../../fixtures/builders';
-import { buildLiveDoc } from '../../../fixtures/live-trip';
+import { buildLiveDoc, LIVE_RECORD_2A_KEYS } from '../../../fixtures/live-trip';
 vi.mock('src/services/trip-live/client', () => ({ tripLiveApi: { get: vi.fn() } }));
 vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { error: vi.fn() }) }));
 vi.mock('src/stores/library-state', async (original) => {
@@ -79,10 +86,25 @@ describe('소유자 링크', () => {
     await userEvent.click(screen.getByRole('button', { name: '이 기기에서 관리하기' }));
     await screen.findByText('/trips/trip000001');
     const r = tripLiveStore.byLiveId(id)!;
+    expect(
+      Object.keys(JSON.parse(localStorage.getItem(TRIP_LIVE_KEY)!)[r.tripId]).filter(
+        (key) => !LIVE_RECORD_2A_KEYS.has(key),
+      ),
+    ).toEqual([]);
     expect(r.status).toBe('live');
     const lib = store.get(libraryAtom);
     expect(lib.trips[r.tripId]!.days.map((d) => d.stops.value.map((s) => s.id))).toEqual(
       buildLiveDoc().ids.stops,
+    );
+    expect(tripLivePlanStore.get(r.tripId)).toBe(
+      await livePlanKey(
+        buildLiveTripDoc(lib, r.tripId, ESTIMATE_ONLY, {
+          title: r.options.title,
+          options: r.options,
+          dayIds: r.dayIds,
+          createdAt: r.createdAt,
+        })!,
+      ),
     );
     expect(r.publishedKey).toBe(
       await liveEditKey(
@@ -133,4 +155,16 @@ it('끊긴 기록이 있어도 새 소유자 링크로 공개본을 확인하고
   mount(buildLiveLibrary());
   await userEvent.click(await screen.findByRole('button', { name: '이 기기에서 관리하기' }));
   await waitFor(() => expect(tripLiveStore.byLiveId(id)?.ownerToken).toBe(owner));
+});
+
+it('v2 공동본은 소유자 연결 기록과 기준을 함께 만든다', async () => {
+  const live = state();
+  live.doc.v = 2;
+  vi.mocked(tripLiveApi.get).mockResolvedValue({ ok: true, value: live });
+  const jotai = mount();
+  await userEvent.click(await screen.findByRole('button', { name: '이 기기에서 관리하기' }));
+  await waitFor(() => expect(tripCollabStore.byLiveId(id)?.role).toBe('owner'));
+  const r = tripCollabStore.byLiveId(id)!;
+  expect(tripCollabStore.readBase(id)?.rev).toBe(live.rev);
+  expect(jotai.get(libraryAtom).trips[r.tripId]!.days[0]!.stops.value[0]!.id).toBe('stop0001');
 });

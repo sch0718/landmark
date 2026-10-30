@@ -27,3 +27,21 @@ export function buildLiveDoc(): LiveTripDoc {
     options: { includeMemo: false, includeCandidates: true },
   };
 }
+
+// 2A가 엄격하게 읽는 기록 필드 집합을 고정해 롤백 호환을 확인한다.
+export const LIVE_RECORD_2A_KEYS = new Set([
+  'tripId',
+  'liveId',
+  'status',
+  'ownerToken',
+  'nextOwnerToken',
+  'viewToken',
+  'rev',
+  'dayIds',
+  'options',
+  'createdAt',
+  'publishedKey',
+  'publishedAt',
+  'expiresAt',
+  'paused',
+]);

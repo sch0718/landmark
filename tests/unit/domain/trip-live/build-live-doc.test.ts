@@ -5,6 +5,7 @@ import {
   ESTIMATE_ONLY,
   fitLiveDoc,
   liveEditKey,
+  livePlanKey,
 } from 'src/domain/trip-live/build-live-doc';
 import { liveDocBytes, LIVE_DOC_MAX_BYTES } from 'src/domain/trip-live/live-doc';
 import { buildLiveLibrary } from '../../../fixtures/builders';
@@ -171,5 +172,161 @@ describe('공개본 만들기', () => {
       mutate(d);
       expect(await liveEditKey(d)).not.toBe(key);
     }
+  });
+});
+
+describe('합류용 계획 지문', () => {
+  function docWithLeg() {
+    const doc = buildLiveDoc();
+    doc.share.trips[0]!.days[0]!.legs = [
+      {
+        from: 'place00001',
+        to: 'place00002',
+        mode: 'car',
+        durationS: 600,
+        distanceM: 1000,
+        tollFare: 100,
+        status: 'routed',
+        queriedAt: opts.createdAt,
+        path: [[127, 37]],
+      },
+    ];
+    return doc;
+  }
+  it('경로의 시간·거리·요금·상태·조회 시각·경로선과 만든 시각만 무시한다', async () => {
+    const a = docWithLeg(),
+      b = structuredClone(a);
+    b.share.createdAt = '2026-12-01T00:00:00Z';
+    Object.assign(b.share.trips[0]!.days[0]!.legs[0]!, ESTIMATE_ONLY({} as never));
+    expect(await livePlanKey(a)).toBe(await livePlanKey(b));
+    expect(await liveEditKey(a)).not.toBe(await liveEditKey(b));
+  });
+  const changes: [string, (d: ReturnType<typeof buildLiveDoc>) => void][] = [
+    [
+      '공유 제목',
+      (d) => {
+        d.share.title = '다른 제목';
+      },
+    ],
+    [
+      '여행 제목',
+      (d) => {
+        d.share.trips[0]!.title = '다른 제목';
+      },
+    ],
+    [
+      '시작일',
+      (d) => {
+        d.share.trips[0]!.startDate = '2026-12-08';
+      },
+    ],
+    [
+      '종료일',
+      (d) => {
+        d.share.trips[0]!.endDate = '2026-12-11';
+      },
+    ],
+    [
+      '출발지',
+      (d) => {
+        d.share.trips[0]!.originId = 'place00002';
+      },
+    ],
+    [
+      '후보',
+      (d) => {
+        d.share.trips[0]!.candidateIds = ['place00002'];
+      },
+    ],
+    [
+      '체류 시간',
+      (d) => {
+        d.share.trips[0]!.days[0]!.stops[0]!.stayMin = 90;
+      },
+    ],
+    [
+      '고정 시각',
+      (d) => {
+        d.share.trips[0]!.days[0]!.stops[0]!.fixedTime = '11:00';
+      },
+    ],
+    [
+      'Stop 메모',
+      (d) => {
+        d.share.trips[0]!.days[0]!.stops[0]!.note = '새 메모';
+      },
+    ],
+    [
+      'Stop 장소',
+      (d) => {
+        d.share.trips[0]!.days[0]!.stops[0]!.placeId = 'place00002';
+      },
+    ],
+    [
+      'Stop id',
+      (d) => {
+        d.ids.stops[0]![0] = 'newstop1';
+      },
+    ],
+    [
+      'Day id',
+      (d) => {
+        d.ids.days[0] = 'newday01';
+      },
+    ],
+    [
+      '출발 시각',
+      (d) => {
+        d.share.trips[0]!.days[0]!.startTime = '08:00';
+      },
+    ],
+    [
+      '숙소',
+      (d) => {
+        d.share.trips[0]!.days[0]!.lodgingId = 'place00002';
+      },
+    ],
+    [
+      '구간 수단 지정',
+      (d) => {
+        d.share.trips[0]!.legModes['place00001>place00002'] = 'walk';
+      },
+    ],
+    [
+      '구간 출발',
+      (d) => {
+        d.share.trips[0]!.days[0]!.legs[0]!.from = 'place00002';
+      },
+    ],
+    [
+      '구간 도착',
+      (d) => {
+        d.share.trips[0]!.days[0]!.legs[0]!.to = 'place00001';
+      },
+    ],
+    [
+      '구간 수단',
+      (d) => {
+        d.share.trips[0]!.days[0]!.legs[0]!.mode = 'walk';
+      },
+    ],
+    [
+      '공개 옵션',
+      (d) => {
+        d.options.includeCandidates = false;
+      },
+    ],
+    [
+      '장소 정보',
+      (d) => {
+        d.share.places[0]!.name = '새 이름';
+      },
+    ],
+  ];
+  it.each(changes)('%s 수정은 지문을 바꾸어 미공개 변경으로 남긴다', async (_name, change) => {
+    const a = docWithLeg(),
+      b = structuredClone(a);
+    change(b);
+    expect(await livePlanKey(a)).not.toBe(await livePlanKey(b));
   });
 });

@@ -238,6 +238,22 @@ export default function SyncSection() {
                   </Button>
                 )}
               </Box>
+              {meta.skipped.length > 0 && (
+                <Box>
+                  <Typography>
+                    건너뛴 항목 {meta.skipped.length}개는 이 기기에서만 바뀝니다
+                  </Typography>
+                  <Button
+                    disabled={busy || phase === 'syncing'}
+                    onClick={() => {
+                      void run((e) => e.unskipAll());
+                    }}
+                    sx={{ minHeight: 44 }}
+                  >
+                    건너뛰기 모두 풀기
+                  </Button>
+                </Box>
+              )}
               <SyncDevices />
               <Button
                 color="error"
