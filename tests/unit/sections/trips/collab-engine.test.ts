@@ -1,3 +1,4 @@
+import { toast } from 'sonner';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   CollabEngine,
@@ -808,4 +809,32 @@ it('겹침과 관계없는 공동 변경은 선택과 함께 최신 판으로 �
   expect(s.engine.getSnapshot().state).toBe('synced');
   expect(s.get().trips.trip000001!.days.map((d) => d.startTime.value)).toEqual(['10:00', '07:00']);
   expect(s.api.putDoc.mock.calls[0]![3]).toBe(4);
+});
+
+it('전체 배치에서 무효 쪽을 고르면 이유를 알리고 다른 쪽으로 마칠 수 있다', async () => {
+  const s = setup();
+  const error = vi.spyOn(toast, 'error');
+  // 중복 장소가 남은 보관함을 전체 배치 안전망에서 복구하는 경로다.
+  await s.deps.run((lib) => {
+    const trip = lib.trips.trip000001!;
+    return {
+      ...lib,
+      trips: {
+        ...lib.trips,
+        [trip.id]: {
+          ...trip,
+          candidates: { ...trip.candidates, value: ['place00001'] },
+        },
+      },
+    };
+  });
+  await s.engine.sync();
+  expect(s.engine.getSnapshot().merge?.conflicts.map((c) => c.id)).toEqual(['placement.all']);
+  await s.engine.resolve({ 'placement.all': 'mine' }, s.engine.getSnapshot().merge);
+  expect(error).toHaveBeenCalledWith('이 조합으로는 장소가 겹쳐요. 다른 쪽을 골라 주세요');
+  expect(s.engine.getSnapshot().state).toBe('conflict');
+  expect(s.api.putDoc).not.toHaveBeenCalled();
+  await s.engine.resolve({ 'placement.all': 'theirs' }, s.engine.getSnapshot().merge);
+  expect(s.engine.getSnapshot().state).toBe('synced');
+  expect(s.get().trips.trip000001!.candidates.value).toEqual([]);
 });

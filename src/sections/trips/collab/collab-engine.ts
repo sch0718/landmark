@@ -436,6 +436,8 @@ export class CollabEngine {
         const r = resolveCollabMerge(merge, choices);
         if (r.ok) plan = r.plan;
         else {
+          if (r.reason === 'invalid')
+            toast.error('이 조합으로는 장소가 겹쳐요. 다른 쪽을 골라 주세요');
           this.emit({ state: 'conflict', merge: r.reason === 'invalid' ? r.merge : merge });
           return;
         }
