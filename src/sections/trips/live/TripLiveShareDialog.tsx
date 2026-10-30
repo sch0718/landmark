@@ -1,3 +1,4 @@
+import { CollabDialogHost } from '../collab/CollabDialogHost';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
@@ -16,7 +17,12 @@ import { toast } from 'sonner';
 import { HelpButton } from 'src/components/HelpButton';
 import { injectShareDoc, shareFileName } from 'src/domain/share/inject';
 import { formatShortExpiry } from 'src/domain/share/short-link';
-import { buildLiveTripDoc, fitLiveDoc, liveEditKey } from 'src/domain/trip-live/build-live-doc';
+import {
+  buildLiveTripDoc,
+  fitLiveDoc,
+  liveEditKey,
+  livePlanKey,
+} from 'src/domain/trip-live/build-live-doc';
 import { importLiveTrip } from 'src/domain/trip-live/import-live';
 import { alignDayIds, liveExpiresAt, liveLinks } from 'src/domain/trip-live/live-doc';
 import { visibleCandidates } from 'src/domain/trips/query';
@@ -34,6 +40,7 @@ import { legStatus, useTripLegs } from 'src/sections/share-export/use-trip-legs'
 import { getTurnstileToken } from 'src/services/meet-online/turnstile-loader';
 import { ShareTemplate } from 'src/services/share-template';
 import { tripLiveApi, type TripLiveError } from 'src/services/trip-live/client';
+import { tripLivePlanStore } from 'src/services/trip-live/plan-store';
 import { rotateLiveOwner, withLiveOwnerRecovery } from 'src/services/trip-live/rotate-owner';
 import {
   tripLiveStore,
@@ -76,9 +83,11 @@ export function TripLiveShareDialog({
   const [title, setTitle] = useState(record?.options.title ?? trip?.title.value ?? ''),
     [includeMemo, setMemo] = useState(record?.options.includeMemo ?? false),
     [includeCandidates, setCandidates] = useState(record?.options.includeCandidates ?? true);
+  const [collabOpen, setCollabOpen] = useState(false);
   const [busy, setBusy] = useState(false),
     [message, setMessage] = useState(''),
-    [otherDevice, setOtherDevice] = useState(false);
+    [otherDevice, setOtherDevice] = useState(false),
+    [collaborative, setCollaborative] = useState(false);
   const [confirm, setConfirm] = useState<{
     kind: 'view' | 'owner' | 'delete';
     token: string;
@@ -129,6 +138,7 @@ export function TripLiveShareDialog({
       }
       if (result.value === 'unchanged') return;
       const state = result.value;
+      setCollaborative(state.doc.v === 2);
       if (state.viewToken && state.viewToken !== current.viewToken)
         tripLiveStore.update(tripId, { viewToken: state.viewToken });
       setOtherDevice(state.rev > current.rev);
@@ -218,6 +228,10 @@ export function TripLiveShareDialog({
             expiresAt = saved.value.expiresAt;
             viewToken = saved.value.viewToken!;
           }
+          const [publishedKey, planKey] = await Promise.all([
+            liveEditKey(publishedDoc),
+            livePlanKey(publishedDoc),
+          ]);
           tripLiveStore.put({
             ...current,
             status: 'live',
@@ -225,8 +239,9 @@ export function TripLiveShareDialog({
             expiresAt,
             viewToken,
             publishedAt: new Date().toISOString(),
-            publishedKey: await liveEditKey(publishedDoc),
+            publishedKey,
           });
+          tripLivePlanStore.put(tripId, current.liveId, planKey, publishedKey);
           return;
         }
         if (result.error === 'taken' && attempt === 0) {
@@ -326,6 +341,7 @@ export function TripLiveShareDialog({
         : '소유자 링크 다시 만들기';
   return (
     <>
+      <CollabDialogHost open={collabOpen} onClose={() => setCollabOpen(false)} tripId={tripId} />
       <Dialog open={open} onClose={onClose} aria-labelledby={heading} fullWidth maxWidth="sm">
         <DialogTitle id={heading}>
           갱신 링크 <HelpButton page="share" />
@@ -333,15 +349,19 @@ export function TripLiveShareDialog({
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
           {(canMake || live) && (
             <>
-              <TextField
-                label="제목"
-                value={title}
-                slotProps={{ htmlInput: { maxLength: 60 } }}
-                onChange={(e) => {
-                  setTitle(e.target.value);
-                  changeOptions({ ...options, title: e.target.value.trim() });
-                }}
-              />
+              {collaborative ? (
+                <Typography>함께 편집 중에는 여행 이름을 따라요</Typography>
+              ) : (
+                <TextField
+                  label="제목"
+                  value={title}
+                  slotProps={{ htmlInput: { maxLength: 60 } }}
+                  onChange={(e) => {
+                    setTitle(e.target.value);
+                    changeOptions({ ...options, title: e.target.value.trim() });
+                  }}
+                />
+              )}
               <FormControlLabel
                 control={
                   <Checkbox
@@ -430,6 +450,10 @@ export function TripLiveShareDialog({
                 )}
               </Box>
               <Typography variant="body2">{LIVE_OWNER_WARNING}</Typography>
+              <Typography>
+                보기 링크는 누구나 볼 수만 있고, 편집 초대 링크는 받은 한 사람이 함께 고칠 수 있어요
+              </Typography>
+              <Button onClick={() => setCollabOpen(true)}>함께 편집…</Button>
               <Button onClick={() => void shareLink(links.owner!, title)}>
                 다른 기기에서 관리
               </Button>

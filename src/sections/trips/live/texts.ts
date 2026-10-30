@@ -21,6 +21,7 @@ export const LIVE_CREATE_ERRORS = {
   failed: '갱신 링크를 만들지 못했어요. 잠시 뒤 다시 해 주세요',
 };
 export const LIVE_STATE_TEXT = {
+  collab: '함께 편집으로 맞추고 있어요',
   off: LIVE_OFF,
   limited: LIVE_LIMITED,
   'too-big': LIVE_TOO_BIG,

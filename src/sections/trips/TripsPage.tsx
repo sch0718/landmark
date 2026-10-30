@@ -1,3 +1,4 @@
+import { CollabDialogHost } from 'src/sections/trips/collab/CollabDialogHost';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
@@ -24,6 +25,8 @@ import { EmptyState } from 'src/sections/library/EmptyState';
 import { TripShareDialogHost } from 'src/sections/share-export/TripShareDialogHost';
 import { TripFormDialog } from 'src/sections/trips/TripFormDialog';
 import { periodLabel } from 'src/sections/trips/trip-dates';
+import { tripCollabApi } from 'src/services/trip-collab/client';
+import { tripCollabStore, useTripCollabRecords } from 'src/services/trip-collab/store';
 import { useTripLiveRecords } from 'src/services/trip-live/store';
 import { libraryAtom, useLibraryAction } from 'src/stores/library-state';
 
@@ -32,6 +35,7 @@ const UNDO_MS = 8000;
 
 type CardProps = {
   liveShared: boolean;
+  collabShared: boolean;
   trip: Trip;
   library: Library;
   onMenu(anchor: HTMLElement): void;
@@ -41,13 +45,13 @@ type CardProps = {
  * 여행 카드: 제목, 기간, 일정·후보 수. 카드를 누르면 계획 화면, 오른쪽 `⋯`은 메뉴.
  * 오늘(04:00 경계)이 기간 안이면 카드 링크 아래 줄에 `오늘 일정`(당일 모드)을 둔다(스펙 §3.1).
  */
-function TripCard({ trip, library, onMenu, liveShared }: CardProps) {
+function TripCard({ trip, library, onMenu, liveShared, collabShared }: CardProps) {
   const title = trip.title.value;
   const during = todayStatus(trip, new Date()).kind === 'during';
   const scheduled = trip.days.reduce((sum, day) => sum + visibleStops(library, day).length, 0);
   const candidates = visibleCandidates(library, trip).length;
   const period = periodLabel(trip.startDate.value, trip.endDate.value);
-  const counts = `일정 ${scheduled}곳 · 후보 ${candidates}곳${liveShared ? ' · 갱신 공유 중' : ''}`;
+  const counts = `일정 ${scheduled}곳 · 후보 ${candidates}곳${liveShared ? ' · 갱신 공유 중' : ''}${collabShared ? ' · 함께 편집 중' : ''}`;
   return (
     <Box
       component="li"
@@ -128,12 +132,14 @@ function TripCard({ trip, library, onMenu, liveShared }: CardProps) {
 
 function TripList({
   liveIds,
+  collabIds,
   label,
   trips,
   library,
   onMenu,
 }: {
   liveIds: ReadonlySet<string>;
+  collabIds: ReadonlySet<string>;
   label: string;
   trips: Trip[];
   library: Library;
@@ -146,6 +152,7 @@ function TripList({
           key={trip.id}
           trip={trip}
           liveShared={liveIds.has(trip.id)}
+          collabShared={collabIds.has(trip.id)}
           library={library}
           onMenu={(anchor) => onMenu(trip, anchor)}
         />
@@ -157,6 +164,8 @@ function TripList({
 /** `/trips`: 여행 목록. 새 여행 만들기, 이름 바꾸기, 일정 공유, 삭제(되돌리기 토스트). */
 export function TripsPage() {
   useDocumentTitle('여행');
+  const collabRecords = useTripCollabRecords();
+  const collabIds = new Set(collabRecords.filter((r) => r.status === 'live').map((r) => r.tripId));
   const liveRecords = useTripLiveRecords();
   const liveIds = new Set(liveRecords.filter((r) => r.status === 'live').map((r) => r.tripId));
   const library = useAtomValue(libraryAtom);
@@ -173,6 +182,7 @@ export function TripsPage() {
     };
   }, [library, today]);
 
+  const [collab, setCollab] = useState<{ tripId: string; open: boolean } | null>(null);
   const [creating, setCreating] = useState(false);
   const [menu, setMenu] = useState<{ tripId: string; anchor: HTMLElement } | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
@@ -195,6 +205,11 @@ export function TripsPage() {
       return deleteTrip(lib, id, ctx);
     });
     if (!result.ok) return;
+    const connection = tripCollabStore.get(id);
+    if (connection?.role === 'editor' && connection.status === 'live' && connection.token) {
+      void tripCollabApi.removeMember(connection.liveId, connection.token, 'me');
+      tripCollabStore.remove(id);
+    }
     setDeleting(null);
     if (!fresh) return;
     toast(`‘${title}’ 여행을 지웠어요`, {
@@ -236,6 +251,7 @@ export function TripsPage() {
           {upcoming.length > 0 && (
             <TripList
               liveIds={liveIds}
+              collabIds={collabIds}
               label="여행 목록"
               trips={upcoming}
               library={library}
@@ -258,6 +274,7 @@ export function TripsPage() {
               </Box>
               <TripList
                 liveIds={liveIds}
+                collabIds={collabIds}
                 label="지난 여행 목록"
                 trips={past}
                 library={library}
@@ -292,6 +309,15 @@ export function TripsPage() {
           일정 공유
         </MenuItem>
         <MenuItem
+          sx={{ minHeight: 44 }}
+          onClick={() => {
+            if (menu) setCollab({ tripId: menu.tripId, open: true });
+            setMenu(null);
+          }}
+        >
+          함께 편집…
+        </MenuItem>
+        <MenuItem
           sx={{ minHeight: 44, color: 'error.main' }}
           onClick={() => {
             setDeleting(menu?.tripId ?? null);
@@ -322,6 +348,14 @@ export function TripsPage() {
           onClose={() => setRenaming(null)}
         />
       )}
+      {collab && (
+        <CollabDialogHost
+          key={collab.tripId}
+          open={collab.open}
+          onClose={() => setCollab({ ...collab, open: false })}
+          tripId={collab.tripId}
+        />
+      )}
       {sharing !== null && (
         <TripShareDialogHost
           open={sharing.open}
@@ -336,6 +370,14 @@ export function TripsPage() {
             <DialogContentText>
               {`‘${deletingTrip.title.value}’ 여행을 지울까요? 보관함의 장소는 지워지지 않아요.`}
             </DialogContentText>
+            {collabRecords.some(
+              (r) => r.tripId === deletingTrip.id && r.role === 'editor' && r.status === 'live',
+            ) && (
+              <DialogContentText>
+                함께 편집 중인 여행이에요. 이 기기에서만 지워지고 공동 여행은 남아요. 이 기기의 함께
+                편집도 그만둬요
+              </DialogContentText>
+            )}
             {liveIds.has(deletingTrip.id) && (
               <DialogContentText>
                 갱신 링크는 서버에 남아요. 설정 › 갱신 링크에서 지울 수 있어요

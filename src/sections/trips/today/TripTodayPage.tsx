@@ -1,8 +1,12 @@
 import Box from '@mui/material/Box';
 import MenuItem from '@mui/material/MenuItem';
 import { useAtomValue } from 'jotai';
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useParams } from 'react-router';
+import { toast } from 'sonner';
+import { OWNER_DEVICE, OWNER_LABEL } from 'src/domain/trip-collab/constants';
+import { visitedInTrip } from 'src/domain/trips/today';
+import { useTripCollab } from 'src/sections/trips/collab/use-trip-collab';
 import { CheckIcon } from 'src/components/icons';
 import type { MapPadding } from 'src/components/map/MapAdapter';
 import { useDocumentTitle } from 'src/lib/use-document-title';
@@ -75,7 +79,25 @@ function Today({ trip }: { trip: Trip }) {
   const focusSeq = useRef(0);
   // 내 위치는 이 화면 상태로만 둔다(보이는 동안만 지켜봄). 받은 지 2분이 지난 위치는 `useToday`가 버린다.
   const location = useMyLocation();
-  const model = useToday(trip, viewDay, lastFixOf(location.state));
+  const collab = useTripCollab(trip.id, true);
+  const progress = collab.progress;
+  const live = collab.record?.status === 'live';
+  const deviceId = collab.record?.deviceId;
+  const isOwner = collab.record?.role === 'owner';
+  const label = collab.record?.label;
+  // `useToday`의 useMemo 의존 배열에 들어가므로 값이 같으면 같은 객체를 돌려준다.
+  const shared = useMemo(
+    () =>
+      live
+        ? {
+            progress,
+            myDevice: deviceId ?? OWNER_DEVICE,
+            myLabel: isOwner ? OWNER_LABEL : label,
+          }
+        : null,
+    [live, progress, deviceId, isOwner, label],
+  );
+  const model = useToday(trip, viewDay, lastFixOf(location.state), shared);
   // 화면 켜 두기·오프라인 안내(스펙 §4.9·§4.10)는 머리·띠의 슬롯으로만 끼운다.
   const wake = useWakeLock();
   const online = useOnline();
@@ -107,7 +129,21 @@ function Today({ trip }: { trip: Trip }) {
   }, [checkFocusTick]);
   // 토스트의 `되돌리기`는 토스트와 함께 사라진다. 누른 버튼을 `from`으로 넘겨, 저장이 끝날 때 포커스가 아직 그
   // 버튼에 있거나 `body`로 떨어졌으면 카드로 옮긴다. 사람이 다른 곳(다른 토스트의 버튼 포함)으로 옮겼으면 둔다.
-  const visit = useVisitToggle({ onUndone: (pressed) => focusCardLater(pressed) });
+  const visit = useVisitToggle({
+    onUndone: (pressed) => focusCardLater(pressed),
+    onWritten: (placeId, visitedOn) => {
+      const item = model.stops.find((stop) => stop.place.id === placeId);
+      const engine = collab.engine;
+      if (!shared || !item || !engine) return;
+      const stopId = item.stop.id;
+      const date = model.date;
+      const previousDate =
+        collab.progress?.marks.find((mark) => mark.stopId === stopId)?.date ?? date;
+      engine.queueProgress({ stopId, visited: visitedInTrip(visitedOn, trip), date });
+      // 토스트가 남아 있는 동안 Day를 바꿔도 누른 Stop과 공동 이전 값을 복원한다.
+      return () => engine.queueProgress({ stopId, visited: item.visited, date: previousDate });
+    },
+  });
 
   // 고른 Stop이 지워졌거나(다른 탭) 그날에서 빠졌으면 다음 장소로 돌아간다. 다음 장소를 고르면 `다음`으로 보인다.
   const found = model.stops.findIndex((s) => s.stop.id === selectedStopId);
@@ -194,9 +230,11 @@ function Today({ trip }: { trip: Trip }) {
         ) : null
       }
       badge={
-        wake.on ? (
+        wake.on || shared ? (
           <Box sx={{ fontSize: 12, fontWeight: 700, color: 'var(--tm-text-secondary)' }}>
-            {WAKE_LOCK_BADGE}
+            {[shared ? '함께 진행' : null, wake.on ? WAKE_LOCK_BADGE : null]
+              .filter(Boolean)
+              .join(' · ')}
           </Box>
         ) : null
       }
@@ -249,6 +287,10 @@ function Today({ trip }: { trip: Trip }) {
         selected={selected}
         onShowNext={showNext}
         onCheck={(item) => void check(item, true, { from: 'card' })}
+        onSetNext={(item) => {
+          collab.engine?.setNext(item.stop.id, model.date);
+          toast('모두에게 다음 장소로 보여요');
+        }}
         pending={visit.pending}
         cardRef={cardRef}
       />

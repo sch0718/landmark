@@ -1,18 +1,28 @@
+import { LIVE_RECORD_2A_KEYS } from '../../../fixtures/live-trip';
+import { tripLivePlanStore, TRIP_LIVE_PLAN_KEY } from 'src/services/trip-live/plan-store';
 import { setTimeout as realTimeout } from 'node:timers/promises';
 import { act, renderHook } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useTripLivePublish } from 'src/sections/trips/live/use-trip-live-publish';
+import { tripCollabStore } from 'src/services/trip-collab/store';
+import { joinCollabAsOwner } from 'src/sections/trips/collab/owner-join';
 import { tripLiveApi } from 'src/services/trip-live/client';
-import { tripLiveStore, type TripLiveRecord } from 'src/services/trip-live/store';
+import { TRIP_LIVE_KEY, tripLiveStore, type TripLiveRecord } from 'src/services/trip-live/store';
 import { libraryAtom } from 'src/stores/library-state';
-import { buildLiveTripDoc, ESTIMATE_ONLY, liveEditKey } from 'src/domain/trip-live/build-live-doc';
+import {
+  buildLiveTripDoc,
+  ESTIMATE_ONLY,
+  liveEditKey,
+  livePlanKey,
+} from 'src/domain/trip-live/build-live-doc';
 import { buildLiveLibrary } from '../../../fixtures/builders';
 import { toast } from 'sonner';
 vi.mock('src/services/trip-live/client', () => ({
-  tripLiveApi: { update: vi.fn(), rotate: vi.fn() },
+  tripLiveApi: { update: vi.fn(), get: vi.fn(), rotate: vi.fn() },
 }));
+vi.mock('src/sections/trips/collab/owner-join', () => ({ joinCollabAsOwner: vi.fn() }));
 vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { error: vi.fn() }) }));
 const routes = vi.hoisted(() => ({
   total: 0,
@@ -92,6 +102,46 @@ function edit() {
   }));
 }
 describe('소유자 자동 반영', () => {
+  it.each([
+    ['처음 확인', '없음'],
+    ['처음 확인', '공개 지문 불일치'],
+    ['처음 확인', '계획 지문 불일치'],
+    ['온라인 복귀', '없음'],
+    ['온라인 복귀', '공개 지문 불일치'],
+    ['온라인 복귀', '계획 지문 불일치'],
+  ])('%s에서 이미 공개한 문서를 건너뛰어도 전용 키를 보충한다: %s', async (entry, missing) => {
+    const r = record();
+    const doc = buildLiveTripDoc(buildLiveLibrary(), r.tripId, ESTIMATE_ONLY, {
+      title: r.options.title,
+      options: r.options,
+      dayIds: r.dayIds,
+      createdAt: r.createdAt,
+    })!;
+    r.publishedKey = await liveEditKey(doc);
+    tripLiveStore.put(r);
+    if (entry === '온라인 복귀') await mount(false);
+    if (missing === '없음') localStorage.removeItem(TRIP_LIVE_PLAN_KEY);
+    else
+      localStorage.setItem(
+        TRIP_LIVE_PLAN_KEY,
+        JSON.stringify({
+          [r.tripId]: {
+            liveId: r.liveId,
+            publishedKey: missing === '공개 지문 불일치' ? '이전 공개 지문' : r.publishedKey,
+            planKey: '이전 계획 지문',
+          },
+        }),
+      );
+    if (entry === '처음 확인') await mount(false);
+    else {
+      act(() => window.dispatchEvent(new Event('online')));
+      await flush();
+    }
+    expect(tripLivePlanStore.get(r.tripId)).toBe(await livePlanKey(doc));
+    expect(tripLiveApi.update).not.toHaveBeenCalled();
+    expect(tripLiveStore.get(r.tripId)).toEqual(r);
+  });
+
   it('기록이 없으면 요청하지 않는다', async () => {
     await mount(false);
     await advance(20000);
@@ -119,10 +169,18 @@ describe('소유자 자동 반영', () => {
     await advance(1);
     expect(tripLiveApi.update).toHaveBeenCalledOnce();
     expect(vi.mocked(tripLiveApi.update).mock.calls[0]![2]).toBe(1);
+    expect(
+      Object.keys(JSON.parse(localStorage.getItem(TRIP_LIVE_KEY)!).trip000001).filter(
+        (key) => !LIVE_RECORD_2A_KEYS.has(key),
+      ),
+    ).toEqual([]);
     expect(tripLiveStore.get('trip000001')).toMatchObject({
       rev: 2,
       publishedKey: expect.any(String),
     });
+    expect(tripLivePlanStore.get('trip000001')).toBe(
+      await livePlanKey(vi.mocked(tripLiveApi.update).mock.calls[0]![1]),
+    );
   });
   it('구간 조회가 끝나지 않았으면 15초까지 기다린다', async () => {
     routes.total = 2;
@@ -380,4 +438,76 @@ it('화면이 모두 닫힌 뒤 도착한 실패 응답은 재시도 타이머�
   });
   await advance(300000);
   expect(tripLiveApi.update).toHaveBeenCalledOnce();
+});
+
+it('연결 기록이 live면 2A 반영을 멈추고 collab을 보인다', async () => {
+  tripCollabStore.put({
+    tripId: 'trip000001',
+    liveId: 'abcdefghij',
+    role: 'owner',
+    token: null,
+    deviceId: null,
+    label: '만든 사람',
+    status: 'live',
+    rev: 2,
+    prev: 0,
+    dayIds: ['day00001', 'day00002'],
+    placeMap: {},
+    syncedAt: new Date().toISOString(),
+    title: '여행',
+    pendingProgress: [],
+  });
+  const hook = await mount();
+  await advance(20_000);
+  expect(tripLiveApi.update).not.toHaveBeenCalled();
+  expect(hook.result.current.state).toBe('collab');
+});
+it('버전 거절은 공동 편집 합류로 이어지고 다시 덮어쓰지 않는다', async () => {
+  const doc = {
+    ...buildLiveTripDoc(buildLiveLibrary(), 'trip000001', ESTIMATE_ONLY, {
+      title: '시험 여행',
+      options: record().options,
+      dayIds: record().dayIds,
+      createdAt: record().createdAt,
+    })!,
+    v: 2 as const,
+  };
+  vi.mocked(tripLiveApi.update).mockResolvedValue({ ok: false, error: 'version' });
+  vi.mocked(tripLiveApi.get).mockResolvedValue({
+    ok: true,
+    value: { role: 'owner', rev: 3, doc, updatedAt: doc.share.createdAt, expiresAt: '2026-12-31' },
+  });
+  const hook = await mount();
+  await advance(3_000);
+  expect(hook.result.current.state).toBe('collab');
+  expect(joinCollabAsOwner).toHaveBeenCalledWith(
+    expect.anything(),
+    expect.objectContaining({ doc }),
+  );
+  await advance(20_000);
+  expect(tripLiveApi.update).toHaveBeenCalledOnce();
+});
+it('version 뒤 공동본 읽기가 실패해도 다시 받아 소유자로 합류한다', async () => {
+  const { buildLiveDoc } = await import('../../../fixtures/live-trip');
+  const doc = { ...buildLiveDoc(), v: 2 as const };
+  vi.mocked(tripLiveApi.update).mockResolvedValue({ ok: false, error: 'version' });
+  vi.mocked(tripLiveApi.get)
+    .mockResolvedValueOnce({ ok: false, error: 'offline' })
+    .mockResolvedValue({
+      ok: true,
+      value: {
+        role: 'owner',
+        rev: 3,
+        doc,
+        updatedAt: doc.share.createdAt,
+        expiresAt: '2026-12-31',
+      },
+    });
+  const hook = await mount();
+  await advance(3000);
+  expect(hook.result.current.state).toBe('failed');
+  expect(joinCollabAsOwner).not.toHaveBeenCalled();
+  await advance(30000);
+  expect(joinCollabAsOwner).toHaveBeenCalledOnce();
+  expect(hook.result.current.state).toBe('collab');
 });

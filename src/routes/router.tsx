@@ -15,6 +15,7 @@ import {
   SettingsPage,
   TripPlannerPage,
   TripLiveLinkPage,
+  TripCollabJoinPage,
   TripsPage,
   TripTodayPage,
 } from 'src/routes/lazy-routes';
@@ -60,6 +61,7 @@ export const routes: RouteObject[] = [
       { path: paths.meetOnline(':id'), element: lazyElement(<MeetLinkPage />, 'meet') },
       { path: paths.trips, element: lazyElement(<TripsPage />, 'trips') },
       { path: paths.tripLive(':id'), element: lazyElement(<TripLiveLinkPage />, 'trip-live') },
+      { path: paths.tripJoin(':id'), element: lazyElement(<TripCollabJoinPage />, 'trip-join') },
       { path: paths.trip(':id'), element: lazyElement(<TripPlannerPage />, 'trip') },
       { path: paths.tripToday(':id'), element: lazyElement(<TripTodayPage />, 'trip-today') },
     ],

@@ -98,6 +98,24 @@ export type Leg = {
   walkAllowed: boolean;
 };
 
+/** 두 장소 사이의 이동 수단·직선거리 규칙. */
+export function legBetween(trip: Trip, from: Place, to: Place): Leg {
+  const key = legKey(from.id, to.id);
+  const straightM = haversineM([from.lng, from.lat], [to.lng, to.lat]);
+  const walkAllowed = straightM <= WALK_MAX_M;
+  const chosen = trip.legModes.value[key];
+  let mode: 'car' | 'walk';
+  let modeSource: 'auto' | 'user';
+  if (chosen === 'car' || (chosen === 'walk' && walkAllowed)) {
+    mode = chosen;
+    modeSource = 'user';
+  } else {
+    mode = walkAllowed ? autoMode(straightM) : 'car';
+    modeSource = 'auto';
+  }
+  return { key, from, to, mode, modeSource, straightM, walkAllowed };
+}
+
 /**
  * 그날의 구간: `[출발점?, …보이는 Stop, 도착점?]`의 이웃한 쌍.
  * 장소가 0곳이면 출발점·도착점이 모두 있을 때만 구간 하나다.
@@ -118,20 +136,7 @@ export function dayLegs(lib: Library, trip: Trip, dayIndex: number): Leg[] {
   for (let i = 0; i + 1 < points.length; i++) {
     const from = points[i]!;
     const to = points[i + 1]!;
-    const key = legKey(from.id, to.id);
-    const straightM = haversineM([from.lng, from.lat], [to.lng, to.lat]);
-    const walkAllowed = straightM <= WALK_MAX_M;
-    const chosen = trip.legModes.value[key];
-    let mode: 'car' | 'walk';
-    let modeSource: 'auto' | 'user';
-    if (chosen === 'car' || (chosen === 'walk' && walkAllowed)) {
-      mode = chosen;
-      modeSource = 'user';
-    } else {
-      mode = walkAllowed ? autoMode(straightM) : 'car';
-      modeSource = 'auto';
-    }
-    legs.push({ key, from, to, mode, modeSource, straightM, walkAllowed });
+    legs.push(legBetween(trip, from, to));
   }
   return legs;
 }

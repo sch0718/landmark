@@ -81,6 +81,7 @@ describe('갱신 공유 API 클라이언트', () => {
     [401, '', 'unauthorized'],
     [404, '', 'not-found'],
     [409, 'taken', 'taken'],
+    [409, 'version', 'version'],
     [409, '', 'conflict'],
     [410, '', 'ended'],
     [413, '', 'too-big'],

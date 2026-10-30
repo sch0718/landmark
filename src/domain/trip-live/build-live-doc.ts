@@ -75,7 +75,14 @@ export function fitLiveDoc(doc: LiveTripDoc): LiveTripDoc | null {
   return liveDocBytes(copy) <= LIVE_DOC_MAX_BYTES ? copy : null;
 }
 /** 경로를 처음 받았을 때는 반영하고, 이미 받은 경로의 재조회 결과는 무시한다. */
-export async function liveEditKey(doc: LiveTripDoc): Promise<string> {
+export function liveEditKey(doc: LiveTripDoc): Promise<string> {
+  return liveDocKey(doc, true);
+}
+/** 합류 기준 판정용. 경로 조회 결과를 빼고 공개 계획 값은 모두 담는다. */
+export function livePlanKey(doc: LiveTripDoc): Promise<string> {
+  return liveDocKey(doc, false);
+}
+async function liveDocKey(doc: LiveTripDoc, includeRouteStatus: boolean): Promise<string> {
   const value = {
     ...doc,
     share: {
@@ -85,7 +92,9 @@ export async function liveEditKey(doc: LiveTripDoc): Promise<string> {
         ...trip,
         days: trip.days.map((day) => ({
           ...day,
-          legs: day.legs.map(({ from, to, mode, status }) => [from, to, mode, status === 'routed']),
+          legs: day.legs.map(({ from, to, mode, status }) =>
+            includeRouteStatus ? [from, to, mode, status === 'routed'] : [from, to, mode],
+          ),
         })),
       })),
     },
