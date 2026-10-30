@@ -1,8 +1,8 @@
 // @vitest-environment node
 import { randomBytes } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
-import { afterEach, beforeEach, expect, it } from 'vitest';
-import type { BackupBody } from 'src/server/library-sync/backup';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { writeBackup, type BackupBody } from 'src/server/library-sync/backup';
 import { createSyncMemoryServer } from '../../helpers/sync-memory-server';
 
 let server: ReturnType<typeof createSyncMemoryServer>;
@@ -37,7 +37,10 @@ beforeEach(async () => {
   server = createSyncMemoryServer({ ALLOWED_ACCOUNTS: 'kakao:dev-me,kakao:dev-you' });
   session = await server.login();
 });
-afterEach(() => server.db.close());
+afterEach(() => {
+  vi.restoreAllMocks();
+  server.db.close();
+});
 it('메타가 없고 쓰기 뒤 메타와 압축 크기가 일치한다', async () => {
   expect(await (await request()).json()).toEqual({
     now: expect.any(Number),
@@ -199,4 +202,33 @@ it('요청의 계정 경계와 실제 세션 계정이 다르면 쓰지 않는�
   });
   expect(response.status).toBe(401);
   expect((await server.db.prepare('SELECT COUNT(*) AS n FROM library_backups').first())?.n).toBe(1);
+});
+
+it('수동 쓰기 직후 다른 쓰기가 덮어써도 완료한 트랜잭션은 성공으로 응답한다', async () => {
+  await request('POST', validBody());
+  const owner = await server.db
+    .prepare('SELECT user_id FROM library_backups')
+    .first<{ user_id: string }>();
+  const batch = server.db.batch.bind(server.db);
+  const laterId = 'ffffffffffffffff';
+  const laterBody = validBody({
+    contentHash: 'later',
+    counts: { places: 7, labels: 2, trips: 0, meetings: 0 },
+  });
+  const spy = vi.spyOn(server.db, 'batch').mockImplementationOnce(async (stmts) => {
+    const results = await batch(stmts);
+    spy.mockRestore();
+    await writeBackup(server.db, owner!.user_id, laterBody, laterId, Date.now() + 1000);
+    return results;
+  });
+  const body = validBody({ contentHash: 'mine' });
+  const response = await request('POST', body);
+  expect(response.status).toBe(200);
+  const { backup } = await response.json();
+  expect(backup).toMatchObject({ contentHash: body.contentHash, counts: body.counts });
+  expect(backup.id).not.toBe(laterId);
+  expect((await (await request()).json()).backup).toMatchObject({
+    id: laterId,
+    contentHash: laterBody.contentHash,
+  });
 });

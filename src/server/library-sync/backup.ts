@@ -218,7 +218,7 @@ export async function writeBackup(
     now,
   ];
   if (typeof body.ifMatch === 'string') values.push(body.ifMatch);
-  await db.batch([
+  const results = (await db.batch([
     ...parts.map((data, idx) =>
       db
         .prepare(
@@ -236,10 +236,22 @@ export async function writeBackup(
         'DELETE FROM library_backup_parts WHERE user_id = ?1 AND backup_id IS NOT (SELECT id FROM library_backups WHERE user_id = ?1)',
       )
       .bind(userId),
-  ]);
-  const meta = await readBackupMeta(db, userId);
-  if (meta?.id !== id) throw new SyncHttpError(409, 'backup-changed');
-  return meta;
+    db.prepare('SELECT id FROM library_backups WHERE user_id = ?1').bind(userId),
+  ])) as { results: { id: string }[] }[];
+  // 배치 커밋 뒤 다른 쓰기가 들어와도 이 트랜잭션의 성공 여부는 바뀌지 않는다.
+  if (results.at(-1)?.results[0]?.id !== id) throw new SyncHttpError(409, 'backup-changed');
+  return {
+    id,
+    createdAt: now,
+    exportedAt: body.exportedAt,
+    storedBytes: storedBytesOf(body.data),
+    rawBytes: body.rawBytes,
+    contentHash: body.contentHash,
+    counts: { ...body.counts },
+    deviceId: body.deviceId,
+    deviceLabel: body.deviceLabel,
+    reason: body.reason,
+  };
 }
 export async function readBackupData(
   db: MeetDb,
