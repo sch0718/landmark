@@ -73,7 +73,10 @@ function setup() {
       ok: true as const,
       value: { rev: 3, expiresAt: '2026-12-31' },
     })),
-    progress: vi.fn(async () => ({ ok: true as const, value: { prev: 1, marks: [], next: null } })),
+    progress: vi.fn<CollabEngineDeps['api']['progress']>(async () => ({
+      ok: true as const,
+      value: { prev: 1, marks: [], next: null },
+    })),
   };
   const deps: CollabEngineDeps = {
     tripId: record.tripId,
