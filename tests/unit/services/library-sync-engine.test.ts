@@ -7,6 +7,7 @@ import {
   type EngineDeps,
 } from 'src/services/library-sync/sync-engine';
 import { createSyncApi } from 'src/services/library-sync/api';
+import { hashItem } from 'src/domain/library-sync/items';
 import {
   SyncStorageError,
   newDeviceMeta,
@@ -685,6 +686,95 @@ it('통신 밖의 예외도 저장 공간 부족으로 표시하지 않는다', 
   });
 });
 
+it('다른 보류 키 때문에 lastSyncAt이 멈춰도 이미 올린 수정은 건너뛰기 풀기 뒤 충돌로 남기지 않는다', async () => {
+  const server = createSyncMemoryServer();
+  disposers.push(() => server.db.close());
+  const otherId = 'other00001';
+  const key = `place:${p.id}` as const;
+  const otherKey = `place:${otherId}` as const;
+  const a = await device(server, {
+    ...emptyLibrary(),
+    places: { [p.id]: p, [otherId]: { ...p, id: otherId } },
+  });
+  await a.engine.connect('upload');
+  a.engine.stop();
+  const b = await device(server);
+  await b.engine.connect('merge');
+  b.engine.stop();
+  const editOther = async (d: typeof a, text: string) => {
+    d.state.time += 1000;
+    await d.runtime.runPromise(
+      Effect.flatMap(LibraryStore, (store) =>
+        store.update((current) =>
+          Effect.succeed({
+            ...current,
+            places: {
+              ...current.places,
+              [otherId]: {
+                ...current.places[otherId]!,
+                memo: f(text, new Date(d.state.time).toISOString()),
+              },
+            },
+          }),
+        ),
+      ),
+    );
+  };
+  await editOther(a, 'K2 서버 수정');
+  await a.engine.runNow('manual');
+  const changes = b.api.changes.bind(b.api);
+  let holdFirst = false;
+  vi.spyOn(b.api, 'changes').mockImplementation(async (request) => {
+    const reply = await changes(request);
+    if (!reply.ok) return reply;
+    return {
+      ...reply,
+      data: {
+        ...reply.data,
+        items: reply.data.items.map((r) =>
+          r.id === otherId || (holdFirst && r.id === p.id) ? { ...r, doc: {} } : r,
+        ),
+      },
+    };
+  });
+  b.state.time = a.state.time + 1000;
+  expect(await b.engine.runNow('manual')).toMatchObject({ phase: 'conflict', held: 1 });
+  const lastSyncAt = readSyncMeta(b.storage).lastSyncAt!;
+  await editOther(b, 'K2 미전송 수정');
+  await b.edit('K1 이미 올린 수정');
+  expect(await b.engine.runNow('manual')).toMatchObject({ dirty: 1, held: 1 });
+  const local = (await b.runtime.runPromise(Effect.flatMap(LibraryStore, (s) => s.snapshot)))
+    .library;
+  const base = readBase(b.storage).items[key];
+  expect(base?.hash).toBe(hashItem(local.places[p.id]));
+  expect(local.places[p.id]!.memo.updatedAt > lastSyncAt).toBe(true);
+  expect(readSyncMeta(b.storage).lastSyncAt).toBe(lastSyncAt);
+  await a.engine.runNow('manual');
+  expect(a.state.lib.places[p.id]?.memo.value).toBe('K1 이미 올린 수정');
+  a.state.time = b.state.time + 1000;
+  await a.edit('K1 나중 서버 수정');
+  await a.engine.runNow('manual');
+  holdFirst = true;
+  b.state.time = a.state.time + 1000;
+  expect(await b.engine.runNow('manual')).toMatchObject({ dirty: 1, held: 2 });
+  expect(readBase(b.storage).items[key]).toEqual(base);
+  expect(readSyncMeta(b.storage).lastSyncAt).toBe(lastSyncAt);
+  await b.engine.resolveHeld(key, 'skip');
+  const skippedAt = readSyncMeta(b.storage).skippedAt?.[key];
+  const skipTime = new Date(b.state.time).toISOString();
+  await b.engine.runNow('manual');
+  holdFirst = false;
+  await b.engine.unskipAll();
+  expect(await b.engine.runNow('manual')).toMatchObject({ dirty: 1, held: 1 });
+  expect(readSyncMeta(b.storage).held.map((h) => h.key)).toEqual([otherKey]);
+  expect(readConflicts(b.storage)).toEqual([]);
+  expect(b.state.lib.places[p.id]?.memo.value).toBe('K1 나중 서버 수정');
+  expect(b.state.lib.places[otherId]?.memo.value).toBe('K2 미전송 수정');
+  expect(readSyncMeta(b.storage).lastSyncAt).toBe(lastSyncAt);
+  expect(skippedAt).toBe(skipTime);
+  expect(readSyncMeta(b.storage).skippedAt).not.toHaveProperty(key);
+});
+
 it('건너뛴 동안 lastSyncAt이 전진해도 풀기 뒤 로컬 수정 유실을 충돌로 남긴다', async () => {
   const server = createSyncMemoryServer();
   disposers.push(() => server.db.close());
@@ -707,8 +797,8 @@ it('건너뛴 동안 lastSyncAt이 전진해도 풀기 뒤 로컬 수정 유실�
     };
   });
   expect((await b.engine.runNow('manual')).phase).toBe('conflict');
-  const skippedAt = readSyncMeta(b.storage).lastSyncAt!;
   await b.engine.resolveHeld(key, 'skip');
+  const skippedAt = readSyncMeta(b.storage).skippedAt![key]!;
   await b.edit('B T1 수정');
   b.state.time += 60_000;
   expect((await b.engine.runNow('manual')).phase).toBe('synced');
@@ -890,7 +980,11 @@ it.each(['decode', 'merge'] as const)(
       ...readSyncMeta(a.storage),
       held: [{ key, rev: 2, reason: 'decode' }],
     });
-    const skippedAt = readSyncMeta(a.storage).lastSyncAt!;
+    a.state.time += 1000;
+    const skippedAt = new Date(a.state.time).toISOString();
+    await a.engine.resolveHeld(key, 'skip');
+    expect(readSyncMeta(a.storage).skippedAt).toEqual({ [key]: skippedAt });
+    a.state.time += 1000;
     await a.engine.resolveHeld(key, 'skip');
     expect(readSyncMeta(a.storage).skippedAt).toEqual({ [key]: skippedAt });
     a.state.time += 60_000;

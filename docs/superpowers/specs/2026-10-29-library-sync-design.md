@@ -120,7 +120,7 @@
 
 | 키 | 값 | 비고 |
 |---|---|---|
-| `tripmap:sync:v1` | `{ v: 1, enabled, pendingChoice, userId, provider, accountLabel, deviceId, cursor: { rev, key } \| null, lastSyncAt, held[], skipped[], skippedAt?: { [key]: ISO 시각 }, rejected[] }` | 앱 시작 때 `enabled && !pendingChoice`만 읽는다. `deviceId`는 16자 a-z0-9(처음 만들 때). `skippedAt[key]`는 그 키가 마지막으로 맞춰진 기준으로, 이미 기록된 값은 유지하고 없으면 지금의 `lastSyncAt`, null이면 지금 ISO 시각을 쓴다. 항목 키와 문자열 값을 검사하며, 없는 옛 기록은 `{}`로 읽는다 |
+| `tripmap:sync:v1` | `{ v: 1, enabled, pendingChoice, userId, provider, accountLabel, deviceId, cursor: { rev, key } \| null, lastSyncAt, held[], skipped[], skippedAt?: { [key]: ISO 시각 }, rejected[] }` | 앱 시작 때 `enabled && !pendingChoice`만 읽는다. `deviceId`는 16자 a-z0-9(처음 만들 때). `skippedAt[key]`는 풀기 뒤 충돌 판단 기준으로, 이미 기록된 값은 유지한다. 없으면 미전송 로컬 수정이 없는 키(로컬 항목이 있고 해시가 base와 같음)는 지금 ISO 시각, 수정이 있거나 로컬 항목이 없는 키는 `lastSyncAt`(null이면 지금 ISO 시각)을 쓴다. 항목 키와 문자열 값을 검사하며, 없는 옛 기록은 `{}`로 읽는다 |
 | `tripmap:sync-base:v1` | `{ v: 1, userId, items: { [key]: "<rev36>.<hash>" 또는 "<rev36>.<hash>.d" } }` | `.d`는 그 항목의 서버 쪽이 묘비였다는 뜻 |
 | `tripmap:sync-conflicts:v1` | `{ v: 1, items: Conflict[] }` | 최신 50건, 직렬화 20만 자 넘으면 오래된 것부터 버림 |
 | `tripmap:sync-session:v1` | `{ v: 1, sessionId, provider }` | 자격 증명. 로그·URL·백업에 넣지 않는다 |
@@ -192,7 +192,7 @@
 
 정리 뒤 `LibrarySchema`가 실패하면 이슈 경로(`places.<id>.…`, `trips.<id>.…`)로 원인 항목을 찾아 그 항목만 반영 전 값으로 되돌리고(없던 항목이면 넣지 않음) 다시 검증한다. 되돌린 항목은 `held`(`{ key, rev, reason }`)에 남기고 커서를 `min(held.rev) - 1`로 둬 다음 실행에서 다시 받는다. 설정에 "이 기기에 넣지 못한 항목 N개"와 `이 기기 값으로 맞추기`(이 기기 값의 시각을 지금으로 바꿔 올림, 이 기기에 없으면 숨김) / `건너뛰기`(그 키를 받기·올리기 모두에서 제외하며 이후 로컬 수정도 이 기기에만 남음)를 둔다. 상태는 `확인 필요한 충돌`이다. 건너뛴 항목이 있으면 설정에 개수와 이 기기에서만 바뀐다는 안내, `건너뛰기 모두 풀기`를 둔다. 풀기는 실행이 끝난 뒤 같은 동기화 잠금 안에서 `meta.skipped`를 비우고 해당 키의 base를 지우며 받기 커서를 처음으로 되돌린 뒤 `schedule('manual')`한다. 다음 받기에서 같은 서버 revision도 다시 보류·병합 흐름으로 들어온다.
 
-건너뛰기로 키를 추가할 때 `skippedAt[key]`에 그 키가 마지막으로 맞춰진 기준을 기록한다. 이미 기록된 값은 처음 값으로 유지하고, 없으면 지금의 `lastSyncAt`, `lastSyncAt`이 null이면 지금 ISO 시각을 쓴다. 보류 중 확인받지 않은 로컬 수정이 있으면 `lastSyncAt`이 전진하지 않으므로, 보류 중 고친 뒤 건너뛰어도 풀기 뒤 다시 받을 때 그 수정을 충돌로 남길 수 있다. `이 기기 값으로 맞추기`를 골랐지만 로컬 항목이 없어 건너뛰기가 된 경우도 같다. 건너뛴 항목만 남았으면 로컬 수정이 있어도 `lastSyncAt`은 기존처럼 계속 갱신하며, 다른 키의 충돌 기준에는 영향을 주지 않는다. 풀기에서는 `skippedAt`을 유지한다. 풀기 뒤 그 키를 다시 받아 보관함에 성공적으로 반영한 다음에만 해당 시각을 지워 이후에는 평소 `lastSyncAt` 기준으로 돌아간다. 건너뛰기 상태에서 서버 해시만 갱신했거나 다시 보류된 키, 아직 받지 못한 키의 시각은 지우지 않는다.
+건너뛰기로 키를 추가할 때 `skippedAt[key]`에 풀기 뒤 충돌 판단 기준을 기록한다. 이미 기록된 값은 항상 처음 값으로 유지한다. 없으면 현재 보관함의 해당 로컬 문서 해시를 base 해시와 비교한다. 로컬 항목이 있고 두 해시가 같으면 확인받지 않은 로컬 수정이 없으므로 지금 ISO 시각을 쓴다. 해시가 다르거나 base가 없으면 `lastSyncAt`, `lastSyncAt`이 null이면 지금 ISO 시각을 쓴다. 로컬 항목이 없을 때도 확인받은 값과 같은지 알 수 없으므로 안전하게 `lastSyncAt`(null이면 지금 ISO 시각)을 쓴다. `decode` 보류는 base를 바꾸지 않고, `library` 보류는 되돌린 항목의 base도 반영 전 값으로 복구하므로 두 경로 모두 이 비교로 미전송 로컬 수정 여부를 판단할 수 있다. 다른 보류 키의 미전송 수정 때문에 전역 `lastSyncAt`이 멈춰 있어도, 이미 올려 맞춘 키는 지금 시각을 써 과거 수정이 충돌로 잡히지 않는다. 보류 중 확인받지 않은 로컬 수정이 있으면 과거 기준을 유지하므로, 보류 중 고친 뒤 건너뛰어도 풀기 뒤 다시 받을 때 그 수정을 충돌로 남길 수 있다. `이 기기 값으로 맞추기`를 골랐지만 로컬 항목이 없어 건너뛰기가 된 경우도 같다. 건너뛴 항목만 남았으면 로컬 수정이 있어도 `lastSyncAt`은 기존처럼 계속 갱신하며, 다른 키의 충돌 기준에는 영향을 주지 않는다. 풀기에서는 `skippedAt`을 유지한다. 풀기 뒤 그 키를 다시 받아 보관함에 성공적으로 반영한 다음에만 해당 시각을 지워 이후에는 평소 `lastSyncAt` 기준으로 돌아간다. 건너뛰기 상태에서 서버 해시만 갱신했거나 다시 보류된 키, 아직 받지 못한 키의 시각은 지우지 않는다.
 
 ### 올리기(서버)
 

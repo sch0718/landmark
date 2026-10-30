@@ -631,17 +631,21 @@ export function createLibrarySyncEngine(deps: EngineDeps): LibrarySyncEngine {
           );
           setLibrary(lib);
         }
+        let skippedAt = meta.skippedAt;
+        if (skip && skippedAt?.[key] === undefined) {
+          const current = (await snapshot()).library;
+          const doc = getItem(current, p.kind, p.id);
+          // decode 보류는 base를 유지하고 library 보류는 반영 전 base로 되돌린다.
+          // 로컬 항목이 없으면 확인받은 값과 같은지 알 수 없어 과거 기준을 유지한다.
+          const synced = doc !== undefined && readBase(storage).items[key]?.hash === hashItem(doc);
+          const now = new Date(deps.now()).toISOString();
+          skippedAt = { ...skippedAt, [key]: synced ? now : (meta.lastSyncAt ?? now) };
+        }
         writeSyncMeta(storage, {
           ...meta,
           held: meta.held.filter((h) => h.key !== key),
           skipped: skip ? [...new Set([...meta.skipped, key])] : meta.skipped,
-          skippedAt: skip
-            ? {
-                ...meta.skippedAt,
-                [key]:
-                  meta.skippedAt?.[key] ?? meta.lastSyncAt ?? new Date(deps.now()).toISOString(),
-              }
-            : meta.skippedAt,
+          skippedAt,
         });
       });
       engine.schedule('manual');
