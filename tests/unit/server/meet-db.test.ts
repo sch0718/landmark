@@ -263,7 +263,7 @@ it('버전 2 DB에서 갱신 공유 표와 색인을 더하고 기존 행을 지
     .bind('share001', '{}', 'trip', '해시', '생성', '만료')
     .run();
   await ensureSchema(db);
-  expect(await db.prepare('SELECT version FROM schema_meta').first()).toEqual({ version: 3 });
+  expect(await db.prepare('SELECT version FROM schema_meta').first()).toEqual({ version: 5 });
   for (const name of [
     'trip_shares',
     'trip_shares_expires',
@@ -277,9 +277,8 @@ it('버전 2 DB에서 갱신 공유 표와 색인을 더하고 기존 행을 지
   for (const name of ['meetings', 'share_links'])
     expect(await db.prepare(`SELECT COUNT(*) AS count FROM ${name}`).first()).toEqual({ count: 1 });
 });
-it('마지막 네 문장은 멱등 갱신 공유 표와 색인이다', () => {
-  for (const sql of SCHEMA_STATEMENTS.slice(-4)) {
-    expect(sql).toContain('trip_share');
-    expect(sql).toContain('IF NOT EXISTS');
-  }
+it('갱신 공유 문장 네 개는 멱등 표와 색인이다', () => {
+  const tripShare = SCHEMA_STATEMENTS.filter((sql) => sql.includes('trip_share'));
+  expect(tripShare).toHaveLength(4);
+  for (const sql of tripShare) expect(sql).toContain('IF NOT EXISTS');
 });
