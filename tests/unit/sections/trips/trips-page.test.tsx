@@ -541,3 +541,62 @@ it('갱신 공유 여행 카드와 지우기 확인에 서버 사본이 남는�
     act(() => tripLiveStore.remove(NEW_ID));
   }
 });
+
+it.each(['editor', 'owner'] as const)(
+  '함께 편집 %s 카드 표시와 여행 삭제 뒤 연결 기록을 구분한다',
+  async (role) => {
+    const { tripCollabStore } = await import('src/services/trip-collab/store');
+    const { tripCollabApi } = await import('src/services/trip-collab/client');
+    const remove = vi
+      .spyOn(tripCollabApi, 'removeMember')
+      .mockResolvedValue({ ok: false, error: 'offline' });
+    tripCollabStore.put({
+      tripId: NEW_ID,
+      liveId: 'abcdefghij',
+      role,
+      token: role === 'editor' ? 'e'.repeat(43) : null,
+      deviceId: role === 'editor' ? 'device01' : null,
+      label: role === 'editor' ? '민지 폰' : '만든 사람',
+      status: 'live',
+      rev: 1,
+      prev: 0,
+      dayIds: [],
+      placeMap: {},
+      syncedAt: T0,
+      title: '강릉 여행',
+      pendingProgress: [],
+    });
+    try {
+      const { store } = await renderLibrary(
+        withTrips(sampleLibrary(), [makeTrip(1, '강릉 여행', '2026-10-23', '2026-10-24')]),
+        { path: '/trips' },
+      );
+      expect(screen.getByRole('link', { name: /강릉 여행.+함께 편집 중/ })).toBeVisible();
+      expect(screen.getByText('일정 0곳 · 후보 0곳 · 함께 편집 중')).toBeVisible();
+      const user = userEvent.setup();
+      await user.click(screen.getByRole('button', { name: '‘강릉 여행’ 메뉴' }));
+      await user.click(screen.getByRole('menuitem', { name: '삭제' }));
+      const warning = screen.queryByText(
+        '함께 편집 중인 여행이에요. 이 기기에서만 지워지고 공동 여행은 남아요. 이 기기의 함께 편집도 그만둬요',
+      );
+      if (role === 'editor') expect(warning).toBeVisible();
+      else expect(warning).toBeNull();
+      await user.click(
+        within(screen.getByRole('dialog', { name: '여행 지우기' })).getByRole('button', {
+          name: '삭제',
+        }),
+      );
+      await waitFor(() => expect(store.get(libraryAtom).trips[NEW_ID]!.deletedAt).not.toBeNull());
+      if (role === 'editor') {
+        await waitFor(() => expect(tripCollabStore.get(NEW_ID)).toBeUndefined());
+        expect(remove).toHaveBeenCalledWith('abcdefghij', 'e'.repeat(43), 'me');
+      } else {
+        expect(remove).not.toHaveBeenCalled();
+        expect(tripCollabStore.get(NEW_ID)).toBeDefined();
+      }
+    } finally {
+      act(() => tripCollabStore.remove(NEW_ID));
+      remove.mockRestore();
+    }
+  },
+);
