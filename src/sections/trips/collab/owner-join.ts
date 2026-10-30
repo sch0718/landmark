@@ -1,7 +1,12 @@
 import { OWNER_LABEL } from 'src/domain/trip-collab/constants';
 import { mapServerPlaces, assignServerPlaceIds, serverIdOf } from 'src/domain/trip-collab/places';
 import { planFromDoc } from 'src/domain/trip-collab/plan';
-import { buildLiveTripDoc, liveEditKey } from 'src/domain/trip-live/build-live-doc';
+import {
+  buildLiveTripDoc,
+  ESTIMATE_ONLY,
+  liveEditKey,
+  livePlanKey,
+} from 'src/domain/trip-live/build-live-doc';
 import { alignDayIds } from 'src/domain/trip-live/live-doc';
 import type { TripCollabError } from 'src/services/trip-collab/client';
 import { tripLiveApi, type LiveState } from 'src/services/trip-live/client';
@@ -33,22 +38,40 @@ export async function joinCollabAsOwner(deps: CollabEngineDeps, live: LiveState)
   );
   // 2A와 같은 옵션·Day id로 공개본을 다시 만들어 미공개 수정 여부를 확인한다.
   const routeOf = deps.routeOf();
+  const publicationOptions = {
+    title: record.options.title,
+    options: record.options,
+    dayIds: alignDayIds(record.dayIds, trip.days.length, newDayId),
+    createdAt: record.createdAt,
+  };
   const published = buildLiveTripDoc(
     deps.getLibrary(),
     tripId,
     (leg) => routeOf(leg.from.id, leg.to.id).time,
-    {
-      title: record.options.title,
-      options: record.options,
-      dayIds: alignDayIds(record.dayIds, trip.days.length, newDayId),
-      createdAt: record.createdAt,
-    },
+    publicationOptions,
   );
   const matchesPublished =
     record.publishedKey !== undefined &&
     (await liveEditKey({ ...live.doc, v: 1 })) === record.publishedKey;
   let base = matchesPublished ? planFromDoc(live.doc) : null;
-  if (!base && published && (await liveEditKey(published)) === record.publishedKey) {
+  let cleanPublished = false;
+  if (!base && published) {
+    if (record.planKey !== undefined) {
+      cleanPublished = (await livePlanKey(published)) === record.planKey;
+    } else if (record.publishedKey !== undefined) {
+      // 옛 기록은 현재 상태와 모든 구간 미조회 상태 중 공개 지문과 맞는 쪽을 찾는다.
+      const estimated = buildLiveTripDoc(
+        deps.getLibrary(),
+        tripId,
+        ESTIMATE_ONLY,
+        publicationOptions,
+      );
+      cleanPublished =
+        (await liveEditKey(published)) === record.publishedKey ||
+        (estimated !== null && (await liveEditKey(estimated)) === record.publishedKey);
+    }
+  }
+  if (!base && published && cleanPublished) {
     // 로컬 투영 대신 공개 문서를 써서 공개에서 뺀 후보를 기준에 섞지 않는다.
     const plan = planFromDoc(published),
       toServer = serverIdOf(placeMap);

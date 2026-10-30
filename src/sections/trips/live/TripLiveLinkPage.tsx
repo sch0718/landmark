@@ -9,7 +9,12 @@ import { useStore } from 'jotai';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { toast } from 'sonner';
-import { buildLiveTripDoc, ESTIMATE_ONLY, liveEditKey } from 'src/domain/trip-live/build-live-doc';
+import {
+  buildLiveTripDoc,
+  ESTIMATE_ONLY,
+  liveEditKey,
+  livePlanKey,
+} from 'src/domain/trip-live/build-live-doc';
 import { importLiveTrip } from 'src/domain/trip-live/import-live';
 import { LIVE_ID_PATTERN, readOwnerHash } from 'src/domain/trip-live/live-doc';
 import { paths } from 'src/routes/paths';
@@ -120,7 +125,7 @@ export function TripLiveLinkPage() {
         toast.error('여행을 담지 못했어요. 다시 해 주세요');
         return;
       }
-      const publishedKey = await liveEditKey(doc);
+      const [publishedKey, planKey] = await Promise.all([liveEditKey(doc), livePlanKey(doc)]);
       const previous = tripLiveStore.byLiveId(id);
       if (previous && previous.tripId !== tripId) tripLiveStore.remove(previous.tripId);
       tripLiveStore.put({
@@ -134,6 +139,7 @@ export function TripLiveLinkPage() {
         options,
         createdAt,
         publishedKey,
+        planKey,
         publishedAt: state.updatedAt,
         expiresAt: state.expiresAt,
       });

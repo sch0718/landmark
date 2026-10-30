@@ -9,7 +9,12 @@ import { joinCollabAsOwner } from 'src/sections/trips/collab/owner-join';
 import { tripLiveApi } from 'src/services/trip-live/client';
 import { tripLiveStore, type TripLiveRecord } from 'src/services/trip-live/store';
 import { libraryAtom } from 'src/stores/library-state';
-import { buildLiveTripDoc, ESTIMATE_ONLY, liveEditKey } from 'src/domain/trip-live/build-live-doc';
+import {
+  buildLiveTripDoc,
+  ESTIMATE_ONLY,
+  liveEditKey,
+  livePlanKey,
+} from 'src/domain/trip-live/build-live-doc';
 import { buildLiveLibrary } from '../../../fixtures/builders';
 import { toast } from 'sonner';
 vi.mock('src/services/trip-live/client', () => ({
@@ -125,7 +130,11 @@ describe('소유자 자동 반영', () => {
     expect(tripLiveStore.get('trip000001')).toMatchObject({
       rev: 2,
       publishedKey: expect.any(String),
+      planKey: expect.any(String),
     });
+    expect(tripLiveStore.get('trip000001')?.planKey).toBe(
+      await livePlanKey(vi.mocked(tripLiveApi.update).mock.calls[0]![1]),
+    );
   });
   it('구간 조회가 끝나지 않았으면 15초까지 기다린다', async () => {
     routes.total = 2;

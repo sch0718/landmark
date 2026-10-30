@@ -113,6 +113,7 @@ describe('갱신 링크 창', () => {
     expect(tripLiveStore.get('trip000001')).toMatchObject({
       status: 'live',
       publishedKey: expect.any(String),
+      planKey: expect.any(String),
     });
   });
   it('응답 유실 뒤 같은 id와 토큰으로 다시 보낸다', async () => {
@@ -304,7 +305,7 @@ describe('갱신 링크 창', () => {
 });
 
 it('응답 유실 뒤 옵션을 바꿔 재시도하면 실제 서버 공개본의 지문을 기록한다', async () => {
-  const { liveEditKey } = await import('src/domain/trip-live/build-live-doc');
+  const { liveEditKey, livePlanKey } = await import('src/domain/trip-live/build-live-doc');
   tripLiveStore.put({ ...record(), status: 'pending', rev: 0 });
   vi.mocked(tripLiveApi.create).mockResolvedValue({
     ok: true,
@@ -315,6 +316,7 @@ it('응답 유실 뒤 옵션을 바꿔 재시도하면 실제 서버 공개본�
   await userEvent.click(screen.getByRole('button', { name: '갱신 링크 만들기' }));
   await screen.findByRole('textbox', { name: '보기 링크' });
   expect(tripLiveStore.get('trip000001')?.publishedKey).toBe(await liveEditKey(buildLiveDoc()));
+  expect(tripLiveStore.get('trip000001')?.planKey).toBe(await livePlanKey(buildLiveDoc()));
   expect(tripLiveStore.get('trip000001')?.options.includeMemo).toBe(true);
 });
 it.each(['turnstile', 'rate-limited', 'switched-off'] as const)(

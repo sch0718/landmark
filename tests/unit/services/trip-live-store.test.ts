@@ -29,6 +29,12 @@ describe('갱신 공유 기기 기록', () => {
     s.remove('trip000001');
     expect(s.list()).toEqual([]);
   });
+  it('선택 계획 지문을 저장하고 새 저장소에서도 읽는다', () => {
+    const s = createTripLiveStore();
+    const r = { ...record(), publishedKey: '공개 지문', planKey: '계획 지문' };
+    s.put(r);
+    expect(createTripLiveStore().get(r.tripId)).toEqual(r);
+  });
   it('깨진 JSON은 빈 목록이고 틀린 항목만 버린다', () => {
     localStorage.setItem(TRIP_LIVE_KEY, '{');
     expect(createTripLiveStore().list()).toEqual([]);

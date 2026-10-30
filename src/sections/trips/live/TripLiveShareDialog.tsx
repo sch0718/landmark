@@ -17,7 +17,12 @@ import { toast } from 'sonner';
 import { HelpButton } from 'src/components/HelpButton';
 import { injectShareDoc, shareFileName } from 'src/domain/share/inject';
 import { formatShortExpiry } from 'src/domain/share/short-link';
-import { buildLiveTripDoc, fitLiveDoc, liveEditKey } from 'src/domain/trip-live/build-live-doc';
+import {
+  buildLiveTripDoc,
+  fitLiveDoc,
+  liveEditKey,
+  livePlanKey,
+} from 'src/domain/trip-live/build-live-doc';
 import { importLiveTrip } from 'src/domain/trip-live/import-live';
 import { alignDayIds, liveExpiresAt, liveLinks } from 'src/domain/trip-live/live-doc';
 import { visibleCandidates } from 'src/domain/trips/query';
@@ -230,6 +235,7 @@ export function TripLiveShareDialog({
             viewToken,
             publishedAt: new Date().toISOString(),
             publishedKey: await liveEditKey(publishedDoc),
+            planKey: await livePlanKey(publishedDoc),
           });
           return;
         }

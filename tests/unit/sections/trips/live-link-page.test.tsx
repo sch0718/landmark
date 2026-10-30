@@ -8,7 +8,12 @@ import { tripLiveApi } from 'src/services/trip-live/client';
 import { tripCollabStore } from 'src/services/trip-collab/store';
 import { tripLiveStore } from 'src/services/trip-live/store';
 import { libraryAtom } from 'src/stores/library-state';
-import { buildLiveTripDoc, ESTIMATE_ONLY, liveEditKey } from 'src/domain/trip-live/build-live-doc';
+import {
+  buildLiveTripDoc,
+  ESTIMATE_ONLY,
+  liveEditKey,
+  livePlanKey,
+} from 'src/domain/trip-live/build-live-doc';
 import { emptyLibrary } from 'src/schema/library';
 import { buildLiveLibrary } from '../../../fixtures/builders';
 import { buildLiveDoc } from '../../../fixtures/live-trip';
@@ -84,6 +89,16 @@ describe('소유자 링크', () => {
     const lib = store.get(libraryAtom);
     expect(lib.trips[r.tripId]!.days.map((d) => d.stops.value.map((s) => s.id))).toEqual(
       buildLiveDoc().ids.stops,
+    );
+    expect(r.planKey).toBe(
+      await livePlanKey(
+        buildLiveTripDoc(lib, r.tripId, ESTIMATE_ONLY, {
+          title: r.options.title,
+          options: r.options,
+          dayIds: r.dayIds,
+          createdAt: r.createdAt,
+        })!,
+      ),
     );
     expect(r.publishedKey).toBe(
       await liveEditKey(

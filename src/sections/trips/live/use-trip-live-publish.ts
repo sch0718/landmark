@@ -5,7 +5,12 @@ import { useAtomValue } from 'jotai';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { alignDayIds } from 'src/domain/trip-live/live-doc';
-import { buildLiveTripDoc, fitLiveDoc, liveEditKey } from 'src/domain/trip-live/build-live-doc';
+import {
+  buildLiveTripDoc,
+  fitLiveDoc,
+  liveEditKey,
+  livePlanKey,
+} from 'src/domain/trip-live/build-live-doc';
 import { useTripLegs } from 'src/sections/share-export/use-trip-legs';
 import { tripLiveApi } from 'src/services/trip-live/client';
 import { rotateLiveOwner } from 'src/services/trip-live/rotate-owner';
@@ -170,7 +175,7 @@ export function useTripLivePublish(
           setState('too-big');
           return;
         }
-        const key = await liveEditKey(doc);
+        const [key, planKey] = await Promise.all([liveEditKey(doc), livePlanKey(doc)]);
         // 잠금 안에서 저장소를 다시 읽어 계획 화면과 공유 창이 같은 문서를 두 번 보내지 않게 한다.
         const fresh = tripLiveStore.get(tripId);
         if (
@@ -220,6 +225,7 @@ export function useTripLivePublish(
           tripLiveStore.update(tripId, {
             rev: result.value.rev,
             publishedKey: key,
+            planKey,
             publishedAt: new Date().toISOString(),
             expiresAt: result.value.expiresAt,
             dayIds,
