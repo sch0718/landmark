@@ -67,7 +67,7 @@ export function toBackupFailure(fail: {
     case 'busy':
       return 'changed';
     case 'limit':
-      return fail.code === 'off' ? 'off' : 'limit';
+      return fail.code === 'off' ? 'off' : fail.code === 'rate-limited' ? 'limit' : 'server';
     case 'invalid':
       return fail.code === 'too-large' ? 'too-large' : 'invalid';
     case 'server':
