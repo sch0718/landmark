@@ -8,7 +8,8 @@ import {
 import { createTripCollabStore, type TripCollabRecord } from 'src/services/trip-collab/store';
 import { tripCollabApi, type CollabState } from 'src/services/trip-collab/client';
 import { createTripLiveStore } from 'src/services/trip-live/store';
-import { planFromDoc } from 'src/domain/trip-collab/plan';
+import { planFromDoc, projectLocalTrip } from 'src/domain/trip-collab/plan';
+import { buildCollabDoc } from 'src/domain/trip-collab/build-doc';
 import { ESTIMATE_ONLY } from 'src/domain/trip-live/build-live-doc';
 import type { Library } from 'src/schema/library';
 import { buildLiveDoc } from '../../../fixtures/live-trip';
@@ -193,6 +194,120 @@ describe('함께 편집 맞추기 엔진', () => {
     await s.engine.resolve({ 'day.0.startTime': 'mine' });
     expect(s.api.putDoc).toHaveBeenCalledOnce();
   });
+  it('오프라인 순서 겹침은 보관함 갱신 알림 뒤에도 비교 상태와 기준을 유지한다', async () => {
+    const s = setup();
+    await s.deps.run((lib) => {
+      const trip = lib.trips.trip000001!,
+        first = trip.days[0]!,
+        second = trip.days[1]!,
+        third = { ...first.stops.value[0]!, id: 'stop0003', placeId: 'place00003' };
+      return {
+        ...lib,
+        places: {
+          ...lib.places,
+          place00003: { ...lib.places.place00001!, id: third.placeId },
+        },
+        trips: {
+          ...lib.trips,
+          [trip.id]: {
+            ...trip,
+            days: [
+              {
+                ...first,
+                stops: {
+                  ...first.stops,
+                  value: [...first.stops.value, ...second.stops.value, third],
+                },
+              },
+              { ...second, stops: { ...second.stops, value: [] } },
+            ],
+          },
+        },
+      };
+    });
+    const placeMap = { ...s.record.placeMap, place00003: 'place00003' },
+      original = projectLocalTrip(s.get().trips.trip000001!, (id) => id, s.record.dayIds);
+    s.store.update(s.record.tripId, { placeMap });
+    Object.assign(
+      s.doc,
+      buildCollabDoc({
+        plan: original,
+        previous: s.doc,
+        lib: s.get(),
+        placeMap,
+        role: 'editor',
+        options: s.doc.options,
+        createdAt: s.doc.share.createdAt,
+        routeOf: s.deps.routeOf(),
+      }),
+    );
+    s.store.writeBase(s.record.liveId, { rev: 2, plan: original, progress: null });
+    await s.engine.sync();
+
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: false });
+    await s.deps.run((lib) => {
+      const trip = lib.trips.trip000001!,
+        day = trip.days[0]!,
+        [a, b, c] = day.stops.value;
+      return {
+        ...lib,
+        trips: {
+          ...lib.trips,
+          [trip.id]: {
+            ...trip,
+            days: [{ ...day, stops: { ...day.stops, value: [b!, a!, c!] } }, trip.days[1]!],
+          },
+        },
+      };
+    });
+    s.engine.localChanged();
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(s.engine.getSnapshot().state).toBe('offline');
+    const day = s.doc.share.trips[0]!.days[0]!,
+      [a, b, c] = day.stops;
+    day.stops = [c!, a!, b!];
+    s.doc.ids.stops[0] = ['stop0003', 'stop0001', 'stop0002'];
+    s.setRemote({ ...s.remote(), rev: 3 });
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+    // 온라인 이벤트가 route 해제보다 먼저 도착해 첫 요청이 실패하는 경우도 거친다.
+    s.api.state.mockResolvedValueOnce({ ok: false, error: 'offline' } as never);
+    await s.engine.sync();
+    await s.engine.sync();
+    const merge = s.engine.getSnapshot().merge!;
+    expect(s.engine.getSnapshot().state).toBe('conflict');
+    expect(merge.conflicts.map((conflict) => conflict.id)).toEqual(['placement.d0']);
+    expect(merge.base).toEqual(original);
+    expect(merge.mine.days[0]!.stops.map((stop) => stop.id)).toEqual([
+      'stop0002',
+      'stop0001',
+      'stop0003',
+    ]);
+    expect(merge.theirs.days[0]!.stops.map((stop) => stop.id)).toEqual([
+      'stop0003',
+      'stop0001',
+      'stop0002',
+    ]);
+
+    // run(mapServerPlaces) 뒤 React의 library 갱신 효과가 같은 투영을 다시 알린다.
+    const requests = s.api.state.mock.calls.length;
+    s.engine.localChanged();
+    expect(s.engine.getSnapshot().state).toBe('conflict');
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(s.api.state).toHaveBeenCalledTimes(requests);
+    expect(s.store.readBase(s.record.liveId)?.plan).toEqual(original);
+    expect(s.store.get(s.record.tripId)?.rev).toBe(2);
+    expect(s.api.putDoc).not.toHaveBeenCalled();
+
+    await s.engine.resolve({ 'placement.d0': 'theirs' });
+    expect(s.engine.getSnapshot().state).toBe('synced');
+    expect(s.get().trips.trip000001!.days[0]!.stops.value.map((stop) => stop.id)).toEqual([
+      'stop0003',
+      'stop0001',
+      'stop0002',
+    ]);
+    expect(s.store.get(s.record.tripId)?.rev).toBe(3);
+    expect(s.api.putDoc).not.toHaveBeenCalled();
+  });
   it('반영 연산 안에서 사람이 고쳤으면 다시 투영한다', async () => {
     const s = setup(),
       run = s.deps.run;
@@ -211,6 +326,28 @@ describe('함께 편집 맞추기 엔진', () => {
       '07:00',
     ]);
   });
+  it.each(['11:00', '09:00'])(
+    '겹침 중 실제로 %s로 고치면 비교 안내를 유지하고 다시 병합한다',
+    async (time) => {
+      const s = setup();
+      s.change(0, '10:00');
+      s.doc.share.trips[0]!.days[0]!.startTime = '08:00';
+      await s.engine.sync();
+      expect(s.engine.getSnapshot().state).toBe('conflict');
+      s.change(0, time);
+      s.engine.localChanged();
+      expect(s.engine.getSnapshot().state).toBe('conflict');
+      await vi.advanceTimersByTimeAsync(3000);
+      if (time === '09:00') {
+        expect(s.engine.getSnapshot().state).toBe('synced');
+        expect(s.get().trips.trip000001!.days[0]!.startTime.value).toBe('08:00');
+      } else {
+        expect(s.engine.getSnapshot().state).toBe('conflict');
+        expect(s.engine.getSnapshot().merge?.mine.days[0]!.startTime).toBe(time);
+      }
+      expect(s.api.putDoc).not.toHaveBeenCalled();
+    },
+  );
   it('409 revision은 다시 받아 병합하고 세 번 넘으면 busy다', async () => {
     const s = setup();
     s.change(0, '10:00');

@@ -516,11 +516,15 @@ export class CollabEngine {
         d.newPlaceId,
       );
       const ids = alignDayIds(r.dayIds, trip.days.length, newDayId);
-      if (base && samePlan(projectLocalTrip(trip, serverIdOf(map), ids), base.plan)) return;
+      const mine = projectLocalTrip(trip, serverIdOf(map), ids);
+      if (this.snapshot.state === 'conflict' && this.snapshot.merge) {
+        // 보관함 연산의 재알림으로 비교 상태를 지우거나 맞추기를 반복하지 않는다.
+        if (samePlan(mine, this.snapshot.merge.mine)) return;
+      } else if (base && samePlan(mine, base.plan)) return;
     } catch (error) {
       d.reportError(error);
     }
-    this.emit({ state: 'pending' });
+    if (this.snapshot.state !== 'conflict') this.emit({ state: 'pending' });
     this.schedule(base ? LIVE_DEBOUNCE_MS : 0);
   }
   queueProgress(op: Omit<ProgressOp, 'at'>): void {
