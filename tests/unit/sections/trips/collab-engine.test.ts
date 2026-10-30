@@ -596,3 +596,42 @@ it('기록을 지우면 진행 중인 엔진도 끝내고 같은 연결을 다�
   s.store.put(s.record);
   expect(collabEngineFor(s.record.tripId, () => s.deps)).not.toBe(first);
 });
+
+it('겹침 중에는 받은 문서 revision으로 폴링해 전체 문서를 되받지 않는다', async () => {
+  const s = setup();
+  s.change(0, '10:00');
+  s.doc.share.trips[0]!.days[0]!.startTime = '08:00';
+  s.setRemote({ ...s.remote(), rev: 3 });
+  await s.engine.sync();
+  s.api.state.mockResolvedValueOnce({ ok: true, value: 'unchanged' } as never);
+  await s.engine.sync();
+  expect(s.api.state).toHaveBeenLastCalledWith(s.record.liveId, s.record.token, {
+    rev: 3,
+    prev: 0,
+  });
+  expect(s.engine.getSnapshot().state).toBe('conflict');
+});
+it.each(['unchanged', 'progress'] as const)(
+  '다른 탭 기준이 새로우면 %s 응답 뒤 문서를 다시 받는다',
+  async (kind) => {
+    const s = setup();
+    await s.engine.sync();
+    const fresh = structuredClone(s.doc);
+    fresh.share.trips[0]!.days[0]!.startTime = '10:00';
+    s.change(0, '10:00');
+    s.store.update(s.record.tripId, { rev: 3 });
+    s.store.writeBase(s.record.liveId, { rev: 3, plan: planFromDoc(fresh), progress: null });
+    s.setRemote({ ...s.remote(), rev: 3, doc: fresh });
+    s.api.state.mockResolvedValueOnce({
+      ok: true,
+      value: kind === 'unchanged' ? 'unchanged' : { ...s.remote(), doc: undefined },
+    } as never);
+    await s.engine.sync();
+    expect(s.api.state).toHaveBeenLastCalledWith(s.record.liveId, s.record.token, {
+      rev: null,
+      prev: null,
+    });
+    expect(s.get().trips.trip000001!.days[0]!.startTime.value).toBe('10:00');
+    expect(s.api.putDoc).not.toHaveBeenCalled();
+  },
+);

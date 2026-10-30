@@ -92,6 +92,7 @@ export class CollabEngine {
   private inflight: Promise<void> | null = null;
   private sending: Promise<void> | null = null;
   private doc: LiveTripDoc | null = null;
+  private docRev: number | null = null;
   private remote: CollabState | null = null;
   private lastPut = -Infinity;
   private retryAt = 0;
@@ -308,18 +309,38 @@ export class CollabEngine {
         this.error('unauthorized');
         return;
       }
-      const response = await d.api.state(record.liveId, token, {
-        rev: this.doc ? record.rev : null,
+      let response = await d.api.state(record.liveId, token, {
+        rev: this.doc ? this.docRev : null,
         prev: this.doc ? record.prev : null,
       });
       if (this.disposed) return;
+      // 다른 탭의 기록이 캐시보다 새로우면 문서 없는 응답을 병합에 쓰지 않는다.
+      const knownRev = Math.max(record.rev, d.store.readBase(record.liveId)?.rev ?? 0);
+      if (
+        response.ok &&
+        (response.value === 'unchanged' || !response.value.doc) &&
+        (!this.doc ||
+          this.docRev === null ||
+          this.docRev < knownRev ||
+          (response.value !== 'unchanged' && response.value.rev !== this.docRev))
+      ) {
+        response = await d.api.state(record.liveId, token, { rev: null, prev: null });
+        if (this.disposed) return;
+        if (response.ok && (response.value === 'unchanged' || !response.value.doc)) {
+          this.emit({ state: 'failed' });
+          return;
+        }
+      }
       if (!response.ok) {
         this.error(response.error);
         return;
       }
       if (response.value !== 'unchanged') {
         this.remote = response.value;
-        if (response.value.doc) this.doc = response.value.doc;
+        if (response.value.doc) {
+          this.doc = response.value.doc;
+          this.docRev = response.value.rev;
+        }
       }
       const remote = this.remote,
         doc = this.doc;
@@ -479,6 +500,7 @@ export class CollabEngine {
         }
         rev = result.value.rev;
         this.doc = fitted;
+        this.docRev = rev;
         this.remote = { ...remote, rev, doc: fitted };
       }
       d.store.writeBase(record.liveId, { rev, plan: chosen, progress });
