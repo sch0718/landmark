@@ -58,12 +58,16 @@ function JoinPage({ id }: { id: string }) {
         setMessage(INVALID);
         return;
       }
-      const existing = tripCollabStore.byLiveId(id);
-      if (existing && store.get(libraryAtom).trips[existing.tripId]?.deletedAt === null) {
+      const existing = tripCollabStore.byLiveId(id),
+        invitation = token.current?.value;
+      if (
+        existing &&
+        (existing.status === 'live' || !invitation) &&
+        store.get(libraryAtom).trips[existing.tripId]?.deletedAt === null
+      ) {
         navigate(paths.trip(existing.tripId), { replace: true });
         return;
       }
-      const invitation = token.current?.value;
       if (!invitation) {
         setMessage(INVALID);
         return;
@@ -126,6 +130,10 @@ function JoinPage({ id }: { id: string }) {
         return;
       }
       const trip = imported.value;
+      tripCollabStore
+        .list()
+        .filter((r) => r.liveId === id && r.tripId !== trip.tripId)
+        .forEach((r) => tripCollabStore.remove(r.tripId));
       tripCollabStore.put({
         tripId: trip.tripId,
         liveId: id,

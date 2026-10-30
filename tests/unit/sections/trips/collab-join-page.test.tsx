@@ -139,6 +139,39 @@ describe('편집 초대 수락 화면', () => {
     expect(tripCollabApi.accept).not.toHaveBeenCalled();
     expect(tripCollabApi.previewInvite).not.toHaveBeenCalled();
   });
+  const revokedRecord = () =>
+    tripCollabStore.put({
+      tripId: 'trip000001',
+      liveId: id,
+      role: 'editor',
+      token: 'e'.repeat(43),
+      deviceId: 'device01',
+      label: '내 폰',
+      status: 'revoked',
+      rev: 2,
+      prev: 0,
+      dayIds: doc().ids.days,
+      placeMap: {},
+      syncedAt: new Date().toISOString(),
+      title: '여행',
+      pendingProgress: [],
+    });
+  it('권한을 잃은 기록이 남아 있어도 새 초대는 수락 화면을 보이고, 수락하면 낡은 기록을 지운다', async () => {
+    revokedRecord();
+    mount(buildLiveLibrary());
+    await userEvent.click(await screen.findByRole('button', { name: '수락하고 함께 편집하기' }));
+    await waitFor(() => expect(tripCollabApi.accept).toHaveBeenCalled());
+    await waitFor(() => expect(tripCollabStore.get('trip000001')).toBeUndefined());
+    expect(tripCollabStore.list().filter((r) => r.liveId === id)).toHaveLength(1);
+    expect(tripCollabStore.readBase(id)?.rev).toBe(2);
+  });
+  it('권한을 잃은 기록이 있고 초대 토큰이 없으면 그 여행으로 간다', async () => {
+    history.replaceState(null, '', `/trips/join/${id}`);
+    revokedRecord();
+    mount(buildLiveLibrary());
+    expect(await screen.findByText('/trips/trip000001')).toBeVisible();
+    expect(tripCollabApi.previewInvite).not.toHaveBeenCalled();
+  });
   it('기기 이름이 비면 입력 오류이고 수락하지 않는다', async () => {
     mount();
     const input = await screen.findByRole('textbox', { name: '이 기기 이름' });
