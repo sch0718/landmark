@@ -1,6 +1,7 @@
 import { expect } from '@playwright/test';
 import { test, mockRoutes, placeIdByName, SEED_PLACE_COUNT, seedStorage } from './fixtures';
 import { createSyncServer, installSyncServer } from './sync-server';
+const REMOTE_SYNC_NOTE = '이 백업 뒤에 만든 장소·여행은 동기화로 다시 들어와요.';
 
 test('@desktop 서버 백업 만들기·파일 사본을 받고 되살리기·자동 백업·지우기', async ({
   page,
@@ -30,22 +31,35 @@ test('@desktop 서버 백업 만들기·파일 사본을 받고 되살리기·�
     await expect(
       backup.getByText(new RegExp(`^서버 백업: .* · 장소 ${SEED_PLACE_COUNT}곳`)),
     ).toBeVisible();
+    // 백업 뒤에 만든 항목은 서버에 올린 다음 복원으로 빠져도 다시 받아야 한다.
+    const laterLabel = '백업 뒤에 만든 라벨';
+    await page.goto('/labels');
+    await page.getByRole('textbox', { name: '새 라벨 이름', exact: true }).fill(laterLabel);
+    await page.getByRole('button', { name: '추가', exact: true }).click();
+    await expect(page.getByText(laterLabel, { exact: true })).toBeVisible();
+    await page.goto('/settings');
+    await expect(sync.getByText('동기화 완료', { exact: true })).toBeVisible({ timeout: 15000 });
     await page.goto(`/place/${placeIdByName('경포대')}`);
     await page
       .getByRole('region', { name: '장소 상세' })
       .getByRole('button', { name: '삭제', exact: true })
       .click();
     await page.goto('/settings');
+    await expect(sync.getByText('동기화 완료', { exact: true })).toBeVisible({ timeout: 15000 });
     await backup.getByRole('button', { name: '서버 백업에서 되살리기', exact: true }).click();
     const restore = page.getByRole('dialog', { name: '서버 백업에서 되살리기', exact: true });
     await expect(restore.getByText(/^서버 백업 · /)).toBeVisible();
     await expect(
       restore.getByRole('checkbox', { name: '바꾸기 전에 지금 보관함을 파일로 받기', exact: true }),
     ).toBeChecked();
+    await expect(restore.getByText(REMOTE_SYNC_NOTE, { exact: true })).toBeVisible();
     const download = page.waitForEvent('download');
     await restore.getByRole('button', { name: '이 백업으로 바꾸기', exact: true }).click();
     expect((await download).suggestedFilename()).toMatch(/^landmark-backup-.*\.json$/);
     await expect(page.getByText(/^백업에서 되살렸어요/)).toBeVisible();
+    await expect(sync.getByText('동기화 완료', { exact: true })).toBeVisible({ timeout: 15000 });
+    await page.goto('/labels');
+    await expect(page.getByText(laterLabel, { exact: true })).toBeVisible({ timeout: 15000 });
     await page.goto('/');
     await expect(page.getByRole('button', { name: /경포대/ }).first()).toBeVisible();
     await page.goto('/settings');
