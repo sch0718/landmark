@@ -768,11 +768,14 @@ it.each(['decode', 'merge'] as const)(
     expect(readBase(a.storage).items[other]).toEqual(base.items[other]);
     expect(schedule).toHaveBeenLastCalledWith('manual');
     changes.mockClear();
+    const push = vi.spyOn(a.api, 'push');
     await a.engine.runNow('manual');
     expect(changes.mock.calls[0]?.[0]).toMatchObject({ since: 0, after: '' });
-    if (flow === 'decode')
+    if (flow === 'decode') {
       expect(readSyncMeta(a.storage).held).toEqual([{ key, rev: 2, reason: 'decode' }]);
-    else {
+      const sent = push.mock.calls.flatMap(([req]) => req.items.map((i) => `${i.kind}:${i.id}`));
+      expect(sent).not.toContain(key);
+    } else {
       expect(readSyncMeta(a.storage).held).toEqual([]);
       expect(a.state.lib.places[p.id]?.memo.value).toBe('서버 값');
     }

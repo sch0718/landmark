@@ -327,7 +327,8 @@ export function createLibrarySyncEngine(deps: EngineDeps): LibrarySyncEngine {
       (await snapshot()).library,
       base.items,
       meta.rejected,
-      new Set(meta.skipped),
+      // 보류 항목은 사용자가 맞추기/건너뛰기를 고르기 전에는 올리지 않는다.
+      new Set([...meta.skipped, ...meta.held.map((h) => h.key)]),
     );
     const send: DirtyItem[] = [];
     const currentLib = (await snapshot()).library;
