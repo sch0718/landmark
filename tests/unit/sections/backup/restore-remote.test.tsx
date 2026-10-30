@@ -393,3 +393,19 @@ it.each(['resolve', 'reject'] as const)(
     expect(screen.getByRole('button', { name: '이 백업으로 바꾸기' })).toBeEnabled();
   },
 );
+
+it.each([
+  ['auth', '설정 › 동기화에서 다시 로그인해 주세요'],
+  ['not-allowed', '이 계정은 동기화를 사용할 수 없어요'],
+  ['unavailable', '서버 동기화를 사용할 수 없어요. 잠시 뒤 다시 시도해 주세요'],
+  ['error', '동기화 오류를 해결한 뒤 다시 시도해 주세요'],
+] as const)('남은 오프라인·보류 값보다 %s 원인을 먼저 안내한다', async (phase, message) => {
+  boot.enabled = true;
+  const h = await setup();
+  await act(async () =>
+    h.store.set(syncStatusAtom, { ...OFF_STATUS, phase, offline: true, held: 1 }),
+  );
+  await screen.findByText(loaded.header);
+  expect(screen.getByText(message)).toHaveAttribute('role', 'status');
+  expect(screen.getByRole('button', { name: '이 백업으로 바꾸기' })).toBeDisabled();
+});

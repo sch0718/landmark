@@ -691,3 +691,68 @@ it('runThen은 받기 실패 상태를 전달하고 후속 작업 예외에도 �
   a.state.online = true;
   expect((await a.engine.runNow('manual')).phase).toBe('synced');
 });
+
+it.each(['disconnect', 'account'] as const)(
+  '받기 전 %s로 취소된 실행의 이전 완료 상태는 되살리기를 허용하지 않는다',
+  async (cancel) => {
+    const server = createSyncMemoryServer();
+    disposers.push(() => server.db.close());
+    const a = await device(server);
+    await a.engine.connect('merge');
+    a.engine.stop();
+    const runLibrary = a.deps.runLibrary;
+    let release!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      vi.spyOn(a.deps, 'runLibrary').mockImplementationOnce(async (effect) => {
+        resolve();
+        await new Promise<void>((r) => {
+          release = r;
+        });
+        return runLibrary(effect);
+      });
+    });
+    const changes = vi.spyOn(a.api, 'changes');
+    const replace = vi.fn();
+    const after = vi.fn(async (status) => {
+      if (status.phase === 'synced' || (status.phase === 'conflict' && status.held === 0))
+        replace();
+      return status;
+    });
+    const run = a.engine.runThen('manual', after);
+    await entered;
+    let finishDisconnect!: () => void;
+    let disconnect: Promise<void> | undefined;
+    if (cancel === 'disconnect') {
+      vi.spyOn(a.api.client, 'endSession').mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finishDisconnect = () => resolve({ ok: true, data: {} });
+          }),
+      );
+      disconnect = a.engine.disconnect();
+    } else {
+      writeSyncMeta(a.storage, { ...readSyncMeta(a.storage), userId: 'new-user' });
+      writeSession(a.storage, { v: 1, provider: 'kakao', sessionId: 'n'.repeat(43) });
+    }
+    release();
+    const status = await run;
+    expect(changes).not.toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
+    expect(status.phase).toBe('auth');
+    if (disconnect) {
+      finishDisconnect();
+      await disconnect;
+    }
+  },
+);
+
+it('runThen은 세션을 지우는 허용 밖 실패도 원래 이유로 전달한다', async () => {
+  const server = createSyncMemoryServer();
+  disposers.push(() => server.db.close());
+  const a = await device(server);
+  await a.engine.connect('merge');
+  vi.spyOn(a.api, 'changes').mockResolvedValue({ ok: false, kind: 'not-allowed' });
+  const status = await a.engine.runThen('manual', async (result) => result);
+  expect(status.phase).toBe('not-allowed');
+  expect(readSession(a.storage)).toBeNull();
+});

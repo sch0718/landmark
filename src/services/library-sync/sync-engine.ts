@@ -438,6 +438,10 @@ export function createLibrarySyncEngine(deps: EngineDeps): LibrarySyncEngine {
       return engine.runThen(reason, async (result) => result);
     },
     async runThen<T>(_reason: SyncRunReason, after: (status: SyncStatus) => Promise<T>) {
+      // 기다리는 동안 연결을 끊거나 계정을 바꾸면 이전 완료 상태로 바꾸기를 허용하지 않는다.
+      const runGeneration = generation;
+      const userId = readSyncMeta(storage).userId;
+      const sessionId = readSession(storage)?.sessionId;
       // 앞 실행의 결과를 재사용하지 않고, 새 잠금 안에서 최신 변경부터 받는다.
       while (active) await active;
       cancelTimer();
@@ -448,6 +452,16 @@ export function createLibrarySyncEngine(deps: EngineDeps): LibrarySyncEngine {
         } catch (error) {
           result = await failed(error);
         }
+        if (
+          (result.phase === 'synced' || (result.phase === 'conflict' && result.held === 0)) &&
+          (generation !== runGeneration ||
+            readSyncMeta(storage).userId !== userId ||
+            readSession(storage)?.sessionId !== sessionId)
+        )
+          result = publish({
+            phase: readSyncMeta(storage).enabled ? 'auth' : 'off',
+            progress: null,
+          });
         return after(result);
       };
       const task = deps.locks ? deps.locks.request(SYNC_LOCK, run) : run();

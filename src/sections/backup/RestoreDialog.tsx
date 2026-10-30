@@ -123,8 +123,6 @@ function replaceError(mode: Mode, error: unknown): ReplaceError {
 function syncRestoreMessage(status: SyncStatus): string | null {
   if (status.phase === 'synced' || (status.phase === 'conflict' && status.held === 0)) return null;
   if (status.phase === 'syncing') return '동기화가 끝난 뒤 되살릴 수 있어요';
-  if (status.offline) return '인터넷에 연결한 뒤 다시 시도해 주세요';
-  if (status.held > 0) return '받지 못한 서버 변경이 있어요. 설정 › 동기화를 확인해 주세요';
   switch (status.phase) {
     case 'auth':
       return '설정 › 동기화에서 다시 로그인해 주세요';
@@ -139,6 +137,8 @@ function syncRestoreMessage(status: SyncStatus): string | null {
     case 'off':
       return '설정 › 동기화에서 이 기기의 동기화를 확인해 주세요';
     default:
+      if (status.held > 0) return '받지 못한 서버 변경이 있어요. 설정 › 동기화를 확인해 주세요';
+      if (status.offline) return '인터넷에 연결한 뒤 다시 시도해 주세요';
       return '동기화가 끝난 뒤 되살릴 수 있어요';
   }
 }
