@@ -303,13 +303,15 @@ function analyze(
         ts = tStops.get(stop.id) ?? [...tStops.values()].find((s) => s.placeId === placeId),
         bs = ms?.id === ts?.id ? bStops.get(stop.id) : undefined;
       if (!ms || !ts) return { ...stop };
+      // 배치 선택으로 결과 Stop id가 바뀌어도 값 선택의 키는 같은 공동 Stop id를 쓴다.
+      const fieldStopId = ts.id;
       return {
         ...stop,
         ...Object.fromEntries(
           (['stayMin', 'fixedTime', 'note'] as const).map((key) => [
             key,
             field(
-              { id: `stop.${stop.id}.${key}`, field: key, stopId: stop.id, placeId },
+              { id: `stop.${fieldStopId}.${key}`, field: key, stopId: fieldStopId, placeId },
               bs?.[key],
               ms[key],
               ts[key],
@@ -346,7 +348,13 @@ export function mergeCollabPlan(
 ): CollabMerge {
   const result = analyze(base, mine, theirs, {});
   if (checkPlan(result.plan).length)
-    return { base, mine, theirs, conflicts: [result.all], plan: null };
+    return {
+      base,
+      mine,
+      theirs,
+      conflicts: [result.all, ...result.conflicts.filter((c) => c.kind === 'field')],
+      plan: null,
+    };
   return {
     base,
     mine,
@@ -372,7 +380,18 @@ export function resolveCollabMerge(
     return {
       ok: false,
       reason: 'invalid',
-      merge: { ...merge, conflicts: [result.all], plan: null },
+      merge: {
+        ...merge,
+        conflicts: [result.all, ...result.conflicts.filter((c) => c.kind === 'field')],
+        plan: null,
+      },
+    };
+  // 배치를 고른 뒤 드러난 값 겹침도 보지 않은 선택으로 자동 처리하지 않는다.
+  if (result.conflicts.some((c) => choices[c.id] !== 'mine' && choices[c.id] !== 'theirs'))
+    return {
+      ok: false,
+      reason: 'invalid',
+      merge: { ...merge, conflicts: result.conflicts, plan: null },
     };
   return { ok: true, plan: result.plan };
 }

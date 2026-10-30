@@ -210,3 +210,20 @@ it('기간 축소로 옮긴 후보와 다른 쪽의 후보 추가가 겹치면 �
     expect(result.plan.candidates).toEqual([pid('d')]);
   }
 });
+it('전체 배치 안전망에서도 값 겹침을 숨기거나 새 겹침을 임의로 선택하지 않는다', () => {
+  const b = base(),
+    m = copy(b),
+    t = copy(b);
+  m.candidates.push(pid('a'));
+  m.days[0]!.stops[0]!.note = '내 메모';
+  t.days[0]!.stops[0]!.note = '공동 메모';
+  const merge = mergeCollabPlan(b, m, t);
+  expect(merge.conflicts.map((c) => c.id)).toContain(`stop.${m.days[0]!.stops[0]!.id}.note`);
+  const placementsOnly = {
+    ...merge,
+    conflicts: merge.conflicts.filter((c) => c.kind === 'placement'),
+  };
+  const result = resolveCollabMerge(placementsOnly, { 'placement.all': 'theirs' });
+  expect(result.ok).toBe(false);
+  if (!result.ok) expect(result).toMatchObject({ reason: 'invalid', merge: { plan: null } });
+});
