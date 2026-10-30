@@ -64,16 +64,82 @@ it('바꾸지 않은 항목을 교체하고 양쪽 수정의 base는 서버 해�
     applyRemote(local, base, [remote(server)], { ...opts, lastSyncAt: now }).conflicts,
   ).toEqual([]);
 });
-it('삭제와 오래된 서버 묘비 정리에서 수정 유실을 기록한다', () => {
+it('서버 묘비를 받으면 삭제로 인한 수정 유실을 기록한다', () => {
   const local = { ...lib, places: { [p.id]: { ...p, memo: f('내 값', later) } } };
   expect(
     applyRemote(local, base, [remote({ ...p, deletedAt: now })], opts).conflicts.some(
       (c) => c.deleted,
     ),
   ).toBe(true);
-  const result = applyRemote(local, base, [], { ...opts, fullResync: true });
+});
+it('전체 재동기화에서 서버에 없는 미변경 live 항목만 묘비로 맞춘다', () => {
+  const result = applyRemote(lib, base, [], { ...opts, fullResync: true });
   expect(result.lib.places[p.id]?.deletedAt).toBe(now);
-  expect(result.base['place:place00001']?.rev).toBe(0);
+  expect(result.base['place:place00001']).toEqual({
+    rev: 0,
+    hash: hashItem({ ...p, deletedAt: now }),
+    deleted: true,
+  });
+  expect(result.conflicts).toEqual([]);
+  expect(dirtyItems(result.lib, result.base, [])).toEqual([]);
+});
+it('전체 재동기화의 미변경 항목 삭제도 기존 충돌 기록 조건을 따른다', () => {
+  const result = applyRemote(lib, base, [], {
+    ...opts,
+    fullResync: true,
+    lastSyncAt: '2026-10-02T00:00:00.000Z',
+  });
+  expect(result.conflicts).toEqual([
+    expect.objectContaining({ mine: p, theirs: { ...p, deletedAt: now }, deleted: true }),
+  ]);
+});
+it('전체 재동기화에서 정리된 묘비를 로컬에서 되살렸으면 새 항목으로 올린다', () => {
+  const tombstoneBase = {
+    'place:place00001': { rev: 2, hash: hashItem({ ...p, deletedAt: later }), deleted: true },
+  };
+  const result = applyRemote(lib, tombstoneBase, [], { ...opts, fullResync: true });
+  expect(result.lib).toBe(lib);
+  expect(result.lib.places[p.id]).toEqual(p);
+  expect(result.base).not.toHaveProperty('place:place00001');
+  expect(result.conflicts).toEqual([]);
+  expect(dirtyItems(result.lib, result.base, [])).toEqual([
+    expect.objectContaining({ key: 'place:place00001', doc: p, baseRev: 0, baseDeleted: null }),
+  ]);
+});
+it('전체 재동기화에서 서버에 없는 로컬 수정 항목을 유지하고 새 항목으로 올린다', () => {
+  const changed = { ...p, memo: f('내 값', later) };
+  const local = { ...lib, places: { [p.id]: changed } };
+  const result = applyRemote(local, base, [], { ...opts, fullResync: true });
+  expect(result.lib).toBe(local);
+  expect(result.lib.places[p.id]).toEqual(changed);
+  expect(result.base).not.toHaveProperty('place:place00001');
+  expect(result.conflicts).toEqual([]);
+  expect(dirtyItems(result.lib, result.base, [])).toEqual([
+    expect.objectContaining({
+      key: 'place:place00001',
+      doc: changed,
+      baseRev: 0,
+      baseDeleted: null,
+    }),
+  ]);
+});
+it('전체 재동기화에서 로컬에도 없는 항목의 base를 지운다', () => {
+  const result = applyRemote(emptyLibrary(), base, [], { ...opts, fullResync: true });
+  expect(result.lib.places).toEqual({});
+  expect(result.base).toEqual({});
+  expect(dirtyItems(result.lib, result.base, [])).toEqual([]);
+});
+it('전체 재동기화에서 로컬 묘비는 그대로 두고 base를 묘비로 맞춘다', () => {
+  const tombstone = { ...p, deletedAt: later };
+  const local = { ...lib, places: { [p.id]: tombstone } };
+  const result = applyRemote(local, base, [], { ...opts, fullResync: true });
+  expect(result.lib).toBe(local);
+  expect(result.base['place:place00001']).toEqual({
+    rev: 0,
+    hash: hashItem(tombstone),
+    deleted: true,
+  });
+  expect(result.conflicts).toEqual([]);
   expect(dirtyItems(result.lib, result.base, [])).toEqual([]);
 });
 it('해석 실패와 보관함 검증 실패만 보류한다', () => {

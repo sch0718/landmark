@@ -202,12 +202,17 @@ export function applyRemote(
   }
   if (opts.fullResync) {
     const received = new Set(remote.map((r) => itemKey(r.kind, r.id)));
-    for (const key of Object.keys(base)) {
+    for (const [key, b] of Object.entries(base)) {
       if (received.has(key as ItemKey)) continue;
       const p = parseItemKey(key);
       if (!p) continue;
       const mine = getItem(next, p.kind, p.id);
       if (!mine) {
+        delete nextBase[key];
+        continue;
+      }
+      // 서버 행이 없어도 로컬 복원·수정은 보존하고 새 항목으로 다시 올린다.
+      if (!isDeleted(mine) && (b.deleted !== false || hashItem(mine) !== b.hash)) {
         delete nextBase[key];
         continue;
       }
