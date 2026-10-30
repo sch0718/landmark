@@ -685,6 +685,70 @@ it('통신 밖의 예외도 저장 공간 부족으로 표시하지 않는다', 
   });
 });
 
+it('건너뛴 동안 lastSyncAt이 전진해도 풀기 뒤 로컬 수정 유실을 충돌로 남긴다', async () => {
+  const server = createSyncMemoryServer();
+  disposers.push(() => server.db.close());
+  const a = await device(server, { ...emptyLibrary(), places: { [p.id]: p } });
+  await a.engine.connect('upload');
+  a.engine.stop();
+  const b = await device(server);
+  await b.engine.connect('merge');
+  b.engine.stop();
+  const key = `place:${p.id}` as const;
+  await a.edit('건너뛸 서버 값');
+  await a.engine.runNow('manual');
+  const changes = b.api.changes.bind(b.api);
+  vi.spyOn(b.api, 'changes').mockImplementationOnce(async (request) => {
+    const reply = await changes(request);
+    if (!reply.ok) throw Error('받기 실패');
+    return {
+      ...reply,
+      data: { ...reply.data, items: reply.data.items.map((r) => ({ ...r, doc: {} })) },
+    };
+  });
+  expect((await b.engine.runNow('manual')).phase).toBe('conflict');
+  await b.engine.resolveHeld(key, 'skip');
+  const skippedAt = new Date(b.state.time).toISOString();
+  await b.edit('B T1 수정');
+  b.state.time += 60_000;
+  expect((await b.engine.runNow('manual')).phase).toBe('synced');
+  expect(readSyncMeta(b.storage).lastSyncAt).toBe(new Date(b.state.time).toISOString());
+  a.state.time = b.state.time + 1000;
+  await a.edit('A T3 수정');
+  await a.engine.runNow('manual');
+  b.state.time = a.state.time + 1000;
+  await b.engine.unskipAll();
+  await b.engine.runNow('manual');
+  expect(readConflicts(b.storage).map((c) => [c.path, c.mine, c.theirs])).toEqual([
+    ['memo', 'B T1 수정', 'A T3 수정'],
+  ]);
+  expect(b.state.lib.places[p.id]?.memo.value).toBe('A T3 수정');
+  expect(skippedAt < readSyncMeta(b.storage).lastSyncAt!).toBe(true);
+  expect(readSyncMeta(b.storage).skippedAt).not.toHaveProperty(key);
+});
+
+it.each(['skip', 'mine'] as const)(
+  '로컬에 없는 보류 항목의 %s 처리도 처음 건너뛴 시각을 유지한다',
+  async (action) => {
+    const server = createSyncMemoryServer();
+    disposers.push(() => server.db.close());
+    const a = await device(server);
+    await a.engine.connect('merge');
+    a.engine.stop();
+    const key = `place:${p.id}` as const;
+    writeSyncMeta(a.storage, {
+      ...readSyncMeta(a.storage),
+      held: [{ key, rev: 1, reason: 'decode' }],
+    });
+    const first = new Date(a.state.time).toISOString();
+    await a.engine.resolveHeld(key, action);
+    expect(readSyncMeta(a.storage).skippedAt).toEqual({ [key]: first });
+    a.state.time += 60_000;
+    await a.engine.resolveHeld(key, action);
+    expect(readSyncMeta(a.storage).skippedAt).toEqual({ [key]: first });
+  },
+);
+
 it('건너뛴 키는 로컬을 고쳐도 올리지 않고 저장 직후 변경 수에서도 뺀다', async () => {
   const server = createSyncMemoryServer();
   disposers.push(() => server.db.close());
@@ -749,7 +813,12 @@ it.each(['decode', 'merge'] as const)(
       held: [{ key, rev: 2, reason: 'decode' }],
     });
     await a.engine.resolveHeld(key, 'skip');
+    const skippedAt = new Date(a.state.time).toISOString();
+    expect(readSyncMeta(a.storage).skippedAt).toEqual({ [key]: skippedAt });
+    a.state.time += 60_000;
     await a.engine.runNow('manual');
+    expect(readSyncMeta(a.storage).lastSyncAt).toBe(new Date(a.state.time).toISOString());
+    expect(readSyncMeta(a.storage).skippedAt).toEqual({ [key]: skippedAt });
     expect(readSyncMeta(a.storage).cursor?.rev).toBe(2);
     expect(readBase(a.storage).items[key]?.rev).toBe(2);
     const base = readBase(a.storage);
@@ -764,6 +833,7 @@ it.each(['decode', 'merge'] as const)(
     held.release();
     await undo;
     expect(readSyncMeta(a.storage).skipped).toEqual([]);
+    expect(readSyncMeta(a.storage).skippedAt).toEqual({ [key]: skippedAt });
     expect(readBase(a.storage).items).not.toHaveProperty(key);
     expect(readBase(a.storage).items[other]).toEqual(base.items[other]);
     expect(schedule).toHaveBeenLastCalledWith('manual');
@@ -772,10 +842,12 @@ it.each(['decode', 'merge'] as const)(
     await a.engine.runNow('manual');
     expect(changes.mock.calls[0]?.[0]).toMatchObject({ since: 0, after: '' });
     if (flow === 'decode') {
+      expect(readSyncMeta(a.storage).skippedAt).toEqual({ [key]: skippedAt });
       expect(readSyncMeta(a.storage).held).toEqual([{ key, rev: 2, reason: 'decode' }]);
       const sent = push.mock.calls.flatMap(([req]) => req.items.map((i) => `${i.kind}:${i.id}`));
       expect(sent).not.toContain(key);
     } else {
+      expect(readSyncMeta(a.storage).skippedAt).not.toHaveProperty(key);
       expect(readSyncMeta(a.storage).held).toEqual([]);
       expect(a.state.lib.places[p.id]?.memo.value).toBe('서버 값');
     }

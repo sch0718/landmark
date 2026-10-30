@@ -45,6 +45,7 @@ export type HeldItem = { key: ItemKey; rev: number; reason: 'decode' | 'library'
 export type ApplyOptions = {
   ctx: OpCtx;
   lastSyncAt: string | null;
+  sinceFor?: (key: string) => string | null;
   fullResync: boolean;
   conflictId: () => string;
   skip?: ReadonlySet<string>;
@@ -96,9 +97,10 @@ function conflictsFor(
   result: MergeResult<AnyItem>,
   opts: ApplyOptions,
 ): Conflict[] {
-  const since = opts.lastSyncAt;
-  if (since === null) return [];
-  const common = { key: itemKey(kind, id), kind, label: itemLabel(kind, mine), at: opts.ctx.now };
+  if (opts.lastSyncAt === null) return [];
+  const key = itemKey(kind, id);
+  const since = opts.sinceFor?.(key) ?? opts.lastSyncAt;
+  const common = { key, kind, label: itemLabel(kind, mine), at: opts.ctx.now };
   if (!isDeleted(mine) && isDeleted(result.doc) && lastTouched(mine) > since)
     return [
       { ...common, id: opts.conflictId(), path: '', mine, theirs: result.doc, deleted: true },

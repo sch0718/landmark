@@ -1,6 +1,7 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 import {
   readSyncMeta,
+  clearSyncRecords,
   writeSyncMeta,
   readBase,
   writeBase,
@@ -74,4 +75,35 @@ it('세션 형식과 저장 실패를 검사한다', () => {
     }),
   } as unknown as Storage;
   expect(() => writeSyncMeta(bad, readSyncMeta(localStorage))).toThrow(SyncStorageError);
+});
+
+it('옛 meta는 건너뛴 시각 없이 읽고 lastSyncAt을 그대로 보존한다', () => {
+  const meta = {
+    ...readSyncMeta(localStorage),
+    enabled: true,
+    lastSyncAt: '2026-10-30T00:00:00.000Z',
+    skipped: ['place:place00001'],
+  };
+  const { skippedAt: _skippedAt, ...old } = meta;
+  void _skippedAt;
+  localStorage.setItem(SYNC_META_KEY, JSON.stringify(old));
+  expect(readSyncMeta(localStorage)).toEqual({ ...old, skippedAt: {} });
+});
+it('건너뛴 시각은 왕복하고 동기화 기록을 비우면 함께 지운다', () => {
+  const skippedAt = { 'place:place00001': '2026-10-30T00:00:00.000Z' };
+  writeSyncMeta(localStorage, { ...readSyncMeta(localStorage), skippedAt });
+  expect(readSyncMeta(localStorage).skippedAt).toEqual(skippedAt);
+  clearSyncRecords(localStorage);
+  expect(readSyncMeta(localStorage).skippedAt).toEqual({});
+});
+it.each(
+  [null, [], 'bad', { 'bad:key': '2026-10-30' }, { 'place:place00001': 1 }].map((skippedAt) => ({
+    skippedAt,
+  })),
+)('깨진 skippedAt $skippedAt는 기존 meta 검사처럼 꺼진 새 기기로 읽는다', ({ skippedAt }) => {
+  localStorage.setItem(
+    SYNC_META_KEY,
+    JSON.stringify({ ...readSyncMeta(localStorage), enabled: true, skippedAt }),
+  );
+  expect(readSyncMeta(localStorage)).toMatchObject({ enabled: false, skippedAt: {} });
 });

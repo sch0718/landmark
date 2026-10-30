@@ -6,6 +6,7 @@ import {
   missingFromLocal,
   type ApplyOptions,
 } from 'src/domain/library-sync/apply';
+import type { Trip } from 'src/schema/trip';
 import { hashItem } from 'src/domain/library-sync/items';
 import { emptyLibrary, type Place } from 'src/schema/library';
 const t = '2026-10-03T00:00:00.000Z';
@@ -218,4 +219,81 @@ it('건너뛴 키는 이후 로컬 수정도 올리기 대상에서 제외한다
   expect(dirtyItems(result.lib, result.base, [], skipped)).toEqual([]);
   expect(dirtyItems(changed, result.base, [], skipped)).toEqual([]);
   expect(dirtyItems(changed, result.base, [], new Set())).toHaveLength(1);
+});
+
+it('건너뛴 키만 별도 since를 쓰고 다른 키와 시각 없는 키는 lastSyncAt을 쓴다', () => {
+  const other = { ...p, id: 'place00002', memo: f('다른 로컬 값', later) };
+  const mine = { ...p, memo: f('건너뛴 로컬 값', later) };
+  const local = { ...lib, places: { [p.id]: mine, [other.id]: other } };
+  const server = { ...p, memo: f('서버 값', now) };
+  const result = applyRemote(
+    local,
+    {},
+    [remote(server), { ...remote(server), id: other.id, doc: { ...server, id: other.id } }],
+    {
+      ...opts,
+      lastSyncAt: later,
+      sinceFor: (key) => (key === 'place:place00001' ? t : null),
+    },
+  );
+  expect(result.conflicts.map((c) => [c.key, c.path, c.mine, c.theirs])).toEqual([
+    ['place:place00001', 'memo', '건너뛴 로컬 값', '서버 값'],
+  ]);
+  expect(
+    applyRemote(local, {}, [remote(server)], { ...opts, lastSyncAt: later, sinceFor: () => null })
+      .conflicts,
+  ).toEqual([]);
+});
+it('키별 since는 삭제 충돌에도 쓰되 첫 연결의 충돌 없음 규칙을 유지한다', () => {
+  const mine = { ...p, memo: f('내 값', later) };
+  const local = { ...lib, places: { [p.id]: mine } };
+  const tombstone = { ...p, deletedAt: now };
+  const keyed = { ...opts, lastSyncAt: later, sinceFor: () => t };
+  expect(applyRemote(local, base, [remote(tombstone)], keyed).conflicts).toEqual([
+    expect.objectContaining({ deleted: true, mine }),
+  ]);
+  expect(applyRemote(local, base, [], { ...keyed, fullResync: true }).conflicts).toEqual([
+    expect.objectContaining({ deleted: true, mine }),
+  ]);
+  for (const doc of [tombstone, { ...p, memo: f('서버', now) }]) {
+    expect(
+      applyRemote(local, base, [remote(doc)], { ...keyed, lastSyncAt: null }).conflicts,
+    ).toEqual([]);
+  }
+});
+
+it('전체 선택 충돌도 키별 since를 쓰고 첫 연결에는 남기지 않는다', () => {
+  const trip: Trip = {
+    id: 'trip000001',
+    title: f('여행'),
+    startDate: f('2026-11-01'),
+    endDate: f('2026-11-01'),
+    origin: f(null),
+    candidates: f([p.id], later),
+    days: [{ stops: f([]), lodging: f(null), startTime: f('09:00') }],
+    legModes: f({}),
+    createdAt: t,
+    deletedAt: null,
+  };
+  const server: Trip = {
+    ...trip,
+    title: f('서버 여행', now),
+    candidates: f([]),
+    days: [
+      {
+        ...trip.days[0]!,
+        stops: f(
+          [{ id: 'stop0001', placeId: p.id, stayMin: null, fixedTime: null, note: '' }],
+          now,
+        ),
+      },
+    ],
+  };
+  const local = { ...lib, trips: { [trip.id]: trip } };
+  const incoming = [{ kind: 'trip' as const, id: trip.id, rev: 2, deleted: false, doc: server }];
+  const keyed = { ...opts, lastSyncAt: later, sinceFor: () => t };
+  expect(applyRemote(local, {}, incoming, keyed).conflicts).toEqual([
+    expect.objectContaining({ key: 'trip:trip000001', whole: true, mine: trip, theirs: server }),
+  ]);
+  expect(applyRemote(local, {}, incoming, { ...keyed, lastSyncAt: null }).conflicts).toEqual([]);
 });

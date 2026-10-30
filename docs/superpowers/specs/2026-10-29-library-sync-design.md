@@ -120,7 +120,7 @@
 
 | 키 | 값 | 비고 |
 |---|---|---|
-| `tripmap:sync:v1` | `{ v: 1, enabled, pendingChoice, userId, provider, accountLabel, deviceId, cursor: { rev, key } \| null, lastSyncAt, held[], skipped[], rejected[] }` | 앱 시작 때 `enabled && !pendingChoice`만 읽는다. `deviceId`는 16자 a-z0-9(처음 만들 때) |
+| `tripmap:sync:v1` | `{ v: 1, enabled, pendingChoice, userId, provider, accountLabel, deviceId, cursor: { rev, key } \| null, lastSyncAt, held[], skipped[], skippedAt?: { [key]: ISO 시각 }, rejected[] }` | 앱 시작 때 `enabled && !pendingChoice`만 읽는다. `deviceId`는 16자 a-z0-9(처음 만들 때). `skippedAt`은 항목 키와 문자열 값을 검사하며, 없는 옛 기록은 `{}`로 읽는다 |
 | `tripmap:sync-base:v1` | `{ v: 1, userId, items: { [key]: "<rev36>.<hash>" 또는 "<rev36>.<hash>.d" } }` | `.d`는 그 항목의 서버 쪽이 묘비였다는 뜻 |
 | `tripmap:sync-conflicts:v1` | `{ v: 1, items: Conflict[] }` | 최신 50건, 직렬화 20만 자 넘으면 오래된 것부터 버림 |
 | `tripmap:sync-session:v1` | `{ v: 1, sessionId, provider }` | 자격 증명. 로그·URL·백업에 넣지 않는다 |
@@ -173,10 +173,10 @@
 
 ### 충돌 기록(`확인 필요한 충돌`)
 
-- 브라우저가 `local`과 `remote`를 합칠 때만 판단한다. **진 쪽이 `local`이고 그 필드의 `updatedAt`이 이 기기의 지난 `lastSyncAt`보다 늦으면**(지난 동기화 뒤 이 기기에서 고친 값) 충돌로 남긴다. 첫 연결(`lastSyncAt === null`)의 합치기는 충돌로 남기지 않는다.
+- 브라우저가 `local`과 `remote`를 합칠 때만 판단한다. **진 쪽이 `local`이고 그 필드의 `updatedAt`이 충돌 기준 시각(`since`)보다 늦으면** 충돌로 남긴다. 보통 `since`는 이 기기의 지난 `lastSyncAt`이다. 건너뛰기를 푼 키를 다시 받을 때는 그 키의 `skippedAt[key]`를 써 건너뛴 동안의 로컬 수정도 충돌로 남긴다. 시각이 없는 옛 기록의 키와 다른 키는 `lastSyncAt`을 쓴다. 첫 연결(`lastSyncAt === null`)의 합치기는 키별 시각이 있어도 충돌로 남기지 않는다.
 - 여행 날짜·날 수 충돌은 `dates` 한 건에 두 날짜와 `days`를 함께 기록한다. 날짜 충돌과 함께 생긴 Day 필드 충돌도 이 묶음에 포함한다. 내 값으로 되돌리면 두 날짜와 모든 Day 필드의 시각을 지금으로 갱신하고 함께 저장한다. 날짜가 같은 여행의 Day별 충돌은 기존 경로를 쓴다.
-- 여행·약속 전체 선택(`whole`)에서 이 기기 쪽이 졌으면 항목 하나를 통째로 남긴다.
-- 서버 묘비를 받아 삭제가 이긴 항목을 이 기기에서 고쳤으면 "다른 기기에서 지운 ○○을 이 기기에서 고쳤어요"로 남긴다(제안서 §5.3). 전체 재동기화에서 서버 행 자체가 없어도 base가 live이면 같은 규칙으로 삭제가 이긴다. `lastTouched(mine) > lastSyncAt`인 경우에만 충돌로 남겨 `내 값으로 되돌리기`로 살릴 수 있고, 그렇지 않거나 첫 연결이면 조용히 묘비로 맞춘다. base가 묘비이고 이 기기에서 되살린 live 항목만 보존해 다시 올리며, 이 경우에는 충돌로 남기지 않는다.
+- 여행·약속 전체 선택(`whole`)에서 이 기기 쪽이 졌으면 `lastTouched(mine) > since`일 때 항목 하나를 통째로 남긴다. `since`는 위와 같이 키별로 고른다.
+- 서버 묘비를 받아 삭제가 이긴 항목을 이 기기에서 고쳤으면 "다른 기기에서 지운 ○○을 이 기기에서 고쳤어요"로 남긴다(제안서 §5.3). 전체 재동기화에서 서버 행 자체가 없어도 base가 live이면 같은 규칙으로 삭제가 이긴다. `lastTouched(mine) > since`(위와 같은 키별 기준)인 경우에만 충돌로 남겨 `내 값으로 되돌리기`로 살릴 수 있고, 그렇지 않거나 첫 연결이면 조용히 묘비로 맞춘다. base가 묘비이고 이 기기에서 되살린 live 항목만 보존해 다시 올리며, 이 경우에는 충돌로 남기지 않는다.
 - `Conflict = { id, key, kind, label, path, mine, theirs, at, whole?: true, deleted?: true }`. 화면 동작: `내 값으로 되돌리기`(그 필드를 지금 시각으로 다시 씀 → 다음 동기화에서 이김. 전체·삭제면 이 기기 사본의 모든 필드 시각을 지금으로 바꿔 되살림) / `그대로 두기`(목록에서 지움).
 
 ### 반영 뒤 정리(`repairLibrary`, 결정적)
@@ -191,6 +191,8 @@
 ### 검증 실패와 보류(`held`)
 
 정리 뒤 `LibrarySchema`가 실패하면 이슈 경로(`places.<id>.…`, `trips.<id>.…`)로 원인 항목을 찾아 그 항목만 반영 전 값으로 되돌리고(없던 항목이면 넣지 않음) 다시 검증한다. 되돌린 항목은 `held`(`{ key, rev, reason }`)에 남기고 커서를 `min(held.rev) - 1`로 둬 다음 실행에서 다시 받는다. 설정에 "이 기기에 넣지 못한 항목 N개"와 `이 기기 값으로 맞추기`(이 기기 값의 시각을 지금으로 바꿔 올림, 이 기기에 없으면 숨김) / `건너뛰기`(그 키를 받기·올리기 모두에서 제외하며 이후 로컬 수정도 이 기기에만 남음)를 둔다. 상태는 `확인 필요한 충돌`이다. 건너뛴 항목이 있으면 설정에 개수와 이 기기에서만 바뀐다는 안내, `건너뛰기 모두 풀기`를 둔다. 풀기는 실행이 끝난 뒤 같은 동기화 잠금 안에서 `meta.skipped`를 비우고 해당 키의 base를 지우며 받기 커서를 처음으로 되돌린 뒤 `schedule('manual')`한다. 다음 받기에서 같은 서버 revision도 다시 보류·병합 흐름으로 들어온다.
+
+건너뛰기로 키를 추가할 때 `skippedAt[key]`에 지금 ISO 시각을 기록한다. 이미 기록된 시각은 처음 값으로 유지한다. `이 기기 값으로 맞추기`를 골랐지만 로컬 항목이 없어 건너뛰기가 된 경우도 같다. 건너뛴 항목만 남았으면 로컬 수정이 있어도 `lastSyncAt`은 기존처럼 계속 갱신하며, 다른 키의 충돌 기준에는 영향을 주지 않는다. 풀기에서는 `skippedAt`을 유지한다. 풀기 뒤 그 키를 다시 받아 보관함에 성공적으로 반영한 다음에만 해당 시각을 지워 이후에는 평소 `lastSyncAt` 기준으로 돌아간다. 건너뛰기 상태에서 서버 해시만 갱신했거나 다시 보류된 키, 아직 받지 못한 키의 시각은 지우지 않는다.
 
 ### 올리기(서버)
 

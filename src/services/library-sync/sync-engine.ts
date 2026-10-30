@@ -295,11 +295,15 @@ export function createLibrarySyncEngine(deps: EngineDeps): LibrarySyncEngine {
     const options = (ids: { next: IdGen['Service']['next'] }): ApplyOptions => ({
       ctx: { now: new Date(deps.now()).toISOString(), newId: ids.next },
       lastSyncAt: meta.lastSyncAt,
+      sinceFor: (key) => meta.skippedAt?.[key] ?? null,
       fullResync,
       conflictId: deps.newConflictId,
       skip: new Set(meta.skipped),
     });
-    async function apply(make: (current: Library, opts: ApplyOptions) => ApplyResult) {
+    async function apply(
+      make: (current: Library, opts: ApplyOptions) => ApplyResult,
+      received: readonly { kind: RemoteItem['kind']; id: string; rev: number }[],
+    ) {
       let result: ApplyResult | undefined;
       const lib = await deps.runLibrary(
         Effect.gen(function* () {
@@ -314,11 +318,23 @@ export function createLibrarySyncEngine(deps: EngineDeps): LibrarySyncEngine {
       if (!result) return;
       base = { userId: meta.userId, items: result.base };
       conflicts = [...conflicts, ...result.conflicts];
-      meta = { ...meta, held: result.held };
+      const skippedAt = { ...meta.skippedAt };
+      // 보관함 저장에 성공한 수신 키만 평소 충돌 기준으로 돌아간다.
+      // 건너뛰는 동안의 base 갱신과 검증 실패로 되돌린 항목은 반영으로 보지 않는다.
+      for (const r of received) {
+        const key = itemKey(r.kind, r.id);
+        if (
+          !meta.skipped.includes(key) &&
+          !result.held.some((h) => h.key === key) &&
+          (result.base[key]?.rev ?? -1) >= r.rev
+        )
+          delete skippedAt[key];
+      }
+      meta = { ...meta, held: result.held, skippedAt };
       setLibrary(lib);
     }
     if (remote.length || fullResync)
-      await apply((current, opts) => applyRemote(current, base.items, remote, opts));
+      await apply((current, opts) => applyRemote(current, base.items, remote, opts), remote);
     if (meta.held.length)
       cursor = { rev: Math.max(0, Math.min(...meta.held.map((h) => h.rev)) - 1), key: '' };
     meta = { ...meta, cursor };
@@ -380,11 +396,13 @@ export function createLibrarySyncEngine(deps: EngineDeps): LibrarySyncEngine {
       if (!isCurrent()) return status;
       if (!reply.ok) throw reply;
       const held = meta.held;
-      await apply((current, opts) =>
-        applyPushResults(current, base.items, chunk, reply.data.results, {
-          ...opts,
-          fullResync: false,
-        }),
+      await apply(
+        (current, opts) =>
+          applyPushResults(current, base.items, chunk, reply.data.results, {
+            ...opts,
+            fullResync: false,
+          }),
+        reply.data.results,
       );
       meta = { ...meta, held: [...held, ...meta.held] };
       for (const r of reply.data.rejected) {
@@ -617,6 +635,12 @@ export function createLibrarySyncEngine(deps: EngineDeps): LibrarySyncEngine {
           ...meta,
           held: meta.held.filter((h) => h.key !== key),
           skipped: skip ? [...new Set([...meta.skipped, key])] : meta.skipped,
+          skippedAt: skip
+            ? {
+                ...meta.skippedAt,
+                [key]: meta.skippedAt?.[key] ?? new Date(deps.now()).toISOString(),
+              }
+            : meta.skippedAt,
         });
       });
       engine.schedule('manual');
