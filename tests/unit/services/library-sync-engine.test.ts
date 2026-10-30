@@ -408,8 +408,11 @@ it('이 기기에서 지운 보류 항목을 내 값으로 맞춰도 삭제 상�
     ...readSyncMeta(a.storage),
     held: [{ key, rev: 2, reason: 'decode' }],
   });
+  const now = '2026-10-30T03:00:00.000Z';
+  a.state.time = Date.parse(now);
   await a.engine.resolveHeld(key, 'mine');
   expect(a.state.lib.places[p.id]?.deletedAt).not.toBeNull();
+  expect(a.state.lib.places[p.id]?.deletedAt).toBe(now);
 });
 
 it('복원으로 사라진 항목을 전체 재동기화로 받고 다음 실행은 기존 커서를 쓴다', async () => {
