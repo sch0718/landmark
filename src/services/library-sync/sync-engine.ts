@@ -637,6 +637,8 @@ export function createLibrarySyncEngine(deps: EngineDeps): LibrarySyncEngine {
           const doc = getItem(current, p.kind, p.id);
           // decode 보류는 base를 유지하고 library 보류는 반영 전 base로 되돌린다.
           // 로컬 항목이 없으면 확인받은 값과 같은지 알 수 없어 과거 기준을 유지한다.
+          // 한계: 올리기 응답에서 생긴 decode 보류는 base가 올리기 전 값이라 보수적으로 lastSyncAt을 쓴다
+          // (풀기 뒤 이미 맞춰진 값이 거짓 충돌로 남을 수 있다).
           const synced = doc !== undefined && readBase(storage).items[key]?.hash === hashItem(doc);
           const now = new Date(deps.now()).toISOString();
           skippedAt = { ...skippedAt, [key]: synced ? now : (meta.lastSyncAt ?? now) };
