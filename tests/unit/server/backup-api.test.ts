@@ -232,3 +232,30 @@ it('수동 쓰기 직후 다른 쓰기가 덮어써도 완료한 트랜잭션은
     contentHash: laterBody.contentHash,
   });
 });
+it.each(
+  ['', '/data'].flatMap((suffix) =>
+    (['same-origin', 'none', 'same-site', 'cross-site', undefined] as const).map((site) => ({
+      suffix,
+      site,
+      status: site === 'same-origin' || site === 'none' ? 200 : 403,
+    })),
+  ),
+)('GET /v1/backup$suffix의 출처 없는 $site 요청은 $status', async ({ suffix, site, status }) => {
+  await request('POST', validBody());
+  const headers = new Headers({ 'X-Landmark-Session': session });
+  if (site !== undefined) headers.set('Sec-Fetch-Site', site);
+  const incoming = new Request('http://localhost:8796/api/sync/v1/backup' + suffix, { headers });
+  expect(incoming.headers.has('Origin')).toBe(false);
+  expect(incoming.headers.has('Referer')).toBe(false);
+  // fetch 도우미가 Origin을 붙이지 못하도록 실제 라우터 진입점을 직접 부른다.
+  const response = await server.handle(incoming);
+  expect(response?.status).toBe(status);
+  if (status === 403) expect(await response!.json()).toEqual({ error: 'origin' });
+  else if (suffix === '/data')
+    expect(await response!.json()).toMatchObject({ data: validBody().data });
+  else
+    expect(await response!.json()).toMatchObject({
+      writable: true,
+      backup: { counts: validBody().counts },
+    });
+});
