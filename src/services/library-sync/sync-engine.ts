@@ -488,7 +488,11 @@ export function createLibrarySyncEngine(deps: EngineDeps): LibrarySyncEngine {
       let meta = readSyncMeta(storage);
       const syncAndStart = async () => {
         const result = await engine.runNow('connect');
-        if (['synced', 'conflict', 'local'].includes(result.phase)) engine.start();
+        if (
+          !readSyncMeta(storage).pendingChoice &&
+          !['auth', 'not-allowed', 'off'].includes(result.phase)
+        )
+          engine.start();
         return result;
       };
       if (!meta.pendingChoice) return syncAndStart();

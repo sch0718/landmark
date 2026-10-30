@@ -211,8 +211,8 @@ export function applyRemote(
         delete nextBase[key];
         continue;
       }
-      // 서버 행이 없어도 로컬 복원·수정은 보존하고 새 항목으로 다시 올린다.
-      if (!isDeleted(mine) && (b.deleted !== false || hashItem(mine) !== b.hash)) {
+      // 받은 묘비를 로컬에서 되살린 경우만 보존하고 새 항목으로 다시 올린다.
+      if (!isDeleted(mine) && b.deleted !== false) {
         delete nextBase[key];
         continue;
       }

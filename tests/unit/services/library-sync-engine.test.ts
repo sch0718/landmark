@@ -228,7 +228,7 @@ it('전송 중 추가 수정과 410 뒤 없어진 서버 묘비를 보존한다'
   expect(a.state.lib.places[p.id]?.deletedAt).not.toBeNull();
 });
 it.each(['복원', '수정'] as const)(
-  '410 전체 재동기화에서 서버에 없는 로컬 %s 항목을 다음 실행에 올린다',
+  '410 전체 재동기화에서 서버에 없는 로컬 %s 항목은 base 삭제 여부에 따라 처리한다',
   async (scenario) => {
     const server = createSyncMemoryServer();
     disposers.push(() => server.db.close());
@@ -237,6 +237,7 @@ it.each(['복원', '수정'] as const)(
     expect((await a.engine.connect('upload')).phase).toBe('synced');
     expect((await a.engine.runNow('manual')).phase).toBe('synced');
     expect(readBase(a.storage).items['place:place00001']?.deleted).toBe(scenario === '복원');
+    a.state.time += 1000;
     const restored = {
       ...p,
       memo: f('로컬에서 ' + scenario, new Date(a.state.time).toISOString()),
@@ -254,10 +255,36 @@ it.each(['복원', '수정'] as const)(
     const changes = vi.spyOn(a.api, 'changes');
     const push = vi.spyOn(a.api, 'push');
 
-    expect((await a.engine.runNow('manual')).phase).toBe('synced');
+    expect((await a.engine.runNow('manual')).phase).toBe(
+      scenario === '복원' ? 'synced' : 'conflict',
+    );
     expect(changes).toHaveBeenCalledTimes(2);
     expect(changes.mock.calls[0]?.[0].since).toBeGreaterThan(0);
     expect(changes.mock.calls[1]?.[0].since).toBe(0);
+    if (scenario === '수정') {
+      expect(a.state.lib.places[p.id]).toEqual({
+        ...restored,
+        deletedAt: new Date(a.state.time).toISOString(),
+      });
+      expect(readConflicts(a.storage)).toEqual([
+        expect.objectContaining({ mine: restored, deleted: true }),
+      ]);
+      expect(push).not.toHaveBeenCalled();
+      expect(readBase(a.storage).items['place:place00001']).toMatchObject({
+        rev: 0,
+        deleted: true,
+      });
+      // 명시적으로 내 값을 선택한 뒤에만 서버에 되살린다.
+      a.state.time += 1000;
+      await a.engine.resolveConflict(readConflicts(a.storage)[0]!.id, 'mine');
+      expect((await a.engine.runNow('manual')).phase).toBe('synced');
+      expect(a.state.lib.places[p.id]?.deletedAt).toBeNull();
+      expect(a.state.lib.places[p.id]?.memo.value).toBe(restored.memo.value);
+      expect(readConflicts(a.storage)).toEqual([]);
+      expect(push).toHaveBeenCalledTimes(1);
+      expect(readBase(a.storage).items['place:place00001']?.deleted).toBe(false);
+      return;
+    }
     expect(a.state.lib.places[p.id]).toEqual(restored);
     expect(readConflicts(a.storage)).toEqual([]);
     expect(push).toHaveBeenCalledExactlyOnceWith({
@@ -488,18 +515,70 @@ it('첫 연결 성공 뒤 탭·온라인 복귀를 구독하고 중복 시작은
   events.dispatchEvent(new Event('visibilitychange'));
   expect(schedule).not.toHaveBeenCalled();
 });
-it('연결 실패 때는 구독하지 않고 다음 연결 성공 때 시작한다', async () => {
-  const server = createSyncMemoryServer();
-  disposers.push(() => server.db.close());
-  const a = await device(server);
-  a.deps.events = new EventTarget();
-  const add = vi.spyOn(a.deps.events, 'addEventListener');
-  vi.spyOn(a.api, 'changes').mockResolvedValueOnce({ ok: false, kind: 'server', status: 500 });
-  expect((await a.engine.connect('merge')).phase).toBe('unavailable');
-  expect(add).not.toHaveBeenCalled();
-  expect((await a.engine.connect('merge')).phase).toBe('synced');
-  expect(add).toHaveBeenCalledTimes(2);
-});
+it.each([
+  ['unavailable', true],
+  ['unavailable', false],
+  ['error', true],
+  ['error', false],
+] as const)(
+  '첫 연결이 %s이고 탭 표시가 %s여도 시작하며 재시도 성공 뒤 복귀 구독을 한 번만 유지한다',
+  async (phase, visible) => {
+    const server = createSyncMemoryServer();
+    disposers.push(() => server.db.close());
+    const a = await device(server);
+    const events = new EventTarget();
+    a.deps.events = events;
+    a.deps.visible = () => visible;
+    const add = vi.spyOn(events, 'addEventListener');
+    const start = vi.spyOn(a.engine, 'start');
+    vi.spyOn(a.api, 'changes').mockImplementationOnce(async () => {
+      if (phase === 'error') throw new Error('처리 중 예외');
+      return { ok: false, kind: 'server', status: 503 };
+    });
+    vi.useFakeTimers();
+    expect((await a.engine.connect('merge')).phase).toBe(phase);
+    expect(readSyncMeta(a.storage).pendingChoice).toBe(false);
+    expect(start).toHaveBeenCalledTimes(1);
+    expect(add).toHaveBeenCalledWith('visibilitychange', expect.any(Function));
+    expect(add).toHaveBeenCalledWith('online', expect.any(Function));
+
+    expect((await a.engine.runNow('retry')).phase).toBe('synced');
+    a.engine.start();
+    expect(add).toHaveBeenCalledTimes(2);
+    a.deps.visible = () => true;
+    const schedule = vi.spyOn(a.engine, 'schedule');
+    events.dispatchEvent(new Event('visibilitychange'));
+    events.dispatchEvent(new Event('online'));
+    expect(schedule.mock.calls).toEqual([['visible'], ['online']]);
+  },
+);
+it.each(['auth', 'not-allowed', 'off'] as const)(
+  '연결 결과가 %s이면 자동 동기화를 시작하지 않는다',
+  async (phase) => {
+    const server = createSyncMemoryServer();
+    disposers.push(() => server.db.close());
+    const a = await device(server);
+    a.deps.events = new EventTarget();
+    const add = vi.spyOn(a.deps.events, 'addEventListener');
+    const start = vi.spyOn(a.engine, 'start');
+    if (phase === 'off') {
+      writeSyncMeta(a.storage, {
+        ...readSyncMeta(a.storage),
+        pendingChoice: false,
+        enabled: false,
+      });
+    } else {
+      vi.spyOn(a.api, 'changes').mockResolvedValueOnce(
+        phase === 'auth'
+          ? { ok: false, kind: phase, code: 'session-expired' }
+          : { ok: false, kind: phase },
+      );
+    }
+    expect((await a.engine.connect('merge')).phase).toBe(phase);
+    expect(start).not.toHaveBeenCalled();
+    expect(add).not.toHaveBeenCalled();
+  },
+);
 
 it.each([
   [new StorageQuotaExceeded({ bytes: 1 }), '저장 공간이 부족해 동기화를 멈췄어요'],
