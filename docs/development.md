@@ -271,6 +271,8 @@ SYNC_VITE_PORT=4195 SYNC_DEV_PORT=8794 VITE_AUTO_BACKUP_INTERVAL_MS=60000 yarn d
 3. 기기 B에서 `http://127.0.0.1:8795`를 열고 같은 경로로 가짜 로그인한 뒤 `서버 보관함 받기`를 누릅니다. 장소 하나를 삭제하고 설정 › 백업 › `서버 백업에서 되살리기`를 엽니다. 미리보기에서 파일 받기 체크를 유지한 채 `이 백업으로 바꾸기`를 누르면 현재 보관함 파일을 먼저 받고 되살립니다.
 4. A에서 `자동 백업`을 켜고 장소 메모를 고칩니다. 마지막 백업에서 1분이 지난 뒤 새로고침하고 설정의 서버 백업 줄에 `· 자동`이 붙는지 확인합니다. 개발 간격 변수가 없으면 하루입니다.
 
+가짜 로그인의 실제 경로는 다음과 같습니다(화면이 아닌 곳에서 확인할 때 참고). `카카오로 로그인`을 누르면 앱이 `GET /api/sync/dev/fake-social/authorize?<카카오 authorize 질의>&provider=kakao`(계정 입력 화면, 계정 ID에는 `dev-`가 자동으로 붙음)로 보내고, `계속`은 `GET /api/sync/dev/fake-social/approve?…&sub=me&result=ok`를 거쳐 `/auth/callback?code=…`로 돌아온 뒤 `POST /api/sync/v1/session/social`로 기기 세션을 만듭니다. 가짜 공급자는 `/api/sync/dev/fake-social/` 아래에만 있고(`/v1/` 아래가 아님), 앱 빌드에 `VITE_SYNC_DEV_FAKE=1`(개발 모드)과 서버 `SYNC_DEV_FAKE_SOCIAL=1`, localhost 계열 요청 주소가 모두 있어야 열립니다. 스크립트로 세션을 만드는 순서는 `tests/helpers/sync-memory-server.ts`의 `login()`과 같습니다(PKCE `code_verifier`와 nonce를 직접 만들어야 하므로 curl 한 줄로는 어렵습니다). 세션 값은 화면·파일에 남기지 마세요.
+
 쓰기 중단을 시험하려면 `dev:sync`와 같은 명령에 `AUTO_BACKUP=off` 바인딩만 더합니다. 실행 중인 서버를 종료한 뒤 사용하세요.
 
 ```bash
