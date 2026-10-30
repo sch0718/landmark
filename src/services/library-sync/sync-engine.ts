@@ -70,6 +70,7 @@ export interface LibrarySyncEngine {
   stop(): void;
   schedule(reason: SyncRunReason): void;
   runNow(reason: SyncRunReason): Promise<SyncStatus>;
+  runThen<T>(reason: SyncRunReason, after: (status: SyncStatus) => Promise<T>): Promise<T>;
   connect(mode: ConnectMode): Promise<SyncStatus>;
   resolveConflict(id: string, action: 'mine' | 'keep'): Promise<void>;
   resolveHeld(key: string, action: 'mine' | 'skip'): Promise<void>;
@@ -432,16 +433,29 @@ export function createLibrarySyncEngine(deps: EngineDeps): LibrarySyncEngine {
         reason === 'save' ? SAVE_DEBOUNCE_MS : 0,
       );
     },
-    runNow() {
+    runNow(reason) {
       if (active) return active;
+      return engine.runThen(reason, async (result) => result);
+    },
+    async runThen<T>(_reason: SyncRunReason, after: (status: SyncStatus) => Promise<T>) {
+      // 앞 실행의 결과를 재사용하지 않고, 새 잠금 안에서 최신 변경부터 받는다.
+      while (active) await active;
       cancelTimer();
-      active = (async () => {
+      const run = async () => {
+        let result;
         try {
-          return await (deps.locks ? deps.locks.request(SYNC_LOCK, () => execute()) : execute());
+          result = await execute();
         } catch (error) {
-          return failed(error);
+          result = await failed(error);
         }
-      })()
+        return after(result);
+      };
+      const task = deps.locks ? deps.locks.request(SYNC_LOCK, run) : run();
+      active = task
+        .then(
+          () => status,
+          () => status,
+        )
         .then((result) => {
           for (const listener of listeners) listener(result);
           return result;
@@ -453,7 +467,8 @@ export function createLibrarySyncEngine(deps: EngineDeps): LibrarySyncEngine {
             engine.schedule('save');
           }
         });
-      return active;
+      await active;
+      return task;
     },
     async connect(mode) {
       let meta = readSyncMeta(storage);

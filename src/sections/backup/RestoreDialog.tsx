@@ -1,7 +1,7 @@
 import Checkbox from '@mui/material/Checkbox';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import Box from '@mui/material/Box';
-import { readBootFlag } from 'src/services/library-sync/boot';
+import { loadSyncEngine, readBootFlag } from 'src/services/library-sync/boot';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
@@ -39,7 +39,7 @@ import { PreviousNotKept, StorageQuotaExceeded } from 'src/services/errors';
 import { LibraryStore } from 'src/services/library-store';
 import { useRestoreActions } from 'src/stores/backup-state';
 import { libraryAtom } from 'src/stores/library-state';
-import { syncStatusAtom } from 'src/stores/sync-status';
+import { syncStatusAtom, type SyncStatus } from 'src/stores/sync-status';
 
 export const REMOTE_PREVIOUS_NOTE =
   "지금 보관함은 이 기기에 '되살리기 전 보관함'으로도 남아요. 설정 › 백업 › 되살리기 전으로 되돌리기로 돌아갈 수 있어요.";
@@ -119,6 +119,30 @@ function replaceError(mode: Mode, error: unknown): ReplaceError {
   return { message: REPLACE_FAILED, downloadCurrent: false };
 }
 
+/** 받지 못한 변경이 없는 완료 상태만 원격 되살리기를 허용한다. */
+function syncRestoreMessage(status: SyncStatus): string | null {
+  if (status.phase === 'synced' || (status.phase === 'conflict' && status.held === 0)) return null;
+  if (status.phase === 'syncing') return '동기화가 끝난 뒤 되살릴 수 있어요';
+  if (status.offline) return '인터넷에 연결한 뒤 다시 시도해 주세요';
+  if (status.held > 0) return '받지 못한 서버 변경이 있어요. 설정 › 동기화를 확인해 주세요';
+  switch (status.phase) {
+    case 'auth':
+      return '설정 › 동기화에서 다시 로그인해 주세요';
+    case 'not-allowed':
+      return '이 계정은 동기화를 사용할 수 없어요';
+    case 'unavailable':
+      return '서버 동기화를 사용할 수 없어요. 잠시 뒤 다시 시도해 주세요';
+    case 'error':
+      return status.message ?? '동기화 오류를 해결한 뒤 다시 시도해 주세요';
+    case 'pending-choice':
+      return '설정 › 동기화에서 연결 방식을 먼저 골라 주세요';
+    case 'off':
+      return '설정 › 동기화에서 이 기기의 동기화를 확인해 주세요';
+    default:
+      return '동기화가 끝난 뒤 되살릴 수 있어요';
+  }
+}
+
 /**
  * 연 때의 저장소 원문(키가 없으면 `null`). 빈 보관함이라 사본 없이 바꾸려 할 때 `savedText`로 넘긴다(스펙 §5).
  * 읽지 못하면(다른 탭이 망가뜨림) `null`을 돌려준다: 그때 저장소에는 원문이 있으므로 `null`과 달라 사본(손상
@@ -150,9 +174,10 @@ export function RestoreDialog({
   const library = useAtomValue(libraryAtom);
   const syncStatus = useAtomValue(syncStatusAtom);
   const store = useStore();
-  const syncBlocked = !!remote && readBootFlag() && syncStatus.phase !== 'synced';
+  const syncMessage = remote && readBootFlag() ? syncRestoreMessage(syncStatus) : null;
+  const syncBlocked = syncMessage !== null;
   const canReplace = () =>
-    !remote || !readBootFlag() || store.get(syncStatusAtom).phase === 'synced';
+    !remote || !readBootFlag() || syncRestoreMessage(store.get(syncStatusAtom)) === null;
   const { replace, undo } = useRestoreActions();
   const backupFile = useBackupFile();
   const remoteRef = useRef(remote);
@@ -172,6 +197,7 @@ export function RestoreDialog({
   const [readError, setReadError] = useState<string | null>(null);
   const [error, setError] = useState<ReplaceError | null>(null);
   const [busy, setBusy] = useState(false);
+  const [receiving, setReceiving] = useState(false);
   /** 이 대화상자에서 `지금 보관함 먼저 받기`가 성공했으면 그 파일에 담은 원문. */
   const [downloaded, setDownloaded] = useState<{ savedText: string | null } | null>(null);
   /** 손상 모드의 받은 원문. `props.savedText`로 채우고, 그 값이 바뀌거나 `지금 원문 받기`가 받으면 바꾼다. */
@@ -328,14 +354,29 @@ export function RestoreDialog({
         options = { requirePrevious: false, savedText: await openTextRef.current };
       }
       if (!canReplace()) return;
-      outcome = await replace(remote ? { ...backup, exportedAt: null } : backup, options);
+      const apply = () => replace(remote ? { ...backup, exportedAt: null } : backup, options);
+      if (remote && readBootFlag()) {
+        setReceiving(true);
+        const engine = (await loadSyncEngine()).ensureLibrarySyncEngine();
+        outcome = await engine.runThen('manual', async (status) => {
+          if (runIdRef.current !== runId || syncRestoreMessage(status) !== null) return;
+          return apply();
+        });
+      } else outcome = await apply();
+    } catch {
+      setError({
+        message: '최신 변경을 받지 못했어요. 설정 › 동기화를 확인해 주세요',
+        downloadCurrent: false,
+      });
+      return;
     } finally {
       if (runIdRef.current === runId) {
         busyRef.current = false;
         setBusy(false);
+        setReceiving(false);
       }
     }
-    if (runIdRef.current !== runId) return;
+    if (runIdRef.current !== runId || !outcome) return;
     if (!outcome.ok) {
       const failure = replaceError(mode, outcome.error);
       setError(failure);
@@ -520,9 +561,9 @@ export function RestoreDialog({
                   {remote.syncNote && <Typography variant="body2">{REMOTE_SYNC_NOTE}</Typography>}
                 </>
               )}
-              {syncBlocked && (
+              {(receiving || syncBlocked) && (
                 <Typography role="status" variant="body2">
-                  동기화가 끝난 뒤 되살릴 수 있어요
+                  {receiving ? '서버의 최신 변경을 먼저 받는 중…' : syncMessage}
                 </Typography>
               )}
               {same && (

@@ -1,7 +1,7 @@
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Provider } from 'jotai';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { RestoreDialog, type RemoteRestoreSource } from 'src/sections/backup/RestoreDialog';
 import { readBackupText } from 'src/domain/backup/read-backup';
 import { buildBackupText } from 'src/domain/backup/build-backup';
@@ -12,10 +12,11 @@ import { emptyLibrary } from 'src/schema/library';
 import { OFF_STATUS, syncStatusAtom } from 'src/stores/sync-status';
 import { renderLibrary, sampleLibrary } from '../library/fixtures';
 import { makeLibrary, place } from '../../domain/backup/fixtures';
-const boot = vi.hoisted(() => ({ enabled: false }));
+const boot = vi.hoisted(() => ({ enabled: false, runThen: vi.fn() }));
 vi.mock('src/services/library-sync/boot', async (original) => ({
   ...(await original<typeof import('src/services/library-sync/boot')>()),
   readBootFlag: () => boot.enabled,
+  loadSyncEngine: async () => ({ ensureLibrarySyncEngine: () => ({ runThen: boot.runThen }) }),
 }));
 const { download, replacing } = vi.hoisted(() => ({ download: vi.fn(), replacing: vi.fn() }));
 vi.mock('src/lib/download-text', () => ({ downloadText: download }));
@@ -36,6 +37,12 @@ vi.mock('src/stores/backup-state', async (original) => {
   };
 });
 vi.mock('src/theme/fonts', () => ({ loadDisplayFont: vi.fn(() => Promise.resolve()) }));
+beforeEach(() => {
+  download.mockReset();
+  replacing.mockReset();
+  boot.runThen.mockReset();
+  boot.runThen.mockImplementation(async (_, after) => after({ ...OFF_STATUS, phase: 'synced' }));
+});
 afterEach(() => {
   boot.enabled = false;
   cleanup();
@@ -49,7 +56,12 @@ const read = readBackupText(
 );
 if (!read.ok) throw Error('시험 백업 오류');
 const loaded = { ok: true as const, backup: read.backup, header: '서버 백업 · 시험 기기' };
-async function setup(load = vi.fn().mockResolvedValue(loaded), live = true, syncNote = true) {
+async function setup(
+  load = vi.fn().mockResolvedValue(loaded),
+  live = true,
+  syncNote = true,
+  remote = true,
+) {
   const { store, storage } = await renderLibrary(live ? sampleLibrary() : emptyLibrary(), {
     path: '/settings',
   });
@@ -61,7 +73,12 @@ async function setup(load = vi.fn().mockResolvedValue(loaded), live = true, sync
   });
   const ui = (open: boolean) => (
     <Provider store={store}>
-      <RestoreDialog open={open} onClose={vi.fn()} mode="normal" remote={source()} />
+      <RestoreDialog
+        open={open}
+        onClose={vi.fn()}
+        mode="normal"
+        remote={remote ? source() : undefined}
+      />
     </Provider>
   );
   const rendered = render(ui(true));
@@ -187,10 +204,13 @@ it.each(['syncing', 'synced', 'error'] as const)(
       expect(screen.queryByText('동기화가 끝난 뒤 되살릴 수 있어요')).toBeNull();
     } else {
       expect(button).toBeDisabled();
-      expect(screen.getByText('동기화가 끝난 뒤 되살릴 수 있어요')).toHaveAttribute(
-        'role',
-        'status',
-      );
+      expect(
+        screen.getByText(
+          phase === 'syncing'
+            ? '동기화가 끝난 뒤 되살릴 수 있어요'
+            : '동기화 오류를 해결한 뒤 다시 시도해 주세요',
+        ),
+      ).toHaveAttribute('role', 'status');
     }
   },
 );
@@ -224,4 +244,123 @@ it('파일 사본을 받는 동안 phase가 바뀌어도 되살리지 않는다'
   await userEvent.click(screen.getByRole('button', { name: '이 백업으로 바꾸기' }));
   expect(download).toHaveBeenCalledOnce();
   expect(replacing).not.toHaveBeenCalled();
+});
+
+it('최신 변경을 받는 동안 기다리고 파일 받기 → 받기 완료 → 바꾸기 순서를 지킨다', async () => {
+  boot.enabled = true;
+  const h = await setup();
+  await act(async () => h.store.set(syncStatusAtom, { ...OFF_STATUS, phase: 'synced' }));
+  await screen.findByText(loaded.header);
+  let finish!: () => void;
+  const order: string[] = [];
+  download.mockImplementationOnce(() => order.push('file'));
+  boot.runThen.mockImplementationOnce(async (_, after) => {
+    order.push('pull');
+    await new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    order.push('pulled');
+    return after({ ...OFF_STATUS, phase: 'synced' });
+  });
+  replacing.mockImplementationOnce(() => order.push('replace'));
+  await userEvent.click(screen.getByRole('button', { name: '이 백업으로 바꾸기' }));
+  expect(order).toEqual(['file', 'pull']);
+  expect(screen.getByText('서버의 최신 변경을 먼저 받는 중…')).toHaveAttribute('role', 'status');
+  expect(screen.getByRole('button', { name: '이 백업으로 바꾸기' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: '취소' })).toBeDisabled();
+  await act(async () => finish());
+  await waitFor(() => expect(order).toEqual(['file', 'pull', 'pulled', 'replace']));
+});
+
+it.each([
+  { phase: 'local', offline: true, held: 0, message: '인터넷에 연결한 뒤 다시 시도해 주세요' },
+  {
+    phase: 'conflict',
+    offline: false,
+    held: 1,
+    message: '받지 못한 서버 변경이 있어요. 설정 › 동기화를 확인해 주세요',
+  },
+  { phase: 'auth', offline: false, held: 0, message: '설정 › 동기화에서 다시 로그인해 주세요' },
+  { phase: 'not-allowed', offline: false, held: 0, message: '이 계정은 동기화를 사용할 수 없어요' },
+  {
+    phase: 'unavailable',
+    offline: false,
+    held: 0,
+    message: '서버 동기화를 사용할 수 없어요. 잠시 뒤 다시 시도해 주세요',
+  },
+  {
+    phase: 'error',
+    offline: false,
+    held: 0,
+    message: '동기화 오류를 해결한 뒤 다시 시도해 주세요',
+  },
+] as const)(
+  '새 받기가 $phase 상태로 끝나면 바꾸지 않고 안내가 상태 회복 때 풀린다',
+  async ({ message, ...patch }) => {
+    boot.enabled = true;
+    const h = await setup();
+    await act(async () => h.store.set(syncStatusAtom, { ...OFF_STATUS, phase: 'synced' }));
+    await screen.findByText(loaded.header);
+    boot.runThen.mockImplementationOnce(async (_, after) => {
+      const status = { ...OFF_STATUS, ...patch };
+      h.store.set(syncStatusAtom, status);
+      return after(status);
+    });
+    await userEvent.click(screen.getByRole('button', { name: '이 백업으로 바꾸기' }));
+    expect(replacing).not.toHaveBeenCalled();
+    expect(screen.getByText(message)).toHaveAttribute('role', 'status');
+    expect(screen.getByRole('button', { name: '이 백업으로 바꾸기' })).toBeDisabled();
+    await act(async () => h.store.set(syncStatusAtom, { ...OFF_STATUS, phase: 'synced' }));
+    expect(screen.queryByText(message)).toBeNull();
+    expect(screen.getByRole('button', { name: '이 백업으로 바꾸기' })).toBeEnabled();
+  },
+);
+
+it.each([0, 1])('conflict의 보류가 %s개면 받기 완료 기준으로 허용한다', async (held) => {
+  boot.enabled = true;
+  const h = await setup();
+  await act(async () =>
+    h.store.set(syncStatusAtom, { ...OFF_STATUS, phase: 'conflict', held, rejected: 1 }),
+  );
+  await screen.findByText(loaded.header);
+  const button = screen.getByRole('button', { name: '이 백업으로 바꾸기' });
+  if (held) {
+    expect(button).toBeDisabled();
+    expect(
+      screen.getByText('받지 못한 서버 변경이 있어요. 설정 › 동기화를 확인해 주세요'),
+    ).toHaveAttribute('role', 'status');
+  } else {
+    expect(button).toBeEnabled();
+    boot.runThen.mockImplementationOnce(async (_, after) =>
+      after({ ...OFF_STATUS, phase: 'conflict', held: 0, rejected: 1 }),
+    );
+    await userEvent.click(button);
+    await waitFor(() => expect(replacing).toHaveBeenCalledOnce());
+  }
+});
+
+it('동기화를 끈 기기는 받기를 실행하지 않고 바꾼다', async () => {
+  await setup();
+  await screen.findByText(loaded.header);
+  await userEvent.click(screen.getByRole('button', { name: '이 백업으로 바꾸기' }));
+  await waitFor(() => expect(replacing).toHaveBeenCalledOnce());
+  expect(boot.runThen).not.toHaveBeenCalled();
+});
+
+it('파일 모드는 동기화가 켜지고 보류 중이어도 기존처럼 바꾼다', async () => {
+  boot.enabled = true;
+  const h = await setup(undefined, true, true, false);
+  await act(async () => h.store.set(syncStatusAtom, { ...OFF_STATUS, phase: 'conflict', held: 1 }));
+  const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+  await userEvent.upload(
+    input,
+    new File(
+      [buildBackupText({ rawLibrary: target, prefs: null, now: new Date() })],
+      'backup.json',
+      { type: 'application/json' },
+    ),
+  );
+  await userEvent.click(await screen.findByRole('button', { name: '이 백업으로 바꾸기' }));
+  await waitFor(() => expect(replacing).toHaveBeenCalledOnce());
+  expect(boot.runThen).not.toHaveBeenCalled();
 });

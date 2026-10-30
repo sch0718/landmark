@@ -585,3 +585,109 @@ it('통신 밖의 예외도 저장 공간 부족으로 표시하지 않는다', 
     message: '예상하지 못한 오류로 동기화를 멈췄어요. 다시 시도해 주세요',
   });
 });
+
+it('되살리기는 새 서버 묘비를 먼저 받고 같은 동기화 잠금 안에서 바꾼다', async () => {
+  const server = createSyncMemoryServer();
+  disposers.push(() => server.db.close());
+  const original = { ...emptyLibrary(), places: { [p.id]: p } };
+  const a = await device(server, original);
+  await a.engine.connect('upload');
+  const b = await device(server);
+  await b.engine.connect('merge');
+  const deletedAt = new Date(a.state.time + 1000).toISOString();
+  await b.runtime.runPromise(
+    Effect.flatMap(LibraryStore, (store) =>
+      store.update((lib) =>
+        Effect.succeed({
+          ...lib,
+          places: { [p.id]: { ...p, deletedAt } },
+        }),
+      ),
+    ),
+  );
+  await b.engine.runNow('manual');
+  expect(a.state.lib.places[p.id]?.deletedAt).toBeNull();
+  let locked = false;
+  a.deps.locks = {
+    request: vi.fn(async (_, callback) => {
+      locked = true;
+      try {
+        return await callback({});
+      } finally {
+        locked = false;
+      }
+    }),
+  } as unknown as LockManager;
+  const result = await a.engine.runThen('manual', async (status) => {
+    expect(status.phase).toBe('synced');
+    expect(locked).toBe(true);
+    expect(a.state.lib.places[p.id]?.deletedAt).toBe(deletedAt);
+    await a.runtime.runPromise(
+      Effect.flatMap(LibraryStore, (store) => store.replace(original, { requirePrevious: true })),
+    );
+    a.engine.schedule('save');
+    return 'restored';
+  });
+  expect(result).toBe('restored');
+  expect(locked).toBe(false);
+  await a.engine.runNow('manual');
+  await b.engine.runNow('manual');
+  expect(b.state.lib.places[p.id]?.deletedAt).toBeNull();
+});
+
+it('runThen은 진행 중 실행 뒤 새 잠금을 기다리고 저장 예약을 잠금 해제 뒤 실행한다', async () => {
+  const server = createSyncMemoryServer();
+  disposers.push(() => server.db.close());
+  const a = await device(server);
+  await a.engine.connect('merge');
+  a.engine.stop();
+  const held = createHeldLocks();
+  a.deps.locks = held.locks;
+  const original = a.api.changes.bind(a.api);
+  let release!: () => void;
+  const entered = new Promise<void>((resolve) => {
+    vi.spyOn(a.api, 'changes').mockImplementationOnce(async (q) => {
+      resolve();
+      await new Promise<void>((r) => {
+        release = r;
+      });
+      return original(q);
+    });
+  });
+  const first = a.engine.runNow('manual');
+  await entered;
+  const after = vi.fn(async () => {
+    a.engine.schedule('save');
+    return 42;
+  });
+  const next = a.engine.runThen('manual', after);
+  expect(after).not.toHaveBeenCalled();
+  held.hold();
+  release();
+  await first;
+  await vi.waitFor(() => expect(held.requested).toHaveLength(2));
+  expect(after).not.toHaveBeenCalled();
+  held.release();
+  expect(await next).toBe(42);
+  expect(a.api.changes).toHaveBeenCalledTimes(2);
+  await a.engine.runNow('manual');
+  expect(a.api.changes).toHaveBeenCalledTimes(3);
+});
+
+it('runThen은 받기 실패 상태를 전달하고 후속 작업 예외에도 잠금을 놓는다', async () => {
+  const server = createSyncMemoryServer();
+  disposers.push(() => server.db.close());
+  const a = await device(server);
+  await a.engine.connect('merge');
+  a.state.online = false;
+  const after = vi.fn(async (status) => status.phase);
+  expect(await a.engine.runThen('manual', after)).toBe('local');
+  expect(after).toHaveBeenCalledWith(expect.objectContaining({ phase: 'local', offline: true }));
+  await expect(
+    a.engine.runThen('manual', async () => {
+      throw Error('replace failed');
+    }),
+  ).rejects.toThrow('replace failed');
+  a.state.online = true;
+  expect((await a.engine.runNow('manual')).phase).toBe('synced');
+});
