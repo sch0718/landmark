@@ -692,3 +692,10 @@
 10. **가짜 로그인 실제 진입 경로**: 설정 › 동기화 › `카카오로 로그인` → `startSocialLogin`(`src/services/library-sync/login.ts`)이 `config.devFake`면 `fakeAuthorizeUrl`로 `GET <origin>/api/sync/dev/fake-social/authorize?<카카오 authorize 질의>&provider=kakao`(계정 입력 화면) → `GET /api/sync/dev/fake-social/approve?…&sub=me&result=ok` → `/auth/callback?code=…&state=…` → `POST /api/sync/v1/session/social`. 클라이언트 쪽 가짜는 `import.meta.env.DEV && VITE_SYNC_DEV_FAKE === '1'`, 서버 쪽은 요청 호스트가 localhost 계열이고 `SYNC_DEV_FAKE_SOCIAL=1`. curl/Node로 세션을 만드는 순서는 `tests/helpers/sync-memory-server.ts`의 `login()`과 같다.
 11. **스키마 버전**: 지금 `SCHEMA_VERSION = 5`. 5를 단언하는 기존 시험은 `tests/unit/server/meet-db.test.ts:30`과 `tests/unit/server/sync-schema.test.ts`(있으면) — 6으로 고친다.
 
+## 마무리 검증에서 보완한 점
+
+- Task 3의 `loadServerBackupSection` 내보내기는 대상 파일이 생기는 Task 5에서 추가했다. 없는 파일을 참조한 채 Task 3의 typecheck와 빌드를 실행할 수 없기 때문이다.
+- 최종 리뷰의 실패 회귀 시험으로 자동 백업의 계정·설정·동기화 상태 전환, 설정 화면의 동기화 끄기 반영, 폴더 조회 도중 알림 끄기 문제를 고쳤다. 인증 대기 중 계정 전환은 선택 머리글 `X-Landmark-Backup-User`를 인증한 사용자와 대조해 막는다. 기존 본문·응답·머리글 없는 요청의 호환은 유지한다.
+- 폴더 부트의 `useNavigate` 구독이 `LibraryShell`을 다시 그려 기존 지도 위치·목록 스크롤 시험을 깨뜨렸다. 원래 실패 단언을 유지하고 부트를 별도 자식 `FolderWatchBoot`에서 실행해 구독을 분리했다. 부트 훅의 인터페이스와 동작은 유지한다.
+- 다른 기기에서 서버 백업을 바꿔 409가 난 복원 창을 닫았다 다시 열 때, 닫는 시점에 메타를 다시 읽어 최신 id를 쓰도록 보완했다.
+- 스키마 6의 두 표를 검증하려고 기존 스키마 시험의 버전뿐 아니라 표 목록 단언에도 두 표를 더했다.
