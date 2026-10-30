@@ -363,7 +363,12 @@ export function RestoreDialog({
         setReceiving(true);
         const engine = (await loadSyncEngine()).ensureLibrarySyncEngine();
         outcome = await engine.runThen('manual', async (status) => {
-          if (runIdRef.current !== runId || syncRestoreMessage(status) !== null) return;
+          if (runIdRef.current !== runId) return;
+          if (syncRestoreMessage(status) !== null) {
+            if (status.phase === 'auth' && store.get(syncStatusAtom).phase !== 'auth')
+              setError({ message: '계정이 바뀌어 되살리지 않았어요', downloadCurrent: false });
+            return;
+          }
           receivingRef.current = false;
           setReceiving(false);
           return apply();

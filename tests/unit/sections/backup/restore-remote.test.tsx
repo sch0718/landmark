@@ -357,6 +357,27 @@ it.each([
   },
 );
 
+it('세션 변경으로 after에만 auth가 오면 계정 변경을 안내하고 바꾸지 않는다', async () => {
+  boot.enabled = true;
+  const h = await setup();
+  await act(async () => h.store.set(syncStatusAtom, { ...OFF_STATUS, phase: 'synced' }));
+  await screen.findByText(loaded.header);
+  let finish!: () => void;
+  boot.runThen.mockImplementationOnce(async (_, after) => {
+    await new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    return after({ ...OFF_STATUS, phase: 'auth' });
+  });
+  const before = h.storage.getItem(LIBRARY_KEY);
+  await userEvent.click(screen.getByRole('button', { name: '이 백업으로 바꾸기' }));
+  await act(async () => finish());
+  expect(screen.getByText('계정이 바뀌어 되살리지 않았어요')).toHaveAttribute('role', 'alert');
+  expect(h.store.get(syncStatusAtom).phase).toBe('synced');
+  expect(replacing).not.toHaveBeenCalled();
+  expect(h.storage.getItem(LIBRARY_KEY)).toBe(before);
+});
+
 it.each([0, 1])('conflict의 보류가 %s개면 받기 완료 기준으로 허용한다', async (held) => {
   boot.enabled = true;
   const h = await setup();

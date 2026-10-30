@@ -446,7 +446,7 @@ export function createLibrarySyncEngine(deps: EngineDeps): LibrarySyncEngine {
       while (active) await active;
       cancelTimer();
       const run = async () => {
-        let result;
+        let result: SyncStatus;
         try {
           result = await execute();
         } catch (error) {
@@ -458,10 +458,9 @@ export function createLibrarySyncEngine(deps: EngineDeps): LibrarySyncEngine {
             readSyncMeta(storage).userId !== userId ||
             readSession(storage)?.sessionId !== sessionId)
         )
-          result = publish({
-            phase: readSyncMeta(storage).enabled ? 'auth' : 'off',
-            progress: null,
-          });
+          result = readSyncMeta(storage).enabled
+            ? { ...result, phase: 'auth' }
+            : publish({ phase: 'off', progress: null });
         return after(result);
       };
       const task = deps.locks ? deps.locks.request(SYNC_LOCK, run) : run();

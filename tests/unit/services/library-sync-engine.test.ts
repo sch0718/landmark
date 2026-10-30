@@ -825,6 +825,39 @@ it.each(['disconnect', 'account'] as const)(
   },
 );
 
+it('잠금 대기 중 세션만 바뀌면 after에만 auth를 넘기고 전역 상태와 알림은 유지한다', async () => {
+  const server = createSyncMemoryServer();
+  disposers.push(() => server.db.close());
+  const a = await device(server);
+  await a.engine.connect('merge');
+  a.engine.stop();
+  const held = createHeldLocks();
+  held.hold();
+  a.deps.locks = held.locks;
+  const setStatus = vi.spyOn(a.deps, 'setStatus');
+  vi.mocked(a.deps.notify).mockClear();
+  const replace = vi.fn();
+  const after = vi.fn(async (status) => {
+    if (status.phase === 'synced' || (status.phase === 'conflict' && status.held === 0)) replace();
+    return status;
+  });
+  const changes = vi.spyOn(a.api, 'changes');
+  const run = a.engine.runThen('manual', after);
+  expect(held.requested).toHaveLength(1);
+  expect(after).not.toHaveBeenCalled();
+  const sessionId = await server.login();
+  expect(sessionId).not.toBe(readSession(a.storage)?.sessionId);
+  writeSession(a.storage, { v: 1, provider: 'kakao', sessionId });
+  held.release();
+  expect(await run).toMatchObject({ phase: 'auth' });
+  expect(changes).toHaveBeenCalled();
+  expect(after).toHaveBeenCalledWith(expect.objectContaining({ phase: 'auth' }));
+  expect(replace).not.toHaveBeenCalled();
+  expect(a.state.status.phase).toBe('synced');
+  expect(setStatus.mock.calls.some(([status]) => status.phase === 'auth')).toBe(false);
+  expect(a.deps.notify).not.toHaveBeenCalled();
+});
+
 it('runThen은 세션을 지우는 허용 밖 실패도 원래 이유로 전달한다', async () => {
   const server = createSyncMemoryServer();
   disposers.push(() => server.db.close());
