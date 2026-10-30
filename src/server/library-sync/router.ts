@@ -1,3 +1,4 @@
+import { BACKUP_ROUTES } from './backup';
 import {
   publicSessionId,
   purgeSessions,
@@ -200,6 +201,7 @@ export const SYNC_ROUTES: SyncRoute[] = [
     allowWhenOff: true,
     run: (c, d, p) => revoke(c, d, { id: p[0]! }),
   },
+  ...BACKUP_ROUTES,
 ];
 export async function handleSync(ctx: SyncContext, deps: SyncDeps): Promise<Response> {
   const start = deps.now();

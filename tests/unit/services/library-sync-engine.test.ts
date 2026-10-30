@@ -1119,3 +1119,207 @@ it('Web Locks가 없어도 보류 처리 둘이 겹치면 앞 처리가 끝난 �
   expect(readSyncMeta(a.storage).held).toEqual([]);
   expect(readSyncMeta(a.storage).skipped).toEqual([other]);
 });
+
+it('되살리기는 새 서버 묘비를 먼저 받고 같은 동기화 잠금 안에서 바꾼다', async () => {
+  const server = createSyncMemoryServer();
+  disposers.push(() => server.db.close());
+  const original = { ...emptyLibrary(), places: { [p.id]: p } };
+  const a = await device(server, original);
+  await a.engine.connect('upload');
+  const b = await device(server);
+  await b.engine.connect('merge');
+  const deletedAt = new Date(a.state.time + 1000).toISOString();
+  await b.runtime.runPromise(
+    Effect.flatMap(LibraryStore, (store) =>
+      store.update((lib) =>
+        Effect.succeed({
+          ...lib,
+          places: { [p.id]: { ...p, deletedAt } },
+        }),
+      ),
+    ),
+  );
+  await b.engine.runNow('manual');
+  expect(a.state.lib.places[p.id]?.deletedAt).toBeNull();
+  let locked = false;
+  a.deps.locks = {
+    request: vi.fn(async (_, callback) => {
+      locked = true;
+      try {
+        return await callback({});
+      } finally {
+        locked = false;
+      }
+    }),
+  } as unknown as LockManager;
+  const result = await a.engine.runThen('manual', async (status) => {
+    expect(status.phase).toBe('synced');
+    expect(locked).toBe(true);
+    expect(a.state.lib.places[p.id]?.deletedAt).toBe(deletedAt);
+    await a.runtime.runPromise(
+      Effect.flatMap(LibraryStore, (store) => store.replace(original, { requirePrevious: true })),
+    );
+    a.engine.schedule('save');
+    return 'restored';
+  });
+  expect(result).toBe('restored');
+  expect(locked).toBe(false);
+  await a.engine.runNow('manual');
+  await b.engine.runNow('manual');
+  expect(b.state.lib.places[p.id]?.deletedAt).toBeNull();
+});
+
+it('runThen은 진행 중 실행 뒤 새 잠금을 기다리고 저장 예약을 잠금 해제 뒤 실행한다', async () => {
+  const server = createSyncMemoryServer();
+  disposers.push(() => server.db.close());
+  const a = await device(server);
+  await a.engine.connect('merge');
+  a.engine.stop();
+  const held = createHeldLocks();
+  a.deps.locks = held.locks;
+  const original = a.api.changes.bind(a.api);
+  let release!: () => void;
+  const entered = new Promise<void>((resolve) => {
+    vi.spyOn(a.api, 'changes').mockImplementationOnce(async (q) => {
+      resolve();
+      await new Promise<void>((r) => {
+        release = r;
+      });
+      return original(q);
+    });
+  });
+  const first = a.engine.runNow('manual');
+  await entered;
+  const after = vi.fn(async () => {
+    a.engine.schedule('save');
+    return 42;
+  });
+  const next = a.engine.runThen('manual', after);
+  expect(after).not.toHaveBeenCalled();
+  held.hold();
+  release();
+  await first;
+  await vi.waitFor(() => expect(held.requested).toHaveLength(2));
+  expect(after).not.toHaveBeenCalled();
+  held.release();
+  expect(await next).toBe(42);
+  expect(a.api.changes).toHaveBeenCalledTimes(2);
+  await a.engine.runNow('manual');
+  expect(a.api.changes).toHaveBeenCalledTimes(3);
+});
+
+it('runThen은 받기 실패 상태를 전달하고 후속 작업 예외에도 잠금을 놓는다', async () => {
+  const server = createSyncMemoryServer();
+  disposers.push(() => server.db.close());
+  const a = await device(server);
+  await a.engine.connect('merge');
+  a.state.online = false;
+  const after = vi.fn(async (status) => status.phase);
+  expect(await a.engine.runThen('manual', after)).toBe('local');
+  expect(after).toHaveBeenCalledWith(expect.objectContaining({ phase: 'local', offline: true }));
+  await expect(
+    a.engine.runThen('manual', async () => {
+      throw Error('replace failed');
+    }),
+  ).rejects.toThrow('replace failed');
+  a.state.online = true;
+  expect((await a.engine.runNow('manual')).phase).toBe('synced');
+});
+
+it.each(['disconnect', 'account'] as const)(
+  '받기 전 %s로 취소된 실행의 이전 완료 상태는 되살리기를 허용하지 않는다',
+  async (cancel) => {
+    const server = createSyncMemoryServer();
+    disposers.push(() => server.db.close());
+    const a = await device(server);
+    await a.engine.connect('merge');
+    a.engine.stop();
+    const runLibrary = a.deps.runLibrary;
+    let release!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      vi.spyOn(a.deps, 'runLibrary').mockImplementationOnce(async (effect) => {
+        resolve();
+        await new Promise<void>((r) => {
+          release = r;
+        });
+        return runLibrary(effect);
+      });
+    });
+    const changes = vi.spyOn(a.api, 'changes');
+    const replace = vi.fn();
+    const after = vi.fn(async (status) => {
+      if (status.phase === 'synced' || (status.phase === 'conflict' && status.held === 0))
+        replace();
+      return status;
+    });
+    const run = a.engine.runThen('manual', after);
+    await entered;
+    let finishDisconnect!: () => void;
+    let disconnect: Promise<void> | undefined;
+    if (cancel === 'disconnect') {
+      vi.spyOn(a.api.client, 'endSession').mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finishDisconnect = () => resolve({ ok: true, data: {} });
+          }),
+      );
+      disconnect = a.engine.disconnect();
+    } else {
+      writeSyncMeta(a.storage, { ...readSyncMeta(a.storage), userId: 'new-user' });
+      writeSession(a.storage, { v: 1, provider: 'kakao', sessionId: 'n'.repeat(43) });
+    }
+    release();
+    const status = await run;
+    expect(changes).not.toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
+    expect(status.phase).toBe('auth');
+    if (disconnect) {
+      finishDisconnect();
+      await disconnect;
+    }
+  },
+);
+
+it('잠금 대기 중 세션만 바뀌면 after에만 auth를 넘기고 전역 상태와 알림은 유지한다', async () => {
+  const server = createSyncMemoryServer();
+  disposers.push(() => server.db.close());
+  const a = await device(server);
+  await a.engine.connect('merge');
+  a.engine.stop();
+  const held = createHeldLocks();
+  held.hold();
+  a.deps.locks = held.locks;
+  const setStatus = vi.spyOn(a.deps, 'setStatus');
+  vi.mocked(a.deps.notify).mockClear();
+  const replace = vi.fn();
+  const after = vi.fn(async (status) => {
+    if (status.phase === 'synced' || (status.phase === 'conflict' && status.held === 0)) replace();
+    return status;
+  });
+  const changes = vi.spyOn(a.api, 'changes');
+  const run = a.engine.runThen('manual', after);
+  expect(held.requested).toHaveLength(1);
+  expect(after).not.toHaveBeenCalled();
+  const sessionId = await server.login();
+  expect(sessionId).not.toBe(readSession(a.storage)?.sessionId);
+  writeSession(a.storage, { v: 1, provider: 'kakao', sessionId });
+  held.release();
+  expect(await run).toMatchObject({ phase: 'auth' });
+  expect(changes).toHaveBeenCalled();
+  expect(after).toHaveBeenCalledWith(expect.objectContaining({ phase: 'auth' }));
+  expect(replace).not.toHaveBeenCalled();
+  expect(a.state.status.phase).toBe('synced');
+  expect(setStatus.mock.calls.some(([status]) => status.phase === 'auth')).toBe(false);
+  expect(a.deps.notify).not.toHaveBeenCalled();
+});
+
+it('runThen은 세션을 지우는 허용 밖 실패도 원래 이유로 전달한다', async () => {
+  const server = createSyncMemoryServer();
+  disposers.push(() => server.db.close());
+  const a = await device(server);
+  await a.engine.connect('merge');
+  vi.spyOn(a.api, 'changes').mockResolvedValue({ ok: false, kind: 'not-allowed' });
+  const status = await a.engine.runThen('manual', async (result) => result);
+  expect(status.phase).toBe('not-allowed');
+  expect(readSession(a.storage)).toBeNull();
+});

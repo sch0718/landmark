@@ -21,7 +21,13 @@ export const PUSH_MAX_ITEMS = 100;
 export const PUSH_MAX_BYTES = 1_000_000;
 export const CLOCK_SKEW_MS = 10 * 60 * 1000;
 export const DEVICE_TOUCH_MS = 60 * 60 * 1000;
-export const ACCOUNT_DATA_TABLES: string[] = ['library_items', 'library_devices', 'library_state'];
+export const ACCOUNT_DATA_TABLES: string[] = [
+  'library_items',
+  'library_devices',
+  'library_state',
+  'library_backup_parts',
+  'library_backups',
+];
 export type MeReply = {
   userId: string;
   provider: SyncUser['provider'];

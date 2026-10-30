@@ -1,3 +1,5 @@
+import { FolderWatchBoot } from 'src/sections/folder-watch/use-folder-watch-boot';
+import { useAutoBackupBoot } from 'src/sections/server-backup/use-auto-backup-boot';
 import { useSetAtom } from 'jotai';
 import { useSyncBoot } from 'src/sections/library-sync/use-sync-boot';
 import { Component, Suspense, useEffect, type ReactNode } from 'react';
@@ -43,11 +45,17 @@ export const PREFETCH_CHUNKS = [...ROUTE_CHUNKS, ...PANEL_CHUNKS];
 function LibraryShell() {
   useLibrarySync();
   useSyncBoot();
+  useAutoBackupBoot();
   // 이 컴포넌트가 그려졌다는 건 보관함을 읽고 셸이 나왔다는 뜻이다. 미리 받기는 한 번만 예약된다.
   useEffect(() => {
     prefetchWhenIdle(PREFETCH_CHUNKS);
   }, []);
-  return <AppShell />;
+  return (
+    <>
+      <FolderWatchBoot />
+      <AppShell />
+    </>
+  );
 }
 
 /** 보관함이 필요한 라우트의 루트. 로드 중 표시·손상 복구 화면·셸을 한 곳에서 감싼다. */

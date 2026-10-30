@@ -42,6 +42,8 @@ export default defineConfig({
       testMatch: [
         'library.spec.ts',
         'library-sync.spec.ts',
+        'server-backup.spec.ts',
+        'folder-watch.spec.ts',
         'labels-emoji.spec.ts',
         'large-library.spec.ts',
         'first-load.spec.ts',

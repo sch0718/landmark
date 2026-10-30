@@ -10,6 +10,8 @@ export type SyncEnv = {
   DB?: MeetDb;
   IP_HASH_SALT?: string;
   LIBRARY_SYNC?: string;
+  /** 'off'면 서버 백업 쓰기를 막는다(읽기·지우기는 됨) */
+  AUTO_BACKUP?: string;
   FIREBASE_PROJECT_ID?: string;
   ALLOWED_EMAILS?: string;
   ALLOWED_ACCOUNTS?: string;

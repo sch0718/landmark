@@ -9,7 +9,7 @@ it('버전 2에서 표 다섯 개와 identity를 멱등으로 더한다', async 
     await db.batch(SCHEMA_STATEMENTS.slice(0, 10).map((s) => db.prepare(s)));
     await db.prepare('INSERT INTO schema_meta VALUES (2)').run();
     await ensureSchema(db);
-    expect(await db.prepare('SELECT version FROM schema_meta').first()).toEqual({ version: 5 });
+    expect(await db.prepare('SELECT version FROM schema_meta').first()).toEqual({ version: 6 });
     for (const table of ['users', 'sessions', 'library_state', 'library_items', 'library_devices'])
       expect(
         await db.prepare('SELECT name FROM sqlite_master WHERE name = ?').bind(table).first(),

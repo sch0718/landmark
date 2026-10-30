@@ -26,15 +26,13 @@ import { hasAnyEntry } from 'src/domain/backup/summary';
 import { startEffect } from 'src/lib/effect/runtime';
 import { emptyLibrary, type Library } from 'src/schema/library';
 import type { Trip } from 'src/schema/trip';
-import { browserStorage } from 'src/services/browser-storage';
-import { createMemoryStorage } from 'src/repositories/edit-layer-repo';
 import { IdGen } from 'src/services/id-gen';
 import { LibraryInvalid, LibraryCorrupt, StorageQuotaExceeded } from 'src/services/errors';
 import { LibraryStore } from 'src/services/library-store';
 import { libraryAtom } from 'src/stores/library-state';
 import { OFF_STATUS, syncStatusAtom, type SyncStatus } from 'src/stores/sync-status';
-import { createSyncApi, googleAuth, type SyncApi, type SyncFail } from './api';
-import { readSyncClientConfig } from './config';
+import { createSyncApi, type SyncApi, type SyncFail } from './api';
+import { getSharedSyncApi, getSharedSyncStorage } from './shared-api';
 import {
   SyncStorageError,
   readSyncMeta,
@@ -72,6 +70,7 @@ export interface LibrarySyncEngine {
   stop(): void;
   schedule(reason: SyncRunReason): void;
   runNow(reason: SyncRunReason): Promise<SyncStatus>;
+  runThen<T>(reason: SyncRunReason, after: (status: SyncStatus) => Promise<T>): Promise<T>;
   connect(mode: ConnectMode): Promise<SyncStatus>;
   resolveConflict(id: string, action: 'mine' | 'keep'): Promise<void>;
   resolveHeld(key: string, action: 'mine' | 'skip'): Promise<void>;
@@ -492,14 +491,41 @@ export function createLibrarySyncEngine(deps: EngineDeps): LibrarySyncEngine {
     runNow(reason) {
       if (handling) return handling.catch(() => {}).then(() => engine.runNow(reason));
       if (active) return active;
+      return engine.runThen(reason, async (result) => result);
+    },
+    async runThen<T>(_reason: SyncRunReason, after: (status: SyncStatus) => Promise<T>) {
+      // 기다리는 동안 연결을 끊거나 계정을 바꾸면 이전 완료 상태로 바꾸기를 허용하지 않는다.
+      const runGeneration = generation;
+      const userId = readSyncMeta(storage).userId;
+      const sessionId = readSession(storage)?.sessionId;
+      // 앞 실행의 결과를 재사용하지 않고, 새 잠금 안에서 최신 변경부터 받는다.
+      // 충돌·보류 처리(whenIdle)와도 겹치지 않게 기다린다.
+      while (active || handling) await (active ?? handling)!.catch(() => {});
       cancelTimer();
-      active = (async () => {
+      const run = async () => {
+        let result: SyncStatus;
         try {
-          return await (deps.locks ? deps.locks.request(SYNC_LOCK, () => execute()) : execute());
+          result = await execute();
         } catch (error) {
-          return failed(error);
+          result = await failed(error);
         }
-      })()
+        if (
+          (result.phase === 'synced' || (result.phase === 'conflict' && result.held === 0)) &&
+          (generation !== runGeneration ||
+            readSyncMeta(storage).userId !== userId ||
+            readSession(storage)?.sessionId !== sessionId)
+        )
+          result = readSyncMeta(storage).enabled
+            ? { ...result, phase: 'auth' }
+            : publish({ phase: 'off', progress: null });
+        return after(result);
+      };
+      const task = deps.locks ? deps.locks.request(SYNC_LOCK, run) : run();
+      active = task
+        .then(
+          () => status,
+          () => status,
+        )
         .then((result) => {
           for (const listener of listeners) listener(result);
           return result;
@@ -511,7 +537,8 @@ export function createLibrarySyncEngine(deps: EngineDeps): LibrarySyncEngine {
             engine.schedule('save');
           }
         });
-      return active;
+      await active;
+      return task;
     },
     async connect(mode) {
       let meta = readSyncMeta(storage);
@@ -718,21 +745,23 @@ export function createLibrarySyncEngine(deps: EngineDeps): LibrarySyncEngine {
 let singleton: LibrarySyncEngine | undefined;
 export function ensureLibrarySyncEngine(): LibrarySyncEngine {
   if (singleton) return singleton;
-  const storage = browserStorage() ?? createMemoryStorage();
-  const config = readSyncClientConfig(import.meta.env, location.origin);
+  const storage = getSharedSyncStorage();
+  const api = getSharedSyncApi();
   const store = getDefaultStore();
   singleton = createLibrarySyncEngine({
-    api: createSyncApi({
-      config: config ?? {
-        apiBase: location.origin + '/api/sync',
-        firebase: null,
-        kakao: null,
-        naver: null,
-        devFake: false,
-      },
-      storage,
-      auth: config ? googleAuth(config) : null,
-    }),
+    api:
+      api ??
+      createSyncApi({
+        config: {
+          apiBase: location.origin + '/api/sync',
+          firebase: null,
+          kakao: null,
+          naver: null,
+          devFake: false,
+        },
+        storage,
+        auth: null,
+      }),
     storage,
     locks: navigator.locks,
     runLibrary: startEffect,
@@ -752,6 +781,6 @@ export function ensureLibrarySyncEngine(): LibrarySyncEngine {
     events: window,
     newConflictId: () => crypto.randomUUID(),
   });
-  if (!config) singleton.disable();
+  if (!api) singleton.disable();
   return singleton;
 }

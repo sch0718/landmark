@@ -40,6 +40,7 @@ export function createSyncServer() {
     log: () => {},
   };
   return {
+    db,
     getRequests,
     async handle(request: Request): Promise<Response | null> {
       if (!new URL(request.url).pathname.startsWith('/api/sync/')) return null;

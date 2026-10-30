@@ -79,6 +79,8 @@ Yarn 1(1.22.22)은 `.npmrc`의 `GITHUB_PACKAGES_TOKEN`이 정의되지 않으면
 | `IP_HASH_SALT` | 일 한도에 쓰는 IP 해시의 소금. Pages의 서버 시크릿(긴 무작위 값) |
 | `MEET_ONLINE` | `off`면 새 약속의 서버 올리기만 중단하고 링크 방식으로 공유. 기존 온라인 약속 읽기·답장은 계속 동작 |
 | `LIBRARY_SYNC` | `off`면 보관함 로그인·받기·올리기를 중단합니다. 연결 해제·서버 자료 지우기는 계속됩니다 |
+| `AUTO_BACKUP` | `off`면 서버 백업 쓰기만 중단합니다. 읽기·지우기는 계속됩니다 |
+| `VITE_AUTO_BACKUP_INTERVAL_MS` | 개발 모드에서만 자동 백업 간격을 양의 정수 ms로 바꿉니다(예: `60000`). 운영은 하루 |
 | `VITE_FIREBASE_*`, `VITE_KAKAO_LOGIN_CLIENT_ID`, `VITE_NAVER_LOGIN_CLIENT_ID` | 동기화 공급자 공개 설정. 아래 보관함 동기화 절 참고 |
 | `FIREBASE_PROJECT_ID`, `KAKAO_CLIENT_ID`, `NAVER_CLIENT_ID` | 서버 로그인 공급자 설정 |
 | `KAKAO_CLIENT_SECRET`, `NAVER_CLIENT_SECRET`, `ALLOWED_EMAILS`, `ALLOWED_ACCOUNTS` | Pages 서버 시크릿. 값은 저장소에 넣지 않습니다 |
@@ -249,6 +251,71 @@ npx wrangler d1 execute landmark --remote --command "SELECT version FROM schema_
 비상 중단은 Pages의 `LIBRARY_SYNC=off` 후 재배포입니다. 로그인·받기·올리기가 503 `off`가 되고 이 기기 저장과 연결 해제·서버 자료 지우기는 계속됩니다. 옛 앱으로 롤백하면 동기화 UI·엔진이 없어져 멈추며 각 기기의 보관함과 D1 자료는 남습니다. `docs/rollback.md`의 버전 행은 병합 뒤 별도 문서 PR에서 추가합니다.
 
 검증은 `yarn typecheck`, `yarn lint`, `yarn test`, `yarn build:ci`와 `E2E_PORT=4181 E2E_MAP_PORT=4182 yarn test:e2e tests/e2e/library-sync.spec.ts --project desktop`입니다. 전체 핵심 E2E는 같은 포트 변수로 `yarn test:e2e:ci`를 실행합니다. 미리보기에서는 실제 Google·카카오·네이버 로그인, 100개 올리기 CPU 시간(무료 CPU 한도를 넘으면 `PUSH_MAX_ITEMS`를 50으로), iOS Safari·카카오톡 인앱 복귀를 사람이 확인합니다.
+
+### 서버 백업과 네이버 폴더 변경 알림
+
+로그인한 사용자당 보관함 스냅샷 하나를 D1에 두고 덮어씁니다. 자동 백업은 동기화를 켠 기기에서 앱을 열어 동기화가 끝났을 때, 마지막 서버 백업이 하루 지났고 내용이 바뀌었으면 올립니다. 빈 보관함과 장소·여행이 크게 줄어든 보관함은 자동으로 덮어쓰지 않습니다. 서버에는 암호화하지 않고 저장합니다. 네이버 폴더 변경 알림은 로그인 없이 기기에서 실행하며, 예약 작업이나 Cron은 없습니다. [설계서](superpowers/specs/2026-10-29-auto-backup-design.md)를 참고하세요.
+
+Pages 변수 `AUTO_BACKUP`은 끌 때만 `off`로 둡니다. 쓰기만 503 `off`가 되고 읽기·지우기는 남습니다. 첫 요청의 `ensureSchema`가 스키마 **6**과 `library_backups`·`library_backup_parts` 표를 멱등으로 만듭니다. 새 외부 계정·키나 원격 마이그레이션은 필요 없습니다.
+
+#### 로컬에서 키 없이 해 보기(서버 백업)
+
+```bash
+VITE_AUTO_BACKUP_INTERVAL_MS=60000 yarn dev:sync
+# 다른 개발 작업과 포트를 나누려면:
+SYNC_VITE_PORT=4195 SYNC_DEV_PORT=8794 VITE_AUTO_BACKUP_INTERVAL_MS=60000 yarn dev:sync
+```
+
+기본 포트는 wrangler 8795·Vite 4185입니다. 아래 주소는 기본 포트 기준입니다.
+
+1. 기기 A에서 `http://localhost:8795`를 엽니다. 설정 › 동기화 › `카카오로 로그인` → 가짜 화면에서 계정 `me`·결과 `정상 로그인`·`계속`을 누릅니다. 연결 방식에서 `올리기`를 누릅니다.
+2. 설정 › 백업 › `서버 백업 지금 만들기`를 누르고 서버 백업 요약을 확인합니다.
+3. 기기 B에서 `http://127.0.0.1:8795`를 열고 같은 경로로 가짜 로그인한 뒤 `서버 보관함 받기`를 누릅니다. 장소 하나를 삭제하고 설정 › 백업 › `서버 백업에서 되살리기`를 엽니다. 미리보기에서 파일 받기 체크를 유지한 채 `이 백업으로 바꾸기`를 누르면 현재 보관함 파일을 먼저 받고 되살립니다.
+4. A에서 `자동 백업`을 켜고 장소 메모를 고칩니다. 마지막 백업에서 1분이 지난 뒤 새로고침하고 설정의 서버 백업 줄에 `· 자동`이 붙는지 확인합니다. 개발 간격 변수가 없으면 하루입니다.
+
+가짜 로그인의 실제 경로는 다음과 같습니다(화면이 아닌 곳에서 확인할 때 참고). `카카오로 로그인`을 누르면 앱이 `GET /api/sync/dev/fake-social/authorize?<카카오 authorize 질의>&provider=kakao`(계정 입력 화면, 계정 ID에는 `dev-`가 자동으로 붙음)로 보내고, `계속`은 `GET /api/sync/dev/fake-social/approve?…&sub=me&result=ok`를 거쳐 `/auth/callback?code=…`로 돌아온 뒤 `POST /api/sync/v1/session/social`로 기기 세션을 만듭니다. 가짜 공급자는 `/api/sync/dev/fake-social/` 아래에만 있고(`/v1/` 아래가 아님), 앱 빌드에 `VITE_SYNC_DEV_FAKE=1`(개발 모드)과 서버 `SYNC_DEV_FAKE_SOCIAL=1`, localhost 계열 요청 주소가 모두 있어야 열립니다. 스크립트로 세션을 만드는 순서는 `tests/helpers/sync-memory-server.ts`의 `login()`과 같습니다(PKCE `code_verifier`와 nonce를 직접 만들어야 하므로 curl 한 줄로는 어렵습니다). 세션 값은 화면·파일에 남기지 마세요.
+
+쓰기 중단을 시험하려면 `dev:sync`와 같은 명령에 `AUTO_BACKUP=off` 바인딩만 더합니다. 실행 중인 서버를 종료한 뒤 사용하세요.
+
+```bash
+yarn build:viewer && VITE_SYNC_DEV_FAKE=1 wrangler pages dev --d1 DB --port 8795 --binding SYNC_DEV_FAKE_SOCIAL=1 --binding ALLOWED_ACCOUNTS=kakao:dev-me,naver:dev-me --binding AUTO_BACKUP=off --proxy 4185 -- vite --port 4185 --strictPort
+```
+
+이때 만들기는 꺼지고 되살리기·지우기는 계속됩니다. 로컬 설정 키는 `tripmap:server-backup:v1`이며 백업 파일과 동기화에는 넣지 않습니다.
+
+#### 폴더 변경 알림 해 보기
+
+네트워크가 되는 위 `dev:sync`에서 공개 네이버 폴더 공유 링크를 ＋ › `네이버 폴더 가져오기`로 가져옵니다. 개발 모드 브라우저 콘솔에서 다음을 실행하면 본 장소 두 곳을 잊어 새 곳을 흉내 냅니다. 연결의 확인 시각은 그대로입니다.
+
+```js
+await __landmarkDev.forgetFolderSids('<공유 ID>', 2);
+```
+
+설정 › 가져오기 › `지금 확인`을 누르면 토스트와 라벨 관리 표시를 볼 수 있습니다. 알림의 `가져오기`는 기존 다시 가져오기 화면을 엽니다. 이 확인은 캐시를 쓰고, 실제 다시 가져오기만 `fresh=1`로 새로 읽습니다. 수동 확인은 1분에 한 번, 최대 20개입니다.
+
+자동 확인은 앱을 열고 3초 뒤와 탭이 다시 보일 때, 연결·마지막 확인 중 더 늦은 시각에서 하루 지난 폴더를 오래된 순서로 최대 5개 확인합니다. 하루 기한을 시험하려면 `localStorage.removeItem('tripmap:folder-watch:v1')`로 기록을 비우는 것과 함께 **연결의 `checkedAt`도 하루 지나 있어야** 합니다. 설정 › 가져오기 › `네이버 폴더 변경 알림`에서 끌 수 있습니다. 오프라인과 데이터 절약 모드에서는 자동 확인하지 않습니다.
+
+#### API·크기·한도와 운영 확인
+
+아래 경로는 `/api/sync` 아래입니다. 모두 3단계 세션을 사용하며 `Cache-Control: private, no-store`로 응답합니다.
+
+| 요청 | 하는 일 | 성공 |
+| --- | --- | --- |
+| `GET /v1/backup` | 서버 시각·쓰기 가능 여부·메타 | `200 { now, writable, maxStoredBytes, backup }` |
+| `POST /v1/backup` | 압축 스냅샷 덮어쓰기(`ifMatch` 조건 지원) | `200 { now, backup }`, 충돌 `409 backup-changed` |
+| `GET /v1/backup/data?id=<id>` | 메타 id의 압축 자료 | `200 { id, data }`, 없음 `404 no-backup`, 바뀜 `409 backup-changed` |
+| `DELETE /v1/backup` | 계정의 스냅샷 지우기 | `204` |
+| 머리글 `X-Landmark-Backup-User` | 요청을 준비한 사용자 ID로 계정을 고정(옛 요청은 생략 가능) | 세션 사용자 ID와 불일치 시 401 `reauth-required` |
+
+사용자당 하루 쓰기 20회·읽기 200회(메타와 자료 합산)입니다. 압축본은 1 MiB, base64 조각은 512 KiB, JSON 본문은 1,500,000바이트 이하입니다. 브라우저는 원문과 압축 풀기 모두 16 MiB를 상한으로 둡니다. 서버는 압축 내용을 풀거나 해석하지 않습니다. 계정의 서버 자료를 지우면 백업 표도 함께 지웁니다.
+
+사용자가 배포 후 버전을 확인할 때만 다음 읽기 명령을 실행합니다(미리보기는 `landmark-preview`). 결과는 `6`입니다.
+
+```bash
+npx wrangler d1 execute landmark --remote --command "SELECT version FROM schema_meta"
+```
+
+미리보기에서는 실제 보관함의 수동·자동 백업, 다른 기기 복원, iOS Safari의 바꾸기 전 파일 받기, 실제 네이버 폴더 알림을 확인합니다. `POST /api/sync/v1/backup` CPU가 10ms를 넘는지와 `SELECT stored_bytes, raw_bytes, parts FROM library_backups`로 실제 압축 크기도 확인하세요. 롤백·남은 표 정리는 설계서의 「호환·롤백」을 따르며 `docs/rollback.md`의 버전 표는 병합 뒤 별도 문서 PR에서 갱신합니다.
 
 ### 공유 짧은 링크(`/s/<id>`)
 
