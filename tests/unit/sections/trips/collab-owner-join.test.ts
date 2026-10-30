@@ -1,4 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { renderHook, waitFor } from '@testing-library/react';
+import { createElement, type ReactNode } from 'react';
+import { createStore, Provider } from 'jotai';
+import { libraryAtom } from 'src/stores/library-state';
+import { useTripLivePublish } from 'src/sections/trips/live/use-trip-live-publish';
+import { useTripLegs } from 'src/sections/share-export/use-trip-legs';
 import { enableCollabAsOwner, joinCollabAsOwner } from 'src/sections/trips/collab/owner-join';
 import {
   collabEngineFor,
@@ -19,6 +25,7 @@ import {
 import type { Library } from 'src/schema/library';
 import { buildLiveLibrary } from '../../../fixtures/builders';
 import { buildLiveDoc } from '../../../fixtures/live-trip';
+vi.mock('src/sections/share-export/use-trip-legs', () => ({ useTripLegs: vi.fn() }));
 beforeEach(() => localStorage.clear());
 afterEach(() => {
   resetCollabEngines();
@@ -345,6 +352,43 @@ it('옛 기록의 두 지문이 모두 다르면 기준을 추측하지 않고 �
   await engine.sync();
   expect(engine.getSnapshot().state).toBe('conflict');
   expect(s.deps.api.putDoc).not.toHaveBeenCalled();
+});
+it('옛 기록이 공개 건너뛰기로 보충되면 경로 미조회 합류도 기준을 쓰고 맞춘다', async () => {
+  const s = await setup(true, { published: true, join: false, legacy: true });
+  expect(s.deps.livePlanStore!.get(s.record.tripId)).toBeUndefined();
+  const jotai = createStore();
+  jotai.set(libraryAtom, s.deps.getLibrary());
+  vi.mocked(useTripLegs).mockReturnValue({
+    total: 1,
+    answered: 1,
+    estimated: 0,
+    oldestQueriedAt: routed().queriedAt,
+    routeOf: routed,
+  });
+  const hook = renderHook(() => useTripLivePublish(s.record.tripId, true), {
+    wrapper: ({ children }: { children: ReactNode }) =>
+      createElement(Provider, { store: jotai }, children),
+  });
+  await waitFor(() => expect(hook.result.current.state).toBe('published'));
+  hook.unmount();
+  expect(s.deps.livePlanStore!.get(s.record.tripId)).toBe(await livePlanKey(s.live.doc));
+  expect(tripLiveApi.update).not.toHaveBeenCalled();
+  s.live.doc.v = 2;
+  s.live.rev = 5;
+  s.live.doc.share.trips[0]!.days[0]!.startTime = '07:00';
+  s.live.doc.share.trips[0]!.days[1]!.startTime = '08:30';
+  await joinCollabAsOwner(s.deps, s.live);
+  expect(s.store.readBase(s.record.liveId)?.plan.days.map((d) => d.startTime)).toEqual([
+    '09:00',
+    '09:00',
+  ]);
+  const engine = collabEngineFor(s.record.tripId, () => s.deps);
+  await engine.sync();
+  expect(engine.getSnapshot().state).toBe('synced');
+  expect(s.deps.getLibrary().trips.trip000001!.days.map((d) => d.startTime.value)).toEqual([
+    '07:00',
+    '08:30',
+  ]);
 });
 it('경로 상태가 다른 깨끗한 기기는 켜기에서도 최신 2A 변경을 받아 v2로 올린다', async () => {
   const s = await setup(true, { published: true, join: false });

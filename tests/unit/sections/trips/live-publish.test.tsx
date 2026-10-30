@@ -1,5 +1,5 @@
 import { LIVE_RECORD_2A_KEYS } from '../../../fixtures/live-trip';
-import { tripLivePlanStore } from 'src/services/trip-live/plan-store';
+import { tripLivePlanStore, TRIP_LIVE_PLAN_KEY } from 'src/services/trip-live/plan-store';
 import { setTimeout as realTimeout } from 'node:timers/promises';
 import { act, renderHook } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
@@ -102,6 +102,46 @@ function edit() {
   }));
 }
 describe('소유자 자동 반영', () => {
+  it.each([
+    ['처음 확인', '없음'],
+    ['처음 확인', '공개 지문 불일치'],
+    ['처음 확인', '계획 지문 불일치'],
+    ['온라인 복귀', '없음'],
+    ['온라인 복귀', '공개 지문 불일치'],
+    ['온라인 복귀', '계획 지문 불일치'],
+  ])('%s에서 이미 공개한 문서를 건너뛰어도 전용 키를 보충한다: %s', async (entry, missing) => {
+    const r = record();
+    const doc = buildLiveTripDoc(buildLiveLibrary(), r.tripId, ESTIMATE_ONLY, {
+      title: r.options.title,
+      options: r.options,
+      dayIds: r.dayIds,
+      createdAt: r.createdAt,
+    })!;
+    r.publishedKey = await liveEditKey(doc);
+    tripLiveStore.put(r);
+    if (entry === '온라인 복귀') await mount(false);
+    if (missing === '없음') localStorage.removeItem(TRIP_LIVE_PLAN_KEY);
+    else
+      localStorage.setItem(
+        TRIP_LIVE_PLAN_KEY,
+        JSON.stringify({
+          [r.tripId]: {
+            liveId: r.liveId,
+            publishedKey: missing === '공개 지문 불일치' ? '이전 공개 지문' : r.publishedKey,
+            planKey: '이전 계획 지문',
+          },
+        }),
+      );
+    if (entry === '처음 확인') await mount(false);
+    else {
+      act(() => window.dispatchEvent(new Event('online')));
+      await flush();
+    }
+    expect(tripLivePlanStore.get(r.tripId)).toBe(await livePlanKey(doc));
+    expect(tripLiveApi.update).not.toHaveBeenCalled();
+    expect(tripLiveStore.get(r.tripId)).toEqual(r);
+  });
+
   it('기록이 없으면 요청하지 않는다', async () => {
     await mount(false);
     await advance(20000);

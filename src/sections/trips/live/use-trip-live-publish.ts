@@ -188,6 +188,8 @@ export function useTripLivePublish(
         )
           return;
         if (!force && fresh.publishedKey === key) {
+          if (tripLivePlanStore.get(tripId) !== planKey)
+            tripLivePlanStore.put(tripId, fresh.liveId, planKey, key);
           setState('published');
           return;
         }
@@ -353,13 +355,17 @@ export function useTripLivePublish(
         setState('empty');
         return;
       }
-      if (!fitLiveDoc(built)) {
+      const doc = fitLiveDoc(built);
+      if (!doc) {
         setState('too-big');
         return;
       }
-      const key = await liveEditKey(built);
+      const [key, planKey] = await Promise.all([liveEditKey(doc), livePlanKey(doc)]);
       if (disposed) return;
-      if (key === tripLiveStore.get(tripId)?.publishedKey) {
+      const fresh = tripLiveStore.get(tripId);
+      if (key === fresh?.publishedKey) {
+        if (tripLivePlanStore.get(tripId) !== planKey)
+          tripLivePlanStore.put(tripId, fresh.liveId, planKey, key);
         setState('published');
         return;
       }
