@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Provider } from 'jotai';
 import { MemoryRouter } from 'react-router';
@@ -6,7 +6,9 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { ServerBackupSection } from 'src/sections/server-backup/ServerBackupSection';
 import {
   readServerBackupLocal,
+  writeServerBackupLocal,
   EMPTY_SERVER_BACKUP_LOCAL,
+  SERVER_BACKUP_EVENT,
   SERVER_BACKUP_KEY,
 } from 'src/services/server-backup/storage';
 import { newDeviceMeta, writeSyncMeta } from 'src/services/library-sync/storage';
@@ -104,6 +106,49 @@ async function setup() {
   const region = screen.getByRole('region', { name: '서버 백업' });
   return Object.assign(() => within(region), { store });
 }
+it('자동 백업이 uploaded를 새로 기록하면 서버 백업 줄이 새로 고쳐진다', async () => {
+  const at = meta.createdAt;
+  writeServerBackupLocal(localStorage, {
+    ...EMPTY_SERVER_BACKUP_LOCAL,
+    auto: true,
+    last: { at, outcome: 'uploaded' },
+  });
+  const q = await setup();
+  await q().findByText('서버 백업: 없음');
+  expect(mocks.api.meta).toHaveBeenCalledTimes(1);
+
+  // 같은 last를 유지한 기한 갱신이나 중복 이벤트는 메타를 다시 읽지 않는다.
+  await act(async () => {
+    writeServerBackupLocal(localStorage, {
+      ...readServerBackupLocal(localStorage),
+      nextCheckAt: at + 86400000,
+    });
+    window.dispatchEvent(new Event(SERVER_BACKUP_EVENT));
+  });
+  expect(mocks.api.meta).toHaveBeenCalledTimes(1);
+
+  mocks.api.meta.mockResolvedValue({
+    ok: true,
+    data: { now: at + 1, writable: true, backup: { ...meta, reason: 'auto' } },
+  });
+  await act(async () => {
+    writeServerBackupLocal(localStorage, {
+      ...readServerBackupLocal(localStorage),
+      last: { at: at + 1, outcome: 'uploaded' },
+    });
+    window.dispatchEvent(new Event(SERVER_BACKUP_EVENT));
+  });
+  await q().findByText(/시험 기기.*자동/);
+  expect(mocks.api.meta).toHaveBeenCalledTimes(2);
+
+  await act(async () => {
+    writeServerBackupLocal(localStorage, {
+      ...readServerBackupLocal(localStorage),
+      last: { at: at + 2, outcome: 'failed' },
+    });
+  });
+  expect(mocks.api.meta).toHaveBeenCalledTimes(2);
+});
 it('빌드 변수가 없으면 설정 페이지에 구역이 없다', async () => {
   await renderLibrary(sampleLibrary(), { path: '/settings' });
   expect(screen.queryByRole('region', { name: '서버 백업' })).not.toBeInTheDocument();

@@ -120,11 +120,14 @@ export function ServerBackupSection() {
     window.addEventListener('storage', changed);
     return () => window.removeEventListener('storage', changed);
   }, []);
+  const lastAt = useRef<number | null>(readServerBackupLocal(storage).last?.at ?? null);
   useEffect(() => {
     const read = () => {
       const next = readServerBackupLocal(storage);
       setLocal(next);
-      if (next.last?.outcome === 'uploaded') void refresh();
+      const changed = (next.last?.at ?? null) !== lastAt.current;
+      lastAt.current = next.last?.at ?? null;
+      if (changed && next.last?.outcome === 'uploaded') void refresh();
     };
     window.addEventListener(SERVER_BACKUP_EVENT, read);
     return () => window.removeEventListener(SERVER_BACKUP_EVENT, read);
