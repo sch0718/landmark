@@ -265,7 +265,9 @@ it('버전 2 DB에서 갱신 공유 표와 색인을 더하고 기존 행을 지
     .bind('share001', '{}', 'trip', '해시', '생성', '만료')
     .run();
   await ensureSchema(db);
-  expect(await db.prepare('SELECT version FROM schema_meta').first()).toEqual({ version: 3 });
+  expect(await db.prepare('SELECT version FROM schema_meta').first()).toEqual({
+    version: SCHEMA_VERSION,
+  });
   for (const name of [
     'trip_shares',
     'trip_shares_expires',
@@ -279,8 +281,12 @@ it('버전 2 DB에서 갱신 공유 표와 색인을 더하고 기존 행을 지
   for (const name of ['meetings', 'share_links'])
     expect(await db.prepare(`SELECT COUNT(*) AS count FROM ${name}`).first()).toEqual({ count: 1 });
 });
-it('마지막 네 문장은 멱등 갱신 공유 표와 색인이다', () => {
-  for (const sql of SCHEMA_STATEMENTS.slice(-4)) {
+it('갱신 공유(2A) 네 문장은 이어져 있고 멱등이다', () => {
+  // 병합 순서(2A → 3 → 4)에 따라 2A 문장 뒤에 보관함 동기화·서버 백업 문장이 붙는다.
+  const start = SCHEMA_STATEMENTS.findIndex((sql) => sql.includes('trip_share'));
+  const block = SCHEMA_STATEMENTS.slice(start, start + 4);
+  expect(SCHEMA_STATEMENTS.filter((sql) => sql.includes('trip_share'))).toEqual(block);
+  for (const sql of block) {
     expect(sql).toContain('trip_share');
     expect(sql).toContain('IF NOT EXISTS');
   }
