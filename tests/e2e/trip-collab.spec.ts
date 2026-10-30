@@ -44,7 +44,7 @@ async function otherPage(browser: Browser) {
   await mockRoutes(page);
   return page;
 }
-async function prepare(page: Page, browser: Browser) {
+async function prepare(page: Page, browser: Browser, changedByOtherOwner = false) {
   await page.clock.install({ time: TIME });
   await mockRoutes(page);
   await createGangneungTrip(page);
@@ -56,9 +56,41 @@ async function prepare(page: Page, browser: Browser) {
   const live = page.getByRole('dialog', { name: /^갱신 링크/ });
   await live.getByRole('button', { name: '갱신 링크 만들기', exact: true }).click();
   await expect(live.getByRole('textbox', { name: '보기 링크' })).toBeVisible();
+  if (changedByOtherOwner) {
+    const status = await page.evaluate(async () => {
+      const records = JSON.parse(localStorage.getItem('tripmap:trip-live:v1') ?? '{}') as Record<
+        string,
+        { liveId: string; ownerToken: string }
+      >;
+      const record = Object.values(records)[0]!;
+      const url = `/api/trip-live/${record.liveId}`;
+      const headers = {
+        Authorization: `Bearer ${record.ownerToken}`,
+        'Content-Type': 'application/json',
+      };
+      const remote = await (await fetch(url, { headers })).json();
+      remote.doc.share.trips[0].days[0].startTime = '08:00';
+      return (
+        await fetch(url, {
+          method: 'PUT',
+          headers,
+          body: JSON.stringify({ doc: remote.doc, baseRev: remote.rev }),
+        })
+      ).status;
+    });
+    expect(status).toBe(200);
+  }
   await live.getByRole('button', { name: '함께 편집…' }).click();
   const collab = page.getByRole('dialog', { name: /^함께 편집/ });
   await collab.getByRole('button', { name: '편집 초대 링크 만들기' }).click();
+  if (changedByOtherOwner) {
+    const compare = page.getByRole('dialog', { name: '겹친 변경 비교' });
+    await expect(compare.getByText('08:00')).toBeVisible();
+    await compare.getByRole('button', { name: '모두 공동 여행으로' }).click();
+    await compare.getByRole('button', { name: '고른 대로 맞추기' }).click();
+    await expect(compare).not.toBeVisible();
+    await collab.getByRole('button', { name: '편집 초대 링크 만들기' }).click();
+  }
   await expect(collab.getByRole('textbox', { name: '편집 초대 링크' })).toBeVisible();
   await collab.getByRole('button', { name: '링크 복사', exact: true }).click();
   const href = await page.evaluate(() => navigator.clipboard.readText());
@@ -100,6 +132,11 @@ async function sameOrder(sender: Page, receiver: Page, wanted: string[]) {
 }
 
 test.describe('여행 함께 편집 @desktop', () => {
+  test('켜기 전 다른 소유자의 2A 변경은 비교한 뒤 초대한다', async ({ page, browser }) => {
+    const { editor } = await prepare(page, browser, true);
+    await expect(timeline(page).getByLabel('출발 시각')).toHaveValue('08:00');
+    await expect(timeline(editor).getByLabel('출발 시각')).toHaveValue('08:00');
+  });
   test('@smoke 편집 초대로 두 기기가 함께 고친다', async ({ page, browser }) => {
     const { editor } = await prepare(page, browser);
     await timeline(editor).getByLabel('출발 시각').fill('10:00');

@@ -28,7 +28,6 @@ vi.mock('src/sections/trips/collab/use-trip-collab', () => ({
 }));
 vi.mock('src/sections/trips/collab/owner-join', () => ({
   joinCollabAsOwner: vi.fn(),
-  isCleanOwnerDevice: vi.fn().mockResolvedValue(true),
 }));
 vi.mock('src/services/trip-live/client', () => ({ tripLiveApi: { get: vi.fn() } }));
 const view = (patch = {}): CollabView => ({ ...mocked.view, ...patch }) as CollabView;
@@ -121,7 +120,6 @@ describe('함께 편집 띠', () => {
       expect(joinCollabAsOwner).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({ doc }),
-        true,
       ),
     );
   });

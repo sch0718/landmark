@@ -714,3 +714,14 @@ it('동시 추가한 같은 장소의 값을 고른 뒤 결과 Stop id를 보관
     note: '내 메모',
   });
 });
+it('병합 결과가 같은 v1도 비교를 마친 뒤 v2로 올린다', async () => {
+  const s = setup();
+  s.doc.v = 1 as never;
+  await s.engine.sync();
+  expect(s.api.putDoc).toHaveBeenCalledWith(
+    s.record.liveId,
+    s.record.token,
+    expect.objectContaining({ v: 2 }),
+    2,
+  );
+});

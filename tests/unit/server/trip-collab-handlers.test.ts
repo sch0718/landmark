@@ -467,3 +467,14 @@ describe('참여 기기 관리', () => {
     ).toBe(204);
   });
 });
+
+it('소유자는 v1을 읽어 병합한 v2를 공동본 경로로 올린 뒤 초대한다', async () => {
+  await setup(1);
+  expect(await (await state(owner)).json()).toMatchObject({ rev: 1, doc: { v: 1 } });
+  expect((await createInvite()).status).toBe(409);
+  expect(
+    (await handleCollabPutDoc(ctx('PUT', owner, { doc: doc(), baseRev: 1 }), deps)).status,
+  ).toBe(200);
+  expect(await (await state(owner)).json()).toMatchObject({ rev: 2, doc: { v: 2 } });
+  expect((await createInvite()).status).toBe(201);
+});

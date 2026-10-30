@@ -14,7 +14,8 @@ export function CollabDialogHost({
   onClose(): void;
   tripId: string;
 }) {
-  const [liveOpen, setLiveOpen] = useState(false);
+  const [liveOpen, setLiveOpen] = useState(false),
+    [compare, setCompare] = useState(false);
   return (
     <>
       <LazyDialogHost open={open} onClose={onClose} heading="함께 편집">
@@ -24,8 +25,10 @@ export function CollabDialogHost({
           onClose={onClose}
           tripId={tripId}
           onOpenLiveShare={() => setLiveOpen(true)}
+          onCompare={() => setCompare(true)}
         />
       </LazyDialogHost>
+      <CollabConflictDialogHost open={compare} onClose={() => setCompare(false)} tripId={tripId} />
       <LazyDialogHost open={liveOpen} onClose={() => setLiveOpen(false)} heading="갱신 링크">
         <TripLiveShareDialog open={liveOpen} onClose={() => setLiveOpen(false)} tripId={tripId} />
       </LazyDialogHost>

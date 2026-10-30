@@ -428,7 +428,6 @@ it('버전 거절은 공동 편집 합류로 이어지고 다시 덮어쓰지 �
   expect(joinCollabAsOwner).toHaveBeenCalledWith(
     expect.anything(),
     expect.objectContaining({ doc }),
-    false,
   );
   await advance(20_000);
   expect(tripLiveApi.update).toHaveBeenCalledOnce();

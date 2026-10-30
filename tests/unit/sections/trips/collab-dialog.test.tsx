@@ -1,3 +1,4 @@
+import Dialog from '@mui/material/Dialog';
 import { CollabDialogHost } from 'src/sections/trips/collab/CollabDialogHost';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -60,7 +61,11 @@ vi.mock('src/stores/library-state', async (original) => {
 vi.mock('src/routes/lazy-routes', async () => ({
   ...(await import('src/sections/trips/collab/TripCollabDialog')),
   TripLiveShareDialog: () => null,
-  CollabConflictDialog: () => null,
+  CollabConflictDialog: ({ open }: { open: boolean }) => (
+    <Dialog open={open} slotProps={{ paper: { 'aria-label': '겹친 변경 비교' } }}>
+      비교 화면
+    </Dialog>
+  ),
 }));
 const owner = () =>
   tripLiveStore.put({
@@ -101,7 +106,13 @@ function mount(entry = false) {
         {entry ? (
           <LiveShareEntry tripId="trip000001" />
         ) : (
-          <TripCollabDialog open tripId="trip000001" onClose={close} onOpenLiveShare={vi.fn()} />
+          <TripCollabDialog
+            open
+            tripId="trip000001"
+            onClose={close}
+            onOpenLiveShare={vi.fn()}
+            onCompare={vi.fn()}
+          />
         )}
       </MemoryRouter>
     </Provider>,
@@ -292,4 +303,21 @@ it('그만두기 요청이 오프라인이면 접근 가능한 오류를 보이�
     '인터넷 연결을 확인하고 다시 해 주세요',
   );
   expect(tripCollabStore.get('trip000001')?.status).toBe('live');
+});
+
+it('켜기 병합이 겹치면 초대를 만들지 않고 비교 창으로 보낸다', async () => {
+  owner();
+  vi.mocked(enableCollabAsOwner).mockResolvedValue({ ok: false, error: 'conflict' });
+  const store = createStore();
+  store.set(libraryAtom, buildLiveLibrary());
+  render(
+    <Provider store={store}>
+      <MemoryRouter>
+        <CollabDialogHost open tripId="trip000001" onClose={vi.fn()} />
+      </MemoryRouter>
+    </Provider>,
+  );
+  await userEvent.click(screen.getByRole('button', { name: '편집 초대 링크 만들기' }));
+  expect(await screen.findByRole('dialog', { name: '겹친 변경 비교' })).toBeVisible();
+  expect(tripCollabApi.createInvite).not.toHaveBeenCalled();
 });

@@ -233,7 +233,7 @@ export function useTripLivePublish(
             versionJoined.current = true;
             const shared = await tripLiveApi.get(fresh.liveId, null, fresh.ownerToken);
             if (shared.ok && shared.value !== 'unchanged')
-              await joinCollabAsOwner(collabDeps, shared.value, false);
+              await joinCollabAsOwner(collabDeps, shared.value);
           }
           return;
         }

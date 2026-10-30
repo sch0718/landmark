@@ -25,7 +25,7 @@ import { tripCollabStore } from 'src/services/trip-collab/store';
 import { useTripLiveRecord } from 'src/services/trip-live/store';
 import { newLiveToken } from 'src/services/trip-live/tokens';
 import { useLibraryAction } from 'src/stores/library-state';
-import { LIVE_CONFLICT, LIVE_EMPTY, LIVE_TOO_BIG } from '../live/texts';
+import { LIVE_EMPTY, LIVE_TOO_BIG } from '../live/texts';
 import { enableCollabAsOwner } from './owner-join';
 import { useCollabDeps, useTripCollab } from './use-trip-collab';
 const NOTICE =
@@ -57,11 +57,13 @@ export function TripCollabDialog({
   onClose,
   tripId,
   onOpenLiveShare,
+  onCompare,
 }: {
   open: boolean;
   onClose(): void;
   tripId: string;
   onOpenLiveShare?(): void;
+  onCompare(): void;
 }) {
   const view = useTripCollab(tripId, open),
     live = useTripLiveRecord(tripId),
@@ -106,20 +108,19 @@ export function TripCollabDialog({
     setBusy(true);
     setMessage('');
     try {
-      if (!tripCollabStore.get(tripId)) {
-        const enabled = await enableCollabAsOwner(deps);
-        if (!enabled.ok) {
-          setMessage(
-            enabled.error === 'conflict'
-              ? LIVE_CONFLICT
-              : enabled.error === 'too-big'
-                ? LIVE_TOO_BIG
-                : enabled.error === 'empty'
-                  ? LIVE_EMPTY
-                  : errorText(enabled.error),
-          );
-          return;
-        }
+      const enabled = await enableCollabAsOwner(deps);
+      if (!enabled.ok) {
+        if (enabled.error === 'conflict') onCompare();
+        setMessage(
+          enabled.error === 'conflict'
+            ? '공동 여행과 겹친 변경을 비교한 뒤 초대를 만들어 주세요'
+            : enabled.error === 'too-big'
+              ? LIVE_TOO_BIG
+              : enabled.error === 'empty'
+                ? LIVE_EMPTY
+                : errorText(enabled.error),
+        );
+        return;
       }
       if (!pendingToken.current) pendingToken.current = newLiveToken();
       const token = pendingToken.current,

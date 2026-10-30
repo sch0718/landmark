@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { tripLiveApi } from 'src/services/trip-live/client';
 import { useTripLiveRecord } from 'src/services/trip-live/store';
 import { CollabBar } from './CollabBar';
-import { isCleanOwnerDevice, joinCollabAsOwner } from './owner-join';
+import { joinCollabAsOwner } from './owner-join';
 import { useCollabDeps, useTripCollab } from './use-trip-collab';
 export function TripCollabSync({ tripId }: { tripId: string }) {
   const view = useTripCollab(tripId, true),
@@ -23,11 +23,7 @@ export function TripCollabSync({ tripId }: { tripId: string }) {
         if (stale) return;
         finished = true;
         if (result.ok && result.value !== 'unchanged' && result.value.doc.v === 2)
-          await joinCollabAsOwner(
-            deps,
-            result.value,
-            await isCleanOwnerDevice(deps.getLibrary(), tripId, live),
-          );
+          await joinCollabAsOwner(deps, result.value);
       })
       .catch((error) => deps.reportError(error));
     return () => {
