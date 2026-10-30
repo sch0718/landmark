@@ -19,9 +19,29 @@ const ctx = (
   params: {},
   waitUntil: () => {},
 });
-it.each(['GET', 'HEAD'])('출처 헤더가 없는 %s 요청은 허용한다', (method) => {
-  expect(isSyncOrigin(new Request('https://landmark.sch0718.dev', { method }))).toBe(true);
-});
+it.each(['GET', 'HEAD'])(
+  '출처 없는 %s는 같은 출처 또는 직접 탐색 메타데이터만 허용한다',
+  (method) => {
+    for (const site of ['same-origin', 'none'])
+      expect(
+        isSyncOrigin(
+          new Request('https://landmark.sch0718.dev', {
+            method,
+            headers: { 'Sec-Fetch-Site': site },
+          }),
+        ),
+      ).toBe(true);
+    for (const site of [null, 'cross-site', 'same-site', 'invalid', ''])
+      expect(
+        isSyncOrigin(
+          new Request('https://landmark.sch0718.dev', {
+            method,
+            headers: site === null ? {} : { 'Sec-Fetch-Site': site },
+          }),
+        ),
+      ).toBe(false);
+  },
+);
 it.each(['POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'])(
   '출처 헤더가 없는 %s 요청은 거절한다',
   (method) => {
@@ -38,7 +58,7 @@ it.each<[string, string]>([
 ])('허용되지 않는 출처 헤더가 있는 GET은 403이다: %s=%s', async (header, value) => {
   const context = ctx('/v1/status');
   context.request = new Request('https://landmark.sch0718.dev/api/sync/v1/status', {
-    headers: { [header]: value },
+    headers: { [header]: value, 'Sec-Fetch-Site': 'same-origin' },
   });
   const deps = productionDeps();
   deps.log = () => {};
@@ -46,9 +66,11 @@ it.each<[string, string]>([
   expect(response.status).toBe(403);
   expect(await response.json()).toEqual({ error: 'origin' });
 });
-it('출처 헤더가 없는 운영 status GET은 200이다', async () => {
+it('같은 출처 메타데이터가 있는 운영 status GET은 200이다', async () => {
   const context = ctx('/v1/status');
-  context.request = new Request('https://landmark.sch0718.dev/api/sync/v1/status');
+  context.request = new Request('https://landmark.sch0718.dev/api/sync/v1/status', {
+    headers: { 'Sec-Fetch-Site': 'same-origin' },
+  });
   const deps = productionDeps();
   deps.log = () => {};
   const response = await handleSync(context, deps);

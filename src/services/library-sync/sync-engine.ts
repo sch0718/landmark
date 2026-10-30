@@ -25,13 +25,16 @@ import { repairLibrary } from 'src/domain/library-sync/repair';
 import { hasAnyEntry } from 'src/domain/backup/summary';
 import { startEffect } from 'src/lib/effect/runtime';
 import { emptyLibrary, type Library } from 'src/schema/library';
+import type { Trip } from 'src/schema/trip';
 import { IdGen } from 'src/services/id-gen';
+import { LibraryInvalid, LibraryCorrupt, StorageQuotaExceeded } from 'src/services/errors';
 import { LibraryStore } from 'src/services/library-store';
 import { libraryAtom } from 'src/stores/library-state';
 import { OFF_STATUS, syncStatusAtom, type SyncStatus } from 'src/stores/sync-status';
 import { createSyncApi, type SyncApi, type SyncFail } from './api';
 import { getSharedSyncApi, getSharedSyncStorage } from './shared-api';
 import {
+  SyncStorageError,
   readSyncMeta,
   writeSyncMeta,
   readBase,
@@ -83,6 +86,17 @@ export const SYNC_LOCK = 'tripmap:library-sync';
 export const PUSH_CHUNK_ITEMS = 100;
 export const PUSH_CHUNK_BYTES = 900_000;
 
+/** 엔진이 직접 판단한, 사용자에게 보여도 되는 원인만 담는다. */
+class SyncEngineError extends Error {}
+function errorMessage(error: unknown): string {
+  if (error instanceof StorageQuotaExceeded || error instanceof SyncStorageError)
+    return '저장 공간이 부족해 동기화를 멈췄어요';
+  if (error instanceof LibraryInvalid) return '보관함 형식이 맞지 않아 동기화를 멈췄어요';
+  if (error instanceof LibraryCorrupt) return '보관함을 읽지 못해 동기화를 멈췄어요';
+  if (error instanceof SyncEngineError) return error.message;
+  return '예상하지 못한 오류로 동기화를 멈췄어요. 다시 시도해 주세요';
+}
+
 /** 문서 전체를 되살릴 때 모든 LWW 시각을 새 명령의 시각으로 바꾼다. */
 function reviveAsLatest(doc: AnyItem, now: string): AnyItem {
   const visit = (v: unknown): unknown => {
@@ -98,6 +112,19 @@ function reviveAsLatest(doc: AnyItem, now: string): AnyItem {
   return { ...(visit(doc) as AnyItem), deletedAt: null };
 }
 function replacePath(doc: AnyItem, path: string, value: unknown, now: string): AnyItem {
+  if (path === 'dates' && 'days' in doc) {
+    const dates = value as Pick<Trip, 'startDate' | 'endDate' | 'days'>;
+    return {
+      ...doc,
+      startDate: { ...dates.startDate, updatedAt: now },
+      endDate: { ...dates.endDate, updatedAt: now },
+      days: dates.days.map((day) => ({
+        stops: { ...day.stops, updatedAt: now },
+        lodging: { ...day.lodging, updatedAt: now },
+        startTime: { ...day.startTime, updatedAt: now },
+      })),
+    };
+  }
   const keys = path.split('.');
   const change = (node: unknown, i: number): unknown => {
     if (i === keys.length) return { value, updatedAt: now };
@@ -178,7 +205,7 @@ export function createLibrarySyncEngine(deps: EngineDeps): LibrarySyncEngine {
     return publish({
       phase: 'error',
       progress: null,
-      message: '저장 공간이 부족해 동기화를 멈췄어요',
+      message: errorMessage(error),
       lastSyncAt: meta.lastSyncAt,
     });
   }
@@ -204,7 +231,8 @@ export function createLibrarySyncEngine(deps: EngineDeps): LibrarySyncEngine {
     const initial = await snapshot();
     if (!isCurrent()) return status;
     const loaded = await deps.runLibrary(Effect.flatMap(LibraryStore, (store) => store.load));
-    if (loaded.persistence !== 'local') throw Error('메모리 저장소에서는 동기화를 켤 수 없어요');
+    if (loaded.persistence !== 'local')
+      throw new SyncEngineError('이 브라우저의 저장소를 쓸 수 없어 동기화를 켤 수 없어요');
     let fullResync = missingFromLocal(initial.library, base.items);
     let cursor = fullResync ? { rev: 0, key: '' } : (meta.cursor ?? { rev: 0, key: '' });
     let restarted = false;
@@ -429,10 +457,16 @@ export function createLibrarySyncEngine(deps: EngineDeps): LibrarySyncEngine {
     },
     async connect(mode) {
       let meta = readSyncMeta(storage);
-      if (!meta.pendingChoice) return engine.runNow('connect');
+      const syncAndStart = async () => {
+        const result = await engine.runNow('connect');
+        if (['synced', 'conflict', 'local'].includes(result.phase)) engine.start();
+        return result;
+      };
+      if (!meta.pendingChoice) return syncAndStart();
       try {
         const loaded = await deps.runLibrary(Effect.flatMap(LibraryStore, (store) => store.load));
-        if (loaded.persistence !== 'local') throw Error('메모리 저장소');
+        if (loaded.persistence !== 'local')
+          throw new SyncEngineError('이 브라우저의 저장소를 쓸 수 없어 동기화를 켤 수 없어요');
         if (mode === 'replace-local') {
           publish({ phase: 'syncing', progress: { step: 'pull', done: 0, total: 0 } });
           const items: RemoteItem[] = [];
@@ -455,7 +489,8 @@ export function createLibrarySyncEngine(deps: EngineDeps): LibrarySyncEngine {
             fullResync: false,
             conflictId: deps.newConflictId,
           });
-          if (result.held.length) throw Error('보관함을 모두 읽지 못했어요');
+          if (result.held.length)
+            throw new SyncEngineError('서버 보관함을 모두 읽지 못해 바꾸지 않았어요');
           const replaced = await deps.runLibrary(
             Effect.flatMap(LibraryStore, (store) =>
               store.replace(
@@ -472,7 +507,7 @@ export function createLibrarySyncEngine(deps: EngineDeps): LibrarySyncEngine {
           meta = { ...meta, cursor };
         } else if (readBase(storage).userId !== meta.userId) writeBase(storage, meta.userId!, {});
         writeSyncMeta(storage, { ...meta, enabled: true, pendingChoice: false });
-        return engine.runNow('connect');
+        return syncAndStart();
       } catch (error) {
         return failed(error);
       }

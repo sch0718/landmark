@@ -167,6 +167,7 @@
 ### 충돌 기록(`확인 필요한 충돌`)
 
 - 브라우저가 `local`과 `remote`를 합칠 때만 판단한다. **진 쪽이 `local`이고 그 필드의 `updatedAt`이 이 기기의 지난 `lastSyncAt`보다 늦으면**(지난 동기화 뒤 이 기기에서 고친 값) 충돌로 남긴다. 첫 연결(`lastSyncAt === null`)의 합치기는 충돌로 남기지 않는다.
+- 여행 날짜·날 수 충돌은 `dates` 한 건에 두 날짜와 `days`를 함께 기록한다. 날짜 충돌과 함께 생긴 Day 필드 충돌도 이 묶음에 포함한다. 내 값으로 되돌리면 두 날짜와 모든 Day 필드의 시각을 지금으로 갱신하고 함께 저장한다. 날짜가 같은 여행의 Day별 충돌은 기존 경로를 쓴다.
 - 여행·약속 전체 선택(`whole`)에서 이 기기 쪽이 졌으면 항목 하나를 통째로 남긴다.
 - 다른 기기가 지운 항목을 이 기기에서 고쳤으면 "다른 기기에서 지운 ○○을 이 기기에서 고쳤어요"로 남긴다(삭제가 이긴다, 제안서 §5.3).
 - `Conflict = { id, key, kind, label, path, mine, theirs, at, whole?: true, deleted?: true }`. 화면 동작: `내 값으로 되돌리기`(그 필드를 지금 시각으로 다시 씀 → 다음 동기화에서 이김. 전체·삭제면 이 기기 사본의 모든 필드 시각을 지금으로 바꿔 되살림) / `그대로 두기`(목록에서 지움).
@@ -271,7 +272,8 @@ CREATE TABLE IF NOT EXISTS library_devices (
 
 진입점 `functions/api/sync/[[path]].ts`(모든 메서드) → `handleSync(ctx, deps)`. `/api/sync` 뒤 경로로 고른다. 응답은 모두 `Cache-Control: private, no-store`, 오류 본문은 패키지 형식 `{ error: '<code>', ...extra }`(패키지 클라이언트 `toResult`가 401·403·413·422·429·503을 해석한다).
 출처 검사: `isAllowedOrigin(origin)` 또는 (요청 주소 호스트가 `localhost`·`127.0.0.1`·`[::1]`이고 출처가 `http://(localhost|127.0.0.1|[::1]):<포트>`). 실패 `403 { error: 'origin' }`.
-단, `GET`·`HEAD`이고 `Origin`·`Referer` 헤더가 모두 없으면 허용하며, 헤더가 있거나 다른 메서드이면 기존 출처 검사를 적용한다.
+단, `GET`·`HEAD`이고 `Origin`·`Referer` 헤더가 모두 없으면 `Sec-Fetch-Site`가 `same-origin` 또는 `none`일 때만 허용한다. 리퍼러를 생략한 같은 출처 요청과 직접 탐색을 지원하기 위한 예외이며, Fetch Metadata도 없으면 출처를 확인할 수 없어 거절한다. 출처 헤더가 있거나 다른 메서드이면 기존 출처 검사를 적용한다. 세션 없이 부수 효과를 일으키는 GET은 추가하지 않는다.
+`/auth/callback`은 코드가 주소에 있는 동안 `Referrer-Policy: no-referrer`로 보호한다. 렌더 전 코드·state를 주소에서 지우고, 로그인 성공이나 오류 화면의 복귀 링크는 전체 문서를 열어 기본 리퍼러 정책을 회복한다. `resume`의 엔진 시작은 새 문서의 부트 흐름이 담당한다.
 인증 헤더: Google은 `Authorization: Bearer <Firebase ID 토큰>` + `X-Landmark-Session`, 카카오·네이버는 `X-Landmark-Session`만. 쿠키를 쓰지 않는다(`credentials: 'omit'`).
 
 | 요청 | 하는 일 | 권한·한도 | 성공 |

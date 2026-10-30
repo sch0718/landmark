@@ -149,6 +149,27 @@ export function mergeItem<K extends ItemKind>(
         });
       }
     }
+    // 날짜·날 수가 엇갈린 충돌은 유효한 기간과 일정 전체를 한 번에 되돌린다.
+    if (losers.some((l) => ['startDate', 'endDate', 'days'].includes(l.path))) {
+      const related = losers.filter(
+        (l) => ['startDate', 'endDate', 'days'].includes(l.path) || l.path.startsWith('days.'),
+      );
+      for (const l of related) losers.splice(losers.indexOf(l), 1);
+      for (const side of ['a', 'b'] as const) {
+        const lost = related.filter((l) => l.side === side);
+        if (!lost.length) continue;
+        const source = side === 'a' ? at : bt;
+        losers.push({
+          path: 'dates',
+          side,
+          value: { startDate: source.startDate, endDate: source.endDate, days: source.days },
+          updatedAt: lost
+            .map((l) => l.updatedAt)
+            .sort()
+            .at(-1)!,
+        });
+      }
+    }
   }
 
   let doc = orderDoc(a, result as ItemDocOf[K]);

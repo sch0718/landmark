@@ -12,7 +12,7 @@ import {
 } from '@mui/material';
 import { useAtomValue } from 'jotai';
 import { useEffect, useMemo, useState } from 'react';
-import { countsText, libraryCounts } from 'src/domain/backup/summary';
+import { libraryCounts } from 'src/domain/backup/summary';
 import { loadSyncEngine } from 'src/services/library-sync/boot';
 import { libraryAtom } from 'src/stores/library-state';
 import { syncStatusAtom } from 'src/stores/sync-status';
@@ -26,6 +26,7 @@ export function SyncConnectDialog({ open, onClose }: { open: boolean; onClose():
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const counts = libraryCounts(lib);
+  const localCountsText = `장소 ${counts.places}곳 · 라벨 ${counts.labels}개 · 여행 ${counts.trips}개 · 약속 ${counts.meetings}개`;
   const localCount = Object.values(counts).reduce((a, b) => a + b, 0);
   useEffect(() => {
     if (!open || !services) return;
@@ -87,8 +88,8 @@ export function SyncConnectDialog({ open, onClose }: { open: boolean; onClose():
     >
       <DialogTitle id="sync-connect-title">연결 방식</DialogTitle>
       <DialogContent>
-        <Typography>이 기기 보관함: {countsText(counts)}</Typography>
-        {server !== null && <Typography>서버 보관함: {server}개</Typography>}
+        <Typography>이 기기 보관함: {localCountsText}</Typography>
+        {server !== null && <Typography>서버 보관함: 항목 {server}개</Typography>}
         {server === 0 ? (
           <Typography>이 기기 보관함을 올릴까요?</Typography>
         ) : localCount === 0 ? (

@@ -29,7 +29,7 @@ test('@desktop 두 기기가 로그인·메모 동기화·충돌 복원·계정 
   browser,
   baseURL,
 }) => {
-  test.setTimeout(120000);
+  test.setTimeout(180000);
   const server = createSyncServer();
   const contexts: BrowserContext[] = [];
   const device = async (seed: boolean) => {
@@ -40,6 +40,14 @@ test('@desktop 두 기기가 로그인·메모 동기화·충돌 복원·계정 
       timezoneId: 'Asia/Seoul',
     });
     contexts.push(context);
+    // Vite는 public/_headers를 적용하지 않으므로 운영 콜백 문서 정책을 재현한다.
+    await context.route('**/auth/callback?**', async (route) => {
+      const response = await route.fetch();
+      await route.fulfill({
+        response,
+        headers: { ...response.headers(), 'referrer-policy': 'no-referrer' },
+      });
+    });
     await installSyncServer(context, server);
     const page = await context.newPage();
     await seedStorage(page, { library: seed, prefs: { libraryView: 'list' } });
@@ -51,6 +59,16 @@ test('@desktop 두 기기가 로그인·메모 동기화·충돌 복원·계정 
     const b = await device(false);
     const c = await device(false);
     await login(a);
+    // 콜백이 문서를 새로 여는 데 걸리는 시간을 넉넉히 둔다.
+    await expect(a.getByRole('dialog', { name: '연결 방식' })).toBeVisible({ timeout: 20000 });
+    // SPA 이동이면 콜백 문서의 navigation 항목과 no-referrer 정책이 남는다.
+    expect(
+      await a.evaluate(() => {
+        const navigation = performance.getEntriesByType('navigation')[0];
+        return navigation ? new URL(navigation.name).pathname : null;
+      }),
+    ).toBe('/settings');
+    expect(await a.evaluate(async () => (await fetch('/api/sync/v1/status')).status)).toBe(200);
     await a
       .getByRole('dialog', { name: '연결 방식' })
       .getByRole('button', { name: '올리기', exact: true })
@@ -89,9 +107,9 @@ test('@desktop 두 기기가 로그인·메모 동기화·충돌 복원·계정 
     await a.goto(path);
     await expect(a.getByRole('textbox', { name: '메모', exact: true })).toHaveValue('B 오프라인');
     await login(c, 'stranger');
-    await expect(
-      c.getByText('이 계정은 아직 동기화를 쓸 수 없어요', { exact: true }),
-    ).toBeVisible();
+    await expect(c.getByText('이 계정은 아직 동기화를 쓸 수 없어요', { exact: true })).toBeVisible({
+      timeout: 20000,
+    });
     await expect(c.getByText('kakao:dev-stranger', { exact: true })).toBeVisible();
     await settings(a);
     await syncSection(a)
@@ -105,6 +123,10 @@ test('@desktop 두 기기가 로그인·메모 동기화·충돌 복원·계정 
     await b.reload();
     await expect(syncSection(b).getByText('다시 로그인해 주세요', { exact: true })).toBeVisible();
   } finally {
+    await test.info().attach('동기화 GET 요청', {
+      body: JSON.stringify(server.getRequests),
+      contentType: 'application/json',
+    });
     for (const context of contexts) await context.close();
     server.close();
   }

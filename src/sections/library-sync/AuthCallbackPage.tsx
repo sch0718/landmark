@@ -2,14 +2,11 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router';
 import { createSyncApi } from 'src/services/library-sync/api';
 import { readSyncClientConfig } from 'src/services/library-sync/config';
 import { takeCapturedCallback } from 'src/services/library-sync/callback-capture';
 import { finishSocialLogin, deviceLabel, type LoginOutcome } from 'src/services/library-sync/login';
-import { loadSyncEngine } from 'src/services/library-sync/boot';
 export default function AuthCallbackPage() {
-  const navigate = useNavigate();
   const [outcome, setOutcome] = useState<LoginOutcome | null>(null);
   const task = useRef<Promise<LoginOutcome> | null>(null);
   useEffect(() => {
@@ -26,19 +23,15 @@ export default function AuthCallbackPage() {
         : Promise.resolve({ ok: false, reason: 'off' });
     }
     void task.current
-      .then(async (result) => {
+      .then((result) => {
         if (!live) return;
         if (result.ok) {
-          if (result.next === 'resume') {
-            const m = await loadSyncEngine();
-            if (!live) return;
-            m.ensureLibrarySyncEngine().start();
-          }
           const target = localStorage.getItem('tripmap:sync-return');
           localStorage.removeItem('tripmap:sync-return');
-          navigate(
+          // 콜백 문서의 no-referrer 정책은 SPA 이동 뒤에도 남으므로 새 문서를 연다.
+          // resume은 새 문서의 useSyncBoot가 저장된 메타를 읽어 엔진을 시작한다.
+          location.replace(
             target?.startsWith('/') && !target.startsWith('//') ? target : '/settings#sync',
-            { replace: true },
           );
         } else setOutcome(result);
       })
@@ -48,7 +41,7 @@ export default function AuthCallbackPage() {
     return () => {
       live = false;
     };
-  }, [navigate]);
+  }, []);
   let text = '로그인하는 중…';
   let account: string | undefined;
   if (outcome && !outcome.ok) {
@@ -84,7 +77,7 @@ export default function AuthCallbackPage() {
         </>
       )}
       {outcome && !outcome.ok && (
-        <Button component={Link} to="/settings#sync">
+        <Button component="a" href="/settings#sync">
           설정으로 돌아가기
         </Button>
       )}
