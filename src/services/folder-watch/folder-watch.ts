@@ -160,9 +160,8 @@ export async function runFolderWatch(
     prune();
     state = {
       ...state,
-      ...(checked > failed
-        ? { lastRunAt: now, ...(opts.manual ? { lastManualAt: now } : {}) }
-        : {}),
+      ...(checked > failed ? { lastRunAt: now } : {}),
+      ...(opts.manual ? { lastManualAt: now } : {}),
     };
     save();
     return { checked, failed, changes };

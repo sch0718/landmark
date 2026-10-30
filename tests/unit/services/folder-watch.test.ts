@@ -10,6 +10,7 @@ import {
   readFolderWatch,
   writeFolderWatch,
   EMPTY_FOLDER_WATCH,
+  FOLDER_WATCH_MANUAL_GAP_MS,
 } from 'src/services/folder-watch/state';
 import { recordFolderLink } from 'src/domain/library/folder-links';
 import { makeLibrary, label, place } from '../domain/backup/fixtures';
@@ -55,8 +56,8 @@ function setup() {
   return {
     deps,
     lookup,
-    advance: () => {
-      time += 86400000;
+    advance: (ms = 86400000) => {
+      time += ms;
     },
     unlink: () => {
       lib = { ...lib, folders: {} };
@@ -172,7 +173,7 @@ it('진행 중 알림을 끄면 다시 켜거나 다음 폴더를 조회하지 �
   expect(result.changes).toEqual([]);
 });
 
-it('모두 실패한 수동 확인은 성공 시각과 수동 간격을 올리지 않아 바로 다시 시도할 수 있다', async () => {
+it('모두 실패한 수동 확인도 1분 간격을 지키되 마지막 성공 시각은 유지한다', async () => {
   const h = setup();
   await runFolderWatch(h.deps, { manual: true });
   h.advance();
@@ -180,10 +181,17 @@ it('모두 실패한 수동 확인은 성공 시각과 수동 간격을 올리�
   const before = readFolderWatch(localStorage);
   expect(await runFolderWatch(h.deps, { manual: true })).toMatchObject({ checked: 1, failed: 1 });
   const after = readFolderWatch(localStorage);
-  expect(after.lastManualAt).toBe(before.lastManualAt);
+  expect(after.lastManualAt).toBe(now + 86400000);
   expect(after.lastRunAt).toBe(before.lastRunAt);
   expect(after.folders[id]).toMatchObject({ checkedAt: now + 86400000, okAt: now });
-  expect((await runFolderWatch(h.deps, { manual: true })).skipped).toBeUndefined();
+  const calls = h.lookup.mock.calls.length;
+  expect((await runFolderWatch(h.deps, { manual: true })).skipped).toBe('gap');
+  h.advance(FOLDER_WATCH_MANUAL_GAP_MS - 1);
+  expect((await runFolderWatch(h.deps, { manual: true })).skipped).toBe('gap');
+  expect(h.lookup).toHaveBeenCalledTimes(calls);
+  h.advance(1);
+  expect(await runFolderWatch(h.deps, { manual: true })).toMatchObject({ checked: 1, failed: 1 });
+  expect(h.lookup).toHaveBeenCalledTimes(calls + 1);
 });
 it('첫 확인이 실패하면 성공 시각은 없다', async () => {
   const h = setup();
@@ -191,6 +199,9 @@ it('첫 확인이 실패하면 성공 시각은 없다', async () => {
   await runFolderWatch(h.deps, { manual: true });
   expect(readFolderWatch(localStorage).folders[id]).toMatchObject({ checkedAt: now, okAt: null });
   expect(readFolderWatch(localStorage).lastRunAt).toBeNull();
+  expect(readFolderWatch(localStorage).lastManualAt).toBe(now);
+  expect((await runFolderWatch(h.deps, { manual: true })).skipped).toBe('gap');
+  expect(h.lookup).toHaveBeenCalledOnce();
 });
 it.each(['all', 'partial', 'changed', 'not-found'] as const)(
   '수동 확인 %s 결과를 사실대로 알린다',
