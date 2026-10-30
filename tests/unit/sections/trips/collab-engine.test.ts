@@ -635,3 +635,28 @@ it.each(['unchanged', 'progress'] as const)(
     expect(s.api.putDoc).not.toHaveBeenCalled();
   },
 );
+
+it.each(['offline', 'switched-off', 'rate-limited', 'gap'] as const)(
+  '반영 뒤 %s 대기 중에도 다른 기기의 되돌림을 보존한다',
+  async (path) => {
+    const s = setup();
+    if (path === 'gap') {
+      s.change(1, '10:00');
+      await s.engine.sync();
+      s.doc.share.trips[0]!.days[1]!.startTime = '10:00';
+    }
+    s.change(1, '11:00');
+    s.doc.share.trips[0]!.days[0]!.startTime = '07:00';
+    s.setRemote({ ...s.remote(), rev: 4 });
+    if (path !== 'gap') s.api.putDoc.mockResolvedValueOnce({ ok: false, error: path } as never);
+    await s.engine.sync();
+    expect(s.get().trips.trip000001!.days[0]!.startTime.value).toBe('07:00');
+    expect(s.store.readBase(s.record.liveId)?.plan.days[0]!.startTime).toBe('07:00');
+    expect(s.store.readBase(s.record.liveId)?.rev).toBe(4);
+    s.doc.share.trips[0]!.days[0]!.startTime = '09:00';
+    s.setRemote({ ...s.remote(), rev: 5 });
+    await s.engine.sync();
+    expect(s.get().trips.trip000001!.days[0]!.startTime.value).toBe('09:00');
+    expect(s.get().trips.trip000001!.days[1]!.startTime.value).toBe('11:00');
+  },
+);

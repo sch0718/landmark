@@ -451,6 +451,8 @@ export class CollabEngine {
         }
         if (moved) continue;
       }
+      // 받은 공동본을 반영했으므로 올리기 대기·실패 때도 그 판을 공통 기준으로 쓴다.
+      d.store.writeBase(record.liveId, { rev: remote.rev, plan: theirs, progress });
       let rev = remote.rev;
       if (!samePlan(chosen, theirs)) {
         if (d.now().getTime() < this.retryAt) {
