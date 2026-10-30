@@ -613,7 +613,12 @@ export class CollabEngine {
         d.store.update(d.tripId, { prev: result.value.prev });
         const base = d.store.readBase(r.liveId);
         if (base) d.store.writeBase(r.liveId, { ...base, progress: result.value });
-        this.emit({ progress: result.value });
+        this.emit({
+          progress: withLocalOps(result.value, d.store.get(d.tripId)?.pendingProgress ?? [], {
+            device: r.deviceId ?? OWNER_DEVICE,
+            label: r.role === 'owner' ? OWNER_LABEL : r.label,
+          }),
+        });
       });
   }
   dispose(): void {
