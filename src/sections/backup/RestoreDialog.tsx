@@ -206,6 +206,7 @@ export function RestoreDialog({
   // 지금 열린 창의 실행 번호. 작업은 시작할 때 번호를 기억하고, 끝났을 때 바뀌었으면 결과를 버린다.
   const runIdRef = useRef(0);
   const busyRef = useRef(false);
+  const receivingRef = useRef(false);
   // 연 때 읽은 저장소 원문(일반 모드).
   const openTextRef = useRef<Promise<string | null>>(Promise.resolve(null));
 
@@ -259,6 +260,7 @@ export function RestoreDialog({
   useLayoutEffect(() => {
     runIdRef.current += 1;
     busyRef.current = false;
+    receivingRef.current = false;
     if (!open) return;
     if (mode === 'normal') openTextRef.current = startEffect(readOpenText);
     if (remoteRef.current) void loadRemote();
@@ -357,10 +359,13 @@ export function RestoreDialog({
       if (!canReplace()) return;
       const apply = () => replace(remote ? { ...backup, exportedAt: null } : backup, options);
       if (remote && readBootFlag()) {
+        receivingRef.current = true;
         setReceiving(true);
         const engine = (await loadSyncEngine()).ensureLibrarySyncEngine();
         outcome = await engine.runThen('manual', async (status) => {
           if (runIdRef.current !== runId || syncRestoreMessage(status) !== null) return;
+          receivingRef.current = false;
+          setReceiving(false);
           return apply();
         });
       } else outcome = await apply();
@@ -374,6 +379,7 @@ export function RestoreDialog({
     } finally {
       if (runIdRef.current === runId) {
         busyRef.current = false;
+        receivingRef.current = false;
         setBusy(false);
         setReceiving(false);
       }
@@ -453,7 +459,8 @@ export function RestoreDialog({
   const replaceDisabled = working || same || syncBlocked;
 
   const close = () => {
-    if (busyRef.current) return;
+    if (busyRef.current && !receivingRef.current) return;
+    runIdRef.current += 1;
     onClose();
   };
 
@@ -601,7 +608,12 @@ export function RestoreDialog({
         </Box>
       </DialogContent>
       <DialogActions sx={{ flexWrap: 'wrap', gap: 1, '& > :not(style) ~ :not(style)': { ml: 0 } }}>
-        <Button ref={cancelRef} onClick={close} disabled={busy} sx={{ minHeight: 44 }}>
+        <Button
+          ref={cancelRef}
+          onClick={close}
+          disabled={busy && !receiving}
+          sx={{ minHeight: 44 }}
+        >
           취소
         </Button>
         {preview !== null && live && !remote && (

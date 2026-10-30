@@ -71,18 +71,25 @@ async function setup(
     load,
     syncNote,
   });
+  const onClose = vi.fn();
   const ui = (open: boolean) => (
     <Provider store={store}>
       <RestoreDialog
         open={open}
-        onClose={vi.fn()}
+        onClose={onClose}
         mode="normal"
         remote={remote ? source() : undefined}
       />
     </Provider>
   );
   const rendered = render(ui(true));
-  return { store, storage, rerender: (open: boolean) => rendered.rerender(ui(open)), load };
+  return {
+    store,
+    storage,
+    rerender: (open: boolean) => rendered.rerender(ui(open)),
+    load,
+    onClose,
+  };
 }
 it('읽는 중과 머리 줄을 보이고 파일 선택은 숨긴다', async () => {
   let resolve!: (value: typeof loaded) => void;
@@ -267,10 +274,44 @@ it('최신 변경을 받는 동안 기다리고 파일 받기 → 받기 완료 
   expect(order).toEqual(['file', 'pull']);
   expect(screen.getByText('서버의 최신 변경을 먼저 받는 중…')).toHaveAttribute('role', 'status');
   expect(screen.getByRole('button', { name: '이 백업으로 바꾸기' })).toBeDisabled();
-  expect(screen.getByRole('button', { name: '취소' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: '취소' })).toBeEnabled();
   await act(async () => finish());
   await waitFor(() => expect(order).toEqual(['file', 'pull', 'pulled', 'replace']));
 });
+
+it.each(['취소', 'Escape'] as const)(
+  '최신 변경을 받는 중 %s로 닫으면 늦게 불린 after는 보관함을 바꾸지 않는다',
+  async (action) => {
+    boot.enabled = true;
+    const h = await setup();
+    h.onClose.mockImplementation(() => h.rerender(false));
+    await act(async () => h.store.set(syncStatusAtom, { ...OFF_STATUS, phase: 'synced' }));
+    await screen.findByText(loaded.header);
+    const before = h.storage.getItem(LIBRARY_KEY);
+    let finish!: () => void;
+    const afterCalled = vi.fn();
+    boot.runThen.mockImplementationOnce(async (_, after) => {
+      await new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+      afterCalled();
+      return after({ ...OFF_STATUS, phase: 'synced' });
+    });
+    await userEvent.click(screen.getByRole('button', { name: '이 백업으로 바꾸기' }));
+    expect(screen.getByText('서버의 최신 변경을 먼저 받는 중…')).toBeInTheDocument();
+    if (action === '취소') await userEvent.click(screen.getByRole('button', { name: '취소' }));
+    else {
+      screen.getByRole('button', { name: '취소' }).focus();
+      await userEvent.keyboard('{Escape}');
+    }
+    expect(h.onClose).toHaveBeenCalledOnce();
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await act(async () => finish());
+    expect(afterCalled).toHaveBeenCalledOnce();
+    expect(replacing).not.toHaveBeenCalled();
+    expect(h.storage.getItem(LIBRARY_KEY)).toBe(before);
+  },
+);
 
 it.each([
   { phase: 'local', offline: true, held: 0, message: '인터넷에 연결한 뒤 다시 시도해 주세요' },
