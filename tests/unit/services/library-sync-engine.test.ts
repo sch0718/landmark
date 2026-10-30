@@ -227,6 +227,57 @@ it('전송 중 추가 수정과 410 뒤 없어진 서버 묘비를 보존한다'
   expect((await a.engine.runNow('manual')).phase).toBe('synced');
   expect(a.state.lib.places[p.id]?.deletedAt).not.toBeNull();
 });
+it.each(['복원', '수정'] as const)(
+  '410 전체 재동기화에서 서버에 없는 로컬 %s 항목을 다음 실행에 올린다',
+  async (scenario) => {
+    const server = createSyncMemoryServer();
+    disposers.push(() => server.db.close());
+    const initial = scenario === '복원' ? { ...p, deletedAt: p.createdAt } : p;
+    const a = await device(server, { ...emptyLibrary(), places: { [p.id]: initial } });
+    expect((await a.engine.connect('upload')).phase).toBe('synced');
+    expect((await a.engine.runNow('manual')).phase).toBe('synced');
+    expect(readBase(a.storage).items['place:place00001']?.deleted).toBe(scenario === '복원');
+    const restored = {
+      ...p,
+      memo: f('로컬에서 ' + scenario, new Date(a.state.time).toISOString()),
+    };
+    await a.runtime.runPromise(
+      Effect.flatMap(LibraryStore, (store) =>
+        store.replace(
+          { ...emptyLibrary(), places: { [p.id]: restored } },
+          { requirePrevious: true },
+        ),
+      ),
+    );
+    await server.db.prepare('DELETE FROM library_items').run();
+    await server.db.prepare('UPDATE library_state SET purged_rev = rev + 10').run();
+    const changes = vi.spyOn(a.api, 'changes');
+    const push = vi.spyOn(a.api, 'push');
+
+    expect((await a.engine.runNow('manual')).phase).toBe('synced');
+    expect(changes).toHaveBeenCalledTimes(2);
+    expect(changes.mock.calls[0]?.[0].since).toBeGreaterThan(0);
+    expect(changes.mock.calls[1]?.[0].since).toBe(0);
+    expect(a.state.lib.places[p.id]).toEqual(restored);
+    expect(readConflicts(a.storage)).toEqual([]);
+    expect(push).toHaveBeenCalledExactlyOnceWith({
+      v: 1,
+      deviceId: readSyncMeta(a.storage).deviceId,
+      items: [{ kind: 'place', id: p.id, baseRev: 0, baseDeleted: null, doc: restored }],
+    });
+    const reply = await a.api.changes({
+      since: 0,
+      after: '',
+      limit: 500,
+      deviceId: readSyncMeta(a.storage).deviceId,
+    });
+    expect(reply).toMatchObject({
+      ok: true,
+      data: { items: [{ kind: 'place', id: p.id, deleted: false, doc: restored }] },
+    });
+    expect(readBase(a.storage).items['place:place00001']).toMatchObject({ deleted: false });
+  },
+);
 it('실행 중 예약은 한 번만 이어지고 장애 재시도는 정해진 간격을 쓴다', async () => {
   const server = createSyncMemoryServer();
   disposers.push(() => server.db.close());
