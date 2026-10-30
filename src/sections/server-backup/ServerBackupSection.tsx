@@ -346,10 +346,13 @@ export function ServerBackupSection() {
                 checked={syncOn && local.auto}
                 disabled={!syncOn || busy}
                 onChange={(_, auto) => {
+                  const latest = readServerBackupLocal(storage);
+                  const userId = readSyncMeta(storage).userId;
                   writeServerBackupLocal(storage, {
-                    ...local,
+                    ...latest,
                     auto,
-                    userId: readSyncMeta(storage).userId,
+                    userId,
+                    ...(latest.userId !== userId ? { nextCheckAt: null, last: null } : {}),
                   });
                   if (auto)
                     void loadAutoBackup()

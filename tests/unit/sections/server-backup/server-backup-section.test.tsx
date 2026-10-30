@@ -4,7 +4,12 @@ import { Provider } from 'jotai';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { ServerBackupSection } from 'src/sections/server-backup/ServerBackupSection';
-import { readServerBackupLocal } from 'src/services/server-backup/storage';
+import {
+  readServerBackupLocal,
+  EMPTY_SERVER_BACKUP_LOCAL,
+  SERVER_BACKUP_KEY,
+} from 'src/services/server-backup/storage';
+import { newDeviceMeta, writeSyncMeta } from 'src/services/library-sync/storage';
 import { setAppRuntimeForTest } from 'src/lib/effect/runtime';
 import { renderLibrary, sampleLibrary } from '../library/fixtures';
 const mocks = vi.hoisted(() => ({
@@ -279,4 +284,41 @@ it('바뀐 서버 백업 창을 닫았다 다시 열면 최신 id를 받는다',
   );
   await userEvent.click(q().getByRole('button', { name: '서버 백업에서 되살리기' }));
   await waitFor(() => expect(mocks.api.download).toHaveBeenLastCalledWith(next.id));
+});
+
+it('다른 계정에서 자동 백업을 켜면 앞 계정의 기한과 결과를 비운다', async () => {
+  writeSyncMeta(localStorage, { ...newDeviceMeta(), userId: 'current' });
+  localStorage.setItem(
+    SERVER_BACKUP_KEY,
+    JSON.stringify({
+      ...EMPTY_SERVER_BACKUP_LOCAL,
+      userId: 'previous',
+      nextCheckAt: Date.now() + 86400000,
+      last: { at: Date.now(), outcome: 'failed' },
+    }),
+  );
+  const q = await setup();
+  await q().findByText('서버 백업: 없음');
+  await userEvent.click(q().getByRole('switch', { name: '자동 백업' }));
+  expect(readServerBackupLocal(localStorage)).toMatchObject({
+    auto: true,
+    userId: 'current',
+    nextCheckAt: null,
+    last: null,
+  });
+});
+it('자동 백업을 켤 때 화면을 연 뒤 바뀐 같은 계정의 최신 기록을 유지한다', async () => {
+  writeSyncMeta(localStorage, { ...newDeviceMeta(), userId: 'current' });
+  const q = await setup();
+  await q().findByText('서버 백업: 없음');
+  // 다른 탭의 기록이 아직 이 화면에 전달되지 않은 상태다.
+  const latest = {
+    ...EMPTY_SERVER_BACKUP_LOCAL,
+    userId: 'current',
+    nextCheckAt: Date.now() + 123456,
+    last: { at: Date.now(), outcome: 'skipped-empty' as const },
+  };
+  localStorage.setItem(SERVER_BACKUP_KEY, JSON.stringify(latest));
+  await userEvent.click(q().getByRole('switch', { name: '자동 백업' }));
+  expect(readServerBackupLocal(localStorage)).toEqual({ ...latest, auto: true });
 });
