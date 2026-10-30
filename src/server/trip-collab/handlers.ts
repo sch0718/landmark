@@ -177,9 +177,9 @@ export function handleCollabInviteCreate(ctx: MeetContext, deps: MeetDeps): Prom
       db = ctx.env.DB;
     const existing = await db
       .prepare(
-        "SELECT expires_at FROM trip_share_tokens WHERE hash = ? AND share_id = ? AND kind = 'invite'",
+        "SELECT expires_at FROM trip_share_tokens WHERE hash = ? AND share_id = ? AND kind = 'invite' AND expires_at > ?",
       )
-      .bind(hash, id)
+      .bind(hash, id, now.toISOString())
       .first<{ expires_at: string }>();
     if (existing)
       return reply({ key: inviteKeyOf(hash), expiresAt: existing.expires_at, created: false });
