@@ -826,3 +826,52 @@ it('Web Locks가 없어도 보류 처리가 끝난 뒤 실행하고 겹친 실�
   expect(a.state.lib.places[p.id]?.memo.updatedAt).toBe(new Date(a.state.time).toISOString());
   expect((await first).phase).toBe('synced');
 });
+
+it('Web Locks가 없어도 보류 처리 둘이 겹치면 앞 처리가 끝난 뒤 차례로 실행하고 쓰기를 덮어쓰지 않는다', async () => {
+  const server = createSyncMemoryServer();
+  disposers.push(() => server.db.close());
+  const a = await device(server, { ...emptyLibrary(), places: { [p.id]: p } });
+  await a.engine.connect('upload');
+  a.engine.stop();
+  expect(a.deps.locks).toBeUndefined();
+  const key = `place:${p.id}` as const;
+  const other = 'place:other00001' as const;
+  writeSyncMeta(a.storage, {
+    ...readSyncMeta(a.storage),
+    held: [
+      { key, rev: 2, reason: 'decode' },
+      { key: other, rev: 2, reason: 'decode' },
+    ],
+  });
+  let release!: () => void;
+  const paused = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let enter!: () => void;
+  const entered = new Promise<void>((resolve) => {
+    enter = resolve;
+  });
+  const original = a.deps.runLibrary.bind(a.deps);
+  const runLibrary = vi.spyOn(a.deps, 'runLibrary').mockImplementationOnce(async (effect) => {
+    enter();
+    await paused;
+    return original(effect);
+  });
+  const first = a.engine.resolveHeld(key, 'mine');
+  await entered;
+  const second = a.engine.resolveHeld(other, 'skip');
+  try {
+    await Promise.resolve();
+    await Promise.resolve();
+    // 첫 처리가 멈춘 동안 둘째 처리는 저장소를 읽거나 쓰지 않는다.
+    expect(runLibrary).toHaveBeenCalledTimes(1);
+    expect(readSyncMeta(a.storage).held.map((h) => h.key)).toEqual([key, other]);
+    expect(readSyncMeta(a.storage).skipped).toEqual([]);
+  } finally {
+    release();
+    await Promise.all([first, second]);
+  }
+  // 둘째 처리가 첫 처리의 쓰기를 덮어쓰지 않고 둘 다 반영된다.
+  expect(readSyncMeta(a.storage).held).toEqual([]);
+  expect(readSyncMeta(a.storage).skipped).toEqual([other]);
+});
