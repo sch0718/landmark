@@ -13,6 +13,7 @@ import {
 } from 'src/domain/trip-live/build-live-doc';
 import { useTripLegs } from 'src/sections/share-export/use-trip-legs';
 import { tripLiveApi } from 'src/services/trip-live/client';
+import { tripLivePlanStore } from 'src/services/trip-live/plan-store';
 import { rotateLiveOwner } from 'src/services/trip-live/rotate-owner';
 import {
   tripLiveStore,
@@ -225,11 +226,11 @@ export function useTripLivePublish(
           tripLiveStore.update(tripId, {
             rev: result.value.rev,
             publishedKey: key,
-            planKey,
             publishedAt: new Date().toISOString(),
             expiresAt: result.value.expiresAt,
             dayIds,
           });
+          tripLivePlanStore.put(tripId, fresh.liveId, planKey);
           setState('published');
           return;
         }

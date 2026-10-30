@@ -21,6 +21,7 @@ import { paths } from 'src/routes/paths';
 import { periodLabel } from 'src/sections/trips/trip-dates';
 import { tripLiveApi, type LiveState } from 'src/services/trip-live/client';
 import { tripLiveStore } from 'src/services/trip-live/store';
+import { tripLivePlanStore } from 'src/services/trip-live/plan-store';
 import { libraryAtom, useLibraryAction } from 'src/stores/library-state';
 import { LIVE_IMPORT_HINT } from './texts';
 const REVOKED = '이 관리 링크는 더 쓸 수 없어요. 다른 기기에서 다시 만들었거나 지웠어요';
@@ -139,10 +140,10 @@ export function TripLiveLinkPage() {
         options,
         createdAt,
         publishedKey,
-        planKey,
         publishedAt: state.updatedAt,
         expiresAt: state.expiresAt,
       });
+      tripLivePlanStore.put(tripId, id, planKey);
       if (linked.value) {
         tripCollabStore.put({
           tripId,

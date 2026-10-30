@@ -1,3 +1,5 @@
+import { LIVE_RECORD_2A_KEYS } from '../../../fixtures/live-trip';
+import { tripLivePlanStore } from 'src/services/trip-live/plan-store';
 import { setTimeout as realTimeout } from 'node:timers/promises';
 import { act, renderHook } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
@@ -7,7 +9,7 @@ import { useTripLivePublish } from 'src/sections/trips/live/use-trip-live-publis
 import { tripCollabStore } from 'src/services/trip-collab/store';
 import { joinCollabAsOwner } from 'src/sections/trips/collab/owner-join';
 import { tripLiveApi } from 'src/services/trip-live/client';
-import { tripLiveStore, type TripLiveRecord } from 'src/services/trip-live/store';
+import { TRIP_LIVE_KEY, tripLiveStore, type TripLiveRecord } from 'src/services/trip-live/store';
 import { libraryAtom } from 'src/stores/library-state';
 import {
   buildLiveTripDoc,
@@ -127,12 +129,16 @@ describe('소유자 자동 반영', () => {
     await advance(1);
     expect(tripLiveApi.update).toHaveBeenCalledOnce();
     expect(vi.mocked(tripLiveApi.update).mock.calls[0]![2]).toBe(1);
+    expect(
+      Object.keys(JSON.parse(localStorage.getItem(TRIP_LIVE_KEY)!).trip000001).filter(
+        (key) => !LIVE_RECORD_2A_KEYS.has(key),
+      ),
+    ).toEqual([]);
     expect(tripLiveStore.get('trip000001')).toMatchObject({
       rev: 2,
       publishedKey: expect.any(String),
-      planKey: expect.any(String),
     });
-    expect(tripLiveStore.get('trip000001')?.planKey).toBe(
+    expect(tripLivePlanStore.get('trip000001')).toBe(
       await livePlanKey(vi.mocked(tripLiveApi.update).mock.calls[0]![1]),
     );
   });

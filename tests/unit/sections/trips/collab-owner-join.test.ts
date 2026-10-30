@@ -7,6 +7,7 @@ import {
 } from 'src/sections/trips/collab/collab-engine';
 import { createTripCollabStore } from 'src/services/trip-collab/store';
 import { createTripLiveStore } from 'src/services/trip-live/store';
+import { createTripLivePlanStore, TRIP_LIVE_PLAN_KEY } from 'src/services/trip-live/plan-store';
 import { tripLiveApi } from 'src/services/trip-live/client';
 import { tripCollabApi } from 'src/services/trip-collab/client';
 import {
@@ -86,9 +87,11 @@ async function setup(
     options: { title: '시험 여행', includeMemo: false, includeCandidates },
     createdAt: doc.share.createdAt,
     publishedKey: await liveEditKey(doc),
-    ...(routes && !routes.legacy ? { planKey: await livePlanKey(doc) } : {}),
   };
   liveStore.put(record);
+  const livePlanStore = createTripLivePlanStore(liveStore);
+  if (routes && !routes.legacy)
+    livePlanStore.put(record.tripId, record.liveId, await livePlanKey(doc));
   const live = {
     rev: 1,
     updatedAt: doc.share.createdAt,
@@ -118,6 +121,7 @@ async function setup(
     },
     store,
     liveStore,
+    livePlanStore,
     getLibrary: () => lib,
     run: async (op) => {
       const r = op(lib, { now: '2026-11-01T00:00:00.000Z', newId: () => 'newplace00' });
@@ -350,4 +354,51 @@ it('경로 상태가 다른 깨끗한 기기는 켜기에서도 최신 2A 변경
   expect(collabEngineFor(s.record.tripId, () => s.deps).getSnapshot().state).toBe('synced');
   expect(vi.mocked(s.deps.api.putDoc).mock.calls[0]![2]).toMatchObject({ v: 2 });
   expect(s.deps.getLibrary().trips.trip000001!.days[0]!.startTime.value).toBe('07:00');
+});
+
+it('다른 liveId의 전용 지문은 현재 2A 공개 기준으로 쓰지 않는다', async () => {
+  const s = await setup(true, { published: true, join: false });
+  localStorage.setItem(
+    TRIP_LIVE_PLAN_KEY,
+    JSON.stringify({
+      [s.record.tripId]: {
+        liveId: 'klmnopqrst',
+        publishedKey: s.record.publishedKey,
+        planKey: await livePlanKey(s.live.doc),
+      },
+    }),
+  );
+  s.live.doc.v = 2;
+  s.live.doc.share.trips[0]!.days[0]!.startTime = '07:00';
+  await joinCollabAsOwner(s.deps, s.live);
+  expect(s.store.readBase(s.record.liveId)).toBeNull();
+  const engine = collabEngineFor(s.record.tripId, () => s.deps);
+  await engine.sync();
+  expect(engine.getSnapshot().state).toBe('conflict');
+  expect(s.deps.api.putDoc).not.toHaveBeenCalled();
+});
+
+it('2A 롤백 중 다른 계획을 공개한 뒤 옛 계획으로 미공개 수정해도 비교로 보존한다', async () => {
+  const s = await setup(true, { published: true, join: false });
+  s.change(1, '11:00');
+  const publishedIn2A = buildLiveTripDoc(s.deps.getLibrary(), s.record.tripId, routed, {
+    title: s.record.options.title,
+    options: s.record.options,
+    dayIds: s.record.dayIds,
+    createdAt: s.record.createdAt,
+  })!;
+  s.deps.liveStore.update(s.record.tripId, { publishedKey: await liveEditKey(publishedIn2A) });
+  s.change(1, '09:00');
+  s.live.doc.v = 2;
+  s.live.doc.share.trips[0]!.days[0]!.startTime = '07:00';
+  await joinCollabAsOwner(s.deps, s.live);
+  expect(s.store.readBase(s.record.liveId)).toBeNull();
+  const engine = collabEngineFor(s.record.tripId, () => s.deps);
+  await engine.sync();
+  expect(engine.getSnapshot().state).toBe('conflict');
+  expect(s.deps.api.putDoc).not.toHaveBeenCalled();
+  expect(s.deps.getLibrary().trips.trip000001!.days.map((d) => d.startTime.value)).toEqual([
+    '09:00',
+    '09:00',
+  ]);
 });

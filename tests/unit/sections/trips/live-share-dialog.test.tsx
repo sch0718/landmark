@@ -1,3 +1,4 @@
+import { tripLivePlanStore } from 'src/services/trip-live/plan-store';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Provider, createStore } from 'jotai';
@@ -6,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TripLiveShareDialog } from 'src/sections/trips/live/TripLiveShareDialog';
 import { tripLiveApi } from 'src/services/trip-live/client';
 import {
+  TRIP_LIVE_KEY,
   createTripLiveStore,
   tripLiveStore,
   type TripLiveRecord,
@@ -13,7 +15,7 @@ import {
 import { libraryAtom } from 'src/stores/library-state';
 import { ESTIMATE_ONLY } from 'src/domain/trip-live/build-live-doc';
 import { buildLiveLibrary } from '../../../fixtures/builders';
-import { buildLiveDoc } from '../../../fixtures/live-trip';
+import { buildLiveDoc, LIVE_RECORD_2A_KEYS } from '../../../fixtures/live-trip';
 import { downloadText } from 'src/lib/download-text';
 import { toast } from 'sonner';
 import { getTurnstileToken } from 'src/services/meet-online/turnstile-loader';
@@ -110,11 +112,19 @@ describe('갱신 링크 창', () => {
     expect(
       ((await screen.findByRole('textbox', { name: '보기 링크' })) as HTMLInputElement).value,
     ).toMatch(/\/view#t=[a-z0-9]{10}\.[A-Za-z0-9_-]{43}$/);
+    expect(
+      Object.keys(JSON.parse(localStorage.getItem(TRIP_LIVE_KEY)!).trip000001).filter(
+        (key) => !LIVE_RECORD_2A_KEYS.has(key),
+      ),
+    ).toEqual([]);
     expect(tripLiveStore.get('trip000001')).toMatchObject({
       status: 'live',
       publishedKey: expect.any(String),
-      planKey: expect.any(String),
     });
+    const { livePlanKey } = await import('src/domain/trip-live/build-live-doc');
+    expect(tripLivePlanStore.get('trip000001')).toBe(
+      await livePlanKey(vi.mocked(tripLiveApi.create).mock.calls[0]![0].doc),
+    );
   });
   it('응답 유실 뒤 같은 id와 토큰으로 다시 보낸다', async () => {
     vi.mocked(tripLiveApi.create).mockResolvedValueOnce({ ok: false, error: 'offline' });
@@ -316,7 +326,7 @@ it('응답 유실 뒤 옵션을 바꿔 재시도하면 실제 서버 공개본�
   await userEvent.click(screen.getByRole('button', { name: '갱신 링크 만들기' }));
   await screen.findByRole('textbox', { name: '보기 링크' });
   expect(tripLiveStore.get('trip000001')?.publishedKey).toBe(await liveEditKey(buildLiveDoc()));
-  expect(tripLiveStore.get('trip000001')?.planKey).toBe(await livePlanKey(buildLiveDoc()));
+  expect(tripLivePlanStore.get('trip000001')).toBe(await livePlanKey(buildLiveDoc()));
   expect(tripLiveStore.get('trip000001')?.options.includeMemo).toBe(true);
 });
 it.each(['turnstile', 'rate-limited', 'switched-off'] as const)(

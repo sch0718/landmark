@@ -34,6 +34,7 @@ import {
 } from 'src/services/trip-collab/client';
 import { createTripCollabStore, type TripCollabRecord } from 'src/services/trip-collab/store';
 import { tripLiveStore } from 'src/services/trip-live/store';
+import type { tripLivePlanStore } from 'src/services/trip-live/plan-store';
 import { newDayId } from 'src/services/trip-live/tokens';
 import { createLivePoll } from 'src/share-viewer/live';
 import type { LibraryActionResult } from 'src/stores/library-state';
@@ -73,6 +74,7 @@ export type CollabEngineDeps = {
   api: typeof tripCollabApi;
   store: ReturnType<typeof createTripCollabStore>;
   liveStore: typeof tripLiveStore;
+  livePlanStore?: typeof tripLivePlanStore;
   getLibrary(): Library;
   run(op: (lib: Library, ctx: OpCtx) => Library | OpResult): Promise<LibraryActionResult>;
   routeOf(): CollabRouteOf;

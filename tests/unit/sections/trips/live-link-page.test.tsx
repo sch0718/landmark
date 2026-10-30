@@ -1,3 +1,4 @@
+import { tripLivePlanStore } from 'src/services/trip-live/plan-store';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Provider, createStore } from 'jotai';
@@ -6,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TripLiveLinkPage } from 'src/sections/trips/live/TripLiveLinkPage';
 import { tripLiveApi } from 'src/services/trip-live/client';
 import { tripCollabStore } from 'src/services/trip-collab/store';
-import { tripLiveStore } from 'src/services/trip-live/store';
+import { TRIP_LIVE_KEY, tripLiveStore } from 'src/services/trip-live/store';
 import { libraryAtom } from 'src/stores/library-state';
 import {
   buildLiveTripDoc,
@@ -16,7 +17,7 @@ import {
 } from 'src/domain/trip-live/build-live-doc';
 import { emptyLibrary } from 'src/schema/library';
 import { buildLiveLibrary } from '../../../fixtures/builders';
-import { buildLiveDoc } from '../../../fixtures/live-trip';
+import { buildLiveDoc, LIVE_RECORD_2A_KEYS } from '../../../fixtures/live-trip';
 vi.mock('src/services/trip-live/client', () => ({ tripLiveApi: { get: vi.fn() } }));
 vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { error: vi.fn() }) }));
 vi.mock('src/stores/library-state', async (original) => {
@@ -85,12 +86,17 @@ describe('소유자 링크', () => {
     await userEvent.click(screen.getByRole('button', { name: '이 기기에서 관리하기' }));
     await screen.findByText('/trips/trip000001');
     const r = tripLiveStore.byLiveId(id)!;
+    expect(
+      Object.keys(JSON.parse(localStorage.getItem(TRIP_LIVE_KEY)!)[r.tripId]).filter(
+        (key) => !LIVE_RECORD_2A_KEYS.has(key),
+      ),
+    ).toEqual([]);
     expect(r.status).toBe('live');
     const lib = store.get(libraryAtom);
     expect(lib.trips[r.tripId]!.days.map((d) => d.stops.value.map((s) => s.id))).toEqual(
       buildLiveDoc().ids.stops,
     );
-    expect(r.planKey).toBe(
+    expect(tripLivePlanStore.get(r.tripId)).toBe(
       await livePlanKey(
         buildLiveTripDoc(lib, r.tripId, ESTIMATE_ONLY, {
           title: r.options.title,

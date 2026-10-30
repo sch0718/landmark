@@ -175,7 +175,6 @@ type TripLiveRecord = {
   options: { title: string; includeMemo: boolean; includeCandidates: boolean };
   createdAt: string;        // share.createdAt 고정값(ISO)
   publishedKey?: string;    // 마지막으로 올린(또는 담은) 문서의 재공개 판단용 편집 지문
-  planKey?: string;         // 같은 문서의 경로 상태를 뺀 계획 지문(2B 합류용, 선택 필드)
   publishedAt?: string;
   expiresAt?: string;
   paused?: true;            // 409 뒤 사용자가 반영을 멈춤
@@ -186,7 +185,7 @@ type TripLiveRecord = {
 - 깨진 값은 빈 기록으로 읽고, 저장소가 막히면 그 페이지 동안 메모리에만 둔다(`tripmap:share-links:v1`과 같은 관례). 다른 탭의 변경은 `storage` 이벤트로 받는다.
 - 토큰은 보관함·백업 파일에 넣지 않는다. 백업을 다른 기기에 되살려도 그 기기는 소유자가 아니다(소유자 링크로 연결한다).
 - **편집 지문** `liveEditKey(doc)`: `share.createdAt`을 빼고 구간은 `[from, to, mode, status === 'routed']`만 남긴 JSON의 SHA-256(base64url). 추정 구간이 받은 경로로 바뀌면 한 번 더 공개하고, 이미 받은 경로의 재조회로 시간·경로선만 바뀐 것은 올리지 않는다.
-- **계획 지문** `livePlanKey(doc)`: 편집 지문과 같은 문서에서 구간을 `[from, to, mode]`만 남긴 SHA-256(base64url). 경로 조회 결과는 모두 무시하되 공개 계획 값은 모두 포함한다. 공개 성공(처음 만들기·갱신)과 소유자 링크 담기 때 같은 문서의 `publishedKey`와 함께 선택 필드 `planKey`로 기록해, 2B 합류 때 경로 응답 도착 여부와 무관하게 미공개 수정 여부를 판정한다. 옛 기록은 그대로 읽는다.
+- **계획 지문** `livePlanKey(doc)`: 편집 지문과 같은 문서에서 구간을 `[from, to, mode]`만 남긴 SHA-256(base64url). 경로 조회 결과는 모두 무시하되 공개 계획 값은 모두 포함한다. 공개 성공(처음 만들기·갱신)과 소유자 링크 담기 때 같은 문서의 `publishedKey`를 2A 기록에 저장하고, `planKey`는 2B 전용 키 `tripmap:trip-live-plan:v1`의 `{ [tripId]: { liveId, planKey, publishedKey } }`에 따로 저장한다. 2A 기록 모양은 바꾸지 않는다. 2B 합류 때 현재 2A 기록과 `liveId`·`publishedKey`가 같은 계획 지문만 읽어 경로 응답 도착 여부와 무관하게 미공개 수정 여부를 판정한다. 계획 지문이 없는 옛 기록은 현재 경로·`ESTIMATE_ONLY` 편집 지문 중 하나라도 `publishedKey`와 같으면 깨끗한 기기로 본다.
 
 ## API(Pages Functions)
 
@@ -229,7 +228,7 @@ type TripLiveRecord = {
 
 | 결과 | 기록·화면 |
 |---|---|
-| 성공 | `rev`·`publishedKey`·`planKey`·`publishedAt`·`expiresAt`·`dayIds` 저장 |
+| 성공 | `rev`·`publishedKey`·`publishedAt`·`expiresAt`·`dayIds` 저장. `planKey`는 2B 전용 키에 따로 저장 |
 | `409 { rev }` | 알림(닫힐 때까지 유지) `다른 기기에서 갱신 링크의 일정을 바꿨어요` · `이 기기 일정으로 바꾸기`(`baseRev = rev`로 다시 올림) · `반영 멈추기`(`paused`) |
 | `401` | `disconnected`, 알림 `이 기기의 갱신 링크 관리 연결이 끊겼어요. 소유자 링크로 다시 연결하세요` |
 | `404`·`410` | `ended`, 알림 `갱신 링크 공유가 끝났어요` |

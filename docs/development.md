@@ -250,6 +250,7 @@ npx wrangler pages dev --d1 DB --port 8788 --proxy 4180 -- npx vite --port 4180 
 - UTC 날짜·IP 해시별 일 한도: 초대 60, 수락 30, 공동본 올리기 1,200, 진행 2,000, 관리 300, 잘못된 초대 읽기 5,000입니다. 정상 읽기와 304는 읽기 한도를 쓰지 않습니다.
 - `TRIP_COLLAB=off`는 쓰기만 멈춥니다. `TRIP_SHARE_LIVE=off`도 공동본 올리기·초대·수락을 막습니다. 읽기와 초대 취소·기기 거두기·그만두기는 계속 됩니다.
 - 기기 키 `tripmap:trip-collab:v1`은 역할·기기 토큰·서버와 로컬 장소 대응표·revision·진행 대기열을 보관합니다(최대 100개). `tripmap:trip-collab-base:v1:<id>`는 3방향 병합 기준 계획과 마지막 진행입니다. 기록 삭제 시 기준도 지우며, 저장소를 못 쓰면 페이지 동안 메모리에만 둡니다. 보관함 schema 2와 백업에는 이 토큰을 넣지 않습니다.
+- 2B 전용 기기 키 `tripmap:trip-live-plan:v1`은 `{ [tripId]: { liveId, planKey, publishedKey } }`로 마지막 2A 공개·소유자 링크 담기 문서의 계획 지문을 보관합니다. `tripmap:trip-live:v1`의 기록 모양은 바꾸지 않습니다. 손상·형식 오류는 빈 값으로 읽고 2A 기록이 없거나 `liveId`·`publishedKey`가 다르면 무시합니다(그만두기·서버 지우기·상한 정리 뒤 낡은 값 방지). 롤백한 2A가 같은 공유를 다시 공개해도 옛 지문을 쓰지 않습니다. 다음 저장 때 유효한 최대 100개만 남기며 저장소가 막히면 페이지 메모리를 씁니다.
 - 코드: `src/domain/trip-collab/*`(투영·병합·장소 대응·공동본·진행), `src/services/trip-collab/*`(클라이언트·기기 저장소), `src/sections/trips/collab/*`(엔진·창·초대 수락), `src/sections/settings/CollabTripsSection.tsx`, 당일 화면 `src/sections/trips/today/*`.
 
 #### 로컬에서 키 없이 두 기기로 해 보기
@@ -280,7 +281,7 @@ npx wrangler pages dev --d1 DB --port 8788 --proxy 4180 -- npx vite --port 4180 
 
 #### 되돌릴 때
 
-- 보관함·백업·공유 문서 형식이 그대로다. 새 기기 키 두 개는 옛 버전이 읽지도 지우지도 않는다.
+- 보관함·백업·공유 문서 형식이 그대로다. 새 기기 키 `tripmap:trip-collab:v1`·`tripmap:trip-collab-base:v1:<id>`·`tripmap:trip-live-plan:v1`은 옛 버전이 읽지도 지우지도 않는다. 2A 소유자 기록의 모양은 그대로다.
 - **서버 쪽만 멈추려면** Pages 환경 변수 `TRIP_COLLAB=off`를 넣고 다시 배포한다. 초대 만들기·수락·공동본 올리기·진행 올리기만 `503`이 되고, 모든 기기는 마지막 공동본을 받아 보고 이 기기에서 고친 것은 기기에 남는다(다시 켜지면 병합). 2A 보기 링크·관리, 기기 거두기·초대 취소·그만두기는 계속 된다. 2A `TRIP_SHARE_LIVE=off`도 공동본 올리기·초대·수락을 막는다.
 - **2A만 있는 버전으로 되돌리면**
   1. 먼저 사용자가 v2 문서를 2A가 읽는 v1로 돌린다(모양이 같아 `v`를 바꾸고, 캐시가 다시 받도록 `rev`도 올린다):

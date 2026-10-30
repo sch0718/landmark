@@ -40,6 +40,7 @@ import { legStatus, useTripLegs } from 'src/sections/share-export/use-trip-legs'
 import { getTurnstileToken } from 'src/services/meet-online/turnstile-loader';
 import { ShareTemplate } from 'src/services/share-template';
 import { tripLiveApi, type TripLiveError } from 'src/services/trip-live/client';
+import { tripLivePlanStore } from 'src/services/trip-live/plan-store';
 import { rotateLiveOwner, withLiveOwnerRecovery } from 'src/services/trip-live/rotate-owner';
 import {
   tripLiveStore,
@@ -227,6 +228,10 @@ export function TripLiveShareDialog({
             expiresAt = saved.value.expiresAt;
             viewToken = saved.value.viewToken!;
           }
+          const [publishedKey, planKey] = await Promise.all([
+            liveEditKey(publishedDoc),
+            livePlanKey(publishedDoc),
+          ]);
           tripLiveStore.put({
             ...current,
             status: 'live',
@@ -234,9 +239,9 @@ export function TripLiveShareDialog({
             expiresAt,
             viewToken,
             publishedAt: new Date().toISOString(),
-            publishedKey: await liveEditKey(publishedDoc),
-            planKey: await livePlanKey(publishedDoc),
+            publishedKey,
           });
+          tripLivePlanStore.put(tripId, current.liveId, planKey);
           return;
         }
         if (result.error === 'taken' && attempt === 0) {

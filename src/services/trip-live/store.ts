@@ -21,7 +21,6 @@ export type TripLiveRecord = {
   options: { title: string; includeMemo: boolean; includeCandidates: boolean };
   createdAt: string;
   publishedKey?: string;
-  planKey?: string;
   publishedAt?: string;
   expiresAt?: string;
   paused?: true;
@@ -44,7 +43,6 @@ const recordSchema = Schema.Struct({
   }),
   createdAt: Schema.String,
   publishedKey: Schema.optionalKey(Schema.String),
-  planKey: Schema.optionalKey(Schema.String),
   publishedAt: Schema.optionalKey(Schema.String),
   expiresAt: Schema.optionalKey(Schema.String),
   paused: Schema.optionalKey(Schema.Literal(true)),

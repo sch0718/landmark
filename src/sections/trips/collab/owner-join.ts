@@ -10,6 +10,7 @@ import {
 import { alignDayIds } from 'src/domain/trip-live/live-doc';
 import type { TripCollabError } from 'src/services/trip-collab/client';
 import { tripLiveApi, type LiveState } from 'src/services/trip-live/client';
+import { tripLivePlanStore } from 'src/services/trip-live/plan-store';
 import { newDayId } from 'src/services/trip-live/tokens';
 import { collabEngineFor, type CollabEngineDeps } from './collab-engine';
 
@@ -56,8 +57,9 @@ export async function joinCollabAsOwner(deps: CollabEngineDeps, live: LiveState)
   let base = matchesPublished ? planFromDoc(live.doc) : null;
   let cleanPublished = false;
   if (!base && published) {
-    if (record.planKey !== undefined) {
-      cleanPublished = (await livePlanKey(published)) === record.planKey;
+    const planKey = (deps.livePlanStore ?? tripLivePlanStore).get(tripId);
+    if (planKey !== undefined) {
+      cleanPublished = (await livePlanKey(published)) === planKey;
     } else if (record.publishedKey !== undefined) {
       // 옛 기록은 현재 상태와 모든 구간 미조회 상태 중 공개 지문과 맞는 쪽을 찾는다.
       const estimated = buildLiveTripDoc(
