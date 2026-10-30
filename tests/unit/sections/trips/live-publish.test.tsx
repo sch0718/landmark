@@ -13,7 +13,7 @@ import { buildLiveTripDoc, ESTIMATE_ONLY, liveEditKey } from 'src/domain/trip-li
 import { buildLiveLibrary } from '../../../fixtures/builders';
 import { toast } from 'sonner';
 vi.mock('src/services/trip-live/client', () => ({
-  tripLiveApi: { update: vi.fn(), get: vi.fn() },
+  tripLiveApi: { update: vi.fn(), get: vi.fn(), rotate: vi.fn() },
 }));
 vi.mock('src/sections/trips/collab/owner-join', () => ({ joinCollabAsOwner: vi.fn() }));
 vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { error: vi.fn() }) }));
@@ -68,6 +68,7 @@ beforeEach(() => {
     ok: true,
     value: { rev: 2, expiresAt: '2027-01-01' },
   });
+  vi.mocked(tripLiveApi.rotate).mockResolvedValue({ ok: true, value: { rev: 1 } });
   routes.total = 0;
   routes.answered = 0;
   vi.useFakeTimers();
@@ -165,6 +166,50 @@ describe('소유자 자동 반영', () => {
     await mount();
     await advance(3000);
     expect(tripLiveStore.get('trip000001')?.status).toBe(status);
+  });
+  it('401에 재발급 대기 토큰이 있으면 같은 값으로 복구한 뒤 다시 반영한다', async () => {
+    const nextOwnerToken = 'n'.repeat(43);
+    tripLiveStore.put({ ...record(), nextOwnerToken });
+    vi.mocked(tripLiveApi.update).mockResolvedValueOnce({ ok: false, error: 'unauthorized' });
+    await mount(false);
+    await advance(3000);
+    await advance(3000);
+    expect(tripLiveApi.rotate).toHaveBeenCalledWith(
+      'abcdefghij',
+      { owner: nextOwnerToken },
+      record().ownerToken,
+    );
+    expect(vi.mocked(tripLiveApi.update).mock.calls[1]![3]).toBe(nextOwnerToken);
+    expect(tripLiveStore.get('trip000001')).toMatchObject({
+      status: 'live',
+      ownerToken: nextOwnerToken,
+    });
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+  it('진행 중인 요청의 401은 이미 교체된 소유자 토큰을 끊지 않고 다시 시도한다', async () => {
+    let finish!: (value: Awaited<ReturnType<typeof tripLiveApi.update>>) => void;
+    vi.mocked(tripLiveApi.update).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const hook = await mount();
+    await advance(3000);
+    expect(tripLiveApi.update).toHaveBeenCalledOnce();
+    act(() => tripLiveStore.update('trip000001', { ownerToken: 'n'.repeat(43) }));
+    await act(async () => {
+      finish({ ok: false, error: 'unauthorized' });
+      await realTimeout(10);
+    });
+    await advance(3000);
+    expect(tripLiveStore.get('trip000001')?.status).toBe('live');
+    expect(vi.mocked(tripLiveApi.update).mock.calls.map((call) => call[3])).toEqual([
+      record().ownerToken,
+      'n'.repeat(43),
+    ]);
+    expect(hook.result.current.state).toBe('published');
+    expect(toast.error).not.toHaveBeenCalled();
   });
   it('off는 5분 뒤 다시 시도한다', async () => {
     vi.mocked(tripLiveApi.update).mockResolvedValueOnce({ ok: false, error: 'switched-off' });

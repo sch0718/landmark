@@ -203,7 +203,6 @@ curl -H 'Origin: http://localhost:8788' 'http://localhost:8788/api/place?url=htt
 
 #### 로컬에서 키 없이 해 보기
 
-
 - `yarn dev:full`(로컬 D1, `http://localhost:8788`)을 띄운다. `VITE_TURNSTILE_SITE_KEY`를 비워 두면 브라우저는 Turnstile을 부르지 않고(`dev` 토큰), 로컬 서버는 시크릿이 없어 검증을 건너뛴다. `IP_HASH_SALT`가 없으면 개발용 소금을 쓴다.
 - 소유자는 보통 창, 받는 사람은 다른 브라우저(또는 시크릿 창), 소유자 다른 기기는 또 다른 시크릿 창으로 연다(기기 저장소가 달라야 한다).
 - Turnstile 위젯까지 보려면 Cloudflare의 공개 시험 키를 쓴다(확인 2026-10-29, [Turnstile 시험 문서](https://developers.cloudflare.com/turnstile/troubleshooting/testing/)): `.env.local`에 `VITE_TURNSTILE_SITE_KEY=1x00000000000000000000BB`(보이지 않음·늘 통과), `.dev.vars`에 `TURNSTILE_SECRET=1x0000000000000000000000000000000AA`(늘 통과). 실패를 보려면 각각 `2x00000000000000000000BB`·`2x0000000000000000000000000000000AA`.
@@ -211,15 +210,13 @@ curl -H 'Origin: http://localhost:8788' 'http://localhost:8788/api/place?url=htt
 - 로컬 D1 확인: `sqlite3 "$(find .wrangler/state -name '*.sqlite' | head -1)" "SELECT id, rev, expires_at FROM trip_shares"`.
 - 한계: 허용 출처가 `localhost:5173`·`localhost:8788`뿐이라 같은 망의 휴대폰(IP 주소 출처)에서는 `/api/trip-live`가 `403`이다. 휴대폰 확인은 미리보기 배포로 한다.
 
-
-기존 개발 서버의 5173·5174를 쓰면 안 되는 경우, 사용자가 직접 아래처럼 Vite를 4180으로 옮기고 **브라우저는 허용 출처 8788**로 열 수 있습니다. 에이전트는 이 로컬 서버 확인을 실행하지 않습니다.
+기존 개발 서버가 5173·5174를 쓰고 있다면 아래처럼 Vite를 4180으로 옮기고 **브라우저는 허용 출처 8788**로 열 수 있습니다.
 
 ```sh
 npx wrangler pages dev --d1 DB --port 8788 --proxy 4180 -- npx vite --port 4180 --strictPort
 ```
 
 #### 사용자가 할 일
-
 
 새 외부 계정·키는 없다. D1(`DB`)·Turnstile(`VITE_TURNSTILE_SITE_KEY`·`TURNSTILE_SECRET`)·`IP_HASH_SALT`는 약속 온라인 집계 때 만든 것을 그대로 쓴다.
 
@@ -228,7 +225,6 @@ npx wrangler pages dev --d1 DB --port 8788 --proxy 4180 -- npx vite --port 4180 
    `npx wrangler d1 execute landmark --remote --command "SELECT version FROM schema_meta; SELECT name FROM sqlite_master WHERE name LIKE 'trip_share%'"` → `3`, `trip_shares`, `trip_share_tokens`, `trip_shares_expires`, `trip_share_tokens_share`.
 3. 미리보기 배포에서 큰 일정(경로선 많은 30일 여행)을 올려 Workers 지표의 CPU 시간이 10ms 안인지 본다.
 4. 휴대폰 두 대(또는 PC와 휴대폰)로 갱신 링크를 보내고, 고친 내용이 받는 화면에 10초 안팎에 들어오는지, 카카오톡에서 링크가 열리는지 확인한다.
-
 
 ### 화면 경로
 

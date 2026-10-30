@@ -74,7 +74,7 @@ export function fitLiveDoc(doc: LiveTripDoc): LiveTripDoc | null {
   };
   return liveDocBytes(copy) <= LIVE_DOC_MAX_BYTES ? copy : null;
 }
-/** 경로 조회 결과를 제외해 실제 편집만 자동 반영한다. */
+/** 경로를 처음 받았을 때는 반영하고, 이미 받은 경로의 재조회 결과는 무시한다. */
 export async function liveEditKey(doc: LiveTripDoc): Promise<string> {
   const value = {
     ...doc,
@@ -85,7 +85,7 @@ export async function liveEditKey(doc: LiveTripDoc): Promise<string> {
         ...trip,
         days: trip.days.map((day) => ({
           ...day,
-          legs: day.legs.map(({ from, to, mode }) => [from, to, mode]),
+          legs: day.legs.map(({ from, to, mode, status }) => [from, to, mode, status === 'routed']),
         })),
       })),
     },

@@ -6,7 +6,7 @@ import { defineConfig, devices } from '@playwright/test';
  */
 const PORT = Number(process.env.E2E_PORT) || 5173;
 /** 지도 페이지(`dist-map/`) 포트. `tests/e2e/fixtures.ts`의 `SHARE_MAP_URL`과 같아야 한다. */
-const MAP_PORT = 5174;
+const MAP_PORT = Number(process.env.E2E_MAP_PORT) || 5174;
 const isCI = !!process.env.CI;
 
 /**

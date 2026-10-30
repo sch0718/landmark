@@ -5,13 +5,18 @@ import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TripLiveShareDialog } from 'src/sections/trips/live/TripLiveShareDialog';
 import { tripLiveApi } from 'src/services/trip-live/client';
-import { tripLiveStore, type TripLiveRecord } from 'src/services/trip-live/store';
+import {
+  createTripLiveStore,
+  tripLiveStore,
+  type TripLiveRecord,
+} from 'src/services/trip-live/store';
 import { libraryAtom } from 'src/stores/library-state';
 import { ESTIMATE_ONLY } from 'src/domain/trip-live/build-live-doc';
 import { buildLiveLibrary } from '../../../fixtures/builders';
 import { buildLiveDoc } from '../../../fixtures/live-trip';
 import { downloadText } from 'src/lib/download-text';
 import { toast } from 'sonner';
+import { getTurnstileToken } from 'src/services/meet-online/turnstile-loader';
 vi.mock('src/services/trip-live/client', () => ({
   tripLiveApi: { create: vi.fn(), get: vi.fn(), rotate: vi.fn(), remove: vi.fn() },
 }));
@@ -124,8 +129,9 @@ describe('갱신 링크 창', () => {
       viewToken: first.viewToken,
     });
   });
-  it('taken이면 새 id로 한 번 더 만든다', async () => {
+  it('taken이면 새 id와 새 Turnstile 토큰으로 한 번 더 만든다', async () => {
     vi.mocked(tripLiveApi.create).mockResolvedValueOnce({ ok: false, error: 'taken' });
+    vi.mocked(getTurnstileToken).mockResolvedValueOnce('first').mockResolvedValueOnce('second');
     mount();
     await userEvent.click(screen.getByRole('button', { name: '갱신 링크 만들기' }));
     await screen.findByRole('textbox', { name: '보기 링크' });
@@ -133,6 +139,11 @@ describe('갱신 링크 창', () => {
     expect(vi.mocked(tripLiveApi.create).mock.calls[0]![0].id).not.toBe(
       vi.mocked(tripLiveApi.create).mock.calls[1]![0].id,
     );
+    expect(getTurnstileToken).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(tripLiveApi.create).mock.calls.map(([body]) => body.turnstile)).toEqual([
+      'first',
+      'second',
+    ]);
   });
   it.each([
     ['switched-off', '지금은 갱신 링크를 만들 수 없어요'],
@@ -172,6 +183,89 @@ describe('갱신 링크 창', () => {
     );
     await waitFor(() => expect(tripLiveStore.get('trip000001')).toBeUndefined());
   });
+  it('소유자 재발급 응답 유실 뒤 창을 다시 열면 저장한 새 토큰으로 복구한다', async () => {
+    tripLiveStore.put(record());
+    let persisted = false;
+    vi.mocked(tripLiveApi.rotate).mockImplementationOnce(async (_id, tokens) => {
+      persisted =
+        'owner' in tokens &&
+        createTripLiveStore().get('trip000001')?.nextOwnerToken === tokens.owner;
+      return { ok: false, error: 'offline' };
+    });
+    const first = mount();
+    await userEvent.click(screen.getByRole('button', { name: '소유자 링크 다시 만들기' }));
+    await userEvent.click(
+      within(screen.getByRole('dialog', { name: '소유자 링크 다시 만들기' })).getByRole('button', {
+        name: '다시 만들기',
+      }),
+    );
+    await waitFor(() => expect(tripLiveApi.rotate).toHaveBeenCalledOnce());
+    expect(persisted).toBe(true);
+    const tokens = vi.mocked(tripLiveApi.rotate).mock.calls[0]![1];
+    if (!('owner' in tokens)) throw new Error('소유자 재발급 요청이 아니에요');
+    const next = tokens.owner;
+    first.unmount();
+    vi.mocked(tripLiveApi.get).mockResolvedValueOnce({ ok: false, error: 'unauthorized' });
+    mount();
+    await waitFor(() => expect(tripLiveApi.rotate).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(tripLiveApi.rotate).mock.calls[1]).toEqual([
+      'abcdefghij',
+      { owner: next },
+      record().ownerToken,
+    ]);
+    await waitFor(() =>
+      expect(tripLiveStore.get('trip000001')).toMatchObject({ status: 'live', ownerToken: next }),
+    );
+    expect(Object.keys(createTripLiveStore().get('trip000001')!)).not.toContain('nextOwnerToken');
+  });
+  it('재발급 실패는 만들기용 안내 대신 다시 만들기 오류를 보인다', async () => {
+    tripLiveStore.put(record());
+    vi.mocked(tripLiveApi.rotate).mockResolvedValueOnce({ ok: false, error: 'unavailable' });
+    mount();
+    await userEvent.click(screen.getByRole('button', { name: '보기 링크 다시 만들기' }));
+    const confirm = screen.getByRole('dialog', { name: '보기 링크 다시 만들기' });
+    await userEvent.click(within(confirm).getByRole('button', { name: '다시 만들기' }));
+    expect(await within(confirm).findByRole('alert')).toHaveTextContent(
+      '링크를 다시 만들지 못했어요. 잠시 뒤 다시 해 주세요',
+    );
+  });
+  it.each(['보기 링크 다시 만들기', '서버에서 지우기', '공개본 파일 저장'])(
+    '재발급 응답 유실 뒤 %s의 401도 대기 토큰을 복구한다',
+    async (action) => {
+      tripLiveStore.put(record());
+      mount();
+      await waitFor(() => expect(tripLiveApi.get).toHaveBeenCalledOnce());
+      const nextOwnerToken = 'n'.repeat(43);
+      act(() => tripLiveStore.update('trip000001', { nextOwnerToken }));
+      const method =
+        action === '보기 링크 다시 만들기'
+          ? tripLiveApi.rotate
+          : action === '서버에서 지우기'
+            ? tripLiveApi.remove
+            : tripLiveApi.get;
+      vi.mocked(method).mockResolvedValueOnce({ ok: false, error: 'unauthorized' });
+      await userEvent.click(screen.getByRole('button', { name: action }));
+      if (action !== '공개본 파일 저장')
+        await userEvent.click(
+          within(screen.getByRole('dialog', { name: action })).getByRole('button', {
+            name: action === '서버에서 지우기' ? '지우기' : '다시 만들기',
+          }),
+        );
+      await waitFor(() =>
+        expect(tripLiveApi.rotate).toHaveBeenCalledWith(
+          record().liveId,
+          { owner: nextOwnerToken },
+          record().ownerToken,
+        ),
+      );
+      if (action === '서버에서 지우기') expect(tripLiveStore.get('trip000001')).toBeUndefined();
+      else
+        expect(tripLiveStore.get('trip000001')).toMatchObject({
+          status: 'live',
+          ownerToken: nextOwnerToken,
+        });
+    },
+  );
   it('공개본 파일 저장은 서버 문서를 틀에 넣는다', async () => {
     tripLiveStore.put(record());
     mount();

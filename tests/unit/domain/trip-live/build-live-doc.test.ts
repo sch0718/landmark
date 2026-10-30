@@ -110,7 +110,7 @@ describe('공개본 만들기', () => {
         durationS: 1,
         distanceM: 1,
         tollFare: null,
-        status: 'estimated',
+        status: 'routed',
         queriedAt: null,
         path: [],
       },
@@ -125,6 +125,33 @@ describe('공개본 만들기', () => {
       path: [[127, 37]],
     });
     expect(await liveEditKey(a)).toBe(await liveEditKey(b));
+  });
+  it('추정에서 받은 경로로 바뀌면 지문이 바뀌고 다시 받은 경로는 무시한다', async () => {
+    const doc = buildLiveDoc();
+    doc.share.trips[0]!.days[0]!.legs = [
+      {
+        from: 'place00001',
+        to: 'place00002',
+        mode: 'car',
+        durationS: 0,
+        distanceM: 0,
+        tollFare: null,
+        status: 'estimated',
+        queriedAt: null,
+        path: [],
+      },
+    ];
+    const estimated = await liveEditKey(doc);
+    doc.share.trips[0]!.days[0]!.legs[0]!.status = 'routed';
+    const routed = await liveEditKey(doc);
+    expect(routed).not.toBe(estimated);
+    Object.assign(doc.share.trips[0]!.days[0]!.legs[0]!, {
+      durationS: 500,
+      distanceM: 900,
+      queriedAt: opts.createdAt,
+      path: [[127, 37]],
+    });
+    expect(await liveEditKey(doc)).toBe(routed);
   });
   it('제목·장소 이름·Stop 순서가 달라지면 지문도 바뀐다', async () => {
     const a = buildLiveDoc(),

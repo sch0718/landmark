@@ -38,6 +38,13 @@ describe('갱신 공유 기기 기록', () => {
     );
     expect(createTripLiveStore().list()).toEqual([record()]);
   });
+  it('기존 v1 기록과 재발급 대기 토큰이 있는 기록을 그대로 다시 읽는다', () => {
+    const pending = { ...record(), nextOwnerToken: 'n'.repeat(43) };
+    localStorage.setItem(TRIP_LIVE_KEY, JSON.stringify({ trip000001: pending }));
+    expect(createTripLiveStore().get('trip000001')).toEqual(pending);
+    localStorage.setItem(TRIP_LIVE_KEY, JSON.stringify({ trip000001: record() }));
+    expect(createTripLiveStore().get('trip000001')).toEqual(record());
+  });
   it('저장소가 막혀도 메모리로 계속한다', () => {
     const s = createTripLiveStore(
       () =>
@@ -67,6 +74,30 @@ describe('갱신 공유 기기 기록', () => {
     expect(s.list()).toHaveLength(100);
     expect(s.get('t000000000')).toBeUndefined();
   });
+  it.each(['ended', 'disconnected'] as const)(
+    '100개 상한에서 새 %s 기록보다 오래된 live를 보존한다',
+    (status) => {
+      const active = Array.from({ length: 100 }, (_, i) =>
+        record(
+          `t${String(i).padStart(9, '0')}`,
+          new Date(1_800_000_000_000 + i * 1000).toISOString(),
+        ),
+      );
+      const inactive = { ...record('inactive01', '2028-01-01T00:00:00Z'), status };
+      localStorage.setItem(
+        TRIP_LIVE_KEY,
+        JSON.stringify(Object.fromEntries([...active, inactive].map((r) => [r.tripId, r]))),
+      );
+      const store = createTripLiveStore();
+      expect(store.list()).toHaveLength(100);
+      expect(store.get(active[0]!.tripId)).toEqual(active[0]);
+      expect(store.get(inactive.tripId)).toBeUndefined();
+      store.put(inactive);
+      expect(createTripLiveStore().list()).toHaveLength(100);
+      expect(createTripLiveStore().get(active[0]!.tripId)).toEqual(active[0]);
+      expect(createTripLiveStore().get(inactive.tripId)).toBeUndefined();
+    },
+  );
   it('다른 탭 storage 이벤트가 구독자와 스냅샷을 갱신한다', () => {
     const s = createTripLiveStore(),
       fn = vi.fn();

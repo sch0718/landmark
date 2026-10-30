@@ -14,6 +14,7 @@ export type TripLiveRecord = {
   liveId: string;
   status: TripLiveStatus;
   ownerToken: string;
+  nextOwnerToken?: string;
   viewToken: string;
   rev: number;
   dayIds: string[];
@@ -31,6 +32,7 @@ const recordSchema = Schema.Struct({
   liveId: id,
   status: Schema.Literals(['pending', 'live', 'disconnected', 'ended']),
   ownerToken: token,
+  nextOwnerToken: Schema.optionalKey(token),
   viewToken: token,
   rev: Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0)),
   dayIds: Schema.mutable(Schema.Array(Schema.String.check(Schema.isPattern(LIVE_DAY_ID_PATTERN)))),
@@ -45,6 +47,15 @@ const recordSchema = Schema.Struct({
   expiresAt: Schema.optionalKey(Schema.String),
   paused: Schema.optionalKey(Schema.Literal(true)),
 });
+function limitedRecords(records: readonly TripLiveRecord[]): TripLiveRecord[] {
+  const inactive = (record: TripLiveRecord) =>
+    Number(record.status === 'ended' || record.status === 'disconnected');
+  const newest = (a: TripLiveRecord, b: TripLiveRecord) => b.createdAt.localeCompare(a.createdAt);
+  return [...records]
+    .sort((a, b) => inactive(a) - inactive(b) || newest(a, b))
+    .slice(0, TRIP_LIVE_MAX)
+    .sort(newest);
+}
 export function createTripLiveStore(storage: () => Storage = () => window.localStorage) {
   let memory: readonly TripLiveRecord[] = [],
     memoryOnly = false;
@@ -78,16 +89,12 @@ export function createTripLiveStore(storage: () => Storage = () => window.localS
             })
           : [];
     }
-    memory = [...records]
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-      .slice(0, TRIP_LIVE_MAX);
+    memory = limitedRecords(records);
     snapshot = { raw: text, records: memory };
     return memory;
   }
   function save(records: readonly TripLiveRecord[]) {
-    memory = [...records]
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-      .slice(0, TRIP_LIVE_MAX);
+    memory = limitedRecords(records);
     snapshot = null;
     if (!memoryOnly)
       try {
