@@ -1,6 +1,11 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import { mergeCollabPlan, resolveCollabMerge, compareListIds } from 'src/domain/trip-collab/merge';
+import {
+  collabMergeSignature,
+  mergeCollabPlan,
+  resolveCollabMerge,
+  compareListIds,
+} from 'src/domain/trip-collab/merge';
 import { checkPlan } from 'src/domain/trip-collab/plan';
 import { mkPlan, pid } from './builders';
 const copy = <T>(p: T): T => structuredClone(p);
@@ -226,4 +231,33 @@ it('전체 배치 안전망에서도 값 겹침을 숨기거나 새 겹침을 �
   const result = resolveCollabMerge(placementsOnly, { 'placement.all': 'theirs' });
   expect(result.ok).toBe(false);
   if (!result.ok) expect(result).toMatchObject({ reason: 'invalid', merge: { plan: null } });
+});
+
+it('겹침과 관계없는 Day 수정은 비교 서명을 바꾸지 않는다', () => {
+  const b = base(),
+    m = copy(b),
+    t = copy(b);
+  m.days[0]!.startTime = '10:00';
+  t.days[0]!.startTime = '08:00';
+  const before = collabMergeSignature(mergeCollabPlan(b, m, t));
+  t.days[2]!.stops[0]!.note = '관계없는 메모';
+  expect(collabMergeSignature(mergeCollabPlan(b, m, t))).toBe(before);
+  t.days[0]!.startTime = '07:00';
+  expect(collabMergeSignature(mergeCollabPlan(b, m, t))).not.toBe(before);
+});
+it('배치 묶음에 딸린 Day·Stop 값은 서명에 포함하고 다른 Day는 빼 둔다', () => {
+  const b = base(),
+    m = copy(b),
+    t = copy(b);
+  m.days[0]!.stops.reverse();
+  t.days[0]!.stops.push(t.days[0]!.stops.shift()!);
+  const signature = () => collabMergeSignature(mergeCollabPlan(b, m, t));
+  const before = signature();
+  t.days[2]!.startTime = '07:00';
+  expect(signature()).toBe(before);
+  t.days[0]!.stops[0]!.note = '배치에 딸린 메모';
+  expect(signature()).not.toBe(before);
+  const withNote = signature();
+  t.days[0]!.lodging = pid('e');
+  expect(signature()).not.toBe(withNote);
 });

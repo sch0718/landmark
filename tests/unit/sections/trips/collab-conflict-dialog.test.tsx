@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Provider, createStore } from 'jotai';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -101,3 +101,48 @@ it.each([false, true])(
     expect(screen.getByRole('button', { name: '고른 대로 맞추기' })).toBeDisabled();
   },
 );
+
+function refresh(rerender: ReturnType<typeof mount>['rerender']) {
+  const store = createStore();
+  store.set(libraryAtom, buildLiveLibrary());
+  rerender(
+    <Provider store={store}>
+      <CollabConflictDialog open tripId="trip000001" onClose={vi.fn()} />
+    </Provider>,
+  );
+}
+it('관계없는 Day가 바뀌어도 선택을 유지하고 다시 고르라고 알리지 않는다', async () => {
+  const { rerender } = mount();
+  await userEvent.click(screen.getByRole('button', { name: '모두 공동 여행으로' }));
+  const previous = mocked.view.merge as ReturnType<typeof mergeCollabPlan>;
+  const theirs = structuredClone(previous.theirs);
+  theirs.days[1]!.stops[0]!.note = '관계없는 메모';
+  mocked.view = { ...mocked.view, merge: mergeCollabPlan(previous.base, previous.mine, theirs) };
+  refresh(rerender);
+  expect(screen.getByRole('button', { name: '고른 대로 맞추기' })).toBeEnabled();
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+});
+it('바뀐 겹침만 선택을 비우고 그대로인 겹침은 남긴다', async () => {
+  const previous = mocked.view.merge as ReturnType<typeof mergeCollabPlan>;
+  const mine = structuredClone(previous.mine),
+    theirs = structuredClone(previous.theirs);
+  mine.title = '내 제목';
+  theirs.title = '공동 제목';
+  mocked.view = { ...mocked.view, merge: mergeCollabPlan(previous.base, mine, theirs) };
+  const { rerender } = mount();
+  await userEvent.click(screen.getByRole('button', { name: '모두 공동 여행으로' }));
+  theirs.days[0]!.startTime = '07:00';
+  mocked.view = { ...mocked.view, merge: mergeCollabPlan(previous.base, mine, theirs) };
+  refresh(rerender);
+  expect(
+    within(screen.getByRole('radiogroup', { name: '여행 이름' })).getByRole('radio', {
+      name: '공동 여행',
+    }),
+  ).toBeChecked();
+  expect(
+    within(screen.getByRole('radiogroup', { name: 'Day 1 출발 시각' })).getByRole('radio', {
+      name: '공동 여행',
+    }),
+  ).not.toBeChecked();
+  expect(screen.getByRole('alert')).toBeVisible();
+});

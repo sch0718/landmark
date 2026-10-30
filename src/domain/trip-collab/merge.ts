@@ -1,12 +1,5 @@
 import { daysBetween } from '../../lib/calendar';
-import {
-  checkPlan,
-  planKey,
-  NEW_DAY_START,
-  type CollabDay,
-  type CollabPlan,
-  type CollabStop,
-} from './plan';
+import { checkPlan, NEW_DAY_START, type CollabDay, type CollabPlan, type CollabStop } from './plan';
 
 export type CollabSide = 'mine' | 'theirs';
 export type ListId = 'c' | `d${number}`;
@@ -396,7 +389,20 @@ export function resolveCollabMerge(
   return { ok: true, plan: result.plan };
 }
 
-/** 비교 값과 함께 배치 선택에 딸린 Day·Stop 값도 확인한다. */
+/** 값 겹침은 두 값만, 배치 겹침은 해당 묶음의 Day·Stop 값까지 확인한다. */
+export function collabConflictSignature(merge: CollabMerge, c: CollabConflict): string {
+  if (c.kind === 'field') return JSON.stringify(c);
+  const side = (plan: CollabPlan, value: PlacementSide) => ({
+    lists: value.lists,
+    ...(c.period ? { period: value.period } : {}),
+    days: c.lists.filter((id) => id !== 'c').map((id) => plan.days[Number(id.slice(1))]),
+  });
+  return JSON.stringify({
+    ...c,
+    mine: side(merge.mine, c.mine),
+    theirs: side(merge.theirs, c.theirs),
+  });
+}
 export function collabMergeSignature(merge: CollabMerge | null): string {
-  return merge ? JSON.stringify([merge.conflicts, planKey(merge.mine), planKey(merge.theirs)]) : '';
+  return merge ? JSON.stringify(merge.conflicts.map((c) => collabConflictSignature(merge, c))) : '';
 }

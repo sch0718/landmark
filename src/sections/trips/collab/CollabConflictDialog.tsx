@@ -12,6 +12,7 @@ import { useAtomValue } from 'jotai';
 import { useId, useState } from 'react';
 import {
   collabMergeSignature,
+  collabConflictSignature,
   type CollabConflict,
   type CollabSide,
   type FieldConflict,
@@ -53,16 +54,25 @@ export function CollabConflictDialog({
     heading = useId(),
     conflicts = view.merge?.conflicts ?? [];
   const signature = collabMergeSignature(view.merge);
+  const signatures = Object.fromEntries(
+    conflicts.map((c) => [c.id, collabConflictSignature(view.merge!, c)]),
+  );
   const [state, setState] = useState<{
     signature: string;
     choices: Record<string, CollabSide>;
+    signatures: Record<string, string>;
     notice: boolean;
-  }>({ signature, choices: {}, notice: false });
+  }>({ signature, signatures, choices: {}, notice: false });
   let current = state;
   if (signature !== state.signature) {
     current = {
       signature,
-      choices: {},
+      signatures,
+      choices: Object.fromEntries(
+        Object.entries(state.choices).filter(
+          ([id]) => signatures[id] !== undefined && signatures[id] === state.signatures[id],
+        ),
+      ),
       notice: state.signature !== '',
     };
     setState(current);

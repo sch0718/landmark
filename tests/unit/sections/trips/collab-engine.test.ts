@@ -795,3 +795,17 @@ it('계획·당일 두 엔진의 진행도 메모리 판으로 받아 체크와 
     prev: 0,
   });
 });
+
+it('겹침과 관계없는 공동 변경은 선택과 함께 최신 판으로 반영한다', async () => {
+  const s = setup();
+  s.change(0, '10:00');
+  s.doc.share.trips[0]!.days[0]!.startTime = '08:00';
+  await s.engine.sync();
+  const seen = s.engine.getSnapshot().merge;
+  s.doc.share.trips[0]!.days[1]!.startTime = '07:00';
+  s.setRemote({ ...s.remote(), rev: 4 });
+  await s.engine.resolve({ 'day.0.startTime': 'mine' }, seen);
+  expect(s.engine.getSnapshot().state).toBe('synced');
+  expect(s.get().trips.trip000001!.days.map((d) => d.startTime.value)).toEqual(['10:00', '07:00']);
+  expect(s.api.putDoc.mock.calls[0]![3]).toBe(4);
+});
