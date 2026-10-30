@@ -955,3 +955,57 @@ it('trip-live 진입점은 env.DB로 만들기·읽기·다시 만들기·삭제
     db.close();
   }
 });
+
+it('trip-collab 진입점은 env.DB로 초대·수락·읽기·거두기를 처리한다', async () => {
+  const { createSqliteD1 } = await import('../../helpers/sqlite-d1');
+  const { buildLiveDoc } = await import('../../fixtures/live-trip');
+  const { onRequestPost: create } = await import('../../../functions/api/trip-live/index');
+  const { onRequestPost: invite } = await import('../../../functions/api/trip-collab/[id]/invites');
+  const { onRequestPost: accept } = await import('../../../functions/api/trip-collab/[id]/accept');
+  const { onRequestGet: state } = await import('../../../functions/api/trip-collab/[id]/state');
+  const { onRequestDelete: remove } =
+    await import('../../../functions/api/trip-collab/[id]/members/[device]');
+  const db = createSqliteD1(),
+    pending: Promise<unknown>[] = [],
+    id = 'abcdefghij',
+    owner = 'o'.repeat(43),
+    invitation = 'i'.repeat(43),
+    editor = 'e'.repeat(43);
+  const ctx = (method: string, token: string, body?: unknown, device = 'me') => ({
+    request: new Request(`http://localhost:8788/api/trip-collab/${id}`, {
+      method,
+      headers: { Origin: ALLOWED_ORIGIN, Authorization: `Bearer ${token}` },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    }),
+    env: { DB: db },
+    params: { id, device },
+    waitUntil: (p: Promise<unknown>) => {
+      pending.push(p);
+    },
+  });
+  try {
+    expect(
+      (
+        await create(
+          ctx('POST', owner, {
+            id,
+            ownerToken: owner,
+            viewToken: 'v'.repeat(43),
+            sourceTripId: 'trip000001',
+            turnstile: 'dev',
+            doc: { ...buildLiveDoc(), v: 2 },
+          }),
+        )
+      ).status,
+    ).toBe(201);
+    expect((await invite(ctx('POST', owner, { token: invitation, label: null }))).status).toBe(201);
+    expect(
+      (await accept(ctx('POST', invitation, { deviceToken: editor, label: '시험 기기' }))).status,
+    ).toBe(201);
+    expect((await state(ctx('GET', editor))).status).toBe(200);
+    expect((await remove(ctx('DELETE', editor))).status).toBe(204);
+  } finally {
+    await Promise.all(pending);
+    db.close();
+  }
+});

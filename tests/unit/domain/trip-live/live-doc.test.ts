@@ -37,6 +37,25 @@ export const fixture = () => ({
   options: { includeMemo: false, includeCandidates: true },
 });
 describe('갱신 공유 문서', () => {
+  it('v2 문서를 통과시키고 v를 그대로 돌려준다', () => {
+    const input = { ...fixture(), v: 2 };
+    expect(parseLiveDoc(input)).toEqual(input);
+  });
+  it('v2의 장소 id 패턴을 검사하고 v1에는 요구하지 않는다', () => {
+    const input = fixture();
+    input.share.places[0]!.id = 'ABC';
+    const trip = input.share.trips[0]!;
+    const oldId = trip.days[0]!.stops[0]!.placeId;
+    trip.days[0]!.stops[0]!.placeId = 'ABC';
+    for (const day of trip.days) {
+      for (const leg of day.legs) {
+        if (leg.from === oldId) leg.from = 'ABC';
+        if (leg.to === oldId) leg.to = 'ABC';
+      }
+    }
+    expect(parseLiveDoc(input)).not.toBeNull();
+    expect(parseLiveDoc({ ...input, v: 2 })).toBeNull();
+  });
   it('정상 문서를 통과시키고 새 객체를 돌려준다', () => {
     const input = fixture();
     const result = parseLiveDoc(input);
@@ -64,7 +83,7 @@ describe('갱신 공유 문서', () => {
       d.ids.days[0] = 'INVALID';
     },
     (d: ReturnType<typeof fixture>) => {
-      Object.assign(d, { v: 2 });
+      Object.assign(d, { v: 3 });
     },
     (d: ReturnType<typeof fixture>) => {
       Object.assign(d.share, { version: 1 });

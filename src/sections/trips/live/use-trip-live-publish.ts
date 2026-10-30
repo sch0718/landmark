@@ -1,10 +1,19 @@
+import { useTripCollabRecord } from 'src/services/trip-collab/store';
+import { useCollabDeps } from '../collab/use-trip-collab';
+import { joinCollabAsOwner } from '../collab/owner-join';
 import { useAtomValue } from 'jotai';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { alignDayIds } from 'src/domain/trip-live/live-doc';
-import { buildLiveTripDoc, fitLiveDoc, liveEditKey } from 'src/domain/trip-live/build-live-doc';
+import {
+  buildLiveTripDoc,
+  fitLiveDoc,
+  liveEditKey,
+  livePlanKey,
+} from 'src/domain/trip-live/build-live-doc';
 import { useTripLegs } from 'src/sections/share-export/use-trip-legs';
 import { tripLiveApi } from 'src/services/trip-live/client';
+import { tripLivePlanStore } from 'src/services/trip-live/plan-store';
 import { rotateLiveOwner } from 'src/services/trip-live/rotate-owner';
 import {
   tripLiveStore,
@@ -21,6 +30,7 @@ export const LIVE_RETRY_MS = [30000, 60000, 120000],
   LIVE_OFF_RETRY_MS = 300000,
   LIVE_LIMIT_RETRY_MS = 3600000;
 export type LivePublishState =
+  | 'collab'
   | 'idle'
   | 'pending'
   | 'publishing'
@@ -64,7 +74,10 @@ export function useTripLivePublish(
 } {
   const library = useAtomValue(libraryAtom),
     record = useTripLiveRecord(tripId);
-  const enabled = active && record?.status === 'live' && !record.paused;
+  const collab = useTripCollabRecord(tripId)?.status === 'live';
+  const collabDeps = useCollabDeps(tripId, false);
+  const versionJoined = useRef(false);
+  const enabled = active && record?.status === 'live' && !record.paused && !collab;
   const legs = useTripLegs(tripId, enabled);
   const [state, setState] = useState<LivePublishState>('idle');
   const latest = useRef({ library, legs, enabled });
@@ -138,6 +151,7 @@ export function useTripLivePublish(
         if (
           !alive.current ||
           !live.enabled ||
+          versionJoined.current ||
           !current ||
           current.status !== 'live' ||
           current.paused ||
@@ -162,7 +176,7 @@ export function useTripLivePublish(
           setState('too-big');
           return;
         }
-        const key = await liveEditKey(doc);
+        const [key, planKey] = await Promise.all([liveEditKey(doc), livePlanKey(doc)]);
         // 잠금 안에서 저장소를 다시 읽어 계획 화면과 공유 창이 같은 문서를 두 번 보내지 않게 한다.
         const fresh = tripLiveStore.get(tripId);
         if (
@@ -174,6 +188,8 @@ export function useTripLivePublish(
         )
           return;
         if (!force && fresh.publishedKey === key) {
+          if (tripLivePlanStore.get(tripId) !== planKey)
+            tripLivePlanStore.put(tripId, fresh.liveId, planKey, key);
           setState('published');
           return;
         }
@@ -216,8 +232,22 @@ export function useTripLivePublish(
             expiresAt: result.value.expiresAt,
             dayIds,
           });
+          tripLivePlanStore.put(tripId, fresh.liveId, planKey, key);
           setState('published');
           return;
+        }
+        if (result.error === 'version') {
+          const shared = await tripLiveApi.get(fresh.liveId, null, fresh.ownerToken);
+          if (shared.ok && shared.value !== 'unchanged' && shared.value.doc.v === 2) {
+            try {
+              await joinCollabAsOwner(collabDeps, shared.value);
+              versionJoined.current = true;
+              setState('collab');
+              return;
+            } catch {
+              result = { ok: false, error: 'unavailable' };
+            }
+          } else result = shared.ok ? { ok: false, error: 'unavailable' } : shared;
         }
         if (result.error === 'unauthorized') {
           const current = tripLiveStore.get(tripId);
@@ -300,7 +330,7 @@ export function useTripLivePublish(
         if (locks.get(tripId) === work) locks.delete(tripId);
       }
     },
-    [tripId, pause],
+    [tripId, pause, collabDeps],
   );
   const overwrite = useCallback(() => {
     overwriteChosen.current = true;
@@ -309,7 +339,7 @@ export function useTripLivePublish(
   useEffect(() => {
     let disposed = false,
       timer: ReturnType<typeof setTimeout> | undefined;
-    if (!enabled || !record) return;
+    if (!enabled || !record || versionJoined.current) return;
     const trip = library.trips[tripId];
     if (!trip || trip.deletedAt !== null) return;
     const dayIds = publicationDayIds(record, trip.days.length);
@@ -325,13 +355,17 @@ export function useTripLivePublish(
         setState('empty');
         return;
       }
-      if (!fitLiveDoc(built)) {
+      const doc = fitLiveDoc(built);
+      if (!doc) {
         setState('too-big');
         return;
       }
-      const key = await liveEditKey(built);
+      const [key, planKey] = await Promise.all([liveEditKey(doc), livePlanKey(doc)]);
       if (disposed) return;
-      if (key === tripLiveStore.get(tripId)?.publishedKey) {
+      const fresh = tripLiveStore.get(tripId);
+      if (key === fresh?.publishedKey) {
+        if (tripLivePlanStore.get(tripId) !== planKey)
+          tripLivePlanStore.put(tripId, fresh.liveId, planKey, key);
         setState('published');
         return;
       }
@@ -378,12 +412,15 @@ export function useTripLivePublish(
       clearTimeout(retry.current);
     };
   }, [enabled, publish, tripId]);
-  const shown: LivePublishState = record?.paused
-    ? 'paused'
-    : record?.status === 'disconnected'
-      ? 'disconnected'
-      : record?.status === 'ended'
-        ? 'ended'
-        : state;
+  const shown: LivePublishState =
+    collab || versionJoined.current
+      ? 'collab'
+      : record?.paused
+        ? 'paused'
+        : record?.status === 'disconnected'
+          ? 'disconnected'
+          : record?.status === 'ended'
+            ? 'ended'
+            : state;
   return { state: shown, publishedAt: record?.publishedAt ?? null, overwrite, pause, resume };
 }

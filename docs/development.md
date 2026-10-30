@@ -79,6 +79,7 @@ Yarn 1(1.22.22)은 `.npmrc`의 `GITHUB_PACKAGES_TOKEN`이 정의되지 않으면
 | `MEET_ONLINE` | `off`면 새 약속의 서버 올리기만 중단하고 링크 방식으로 공유. 기존 온라인 약속 읽기·답장은 계속 동작 |
 | `SHARE_SHORT` | `off`면 카카오톡용 짧은 링크 만들기만 중단(카카오톡 단추는 예전처럼 꺼지고 `링크 복사` 안내). 이미 만든 `/s/<id>` 열기·지우기는 계속 동작 |
 | `TRIP_SHARE_LIVE` | `off`면 갱신 링크 만들기·올리기만 중단(`503`). 이미 보낸 링크 읽기·지우기·링크 다시 만들기는 계속 동작 |
+| `TRIP_COLLAB` | `off`면 함께 편집의 초대 만들기·수락·공동본 올리기·진행 올리기만 중단(`503`). 읽기·기기 거두기·초대 취소·그만두기는 계속 동작 |
 
 ```bash
 echo 'VITE_NAVER_MAP_CLIENT_ID=<발급받은 Client ID>' > .env.local
@@ -226,6 +227,73 @@ npx wrangler pages dev --d1 DB --port 8788 --proxy 4180 -- npx vite --port 4180 
 3. 미리보기 배포에서 큰 일정(경로선 많은 30일 여행)을 올려 Workers 지표의 CPU 시간이 10ms 안인지 본다.
 4. 휴대폰 두 대(또는 PC와 휴대폰)로 갱신 링크를 보내고, 고친 내용이 받는 화면에 10초 안팎에 들어오는지, 카카오톡에서 링크가 열리는지 확인한다.
 
+### 여행 함께 편집(`/trips/join/<id>`)
+
+갱신 링크 창의 `함께 편집…`에서 한 번만 쓸 수 있는 편집 초대를 만듭니다. 받은 기기는 별도 보관함에 여행을 담고, 다른 곳의 변경은 자동으로 합치며 같은 곳의 변경은 비교 창에서 고릅니다. 설계: [여행 함께 편집(2B)](superpowers/specs/2026-10-29-trip-collab-design.md).
+
+진입점 `functions/api/trip-collab/[id]/**`, 처리 `src/server/trip-collab/handlers.ts`. 모든 응답 `Cache-Control: private, no-store`, 모든 경로 출처 검사, 토큰은 `Authorization: Bearer <토큰>`. 역할은 토큰 해시로 찾는다: 2A `trip_share_tokens`의 `owner` → 소유자, `trip_collab_devices` → 편집 기기.
+
+| 요청 | 하는 일 | 권한 | 성공 |
+|---|---|---|---|
+| `POST /api/trip-collab/:id/invites` | `{ token, label: string \| null }` 초대 만들기 | 소유자 + 두 스위치 + 한도 `collabInvite` | `201 { key, expiresAt, created: true }`. 같은 토큰 재시도 `200 { …, created: false }`. 문서가 v1이면 `409 { reason: 'upgrade' }`, 기다리는 초대 10개면 `409 { reason: 'full' }` |
+| `DELETE /api/trip-collab/:id/invites/:key` | 초대 취소 | 소유자 + 한도 `collabManage` | `204`(없어도 `204`) |
+| `GET /api/trip-collab/:id/invite` | 초대 미리보기 | 초대 토큰 | `200 { title, startDate, endDate, expiresAt }`. 없는·쓴·지난 초대 `401 { reason: 'invite' }`(그때만 `collabRead` 셈) |
+| `POST /api/trip-collab/:id/accept` | `{ deviceToken, label }` 수락 | 초대 토큰 + 두 스위치 + 한도 `collabAccept` | `201 { deviceId, rev }`. 같은 `deviceToken`이 이미 이 공유의 기기면 `200 { deviceId, rev }`. 기기 20대면 `409 { reason: 'full' }`, 초대가 틀리면 `401 { reason: 'invite' }` |
+| `GET /api/trip-collab/:id/state?rev=<n>&prev=<n>` | 공동본·진행 읽기 | 소유자·편집 기기 | `200 { rev, updatedAt, expiresAt, role, deviceId, members, editedBy, doc?, progress? }`. `doc`은 `rev`가 없거나 다를 때만, `progress`는 `prev`가 없거나 다를 때만. 둘 다 같으면 `304` |
+| `PUT /api/trip-collab/:id/doc` | `{ doc, baseRev }` 공동본 올리기(v2만) | 소유자·편집 기기 + 두 스위치 + 한도 `collabUpdate` | `200 { rev, expiresAt }`. `rev`가 다르면 `409 { rev }`, 저장된 `v`가 더 크면 `409 { reason: 'version' }` |
+| `POST /api/trip-collab/:id/progress` | `{ ops: ProgressOp[], next?: NextOp }` 진행 올리기 | 소유자·편집 기기 + `TRIP_COLLAB` + 한도 `collabProgress` | `200 { prev, marks, next }`. 행이 2,000개를 넘으면 `409 { reason: 'full' }` |
+| `GET /api/trip-collab/:id/members` | 기기·기다리는 초대 목록 | 소유자 | `200 { devices: [{ deviceId, label, createdAt, seenAt }], invites: [{ key, label, createdAt, expiresAt }] }` |
+| `DELETE /api/trip-collab/:id/members/:device` | 기기 거두기(`:device`가 `me`면 그 편집 기기 스스로 그만두기) | 소유자(기기 id) · 편집 기기(`me`) + 한도 `collabManage` | `204`(없어도 `204`) |
+
+- 공유당 편집 기기 20대, 기다리는 초대 10개, 초대 기한은 7일과 갱신 링크 기한 중 빠른 때입니다. 기기 이름은 1~30자이며 초대는 수락한 기기 하나만 씁니다.
+- 진행은 요청당 최대 50개·16,384바이트, 공유당 2,000행입니다. 오프라인 대기열은 같은 Stop의 마지막 누름만 남기며 최대 200개입니다. 내 체크는 개인 `visitedOn`에도 쓰고, 다른 기기의 체크는 공동 진행에만 표시합니다.
+- UTC 날짜·IP 해시별 일 한도: 초대 60, 수락 30, 공동본 올리기 1,200, 진행 2,000, 관리 300, 잘못된 초대 읽기 5,000입니다. 정상 읽기와 304는 읽기 한도를 쓰지 않습니다.
+- `TRIP_COLLAB=off`는 쓰기만 멈춥니다. `TRIP_SHARE_LIVE=off`도 공동본 올리기·초대·수락을 막습니다. 읽기와 초대 취소·기기 거두기·그만두기는 계속 됩니다.
+- 기기 키 `tripmap:trip-collab:v1`은 역할·기기 토큰·서버와 로컬 장소 대응표·revision·진행 대기열을 보관합니다(최대 100개). `tripmap:trip-collab-base:v1:<id>`는 3방향 병합 기준 계획과 마지막 진행입니다. 기록 삭제 시 기준도 지우며, 저장소를 못 쓰면 페이지 동안 메모리에만 둡니다. 보관함 schema 2와 백업에는 이 토큰을 넣지 않습니다.
+- 2B 전용 기기 키 `tripmap:trip-live-plan:v1`은 `{ [tripId]: { liveId, planKey, publishedKey } }`로 마지막 2A 공개·소유자 링크 담기 문서의 계획 지문을 보관합니다. `tripmap:trip-live:v1`의 기록 모양은 바꾸지 않습니다. 손상·형식 오류는 빈 값으로 읽고 2A 기록이 없거나 `liveId`·`publishedKey`가 다르면 무시합니다(그만두기·서버 지우기·상한 정리 뒤 낡은 값 방지). 롤백한 2A가 같은 공유를 다시 공개해도 옛 지문을 쓰지 않습니다. 다음 저장 때 유효한 최대 100개만 남기며 저장소가 막히면 페이지 메모리를 씁니다.
+- 코드: `src/domain/trip-collab/*`(투영·병합·장소 대응·공동본·진행), `src/services/trip-collab/*`(클라이언트·기기 저장소), `src/sections/trips/collab/*`(엔진·창·초대 수락), `src/sections/settings/CollabTripsSection.tsx`, 당일 화면 `src/sections/trips/today/*`.
+
+#### 로컬에서 키 없이 두 기기로 해 보기
+
+- `yarn dev:full`(로컬 D1, `http://localhost:8788`)을 띄운다. 2B는 Turnstile을 쓰지 않는다. 갱신 링크 만들기의 Turnstile은 2A대로 키가 없으면 건너뛴다.
+- 기기 저장소가 달라야 두 기기다. 같은 브라우저의 탭 두 개는 한 기기다.
+  - 기기 A(소유자): 평소 Chrome 프로필.
+  - 기기 B(편집): Chrome의 다른 프로필(오른쪽 위 프로필 › `추가`) 또는 다른 브라우저(Safari·Firefox). 시크릿 창도 되지만 닫으면 기록이 사라진다.
+  - 보기 링크 확인은 또 다른 시크릿 창.
+- 순서: A에서 여행을 만들고(당일 진행을 보려면 오늘이 들어간 기간) Day 1에 장소 셋 → `일정 공유` › `갱신 링크…` › `갱신 링크 만들기` → 같은 창의 `함께 편집…` › `편집 초대 링크 만들기` › `링크 복사` → B 주소창에 붙여 열기 → `수락하고 함께 편집하기`.
+  - 다른 곳 고치기: A는 Day 1 출발 시각, B는 Stop 메모 → 10초 안팎에 서로 보인다.
+  - 겹침: B의 개발자 도구 › Network › `Offline`으로 끊고 Day 1 순서를 바꾼다. A에서도 Day 1 순서를 다르게 바꾼다. B를 다시 `No throttling`으로 → B 띠 `다른 기기와 같은 곳을 고쳤어요` → `비교하기`.
+  - 당일 진행: A·B 모두 `오늘 일정` → A에서 첫 장소 체크 → B에 `다녀옴 · 만든 사람`, 다음 장소가 둘째로.
+  - 거두기: A `함께 편집` 창 › B 기기 `편집 권한 거두기` → B 띠에 거둬졌다는 문구.
+- 로컬 D1 확인: `sqlite3 "$(find .wrangler/state -name '*.sqlite' | head -1)" "SELECT share_id, device_id, label, seen_at FROM trip_collab_devices; SELECT stop_id, visited, by_label FROM trip_progress"`.
+- 기능 스위치는 `.dev.vars`에 `TRIP_COLLAB=off`를 넣고 `yarn dev:full`을 다시 띄워 본다.
+- 한계: 허용 출처가 `localhost:5173`·`localhost:8788`뿐이라 같은 망의 휴대폰에서는 `/api/trip-collab`이 `403`이다(2A와 같음). 휴대폰은 미리보기 배포로 확인한다.
+
+#### 사용자가 할 일
+
+새 외부 계정·키는 없다. D1(`DB`)·`IP_HASH_SALT`는 약속 온라인 집계 때 만든 것을 그대로 쓴다.
+
+1. (선택) 비상 스위치가 필요할 때만 Cloudflare 대시보드 › Workers & Pages › `landmark` › Settings › Variables and Secrets에서 Production·Preview에 `TRIP_COLLAB`=`off`를 넣고 다시 배포한다. 평소에는 넣지 않는다.
+2. 표 만들기는 첫 요청 때 서버 코드가 스스로 한다(`SCHEMA_VERSION` 4). 배포 뒤 확인만 한다:
+   `npx wrangler d1 execute landmark --remote --command "SELECT version FROM schema_meta; SELECT name FROM sqlite_master WHERE name LIKE 'trip_collab%' OR name = 'trip_progress'"` → `4`, `trip_collab_devices`, `trip_collab_devices_token`, `trip_collab_meta`, `trip_progress`.
+3. 미리보기 배포에서 큰 일정(30일, 경로선 많음)의 공동본 올리기 CPU 시간이 10ms 안인지 Workers 지표로 본다(2A와 같은 확인).
+4. 휴대폰 두 대(또는 PC와 휴대폰)로 편집 초대 → 수락 → 양쪽에서 다른 곳 고치기 → 같은 Day 순서를 동시에 바꿔 비교 화면 → 당일 화면의 체크가 10초 안팎에 다른 기기에 보이는지 확인 → 마지막으로 기기 거두기를 확인한다.
+
+#### 되돌릴 때
+
+- 보관함·백업·공유 문서 형식이 그대로다. 새 기기 키 `tripmap:trip-collab:v1`·`tripmap:trip-collab-base:v1:<id>`·`tripmap:trip-live-plan:v1`은 옛 버전이 읽지도 지우지도 않는다. 2A 소유자 기록의 모양은 그대로다.
+- **서버 쪽만 멈추려면** Pages 환경 변수 `TRIP_COLLAB=off`를 넣고 다시 배포한다. 초대 만들기·수락·공동본 올리기·진행 올리기만 `503`이 되고, 모든 기기는 마지막 공동본을 받아 보고 이 기기에서 고친 것은 기기에 남는다(다시 켜지면 병합). 2A 보기 링크·관리, 기기 거두기·초대 취소·그만두기는 계속 된다. 2A `TRIP_SHARE_LIVE=off`도 공동본 올리기·초대·수락을 막는다.
+- **2A만 있는 버전으로 되돌리면**
+  1. 먼저 사용자가 v2 문서를 2A가 읽는 v1로 돌린다(모양이 같아 `v`를 바꾸고, 캐시가 다시 받도록 `rev`도 올린다):
+     `npx wrangler d1 execute landmark --remote --command "UPDATE trip_shares SET doc = json_set(doc, '$.v', 1), rev = rev + 1 WHERE json_extract(doc, '$.v') = 2"`
+     이것을 하지 않으면 2A 보기 화면이 v2 문서를 읽지 못해 `일정을 불러오지 못했어요`를 보인다(소유자가 다시 올릴 때까지).
+  2. 편집 기기의 연결된 여행은 보관함에 보통 여행으로 남는다(옛 앱은 `tripmap:trip-collab:v1`을 모른다). 초대 링크 `/trips/join/<id>`는 `페이지를 찾을 수 없어요`.
+  3. 소유자 기기의 2A 반영 훅은 기록 `rev`가 낡아 `409`를 받고 2A 알림(`이 기기 일정으로 바꾸기`·`반영 멈추기`)을 띄운다. 소유자 기기 여행에는 마지막으로 맞춘 공동 편집 내용이 들어 있다.
+  4. 2B 표는 남는다. `schema_meta`는 4이고 2A 코드의 `ensureSchema`(3 기준)는 아무것도 하지 않는다. 2A 코드의 공유 지우기·만료 정리는 2B 표를 모르므로 오래 되돌려 둘 때는 정리한다(사용자가 실행):
+     `npx wrangler d1 execute landmark --remote --command "DELETE FROM trip_collab_devices; DELETE FROM trip_collab_meta; DELETE FROM trip_progress; DELETE FROM trip_share_tokens WHERE kind = 'invite'"`
+  5. 다시 2B로 올리면: 남은 연결 기록의 기기는 다음 맞추기에서 v1 문서를 받는다. 장소 id가 소유자 기기 id로 바뀌었을 수 있어 대응표에 없는 장소는 출처로 다시 찾는다(못 찾은 핀 장소는 새로 담길 수 있다). 기준 계획과 다른 곳은 평소 규칙대로 병합한다. 4를 했으면 편집 기기는 `401`로 끝나고 다시 초대해야 한다.
+- 코드 되돌리기 순서: 2B를 먼저 되돌린 뒤에야 2A를 되돌릴 수 있다.
+
 ### 화면 경로
 
 | 경로               | 화면                                                                                             |
@@ -249,6 +317,7 @@ npx wrangler pages dev --d1 DB --port 8788 --proxy 4180 -- npx vite --port 4180 
 | `/import`          | 받은 공유 파일 가져오기(`/`로 바뀌고 고르기·미리보기 칸이 열림)                                  |
 | `/view#t=<id>.<토큰>` | 갱신 링크 보기(10초마다 최신 일정, `파일로 저장`·`Landmark에 담기`) |
 | `/trips/live/:id` | 갱신 링크 소유자 링크(`#h=`)로 다른 기기 연결 |
+| `/trips/join/:id#i=<토큰>` | 함께 편집 초대 수락(1회용) |
 
 - 화면 폭에 따라 ≥1280px 3단, 768–1279px 2단 + 상세 오버레이, 768px 미만 하단 탭(보관함·지도·＋·여행·약속·설정)입니다. 휴대폰의 장소 상세는 지도·목록 위 아래쪽 시트로 열립니다.
 - **메모 자동 저장**: 입력을 멈춘 뒤 저장하고, 다른 화면으로 이동하거나 탭을 백그라운드로 보낼 때 대기 중인 초안을 먼저 저장합니다. 탭·브라우저를 바로 닫을 때는 저장이 비동기 Web Lock 안에서 실행되므로 **최선 노력(best-effort)** 입니다. 백그라운드 전환과 앱 안 이동에서는 안정적으로 저장됩니다.
@@ -386,6 +455,8 @@ node scripts/measure-ui-assets.mjs dist/assets
 
 
 갱신 링크를 만들면 제목·장소 이름·주소·좌표·라벨·Day·시간·체류·구간 시간·경로선·처음 기기 여행 id와 선택 시 메모·한 줄 평을 서버에 **암호화하지 않고** 둡니다. 여행 끝 30일 뒤(최소 갱신 후 30일·최대 180일)까지 보관하고 고칠 때마다 다시 계산합니다. 링크를 받은 사람은 누구나 최신 공개본을 볼 수 있습니다. `보기 링크 다시 만들기`로 이전 링크를 닫거나 `서버에서 지우기`·설정 › `갱신 링크`로 서버 사본을 지울 수 있습니다. 이미 저장한 HTML 파일이나 가져간 여행 사본은 남습니다.
+
+함께 편집을 시작하면 기기 이름·마지막 접속 시각, Stop별 다녀옴 체크·날짜·누른 기기 이름·시각, 정한 다음 장소와 기다리는 초대의 받는 사람 이름도 서버에 **암호화하지 않고** 남습니다. 공동 일정과 같은 갱신 링크 기한까지 보관하며 공유가 끝나면 함께 지웁니다. 편집 초대는 한 번만 쓰고 최대 7일 안에 수락해야 합니다. 만든 사람은 `함께 편집` 창에서 초대를 취소하거나 기기마다 권한을 거둘 수 있고, 참여 기기는 그만둘 수 있습니다. 거둔 뒤에도 각 기기에 담긴 여행 사본은 남습니다.
 
 ## 알려진 한계
 

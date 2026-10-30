@@ -18,6 +18,8 @@ function pressedButton(event: { currentTarget?: unknown } | undefined): Element 
 }
 
 type Options = {
+  /** 공동 상태처럼 개인 기록과 다른 이전 값은 반환한 함수로 되돌린다. */
+  onWritten?: (placeId: string, visitedOn: string | null) => void | (() => void);
   /**
    * 토스트의 `되돌리기`가 끝났다(바꿨든 아니든). 화면이 포커스를 되살릴 때 쓴다. `pressed`는 누른 순간의
    * `되돌리기` 버튼(알 수 없으면 null)이다.
@@ -41,9 +43,11 @@ export function useVisitToggle(options: Options = {}): {
   pending: ReadonlySet<string>;
 } {
   const { run } = useLibraryAction();
-  // 토스트는 8초 동안 남으므로 그때의 콜백을 부른다. 콜백이 바뀌어도 `undo`·`toggle`은 그대로다.
+  // 포커스 콜백은 최신 값을 쓰고, 쓰기 콜백은 체크를 누를 때 캡처한다.
+  const onWritten = useRef(options.onWritten);
   const onUndone = useRef(options.onUndone);
   useEffect(() => {
+    onWritten.current = options.onWritten;
     onUndone.current = options.onUndone;
   });
   // 렌더를 기다리지 않고 바로 막도록 진행 중인 id는 ref에, `aria-disabled` 표시에 쓰는 사본은 상태에 둔다.
@@ -56,9 +60,14 @@ export function useVisitToggle(options: Options = {}): {
       written: string | null,
       previous: string | null,
       pressed: Element | null,
+      undoWritten: void | (() => void),
     ) => {
       const result = await run(revertVisit(placeId, written, previous));
       if (result.ok && (result.summary?.merged ?? 0) > 0) toast(MERGED_NOTICE);
+      if (result.ok && (result.summary?.merged ?? 0) === 0) {
+        if (undoWritten) undoWritten();
+        else onWritten.current?.(placeId, previous);
+      }
       onUndone.current?.(pressed);
     },
     [run],
@@ -67,6 +76,7 @@ export function useVisitToggle(options: Options = {}): {
   const toggle = useCallback(
     async (place: Place, next: boolean, date: string): Promise<boolean> => {
       const id = place.id;
+      const writtenCallback = onWritten.current;
       if (saving.current.has(id)) return false;
       saving.current.add(id);
       setPending(new Set(saving.current));
@@ -85,7 +95,8 @@ export function useVisitToggle(options: Options = {}): {
           return out;
         });
         if (!result.ok) return false;
-        if (box.changed) {
+        const undoWritten = writtenCallback?.(id, written);
+        if (box.changed || undoWritten) {
           const name = place.name.value;
           const previous = box.previous;
           toast(next ? `‘${name}’ 다녀옴으로 표시했어요` : `‘${name}’ 다녀옴 표시를 지웠어요`, {
@@ -94,7 +105,8 @@ export function useVisitToggle(options: Options = {}): {
               label: '되돌리기',
               // 누른 버튼은 누른 순간에 잡아 둔다. 저장이 끝날 때 포커스가 토스트 안에 있어도 그것이 이
               // 버튼인지(곧 사라짐) 사람이 옮긴 다른 토스트의 버튼인지는 그때 알 수 없다.
-              onClick: (event) => void undo(id, written, previous, pressedButton(event)),
+              onClick: (event) =>
+                void undo(id, written, previous, pressedButton(event), undoWritten),
             },
           });
         }

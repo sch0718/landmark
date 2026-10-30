@@ -214,7 +214,13 @@ export function TodayLists({ model, onSelect, onCheck, pending }: Props) {
                     {check(item, 'visited', at)}
                     <Box sx={{ flex: 1, minWidth: 0 }}>
                       <Box sx={{ fontSize: 15, fontWeight: 700 }}>{item.place.name.value}</Box>
-                      {on !== null && <Box sx={TIME_SX}>{`다녀옴 · ${shortDate(on)}`}</Box>}
+                      {(on !== null || item.visitedBy !== null) && (
+                        <Box sx={TIME_SX}>
+                          {['다녀옴', on !== null ? shortDate(on) : null, item.visitedBy]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </Box>
+                      )}
                     </Box>
                   </Box>
                 );

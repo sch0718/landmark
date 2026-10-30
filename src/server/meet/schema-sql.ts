@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 export const SCHEMA_STATEMENTS: string[] = [
   `CREATE TABLE IF NOT EXISTS meetings (
@@ -58,4 +58,21 @@ export const SCHEMA_STATEMENTS: string[] = [
     label TEXT, expires_at TEXT, created_at TEXT NOT NULL
   )`,
   'CREATE INDEX IF NOT EXISTS trip_share_tokens_share ON trip_share_tokens(share_id, kind)',
+  // 4: 여행 함께 편집(2B). 초대는 2A trip_share_tokens(kind='invite')를 쓴다.
+  `CREATE TABLE IF NOT EXISTS trip_collab_devices (
+    share_id TEXT NOT NULL, device_id TEXT NOT NULL, token_hash TEXT NOT NULL,
+    label TEXT NOT NULL, created_at TEXT NOT NULL, seen_at TEXT NOT NULL,
+    PRIMARY KEY (share_id, device_id)
+  )`,
+  'CREATE UNIQUE INDEX IF NOT EXISTS trip_collab_devices_token ON trip_collab_devices(token_hash)',
+  `CREATE TABLE IF NOT EXISTS trip_collab_meta (
+    share_id TEXT PRIMARY KEY, progress_rev INTEGER NOT NULL,
+    next_stop_id TEXT, next_date TEXT, next_label TEXT, next_at TEXT,
+    edited_label TEXT, edited_at TEXT
+  )`,
+  `CREATE TABLE IF NOT EXISTS trip_progress (
+    share_id TEXT NOT NULL, stop_id TEXT NOT NULL, visited INTEGER NOT NULL,
+    date TEXT NOT NULL, by_device TEXT NOT NULL, by_label TEXT NOT NULL, at TEXT NOT NULL,
+    PRIMARY KEY (share_id, stop_id)
+  )`,
 ];

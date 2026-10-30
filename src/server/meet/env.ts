@@ -7,6 +7,7 @@ export type MeetEnv = {
   MEET_ONLINE?: string;
   SHARE_SHORT?: string;
   TRIP_SHARE_LIVE?: string;
+  TRIP_COLLAB?: string;
 };
 
 export type MeetContext = {

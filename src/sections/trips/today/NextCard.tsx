@@ -27,6 +27,7 @@ type Props = {
   onShowNext(): void;
   /** 카드의 `다녀옴`을 눌렀다. */
   onCheck(target: TodayStop): void;
+  onSetNext?: (item: TodayStop) => void;
   /** 다녀옴을 저장 중인 장소 id. 그동안 `다녀옴`은 포커스를 지닌 채 `aria-disabled`(누름은 저장 쪽이 무시). */
   pending: ReadonlySet<string>;
   /** 카드(`section`). `다음 장소 보기`·체크 뒤 포커스를 여기에 둔다. */
@@ -144,7 +145,16 @@ function directions(args: {
  * 기간 안이면 Stop 카드에 `다녀옴`(스펙 §4.4)을 둔다. 숙소는 체크 대상이 아니다. 오늘 Day의 다음 장소면 줄 2에
  * 늦어짐(§4.6)을, 카드가 보는 곳(Stop·숙소)에는 `길찾기`(§4.8)를 둔다. 그날 Stop이 없으면 숙소로 길찾기 하나.
  */
-export function NextCard({ model, trip, selected, onShowNext, onCheck, pending, cardRef }: Props) {
+export function NextCard({
+  model,
+  trip,
+  selected,
+  onShowNext,
+  onCheck,
+  onSetNext,
+  pending,
+  cardRef,
+}: Props) {
   const selectPlannerDay = useSetAtom(selectPlannerDayAtom);
   const platform = useLayout() === 'compact' ? 'app' : 'web';
   const hintId = useId();
@@ -208,7 +218,9 @@ export function NextCard({ model, trip, selected, onShowNext, onCheck, pending, 
     });
     body = (
       <>
-        <Box sx={HEAD_SX}>{`${head} · ${target.number}번째`}</Box>
+        <Box
+          sx={HEAD_SX}
+        >{`${head} · ${target.number}번째${selected === null && model.nextBy ? ` · ‘${model.nextBy}’에서 정함` : ''}`}</Box>
         <Box component="h2" sx={TITLE_SX}>
           {name}
         </Box>
@@ -227,6 +239,11 @@ export function NextCard({ model, trip, selected, onShowNext, onCheck, pending, 
               sx={{ minHeight: 44, '&[aria-disabled="true"]': { opacity: 0.5 } }}
             >
               다녀옴
+            </Button>
+          )}
+          {selected !== null && model.shared && model.isToday && !target.visited && onSetNext && (
+            <Button onClick={() => onSetNext(target)} sx={{ minHeight: 44 }}>
+              다음 장소로 정하기
             </Button>
           )}
           {selected !== null && (

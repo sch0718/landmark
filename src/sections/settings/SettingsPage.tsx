@@ -15,6 +15,7 @@ import { RestoreDialogHost } from 'src/sections/backup/RestoreDialogHost';
 import { AboutSection } from 'src/sections/settings/AboutSection';
 import { LegacyImportDialog } from 'src/sections/settings/LegacyImportDialog';
 import { OptionGroup, type Option } from 'src/sections/settings/OptionGroup';
+import { CollabTripsSection } from 'src/sections/settings/CollabTripsSection';
 import { LiveTripsSection } from 'src/sections/settings/LiveTripsSection';
 import { SentLinksSection } from 'src/sections/settings/SentLinksSection';
 import { ThemePicker } from 'src/sections/settings/ThemePicker';
@@ -146,6 +147,7 @@ export function SettingsPage() {
       </Section>
       <SentLinksSection />
       <LiveTripsSection />
+      <CollabTripsSection />
       <Section title="가져오기">
         <Typography variant="body2" sx={{ color: 'var(--tm-text-secondary)' }}>
           예전 여행 데이터의 장소와 라벨을 보관함으로 가져와요.

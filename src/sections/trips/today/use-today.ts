@@ -14,6 +14,11 @@ import {
   visitedInTrip,
   type TodayStatus,
 } from 'src/domain/trips/today';
+import {
+  sharedMarkOf,
+  sharedNextIndex,
+  type SharedProgress,
+} from 'src/domain/trip-collab/progress';
 import type { Place } from 'src/schema/library';
 import type { Stop, Trip } from 'src/schema/trip';
 import type { GeoFix } from 'src/services/geolocation';
@@ -29,6 +34,7 @@ export type TodayStop = {
   number: number;
   /** 이 여행 기간 안에 다녀옴으로 표시됐는가(스펙 §4.4). */
   visited: boolean;
+  visitedBy: string | null;
   /** 마지막으로 다녀온 Stop보다 앞에 있는 미체크 Stop(건너뛴 곳, 스펙 §4.5). */
   skipped: boolean;
   /** 계획 시각(`useDayPlan`의 시간표). */
@@ -59,6 +65,8 @@ export type TodayModel = {
   start: Place | null;
   end: Place | null;
   next: TodayNext;
+  nextBy: string | null;
+  shared: boolean;
   /** 마지막 체크 뒤에 미체크가 없어 앞쪽으로 되감았는가. */
   wrapped: boolean;
   /** 쓸 수 있는 내 위치(받은 지 2분 이내, 스펙 §4.7). 없으면 null. */
@@ -95,6 +103,7 @@ export function useToday(
   trip: Trip,
   viewDay: number | null,
   fix: GeoFix | null = null,
+  shared: { progress: SharedProgress | null; myDevice: string; myLabel?: string } | null = null,
 ): TodayModel {
   const library = useAtomValue(libraryAtom);
   const now = useNow();
@@ -107,18 +116,34 @@ export function useToday(
     const { start, end } = dayEndpoints(library, trip, dayIndex);
     const offset = start === null ? 0 : 1;
     const shown = day === undefined ? [] : visibleStops(library, day);
-    const visited = shown.map((stop) =>
-      visitedInTrip(visitedOnOf(library.places[stop.placeId]!), trip),
+    const period = { startDate: trip.startDate.value, endDate: trip.endDate.value };
+    const marks = shown.map((stop) => sharedMarkOf(shared?.progress ?? null, stop.id, period));
+    // 공동 진행을 아직 받지 못했으면 설계서대로 개인 기록을 보인다.
+    const visited = shown.map((stop, i) =>
+      shared?.progress
+        ? marks[i] !== null
+        : visitedInTrip(visitedOnOf(library.places[stop.placeId]!), trip),
     );
     const pick = pickNext(visited);
     const todayIndex = status.kind === 'during' ? status.dayIndex : null;
     const isToday = todayIndex === dayIndex;
-    const nextIndex = pick.nextIndex;
+    const date = status.kind === 'during' ? status.date : (tripDates(trip)[dayIndex] ?? '');
+    const sharedIndex = isToday
+      ? sharedNextIndex(
+          shared?.progress ?? null,
+          date,
+          shown.map((stop) => stop.id),
+          visited,
+        )
+      : null;
+    const nextIndex = sharedIndex ?? pick.nextIndex;
+    const wrapped = sharedIndex === null && pick.wrapped;
     const base = shown.map((stop, i): TodayStop => ({
       stop,
       place: library.places[stop.placeId]!,
       number: i + 1,
       visited: visited[i]!,
+      visitedBy: marks[i] && marks[i]!.by.device !== shared?.myDevice ? marks[i]!.by.label : null,
       skipped: pick.skipped.has(i),
       planned: plan.schedule.points[offset + i] ?? NO_TIME,
       projected: null,
@@ -132,7 +157,7 @@ export function useToday(
     let projected: PointTime[] = [];
     let delayMin: number | null = null;
     let approximate = false;
-    if (isToday && status.kind === 'during' && nextIndex !== null && !pick.wrapped) {
+    if (isToday && status.kind === 'during' && nextIndex !== null && !wrapped) {
       const projection = projectFromNow({
         input: plan.input,
         planned: plan.schedule,
@@ -163,18 +188,23 @@ export function useToday(
       todayIndex,
       dayIndex,
       isToday,
-      date: status.kind === 'during' ? status.date : (tripDates(trip)[dayIndex] ?? ''),
+      date,
       canCheck: status.kind === 'during',
       plan,
       stops,
       start,
       end,
       next,
-      wrapped: pick.wrapped,
+      wrapped,
+      shared: shared !== null,
+      nextBy:
+        sharedIndex !== null && shared?.progress?.next?.label !== shared?.myLabel
+          ? (shared?.progress?.next?.label ?? null)
+          : null,
       fix: me,
       here,
       delayMin,
       approximate,
     };
-  }, [library, trip, dayIndex, plan, status, now, fix]);
+  }, [library, trip, dayIndex, plan, status, now, fix, shared]);
 }

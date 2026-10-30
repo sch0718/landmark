@@ -24,12 +24,12 @@ describe('ensureSchema', () => {
       expect.objectContaining({ name: 'doc_rev', type: 'INTEGER', notnull: 1 }),
     );
   });
-  it('빈 DB에 설계의 표·색인과 버전 3을 만든다', async () => {
+  it('빈 DB에 설계의 표·색인과 버전 4를 만든다', async () => {
     await ensureSchema(db);
 
-    expect(SCHEMA_VERSION).toBe(3);
+    expect(SCHEMA_VERSION).toBe(4);
     expect(await db.prepare('SELECT version FROM schema_meta').all()).toEqual({
-      results: [{ version: 3 }],
+      results: [{ version: 4 }],
     });
     expect(
       await db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all(),
@@ -41,6 +41,9 @@ describe('ensureSchema', () => {
         { name: 'rate_counters' },
         { name: 'schema_meta' },
         { name: 'share_links' },
+        { name: 'trip_collab_devices' },
+        { name: 'trip_collab_meta' },
+        { name: 'trip_progress' },
         { name: 'trip_share_tokens' },
         { name: 'trip_shares' },
       ],
@@ -80,7 +83,7 @@ describe('ensureSchema', () => {
       count: 0,
     });
     expect(await db.prepare('SELECT version FROM schema_meta').all()).toEqual({
-      results: [{ version: 3 }],
+      results: [{ version: 4 }],
     });
   });
 
@@ -95,7 +98,7 @@ describe('ensureSchema', () => {
     expect(batch).toHaveBeenCalledTimes(1);
     expect(prepare).toHaveBeenCalledTimes(prepared);
     expect(await db.prepare('SELECT version FROM schema_meta').all()).toEqual({
-      results: [{ version: 3 }],
+      results: [{ version: 4 }],
     });
   });
 
@@ -112,7 +115,7 @@ describe('ensureSchema', () => {
     await ensureSchema(db);
 
     expect(batch).toHaveBeenCalledTimes(2);
-    expect(await db.prepare('SELECT version FROM schema_meta').first()).toEqual({ version: 3 });
+    expect(await db.prepare('SELECT version FROM schema_meta').first()).toEqual({ version: 4 });
   });
 
   it('표 없음 이외의 읽기 오류는 전파하고 다음 호출에서 다시 시도한다', async () => {
@@ -123,7 +126,7 @@ describe('ensureSchema', () => {
     await expect(ensureSchema(db)).rejects.toThrow('DB 읽기 실패');
     expect(prepare).toHaveBeenCalledTimes(1);
     await ensureSchema(db);
-    expect(await db.prepare('SELECT version FROM schema_meta').first()).toEqual({ version: 3 });
+    expect(await db.prepare('SELECT version FROM schema_meta').first()).toEqual({ version: 4 });
   });
 
   it('이전 버전의 자료는 보존하고 버전 기록만 하나로 갱신한다', async () => {
@@ -141,18 +144,18 @@ describe('ensureSchema', () => {
       doc: '{}',
     });
     expect(await db.prepare('SELECT version FROM schema_meta').all()).toEqual({
-      results: [{ version: 3 }],
+      results: [{ version: 4 }],
     });
   });
 
   it('버전 표가 비어 있어도 초기화한다', async () => {
     await db.prepare('CREATE TABLE schema_meta (version INTEGER NOT NULL)').run();
     await ensureSchema(db);
-    expect(await db.prepare('SELECT version FROM schema_meta').first()).toEqual({ version: 3 });
+    expect(await db.prepare('SELECT version FROM schema_meta').first()).toEqual({ version: 4 });
     expect(await db.prepare('SELECT * FROM rate_counters').all()).toEqual({ results: [] });
   });
 
-  it.each([3, 4])('이미 버전 %i이면 배치를 실행하지 않는다', async (version) => {
+  it.each([4, 5])('이미 버전 %i이면 배치를 실행하지 않는다', async (version) => {
     await db.prepare('CREATE TABLE schema_meta (version INTEGER NOT NULL)').run();
     await db.prepare('INSERT INTO schema_meta (version) VALUES (?)').bind(version).run();
     const batch = vi.spyOn(db, 'batch');
@@ -168,7 +171,7 @@ describe('ensureSchema', () => {
     await db.prepare('UPDATE schema_meta SET version = 0').run();
     resetSchemaMemo();
     await ensureSchema(db);
-    expect(await db.prepare('SELECT version FROM schema_meta').first()).toEqual({ version: 3 });
+    expect(await db.prepare('SELECT version FROM schema_meta').first()).toEqual({ version: 4 });
   });
 });
 
@@ -258,7 +261,7 @@ it('버전 2 DB에서 갱신 공유 표와 색인을 더하고 기존 행을 지
     .bind('share001', '{}', 'trip', '해시', '생성', '만료')
     .run();
   await ensureSchema(db);
-  expect(await db.prepare('SELECT version FROM schema_meta').first()).toEqual({ version: 3 });
+  expect(await db.prepare('SELECT version FROM schema_meta').first()).toEqual({ version: 4 });
   for (const name of [
     'trip_shares',
     'trip_shares_expires',
@@ -272,9 +275,42 @@ it('버전 2 DB에서 갱신 공유 표와 색인을 더하고 기존 행을 지
   for (const name of ['meetings', 'share_links'])
     expect(await db.prepare(`SELECT COUNT(*) AS count FROM ${name}`).first()).toEqual({ count: 1 });
 });
-it('마지막 네 문장은 멱등 갱신 공유 표와 색인이다', () => {
-  for (const sql of SCHEMA_STATEMENTS.slice(-4)) {
+it('함께 편집 표 앞 네 문장은 멱등 갱신 공유 표와 색인이다', () => {
+  for (const sql of SCHEMA_STATEMENTS.slice(-8, -4)) {
     expect(sql).toContain('trip_share');
     expect(sql).toContain('IF NOT EXISTS');
   }
+});
+
+it('버전 3 DB에서 함께 편집 표·색인을 더하고 기존 공동본을 지킨다', async () => {
+  await db.batch(
+    SCHEMA_STATEMENTS.filter(
+      (sql) => !sql.includes('trip_collab') && !sql.includes('trip_progress'),
+    ).map((sql) => db.prepare(sql)),
+  );
+  await db.prepare('INSERT INTO schema_meta VALUES (3)').run();
+  await db
+    .prepare(
+      "INSERT INTO trip_shares VALUES ('abcdefghij', '{}', 1, '시험보기', 'trip000001', '생성', '변경', '만료')",
+    )
+    .run();
+  await ensureSchema(db);
+  expect(await db.prepare('SELECT id FROM trip_shares').first()).toEqual({ id: 'abcdefghij' });
+  for (const name of [
+    'trip_collab_devices',
+    'trip_collab_devices_token',
+    'trip_collab_meta',
+    'trip_progress',
+  ])
+    expect(
+      await db.prepare('SELECT name FROM sqlite_master WHERE name = ?').bind(name).first(),
+    ).toEqual({ name });
+});
+it('마지막 네 문장은 함께 편집 표·색인이며 모두 멱등이다', () => {
+  expect(SCHEMA_STATEMENTS.slice(-4).map((s) => /IF NOT EXISTS (\w+)/.exec(s)?.[1])).toEqual([
+    'trip_collab_devices',
+    'trip_collab_devices_token',
+    'trip_collab_meta',
+    'trip_progress',
+  ]);
 });
