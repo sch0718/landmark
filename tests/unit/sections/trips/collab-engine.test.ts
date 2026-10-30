@@ -660,3 +660,15 @@ it.each(['offline', 'switched-off', 'rate-limited', 'gap'] as const)(
     expect(s.get().trips.trip000001!.days[1]!.startTime.value).toBe('11:00');
   },
 );
+it('선택 뒤 같은 id의 겹침 값이 바뀌면 적용하지 않고 다시 비교한다', async () => {
+  const s = setup();
+  s.change(0, '10:00');
+  s.doc.share.trips[0]!.days[0]!.startTime = '08:00';
+  await s.engine.sync();
+  s.doc.share.trips[0]!.days[0]!.startTime = '07:00';
+  s.setRemote({ ...s.remote(), rev: 3 });
+  await s.engine.resolve({ 'day.0.startTime': 'mine' });
+  expect(s.engine.getSnapshot().state).toBe('conflict');
+  expect(s.engine.getSnapshot().merge?.theirs.days[0]!.startTime).toBe('07:00');
+  expect(s.api.putDoc).not.toHaveBeenCalled();
+});

@@ -52,7 +52,7 @@ describe('겹친 변경 비교 창', () => {
     mount();
     await userEvent.click(screen.getByRole('button', { name: '모두 공동 여행으로' }));
     await userEvent.click(screen.getByRole('button', { name: '고른 대로 맞추기' }));
-    expect(mocked.resolve).toHaveBeenCalledWith({ 'day.0.startTime': 'theirs' });
+    expect(mocked.resolve).toHaveBeenCalledWith({ 'day.0.startTime': 'theirs' }, mocked.view.merge);
   });
   it('배치는 두 열에 장소 이름을 보여 준다', () => {
     prepare(true);
@@ -78,3 +78,26 @@ describe('겹친 변경 비교 창', () => {
     expect(screen.getByRole('button', { name: '고른 대로 맞추기' })).toBeDisabled();
   });
 });
+
+it.each([false, true])(
+  '같은 겹침 id라도 값·목록이 달라지면 선택을 지우고 알린다 (%s)',
+  async (placement) => {
+    prepare(placement);
+    const { rerender } = mount();
+    await userEvent.click(screen.getByRole('button', { name: '모두 공동 여행으로' }));
+    const previous = mocked.view.merge as ReturnType<typeof mergeCollabPlan>;
+    const theirs = structuredClone(previous.theirs);
+    if (placement) theirs.candidates.push(theirs.days[1]!.stops.pop()!.placeId);
+    else theirs.days[0]!.startTime = '07:00';
+    mocked.view = { ...mocked.view, merge: mergeCollabPlan(previous.base, previous.mine, theirs) };
+    const store = createStore();
+    store.set(libraryAtom, buildLiveLibrary());
+    rerender(
+      <Provider store={store}>
+        <CollabConflictDialog open tripId="trip000001" onClose={vi.fn()} />
+      </Provider>,
+    );
+    expect(screen.getByRole('alert')).toHaveTextContent('그사이 공동 여행이 또 바뀌었어요');
+    expect(screen.getByRole('button', { name: '고른 대로 맞추기' })).toBeDisabled();
+  },
+);

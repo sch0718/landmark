@@ -4,6 +4,7 @@ import { applyCollabPlan } from 'src/domain/trip-collab/apply';
 import { buildCollabDoc, type CollabRouteOf } from 'src/domain/trip-collab/build-doc';
 import { OWNER_DEVICE, OWNER_LABEL } from 'src/domain/trip-collab/constants';
 import {
+  collabMergeSignature,
   mergeCollabPlan,
   resolveCollabMerge,
   type CollabMerge,
@@ -211,16 +212,22 @@ export class CollabEngine {
   sync(): Promise<void> {
     return this.start();
   }
-  resolve(choices: Readonly<Record<string, CollabSide>>): Promise<void> {
-    return this.start(choices);
+  resolve(
+    choices: Readonly<Record<string, CollabSide>>,
+    seen = this.snapshot.merge,
+  ): Promise<void> {
+    return this.start(choices, seen);
   }
-  private start(choices?: Readonly<Record<string, CollabSide>>): Promise<void> {
+  private start(
+    choices?: Readonly<Record<string, CollabSide>>,
+    seen?: CollabMerge | null,
+  ): Promise<void> {
     if (this.disposed) return Promise.resolve();
     if (this.inflight)
-      return choices ? this.inflight.then(() => this.start(choices)) : this.inflight;
+      return choices ? this.inflight.then(() => this.start(choices, seen)) : this.inflight;
     const run = async () => {
       try {
-        await this.perform(choices);
+        await this.perform(choices, seen);
       } catch (error) {
         this.deps.reportError(error);
         this.emit({ state: 'failed' });
@@ -283,7 +290,10 @@ export class CollabEngine {
     });
     return this.sending;
   }
-  private async perform(choices?: Readonly<Record<string, CollabSide>>): Promise<void> {
+  private async perform(
+    choices?: Readonly<Record<string, CollabSide>>,
+    seen?: CollabMerge | null,
+  ): Promise<void> {
     const d = this.deps;
     if (this.disposed) return;
     if (terminal(this.snapshot.state)) return;
@@ -414,6 +424,10 @@ export class CollabEngine {
       const merge = mergeCollabPlan(base?.plan ?? null, mine, theirs);
       let plan = merge.plan;
       if (merge.conflicts.length && choices) {
+        if (collabMergeSignature(merge) !== collabMergeSignature(seen ?? null)) {
+          this.emit({ state: 'conflict', merge });
+          return;
+        }
         const r = resolveCollabMerge(merge, choices);
         if (r.ok) plan = r.plan;
         else {

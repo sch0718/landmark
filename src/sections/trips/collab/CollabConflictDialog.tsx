@@ -10,11 +10,12 @@ import RadioGroup from '@mui/material/RadioGroup';
 import Typography from '@mui/material/Typography';
 import { useAtomValue } from 'jotai';
 import { useId, useState } from 'react';
-import type {
-  CollabConflict,
-  CollabSide,
-  FieldConflict,
-  ListId,
+import {
+  collabMergeSignature,
+  type CollabConflict,
+  type CollabSide,
+  type FieldConflict,
+  type ListId,
 } from 'src/domain/trip-collab/merge';
 import { libraryAtom } from 'src/stores/library-state';
 import { useTripCollab } from './use-trip-collab';
@@ -51,10 +52,7 @@ export function CollabConflictDialog({
     lib = useAtomValue(libraryAtom),
     heading = useId(),
     conflicts = view.merge?.conflicts ?? [];
-  const signature = conflicts
-    .map((c) => c.id)
-    .sort()
-    .join('|');
+  const signature = collabMergeSignature(view.merge);
   const [state, setState] = useState<{
     signature: string;
     choices: Record<string, CollabSide>;
@@ -64,9 +62,7 @@ export function CollabConflictDialog({
   if (signature !== state.signature) {
     current = {
       signature,
-      choices: Object.fromEntries(
-        Object.entries(state.choices).filter(([key]) => conflicts.some((c) => c.id === key)),
-      ),
+      choices: {},
       notice: state.signature !== '',
     };
     setState(current);
@@ -104,7 +100,7 @@ export function CollabConflictDialog({
     if (!view.engine) return;
     setBusy(true);
     try {
-      await view.engine.resolve(current.choices);
+      await view.engine.resolve(current.choices, view.merge);
       if (view.engine.getSnapshot().state !== 'conflict') onClose();
     } finally {
       setBusy(false);
