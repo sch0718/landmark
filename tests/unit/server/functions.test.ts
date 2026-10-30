@@ -904,3 +904,54 @@ describe('짧은 링크 함수 진입점', () => {
     }
   });
 });
+
+it('trip-live 진입점은 env.DB로 만들기·읽기·다시 만들기·삭제를 처리한다', async () => {
+  const { createSqliteD1 } = await import('../../helpers/sqlite-d1');
+  const { buildLiveDoc } = await import('../../fixtures/live-trip');
+  const { onRequestPost } = await import('../../../functions/api/trip-live/index');
+  const { onRequestGet, onRequestPut, onRequestDelete } =
+    await import('../../../functions/api/trip-live/[id]');
+  const { onRequestPost: rotate } = await import('../../../functions/api/trip-live/[id]/rotate');
+  const db = createSqliteD1();
+  const pending: Promise<unknown>[] = [];
+  const owner = 'o'.repeat(43),
+    view = 'v'.repeat(43),
+    id = 'abcdefghij';
+  const doc = buildLiveDoc();
+  const ctx = (method: string, body?: unknown) => ({
+    request: new Request(`http://localhost:8788/api/trip-live/${id}`, {
+      method,
+      headers: { Origin: ALLOWED_ORIGIN, Authorization: `Bearer ${owner}` },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    }),
+    env: { DB: db },
+    params: { id },
+    waitUntil(p: Promise<unknown>) {
+      pending.push(p);
+    },
+  });
+  try {
+    expect(
+      (
+        await onRequestPost(
+          ctx('POST', {
+            id,
+            sourceTripId: 'trip000001',
+            ownerToken: owner,
+            viewToken: view,
+            doc,
+            turnstile: 'dev',
+          }),
+        )
+      ).status,
+    ).toBe(201);
+    expect((await onRequestGet(ctx('GET'))).status).toBe(200);
+    expect((await onRequestPut(ctx('PUT', { doc, baseRev: 1 }))).status).toBe(200);
+    expect((await rotate(ctx('POST', { view: 'n'.repeat(43) }))).status).toBe(200);
+    await Promise.all(pending);
+    expect((await onRequestDelete(ctx('DELETE'))).status).toBe(204);
+  } finally {
+    await Promise.all(pending);
+    db.close();
+  }
+});

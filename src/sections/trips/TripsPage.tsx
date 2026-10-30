@@ -24,12 +24,14 @@ import { EmptyState } from 'src/sections/library/EmptyState';
 import { TripShareDialogHost } from 'src/sections/share-export/TripShareDialogHost';
 import { TripFormDialog } from 'src/sections/trips/TripFormDialog';
 import { periodLabel } from 'src/sections/trips/trip-dates';
+import { useTripLiveRecords } from 'src/services/trip-live/store';
 import { libraryAtom, useLibraryAction } from 'src/stores/library-state';
 
 /** 지운 직후 "되돌리기"를 보여 주는 시간(스펙: 8초). */
 const UNDO_MS = 8000;
 
 type CardProps = {
+  liveShared: boolean;
   trip: Trip;
   library: Library;
   onMenu(anchor: HTMLElement): void;
@@ -39,13 +41,13 @@ type CardProps = {
  * 여행 카드: 제목, 기간, 일정·후보 수. 카드를 누르면 계획 화면, 오른쪽 `⋯`은 메뉴.
  * 오늘(04:00 경계)이 기간 안이면 카드 링크 아래 줄에 `오늘 일정`(당일 모드)을 둔다(스펙 §3.1).
  */
-function TripCard({ trip, library, onMenu }: CardProps) {
+function TripCard({ trip, library, onMenu, liveShared }: CardProps) {
   const title = trip.title.value;
   const during = todayStatus(trip, new Date()).kind === 'during';
   const scheduled = trip.days.reduce((sum, day) => sum + visibleStops(library, day).length, 0);
   const candidates = visibleCandidates(library, trip).length;
   const period = periodLabel(trip.startDate.value, trip.endDate.value);
-  const counts = `일정 ${scheduled}곳 · 후보 ${candidates}곳`;
+  const counts = `일정 ${scheduled}곳 · 후보 ${candidates}곳${liveShared ? ' · 갱신 공유 중' : ''}`;
   return (
     <Box
       component="li"
@@ -125,11 +127,13 @@ function TripCard({ trip, library, onMenu }: CardProps) {
 }
 
 function TripList({
+  liveIds,
   label,
   trips,
   library,
   onMenu,
 }: {
+  liveIds: ReadonlySet<string>;
   label: string;
   trips: Trip[];
   library: Library;
@@ -141,6 +145,7 @@ function TripList({
         <TripCard
           key={trip.id}
           trip={trip}
+          liveShared={liveIds.has(trip.id)}
           library={library}
           onMenu={(anchor) => onMenu(trip, anchor)}
         />
@@ -152,6 +157,8 @@ function TripList({
 /** `/trips`: 여행 목록. 새 여행 만들기, 이름 바꾸기, 일정 공유, 삭제(되돌리기 토스트). */
 export function TripsPage() {
   useDocumentTitle('여행');
+  const liveRecords = useTripLiveRecords();
+  const liveIds = new Set(liveRecords.filter((r) => r.status === 'live').map((r) => r.tripId));
   const library = useAtomValue(libraryAtom);
   const { run } = useLibraryAction();
   const navigate = useNavigate();
@@ -227,7 +234,13 @@ export function TripsPage() {
       ) : (
         <>
           {upcoming.length > 0 && (
-            <TripList label="여행 목록" trips={upcoming} library={library} onMenu={openMenu} />
+            <TripList
+              liveIds={liveIds}
+              label="여행 목록"
+              trips={upcoming}
+              library={library}
+              onMenu={openMenu}
+            />
           )}
           {past.length > 0 && (
             <Box component="section" sx={{ mt: upcoming.length > 0 ? 3 : 0 }}>
@@ -243,7 +256,13 @@ export function TripsPage() {
               >
                 지난 여행
               </Box>
-              <TripList label="지난 여행 목록" trips={past} library={library} onMenu={openMenu} />
+              <TripList
+                liveIds={liveIds}
+                label="지난 여행 목록"
+                trips={past}
+                library={library}
+                onMenu={openMenu}
+              />
             </Box>
           )}
         </>
@@ -317,6 +336,11 @@ export function TripsPage() {
             <DialogContentText>
               {`‘${deletingTrip.title.value}’ 여행을 지울까요? 보관함의 장소는 지워지지 않아요.`}
             </DialogContentText>
+            {liveIds.has(deletingTrip.id) && (
+              <DialogContentText>
+                갱신 링크는 서버에 남아요. 설정 › 갱신 링크에서 지울 수 있어요
+              </DialogContentText>
+            )}
           </DialogContent>
           <DialogActions>
             <Button onClick={() => setDeleting(null)} sx={{ minHeight: 44 }}>

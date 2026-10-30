@@ -378,3 +378,16 @@ describe('connectMapFrame', () => {
     });
   });
 });
+
+it('연결을 끝내면 message 리스너와 준비 타이머를 푼다', () => {
+  const host = document.createElement('div');
+  document.body.append(host);
+  const remove = vi.spyOn(window, 'removeEventListener');
+  const handle = connectMapFrame(host, {
+    mapUrl: 'https://map.test/',
+    places: [],
+    onSelect: vi.fn(),
+  });
+  handle.stop();
+  expect(remove).toHaveBeenCalledWith('message', expect.any(Function));
+});
