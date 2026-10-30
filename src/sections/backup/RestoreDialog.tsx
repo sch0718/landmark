@@ -223,6 +223,7 @@ export function RestoreDialog({
       setReadError(null);
       setError(null);
       setBusy(false);
+      setReceiving(false);
       setDownloaded(null);
       setDownloadBefore(true);
       setRemoteHeader(null);
@@ -364,6 +365,7 @@ export function RestoreDialog({
         });
       } else outcome = await apply();
     } catch {
+      if (runIdRef.current !== runId) return;
       setError({
         message: '최신 변경을 받지 못했어요. 설정 › 동기화를 확인해 주세요',
         downloadCurrent: false,

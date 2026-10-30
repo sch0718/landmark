@@ -364,3 +364,32 @@ it('파일 모드는 동기화가 켜지고 보류 중이어도 기존처럼 바
   await waitFor(() => expect(replacing).toHaveBeenCalledOnce());
   expect(boot.runThen).not.toHaveBeenCalled();
 });
+
+it.each(['resolve', 'reject'] as const)(
+  '받기 도중 다시 연 창에는 이전 실행의 진행 문구와 늦은 %s를 남기지 않는다',
+  async (completion) => {
+    boot.enabled = true;
+    const h = await setup();
+    await act(async () => h.store.set(syncStatusAtom, { ...OFF_STATUS, phase: 'synced' }));
+    await screen.findByText(loaded.header);
+    let finish!: () => void;
+    boot.runThen.mockImplementationOnce(async (_, after) => {
+      await new Promise<void>((resolve, reject) => {
+        finish = () => (completion === 'resolve' ? resolve() : reject(Error('이전 받기 실패')));
+      });
+      return after({ ...OFF_STATUS, phase: 'synced' });
+    });
+    await userEvent.click(screen.getByRole('button', { name: '이 백업으로 바꾸기' }));
+    expect(screen.getByText('서버의 최신 변경을 먼저 받는 중…')).toBeInTheDocument();
+    h.rerender(false);
+    h.rerender(true);
+    await screen.findByText(loaded.header);
+    expect(screen.queryByText('서버의 최신 변경을 먼저 받는 중…')).toBeNull();
+    await act(async () => finish());
+    expect(replacing).not.toHaveBeenCalled();
+    expect(
+      screen.queryByText('최신 변경을 받지 못했어요. 설정 › 동기화를 확인해 주세요'),
+    ).toBeNull();
+    expect(screen.getByRole('button', { name: '이 백업으로 바꾸기' })).toBeEnabled();
+  },
+);
