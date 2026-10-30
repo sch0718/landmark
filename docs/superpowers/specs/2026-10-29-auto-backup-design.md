@@ -167,6 +167,7 @@ CREATE TABLE IF NOT EXISTS library_backup_parts (
 | `POST /v1/backup` | 스냅샷 쓰기(덮어쓰기) | 세션·사용자 `backup-write` 20/일. 본문 1,500,000바이트 이하. `AUTO_BACKUP=off`·`LIBRARY_SYNC=off`면 503 `off` | `200 { now, backup: BackupMeta }`, `409 { error: 'backup-changed' }` |
 | `GET /v1/backup/data?id=<id>` | 스냅샷 데이터 | 세션·`backup-read`. `allowWhenOff` | `200 { id, data }`, 없으면 `404 { error: 'no-backup' }`, id가 다르면 `409 backup-changed` |
 | `DELETE /v1/backup` | 지우기 | 세션. `allowWhenOff` | `204` |
+| 머리글 `X-Landmark-Backup-User` | 요청을 준비한 사용자 ID로 계정 전환 경쟁 방지 | 세션 사용자 ID와 대조(옛 요청은 생략 가능) | 불일치 시 401 `reauth-required` |
 
 `BackupMeta = { id, createdAt, exportedAt, storedBytes, rawBytes, contentHash, counts: { places, labels, trips, meetings }, deviceId, deviceLabel, reason }`. `writable = AUTO_BACKUP !== 'off' && LIBRARY_SYNC !== 'off'`.
 
@@ -180,7 +181,7 @@ CREATE TABLE IF NOT EXISTS library_backup_parts (
 ```
 
 - 검사(실패는 `422 { error: 'invalid', path }`): 남는 키 금지, `v === 1`, `format === 1`, `data`는 `H4sI`로 시작·`^[A-Za-z0-9+/]+={0,2}$`·길이가 4의 배수, `data` 길이 1,398,104 초과는 `413 { error: 'too-large' }`, `rawBytes` 1~16,777,216 정수, `contentHash` `^[0-9a-z]{1,16}$`, `counts` 넷 다 0~1,000,000 정수(남는 키 금지), `exportedAt` ISO(`Date.parse` 가능, 30자 이하), `deviceId` `^[a-z0-9]{16}$`, `deviceLabel` 앞뒤 공백 제거 1~40자·제어 문자 없음, `reason` `manual|auto`, `ifMatch`는 없거나 `null` 또는 `^[0-9a-f]{16}$`.
-- 쓰기(한 `batch`): 조각마다 `INSERT INTO library_backup_parts` → 메타 upsert(`ifMatch` 없음: 늘 덮어씀 / `null`: `ON CONFLICT DO NOTHING` / 문자열: `DO UPDATE … WHERE library_backups.id = ?`) → `DELETE FROM library_backup_parts WHERE user_id = ? AND backup_id IS NOT (SELECT id FROM library_backups WHERE user_id = ?)`. 그 뒤 메타를 읽어 id가 새 id가 아니면 `409 backup-changed`(진 쪽 조각은 이미 지워졌다).
+- 쓰기(한 `batch`): 조각마다 `INSERT INTO library_backup_parts` → 메타 upsert(`ifMatch` 없음: 늘 덮어씀 / `null`: `ON CONFLICT DO NOTHING` / 문자열: `DO UPDATE … WHERE library_backups.id = ?`) → `DELETE FROM library_backup_parts WHERE user_id = ? AND backup_id IS NOT (SELECT id FROM library_backups WHERE user_id = ?)`. 같은 트랜잭션의 마지막 문장 `SELECT id FROM library_backups WHERE user_id = ?1` 결과가 새 id가 아니면 `409 backup-changed`(진 쪽 조각은 이미 지워졌다). 성공 응답은 이 쓰기의 메타를 반환하며, 커밋 뒤 다른 쓰기가 덮어써도 성공 여부는 바뀌지 않는다.
 - 읽기 응답 `GET /v1/backup/data`는 조각 문자열을 해석 없이 이어 붙여 만든다(`'{"id":"…","data":"' + 조각들 + '"}'`). base64 문자는 JSON 이스케이프가 필요 없다. 조각 수가 메타의 `parts`와 다르면(쓰는 중) `409 backup-changed`.
 - 로그: 3단계 라우터 한 줄 로그(`{ method, path, status, ms }`) 그대로. 데이터·해시·기기 이름을 남기지 않는다.
 

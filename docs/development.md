@@ -303,6 +303,7 @@ await __landmarkDev.forgetFolderSids('<공유 ID>', 2);
 | `POST /v1/backup` | 압축 스냅샷 덮어쓰기(`ifMatch` 조건 지원) | `200 { now, backup }`, 충돌 `409 backup-changed` |
 | `GET /v1/backup/data?id=<id>` | 메타 id의 압축 자료 | `200 { id, data }`, 없음 `404 no-backup`, 바뀜 `409 backup-changed` |
 | `DELETE /v1/backup` | 계정의 스냅샷 지우기 | `204` |
+| 머리글 `X-Landmark-Backup-User` | 요청을 준비한 사용자 ID로 계정을 고정(옛 요청은 생략 가능) | 세션 사용자 ID와 불일치 시 401 `reauth-required` |
 
 사용자당 하루 쓰기 20회·읽기 200회(메타와 자료 합산)입니다. 압축본은 1 MiB, base64 조각은 512 KiB, JSON 본문은 1,500,000바이트 이하입니다. 브라우저는 원문과 압축 풀기 모두 16 MiB를 상한으로 둡니다. 서버는 압축 내용을 풀거나 해석하지 않습니다. 계정의 서버 자료를 지우면 백업 표도 함께 지웁니다.
 
