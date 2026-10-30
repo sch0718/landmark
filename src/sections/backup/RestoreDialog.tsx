@@ -10,7 +10,7 @@ import DialogTitle from '@mui/material/DialogTitle';
 import Typography from '@mui/material/Typography';
 import { Effect } from 'effect';
 import { isEqual } from 'es-toolkit';
-import { useAtomValue } from 'jotai';
+import { useAtomValue, useStore } from 'jotai';
 import {
   useCallback,
   useId,
@@ -39,6 +39,7 @@ import { PreviousNotKept, StorageQuotaExceeded } from 'src/services/errors';
 import { LibraryStore } from 'src/services/library-store';
 import { useRestoreActions } from 'src/stores/backup-state';
 import { libraryAtom } from 'src/stores/library-state';
+import { syncStatusAtom } from 'src/stores/sync-status';
 
 export const REMOTE_PREVIOUS_NOTE =
   "지금 보관함은 이 기기에 '되살리기 전 보관함'으로도 남아요. 설정 › 백업 › 되살리기 전으로 되돌리기로 돌아갈 수 있어요.";
@@ -147,6 +148,11 @@ export function RestoreDialog({
   remote,
 }: RestoreDialogProps) {
   const library = useAtomValue(libraryAtom);
+  const syncStatus = useAtomValue(syncStatusAtom);
+  const store = useStore();
+  const syncBlocked = !!remote && readBootFlag() && syncStatus.phase !== 'synced';
+  const canReplace = () =>
+    !remote || !readBootFlag() || store.get(syncStatusAtom).phase === 'synced';
   const { replace, undo } = useRestoreActions();
   const backupFile = useBackupFile();
   const remoteRef = useRef(remote);
@@ -289,7 +295,7 @@ export function RestoreDialog({
   const live = mode === 'normal' && hasLiveContent(library);
 
   const doReplace = async (backup: ReadBackup) => {
-    if (busyRef.current) return;
+    if (busyRef.current || !canReplace()) return;
     const savedPromise =
       remote && live && downloadBefore && downloaded === null ? backupFile.save() : null;
     const runId = runIdRef.current;
@@ -321,6 +327,7 @@ export function RestoreDialog({
       } else {
         options = { requirePrevious: false, savedText: await openTextRef.current };
       }
+      if (!canReplace()) return;
       outcome = await replace(remote ? { ...backup, exportedAt: null } : backup, options);
     } finally {
       if (runIdRef.current === runId) {
@@ -400,7 +407,7 @@ export function RestoreDialog({
     [preview, mode, library],
   );
   const working = busy || backupFile.busy;
-  const replaceDisabled = working || same;
+  const replaceDisabled = working || same || syncBlocked;
 
   const close = () => {
     if (busyRef.current) return;
@@ -512,6 +519,11 @@ export function RestoreDialog({
                   <Typography variant="body2">{REMOTE_PREVIOUS_NOTE}</Typography>
                   {remote.syncNote && <Typography variant="body2">{REMOTE_SYNC_NOTE}</Typography>}
                 </>
+              )}
+              {syncBlocked && (
+                <Typography role="status" variant="body2">
+                  동기화가 끝난 뒤 되살릴 수 있어요
+                </Typography>
               )}
               {same && (
                 <Typography variant="body2" sx={{ color: 'var(--tm-text-secondary)' }}>

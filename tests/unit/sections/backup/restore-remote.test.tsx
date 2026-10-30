@@ -9,8 +9,14 @@ import { setAppRuntimeForTest } from 'src/lib/effect/runtime';
 import { LIBRARY_KEY } from 'src/services/library-store';
 import { BACKUP_META_KEY } from 'src/services/backup-meta-store';
 import { emptyLibrary } from 'src/schema/library';
+import { OFF_STATUS, syncStatusAtom } from 'src/stores/sync-status';
 import { renderLibrary, sampleLibrary } from '../library/fixtures';
 import { makeLibrary, place } from '../../domain/backup/fixtures';
+const boot = vi.hoisted(() => ({ enabled: false }));
+vi.mock('src/services/library-sync/boot', async (original) => ({
+  ...(await original<typeof import('src/services/library-sync/boot')>()),
+  readBootFlag: () => boot.enabled,
+}));
 const { download, replacing } = vi.hoisted(() => ({ download: vi.fn(), replacing: vi.fn() }));
 vi.mock('src/lib/download-text', () => ({ downloadText: download }));
 vi.mock('src/stores/backup-state', async (original) => {
@@ -31,6 +37,7 @@ vi.mock('src/stores/backup-state', async (original) => {
 });
 vi.mock('src/theme/fonts', () => ({ loadDisplayFont: vi.fn(() => Promise.resolve()) }));
 afterEach(() => {
+  boot.enabled = false;
   cleanup();
   setAppRuntimeForTest(null);
   vi.clearAllMocks();
@@ -58,7 +65,7 @@ async function setup(load = vi.fn().mockResolvedValue(loaded), live = true, sync
     </Provider>
   );
   const rendered = render(ui(true));
-  return { storage, rerender: (open: boolean) => rendered.rerender(ui(open)), load };
+  return { store, storage, rerender: (open: boolean) => rendered.rerender(ui(open)), load };
 }
 it('읽는 중과 머리 줄을 보이고 파일 선택은 숨긴다', async () => {
   let resolve!: (value: typeof loaded) => void;
@@ -165,4 +172,56 @@ it('빈 보관함은 파일 체크가 없고 동기화 안내를 조건부로 �
   expect(
     screen.queryByText('이 백업 뒤에 만든 장소·여행은 동기화로 다시 들어와요.'),
   ).not.toBeInTheDocument();
+});
+
+it.each(['syncing', 'synced', 'error'] as const)(
+  '동기화 켜짐: %s에서는 완료했을 때만 되살린다',
+  async (phase) => {
+    boot.enabled = true;
+    const h = await setup();
+    await act(async () => h.store.set(syncStatusAtom, { ...OFF_STATUS, phase }));
+    await screen.findByText(loaded.header);
+    const button = screen.getByRole('button', { name: '이 백업으로 바꾸기' });
+    if (phase === 'synced') {
+      expect(button).toBeEnabled();
+      expect(screen.queryByText('동기화가 끝난 뒤 되살릴 수 있어요')).toBeNull();
+    } else {
+      expect(button).toBeDisabled();
+      expect(screen.getByText('동기화가 끝난 뒤 되살릴 수 있어요')).toHaveAttribute(
+        'role',
+        'status',
+      );
+    }
+  },
+);
+it.each(['syncing', 'error'] as const)('동기화 꺼짐: %s여도 되살릴 수 있다', async (phase) => {
+  const h = await setup();
+  await act(async () => h.store.set(syncStatusAtom, { ...OFF_STATUS, phase }));
+  await screen.findByText(loaded.header);
+  expect(screen.getByRole('button', { name: '이 백업으로 바꾸기' })).toBeEnabled();
+});
+it('클릭 직전에 phase가 바뀌면 되살리지 않는다', async () => {
+  boot.enabled = true;
+  const h = await setup();
+  await act(async () => h.store.set(syncStatusAtom, { ...OFF_STATUS, phase: 'synced' }));
+  await screen.findByText(loaded.header);
+  const button = screen.getByRole('button', { name: '이 백업으로 바꾸기' });
+  await act(async () => {
+    h.store.set(syncStatusAtom, { ...OFF_STATUS, phase: 'syncing' });
+    button.click();
+  });
+  expect(replacing).not.toHaveBeenCalled();
+  expect(download).not.toHaveBeenCalled();
+});
+it('파일 사본을 받는 동안 phase가 바뀌어도 되살리지 않는다', async () => {
+  boot.enabled = true;
+  const h = await setup();
+  await act(async () => h.store.set(syncStatusAtom, { ...OFF_STATUS, phase: 'synced' }));
+  await screen.findByText(loaded.header);
+  download.mockImplementationOnce(() =>
+    h.store.set(syncStatusAtom, { ...OFF_STATUS, phase: 'syncing' }),
+  );
+  await userEvent.click(screen.getByRole('button', { name: '이 백업으로 바꾸기' }));
+  expect(download).toHaveBeenCalledOnce();
+  expect(replacing).not.toHaveBeenCalled();
 });

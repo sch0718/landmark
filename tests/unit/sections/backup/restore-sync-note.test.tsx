@@ -25,6 +25,8 @@ it.each([false, true])('동기화가 %s일 때 되살리기 안내를 확인한�
     new File([text], 'backup.json', { type: 'application/json' }),
   );
   await screen.findByText(/백업 파일: 장소 0곳/);
+  expect(screen.getByRole('button', { name: '이 백업으로 바꾸기' })).toBeEnabled();
+  expect(screen.queryByText('동기화가 끝난 뒤 되살릴 수 있어요')).toBeNull();
   const note = screen.queryByText('동기화가 켜져 있어요. 되살린 내용은 다른 기기에도 반영돼요.');
   if (enabled) expect(note).toBeInTheDocument();
   else expect(note).toBeNull();
