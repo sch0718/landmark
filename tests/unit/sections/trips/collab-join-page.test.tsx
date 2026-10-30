@@ -166,3 +166,25 @@ describe('편집 초대 수락 화면', () => {
     expect(await screen.findByText('함께 고칠 수 있는 기기 수(20대)를 넘었어요')).toBeVisible();
   });
 });
+it('수락 뒤 받기에 실패하면 새로 고침 대신 재시도와 기기 거두기 방법을 알린다', async () => {
+  vi.mocked(tripCollabApi.state).mockResolvedValueOnce({ ok: false, error: 'offline' });
+  mount();
+  await userEvent.click(await screen.findByRole('button', { name: '수락하고 함께 편집하기' }));
+  expect(await screen.findByText(/새로 고쳤다면.*이 기기의 권한을 거두고 새 초대/)).toBeVisible();
+  const token = vi.mocked(tripCollabApi.accept).mock.calls[0]![2].deviceToken;
+  await userEvent.click(screen.getByRole('button', { name: '수락하고 함께 편집하기' }));
+  await waitFor(() => expect(tripCollabStore.byLiveId(id)?.token).toBe(token));
+});
+
+it('수락 뒤 보관함 반영 실패에도 새로 고침 복구 방법을 안내하고 재시도한다', async () => {
+  const apply = await import('src/domain/trip-collab/apply');
+  const spy = vi
+    .spyOn(apply, 'importCollabTrip')
+    .mockReturnValueOnce({ ok: false, error: { _tag: 'NotFound', id: 'missing000' } });
+  mount();
+  await userEvent.click(await screen.findByRole('button', { name: '수락하고 함께 편집하기' }));
+  expect(await screen.findByText(/새로 고쳤다면.*이 기기의 권한을 거두고 새 초대/)).toBeVisible();
+  await userEvent.click(screen.getByRole('button', { name: '수락하고 함께 편집하기' }));
+  await waitFor(() => expect(tripCollabStore.byLiveId(id)).toBeDefined());
+  spy.mockRestore();
+});

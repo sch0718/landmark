@@ -283,8 +283,8 @@ npx wrangler pages dev --d1 DB --port 8788 --proxy 4180 -- npx vite --port 4180 
 - 보관함·백업·공유 문서 형식이 그대로다. 새 기기 키 두 개는 옛 버전이 읽지도 지우지도 않는다.
 - **서버 쪽만 멈추려면** Pages 환경 변수 `TRIP_COLLAB=off`를 넣고 다시 배포한다. 초대 만들기·수락·공동본 올리기·진행 올리기만 `503`이 되고, 모든 기기는 마지막 공동본을 받아 보고 이 기기에서 고친 것은 기기에 남는다(다시 켜지면 병합). 2A 보기 링크·관리, 기기 거두기·초대 취소·그만두기는 계속 된다. 2A `TRIP_SHARE_LIVE=off`도 공동본 올리기·초대·수락을 막는다.
 - **2A만 있는 버전으로 되돌리면**
-  1. 먼저 사용자가 v2 문서를 2A가 읽는 v1로 돌린다(모양이 같아 `v`만 바꾸면 된다):
-     `npx wrangler d1 execute landmark --remote --command "UPDATE trip_shares SET doc = json_set(doc, '$.v', 1) WHERE json_extract(doc, '$.v') = 2"`
+  1. 먼저 사용자가 v2 문서를 2A가 읽는 v1로 돌린다(모양이 같아 `v`를 바꾸고, 캐시가 다시 받도록 `rev`도 올린다):
+     `npx wrangler d1 execute landmark --remote --command "UPDATE trip_shares SET doc = json_set(doc, '$.v', 1), rev = rev + 1 WHERE json_extract(doc, '$.v') = 2"`
      이것을 하지 않으면 2A 보기 화면이 v2 문서를 읽지 못해 `일정을 불러오지 못했어요`를 보인다(소유자가 다시 올릴 때까지).
   2. 편집 기기의 연결된 여행은 보관함에 보통 여행으로 남는다(옛 앱은 `tripmap:trip-collab:v1`을 모른다). 초대 링크 `/trips/join/<id>`는 `페이지를 찾을 수 없어요`.
   3. 소유자 기기의 2A 반영 훅은 기록 `rev`가 낡아 `409`를 받고 2A 알림(`이 기기 일정으로 바꾸기`·`반영 멈추기`)을 띄운다. 소유자 기기 여행에는 마지막으로 맞춘 공동 편집 내용이 들어 있다.

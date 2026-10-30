@@ -44,6 +44,7 @@ function JoinPage({ id }: { id: string }) {
     [message, setMessage] = useState(''),
     [retry, setRetry] = useState(0),
     [busy, setBusy] = useState(false),
+    [acceptedHere, setAcceptedHere] = useState(false),
     [label, setLabel] = useState(coarse ? '내 휴대폰' : '내 컴퓨터'),
     [labelError, setLabelError] = useState(false),
     [deviceToken, setDeviceToken] = useState<string | null>(null);
@@ -99,6 +100,7 @@ function JoinPage({ id }: { id: string }) {
         setMessage(errorText(accepted.error));
         return;
       }
+      setAcceptedHere(true);
       const state = await tripCollabApi.state(id, editing, { rev: null, prev: null });
       if (!state.ok) {
         setMessage(errorText(state.error));
@@ -119,6 +121,7 @@ function JoinPage({ id }: { id: string }) {
         return { ok: true, lib: r.lib, createdId: r.tripId };
       });
       if (!result.ok || !imported.value) {
+        setMessage('여행을 담지 못했어요. 다시 해 주세요');
         toast.error('여행을 담지 못했어요. 다시 해 주세요');
         return;
       }
@@ -195,6 +198,12 @@ function JoinPage({ id }: { id: string }) {
         !message && <Typography role="status">초대를 확인하는 중이에요</Typography>
       )}
       {message && <Typography role="alert">{message}</Typography>}
+      {acceptedHere && message && (
+        <Typography>
+          이 화면을 새로 고치지 말고 다시 시도해 주세요. 새로 고쳤다면 보낸 사람에게 이 기기의
+          권한을 거두고 새 초대를 보내 달라고 해 주세요
+        </Typography>
+      )}
       {!preview && message === OFFLINE && (
         <Button onClick={() => setRetry((n) => n + 1)}>다시 시도</Button>
       )}

@@ -228,14 +228,17 @@ export function useTripLivePublish(
           return;
         }
         if (result.error === 'version') {
-          setState('collab');
-          if (!versionJoined.current) {
-            versionJoined.current = true;
-            const shared = await tripLiveApi.get(fresh.liveId, null, fresh.ownerToken);
-            if (shared.ok && shared.value !== 'unchanged')
+          const shared = await tripLiveApi.get(fresh.liveId, null, fresh.ownerToken);
+          if (shared.ok && shared.value !== 'unchanged' && shared.value.doc.v === 2) {
+            try {
               await joinCollabAsOwner(collabDeps, shared.value);
-          }
-          return;
+              versionJoined.current = true;
+              setState('collab');
+              return;
+            } catch {
+              result = { ok: false, error: 'unavailable' };
+            }
+          } else result = shared.ok ? { ok: false, error: 'unavailable' } : shared;
         }
         if (result.error === 'unauthorized') {
           const current = tripLiveStore.get(tripId);

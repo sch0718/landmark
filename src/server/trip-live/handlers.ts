@@ -249,6 +249,8 @@ export function handleLiveUpdate(ctx: MeetContext, deps: MeetDeps): Promise<Resp
         await readLimitedJson(ctx.request, LIVE_REQUEST_MAX_BYTES),
       ),
       doc = checkedDoc(input.doc);
+    if (doc.v === 2 && ctx.env.TRIP_COLLAB === 'off')
+      throw new MeetError('UNAVAILABLE', '지금은 함께 편집이 잠시 멈췄어요', { reason: 'off' });
     const stored = await ctx.env.DB.prepare(
       "SELECT json_extract(doc, '$.v') AS v FROM trip_shares WHERE id = ?",
     )

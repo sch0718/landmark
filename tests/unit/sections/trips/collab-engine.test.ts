@@ -66,7 +66,10 @@ function setup() {
   const api = {
     ...tripCollabApi,
     state: vi.fn(async () => ({ ok: true as const, value: remote })),
-    putDoc: vi.fn(async () => ({ ok: true as const, value: { rev: 3, expiresAt: '2026-12-31' } })),
+    putDoc: vi.fn<CollabEngineDeps['api']['putDoc']>(async () => ({
+      ok: true as const,
+      value: { rev: 3, expiresAt: '2026-12-31' },
+    })),
     progress: vi.fn(async () => ({ ok: true as const, value: { prev: 1, marks: [], next: null } })),
   };
   const deps: CollabEngineDeps = {
@@ -724,4 +727,30 @@ it('병합 결과가 같은 v1도 비교를 마친 뒤 v2로 올린다', async (
     expect.objectContaining({ v: 2 }),
     2,
   );
+});
+it('맞추는 중 편집해도 끝난 뒤 3초 모아 다시 맞춘다', async () => {
+  const s = setup();
+  s.change(0, '10:00');
+  let finish!: () => void;
+  s.api.putDoc.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = () => resolve({ ok: true, value: { rev: 3, expiresAt: '2026-12-31' } });
+      }),
+  );
+  const first = s.engine.sync();
+  await vi.advanceTimersByTimeAsync(0);
+  s.change(1, '11:00');
+  s.engine.localChanged();
+  finish();
+  await first;
+  s.doc.share.trips[0]!.days[0]!.startTime = '10:00';
+  s.setRemote({ ...s.remote(), rev: 3 });
+  await vi.advanceTimersByTimeAsync(2999);
+  const requests = s.api.state.mock.calls.length;
+  await vi.advanceTimersByTimeAsync(1);
+  expect(s.api.state).toHaveBeenCalledTimes(requests + 1);
+  await vi.advanceTimersByTimeAsync(7000);
+  expect(s.api.putDoc).toHaveBeenCalledTimes(2);
+  expect(s.api.putDoc.mock.calls[1]![2].share.trips[0]!.days[1]!.startTime).toBe('11:00');
 });

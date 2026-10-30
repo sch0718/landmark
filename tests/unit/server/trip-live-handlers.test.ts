@@ -491,3 +491,36 @@ it('만료 정리는 만료된 함께 편집 자료만 지운다', async () => {
       results: [{ share_id: id }],
     });
 });
+it('공동 편집 스위치가 꺼지면 2A PUT의 v2만 막고 v1·읽기는 유지한다', async () => {
+  await create();
+  const response = await handleLiveUpdate(
+    ctx('PUT', { doc: { ...doc(), v: 2 }, baseRev: 1 }, owner, '', { TRIP_COLLAB: 'off' }),
+    deps,
+  );
+  expect(response.status).toBe(503);
+  expect(await response.json()).toMatchObject({ reason: 'off' });
+  expect((await get()).status).toBe(200);
+  expect(
+    (
+      await handleLiveUpdate(
+        ctx('PUT', { doc: doc(), baseRev: 1 }, owner, '', { TRIP_COLLAB: 'off' }),
+        deps,
+      )
+    ).status,
+  ).toBe(200);
+});
+
+it('이미 v2인 여행도 공동 편집 off 동안 2A PUT으로 바꾸지 못한다', async () => {
+  await create();
+  expect(
+    (await handleLiveUpdate(ctx('PUT', { doc: { ...doc(), v: 2 }, baseRev: 1 }, owner), deps))
+      .status,
+  ).toBe(200);
+  const response = await handleLiveUpdate(
+    ctx('PUT', { doc: { ...doc(), v: 2 }, baseRev: 2 }, owner, '', { TRIP_COLLAB: 'off' }),
+    deps,
+  );
+  expect(response.status).toBe(503);
+  expect(await response.json()).toMatchObject({ reason: 'off' });
+  expect(await (await get()).json()).toMatchObject({ rev: 2, doc: { v: 2 } });
+});

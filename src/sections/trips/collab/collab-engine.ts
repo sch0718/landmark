@@ -98,6 +98,7 @@ export class CollabEngine {
   private lastPut = -Infinity;
   private retryAt = 0;
   private disposed = false;
+  private changedWhileSyncing = false;
   constructor(private deps: CollabEngineDeps) {
     const record = deps.store.get(deps.tripId),
       base = record ? deps.store.readBase(record.liveId) : null;
@@ -244,6 +245,10 @@ export class CollabEngine {
     const done = pending.finally(() => {
       if (chains.get(this.deps.tripId) === pending) chains.delete(this.deps.tripId);
       this.inflight = null;
+      if (this.changedWhileSyncing) {
+        this.changedWhileSyncing = false;
+        this.localChanged();
+      }
     });
     this.inflight = done;
     return done;
@@ -540,7 +545,11 @@ export class CollabEngine {
   }
   localChanged(): void {
     if (this.disposed) return;
-    if (terminal(this.snapshot.state) || this.snapshot.state === 'syncing') return;
+    if (terminal(this.snapshot.state)) return;
+    if (this.snapshot.state === 'syncing') {
+      this.changedWhileSyncing = true;
+      return;
+    }
     const d = this.deps,
       r = d.store.get(d.tripId),
       trip = d.getLibrary().trips[d.tripId];

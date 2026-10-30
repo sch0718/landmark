@@ -432,3 +432,27 @@ it('버전 거절은 공동 편집 합류로 이어지고 다시 덮어쓰지 �
   await advance(20_000);
   expect(tripLiveApi.update).toHaveBeenCalledOnce();
 });
+it('version 뒤 공동본 읽기가 실패해도 다시 받아 소유자로 합류한다', async () => {
+  const { buildLiveDoc } = await import('../../../fixtures/live-trip');
+  const doc = { ...buildLiveDoc(), v: 2 as const };
+  vi.mocked(tripLiveApi.update).mockResolvedValue({ ok: false, error: 'version' });
+  vi.mocked(tripLiveApi.get)
+    .mockResolvedValueOnce({ ok: false, error: 'offline' })
+    .mockResolvedValue({
+      ok: true,
+      value: {
+        role: 'owner',
+        rev: 3,
+        doc,
+        updatedAt: doc.share.createdAt,
+        expiresAt: '2026-12-31',
+      },
+    });
+  const hook = await mount();
+  await advance(3000);
+  expect(hook.result.current.state).toBe('failed');
+  expect(joinCollabAsOwner).not.toHaveBeenCalled();
+  await advance(30000);
+  expect(joinCollabAsOwner).toHaveBeenCalledOnce();
+  expect(hook.result.current.state).toBe('collab');
+});
