@@ -707,8 +707,8 @@ it('건너뛴 동안 lastSyncAt이 전진해도 풀기 뒤 로컬 수정 유실�
     };
   });
   expect((await b.engine.runNow('manual')).phase).toBe('conflict');
+  const skippedAt = readSyncMeta(b.storage).lastSyncAt!;
   await b.engine.resolveHeld(key, 'skip');
-  const skippedAt = new Date(b.state.time).toISOString();
   await b.edit('B T1 수정');
   b.state.time += 60_000;
   expect((await b.engine.runNow('manual')).phase).toBe('synced');
@@ -727,8 +727,60 @@ it('건너뛴 동안 lastSyncAt이 전진해도 풀기 뒤 로컬 수정 유실�
   expect(readSyncMeta(b.storage).skippedAt).not.toHaveProperty(key);
 });
 
+it('보류 중 수정한 뒤 건너뛰고 풀어도 서버 값에 진 수정을 충돌로 남긴다', async () => {
+  const server = createSyncMemoryServer();
+  disposers.push(() => server.db.close());
+  const a = await device(server, { ...emptyLibrary(), places: { [p.id]: p } });
+  await a.engine.connect('upload');
+  a.engine.stop();
+  const b = await device(server);
+  await b.engine.connect('merge');
+  b.engine.stop();
+  const key = `place:${p.id}` as const;
+  const base = readBase(b.storage).items[key];
+  await a.edit('보류할 서버 값');
+  await a.engine.runNow('manual');
+  const changes = b.api.changes.bind(b.api);
+  let decodeFails = true;
+  vi.spyOn(b.api, 'changes').mockImplementation(async (request) => {
+    const reply = await changes(request);
+    if (!reply.ok || !decodeFails) return reply;
+    return {
+      ...reply,
+      data: { ...reply.data, items: reply.data.items.map((r) => ({ ...r, doc: {} })) },
+    };
+  });
+  b.state.time = a.state.time + 1000; // T2: 보류가 생긴다.
+  expect(await b.engine.runNow('manual')).toMatchObject({ phase: 'conflict', held: 1 });
+  const lastSyncAt = readSyncMeta(b.storage).lastSyncAt!;
+  await b.edit('B T2.5 보류 중 수정');
+  a.state.time = b.state.time + 1000;
+  await a.edit('A 나중 서버 수정');
+  await a.engine.runNow('manual');
+  const push = vi.spyOn(b.api, 'push');
+  b.state.time = a.state.time + 1000;
+  expect(await b.engine.runNow('manual')).toMatchObject({ phase: 'conflict', dirty: 1, held: 1 });
+  expect(push).not.toHaveBeenCalled();
+  expect(readBase(b.storage).items[key]).toEqual(base);
+  expect(readSyncMeta(b.storage).lastSyncAt).toBe(lastSyncAt);
+  b.state.time += 60_000; // T3: 수정 시각보다 나중에 건너뛴다.
+  await b.engine.resolveHeld(key, 'skip');
+  const skippedAt = readSyncMeta(b.storage).skippedAt?.[key];
+  await b.engine.runNow('manual');
+  expect(readSyncMeta(b.storage).lastSyncAt).toBe(new Date(b.state.time).toISOString());
+  decodeFails = false;
+  await b.engine.unskipAll();
+  await b.engine.runNow('manual');
+  expect(readConflicts(b.storage).map((c) => [c.path, c.mine, c.theirs])).toEqual([
+    ['memo', 'B T2.5 보류 중 수정', 'A 나중 서버 수정'],
+  ]);
+  expect(b.state.lib.places[p.id]?.memo.value).toBe('A 나중 서버 수정');
+  expect(skippedAt).toBe(lastSyncAt);
+  expect(readSyncMeta(b.storage).skippedAt).not.toHaveProperty(key);
+});
+
 it.each(['skip', 'mine'] as const)(
-  '로컬에 없는 보류 항목의 %s 처리도 처음 건너뛴 시각을 유지한다',
+  '로컬에 없는 보류 항목의 %s 처리도 지난 동기화 기준을 처음 값으로 유지한다',
   async (action) => {
     const server = createSyncMemoryServer();
     disposers.push(() => server.db.close());
@@ -740,12 +792,38 @@ it.each(['skip', 'mine'] as const)(
       ...readSyncMeta(a.storage),
       held: [{ key, rev: 1, reason: 'decode' }],
     });
-    const first = new Date(a.state.time).toISOString();
+    const first = readSyncMeta(a.storage).lastSyncAt!;
+    a.state.time += 3_600_000;
     await a.engine.resolveHeld(key, action);
     expect(readSyncMeta(a.storage).skippedAt).toEqual({ [key]: first });
+    expect(first).not.toBe(new Date(a.state.time).toISOString());
     a.state.time += 60_000;
+    writeSyncMeta(a.storage, {
+      ...readSyncMeta(a.storage),
+      lastSyncAt: new Date(a.state.time).toISOString(),
+    });
     await a.engine.resolveHeld(key, action);
     expect(readSyncMeta(a.storage).skippedAt).toEqual({ [key]: first });
+  },
+);
+
+it.each(['skip', 'mine'] as const)(
+  '지난 동기화 기준이 없는 보류 항목의 %s 처리는 현재 시각을 기록한다',
+  async (action) => {
+    const server = createSyncMemoryServer();
+    disposers.push(() => server.db.close());
+    const a = await device(server);
+    a.engine.stop();
+    const key = `place:${p.id}` as const;
+    writeSyncMeta(a.storage, {
+      ...readSyncMeta(a.storage),
+      held: [{ key, rev: 1, reason: 'decode' }],
+    });
+    expect(readSyncMeta(a.storage).lastSyncAt).toBeNull();
+    await a.engine.resolveHeld(key, action);
+    expect(readSyncMeta(a.storage).skippedAt).toEqual({
+      [key]: new Date(a.state.time).toISOString(),
+    });
   },
 );
 
@@ -812,8 +890,8 @@ it.each(['decode', 'merge'] as const)(
       ...readSyncMeta(a.storage),
       held: [{ key, rev: 2, reason: 'decode' }],
     });
+    const skippedAt = readSyncMeta(a.storage).lastSyncAt!;
     await a.engine.resolveHeld(key, 'skip');
-    const skippedAt = new Date(a.state.time).toISOString();
     expect(readSyncMeta(a.storage).skippedAt).toEqual({ [key]: skippedAt });
     a.state.time += 60_000;
     await a.engine.runNow('manual');

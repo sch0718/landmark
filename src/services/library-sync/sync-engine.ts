@@ -638,7 +638,8 @@ export function createLibrarySyncEngine(deps: EngineDeps): LibrarySyncEngine {
           skippedAt: skip
             ? {
                 ...meta.skippedAt,
-                [key]: meta.skippedAt?.[key] ?? new Date(deps.now()).toISOString(),
+                [key]:
+                  meta.skippedAt?.[key] ?? meta.lastSyncAt ?? new Date(deps.now()).toISOString(),
               }
             : meta.skippedAt,
         });
