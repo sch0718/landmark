@@ -183,3 +183,10 @@ export const loadCollabConflictDialog = lazyChunk(
 export const CollabConflictDialog = lazy(() =>
   loadCollabConflictDialog().then((m) => ({ default: m.CollabConflictDialog })),
 );
+
+export const loadTripCollabJoinPage = lazyChunk(
+  () => import('src/sections/trips/collab/TripCollabJoinPage'),
+);
+export const TripCollabJoinPage = lazy(() =>
+  loadTripCollabJoinPage().then((m) => ({ default: m.TripCollabJoinPage })),
+);
