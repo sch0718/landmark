@@ -265,3 +265,56 @@ it.each(['meta', 'read', 'build', 'upload', 'throw'] as const)(
     expect(await runAutoBackup(status, d)).toBe('waiting');
   },
 );
+
+it.each(['meta', 'read', 'build', 'upload', 'throw'] as const)(
+  '요청 뒤 %s 단계에서 계정이 바뀌면 새 계정의 기한과 결과를 보존한다',
+  async (stage) => {
+    const d = deps();
+    let userId = 'me';
+    d.syncUserId = () => userId;
+    const next = {
+      ...EMPTY_SERVER_BACKUP_LOCAL,
+      auto: true,
+      userId: 'you',
+      nextCheckAt: null,
+      last: { at: now - 1, outcome: 'uploaded' as const },
+    };
+    const changeAccount = () => {
+      userId = 'you';
+      writeServerBackupLocal(localStorage, next);
+    };
+    if (stage === 'meta' || stage === 'throw') {
+      const meta = d.api.meta;
+      d.api.meta = async () => {
+        changeAccount();
+        if (stage === 'throw') throw Error('연결 실패');
+        return meta();
+      };
+    } else if (stage === 'read') {
+      const read = d.readLibrary;
+      d.readLibrary = async () => {
+        changeAccount();
+        return read();
+      };
+    } else if (stage === 'build') {
+      const build = d.build!;
+      d.build = async (input) => {
+        changeAccount();
+        return build(input);
+      };
+    } else {
+      const upload = d.api.upload;
+      d.api.upload = async (body) => {
+        changeAccount();
+        return upload(body);
+      };
+    }
+    expect(await runAutoBackup({ phase: 'synced' }, d)).toBe('auth');
+    expect(readServerBackupLocal(localStorage)).toEqual(next);
+    if (stage !== 'upload') expect(d.api.upload).not.toHaveBeenCalled();
+    const nextDeps = deps();
+    nextDeps.syncUserId = () => 'you';
+    expect(await runAutoBackup({ phase: 'synced' }, nextDeps)).toBe('uploaded');
+    expect(nextDeps.api.meta).toHaveBeenCalledOnce();
+  },
+);

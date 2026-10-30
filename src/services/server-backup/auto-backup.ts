@@ -78,7 +78,7 @@ export async function runAutoBackup(
         : deps.syncUserId() !== userId || latest.userId !== userId
           ? 'auth'
           : null;
-    if (step && requested)
+    if (step && requested && latest.userId === userId)
       writeServerBackupLocal(deps.storage, {
         ...latest,
         nextCheckAt: deps.now() + AUTO_CANCEL_RETRY_MS,
