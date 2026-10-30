@@ -366,7 +366,10 @@ export function RestoreDialog({
           if (runIdRef.current !== runId) return;
           if (syncRestoreMessage(status) !== null) {
             if (status.phase === 'auth' && store.get(syncStatusAtom).phase !== 'auth')
-              setError({ message: '계정이 바뀌어 되살리지 않았어요', downloadCurrent: false });
+              setError({
+                message: '동기화 연결이 바뀌어 되살리지 않았어요. 다시 시도해 주세요',
+                downloadCurrent: false,
+              });
             return;
           }
           receivingRef.current = false;

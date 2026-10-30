@@ -372,7 +372,9 @@ it('세션 변경으로 after에만 auth가 오면 계정 변경을 안내하고
   const before = h.storage.getItem(LIBRARY_KEY);
   await userEvent.click(screen.getByRole('button', { name: '이 백업으로 바꾸기' }));
   await act(async () => finish());
-  expect(screen.getByText('계정이 바뀌어 되살리지 않았어요')).toHaveAttribute('role', 'alert');
+  expect(
+    screen.getByText('동기화 연결이 바뀌어 되살리지 않았어요. 다시 시도해 주세요'),
+  ).toHaveAttribute('role', 'alert');
   expect(h.store.get(syncStatusAtom).phase).toBe('synced');
   expect(replacing).not.toHaveBeenCalled();
   expect(h.storage.getItem(LIBRARY_KEY)).toBe(before);
