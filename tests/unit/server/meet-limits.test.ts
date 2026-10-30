@@ -28,6 +28,10 @@ describe('consumeLimit', () => {
       shareCreate: 50,
       shareDelete: 200,
       shareRead: 5000,
+      tripCreate: 20,
+      tripUpdate: 600,
+      tripRotate: 60,
+      tripRead: 5000,
     });
   });
 

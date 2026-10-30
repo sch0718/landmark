@@ -510,3 +510,33 @@ describe('오늘 일정 버튼(스펙 §3.1)', () => {
     expect(titlesIn('지난 여행 목록')).toEqual(['하루 나들이']);
   });
 });
+
+it('갱신 공유 여행 카드와 지우기 확인에 서버 사본이 남는다는 안내를 보인다', async () => {
+  const { tripLiveStore } = await import('src/services/trip-live/store');
+  tripLiveStore.put({
+    tripId: NEW_ID,
+    liveId: 'abcdefghij',
+    status: 'live',
+    ownerToken: 'o'.repeat(43),
+    viewToken: 'v'.repeat(43),
+    rev: 1,
+    dayIds: [],
+    options: { title: '강릉 여행', includeMemo: false, includeCandidates: true },
+    createdAt: T0,
+  });
+  try {
+    await renderLibrary(
+      withTrips(sampleLibrary(), [makeTrip(1, '강릉 여행', '2026-10-23', '2026-10-24')]),
+      { path: '/trips' },
+    );
+    expect(screen.getByRole('link', { name: /강릉 여행.+갱신 공유 중/ })).toBeVisible();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: '‘강릉 여행’ 메뉴' }));
+    await user.click(screen.getByRole('menuitem', { name: '삭제' }));
+    expect(
+      screen.getByText('갱신 링크는 서버에 남아요. 설정 › 갱신 링크에서 지울 수 있어요'),
+    ).toBeVisible();
+  } finally {
+    act(() => tripLiveStore.remove(NEW_ID));
+  }
+});

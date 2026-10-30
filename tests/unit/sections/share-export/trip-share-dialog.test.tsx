@@ -567,3 +567,14 @@ describe('일정 공유 장소 수 한도', () => {
     expect(tooManyHint(null)).toBe('일정을 나눠 보내 주세요');
   });
 });
+
+it('일정 공유 창에 갱신 링크 입구가 있고 누르면 관리 창을 연다', async () => {
+  const user = userEvent.setup();
+  await renderLibrary(withTrip(plannerLibrary(), makeTrip({ stops: [[P1, P2], []] })), {
+    path: '/trips',
+    routeLookup: fakeRoutes(() => route(10, 1000)).layer,
+  });
+  await openFromList(user);
+  await user.click(screen.getByRole('button', { name: '갱신 링크…' }));
+  expect(await screen.findByRole('dialog', { name: '갱신 링크' })).toBeVisible();
+});

@@ -8,27 +8,13 @@ import { buildTripShareDoc } from 'src/domain/share/build-trip-share';
 import { visibleCandidates, visibleStops } from 'src/domain/trips/query';
 import { renderTripShareHtml } from 'src/sections/share-export/make-share-html';
 import { ShareFileDialog, type ShareFileOptions } from 'src/sections/share-export/ShareFileDialog';
-import { useTripLegs, type TripLegs } from 'src/sections/share-export/use-trip-legs';
-import { queriedLabel } from 'src/sections/trips/planner/format';
+import { useTripLegs, legStatus } from 'src/sections/share-export/use-trip-legs';
+import { LiveShareEntry } from 'src/sections/trips/live/LiveShareEntry';
 import { libraryAtom } from 'src/stores/library-state';
 
 const NOTHING_TO_SHARE = '일정에 넣은 장소가 없어요';
 
 type Props = { open: boolean; onClose(): void; tripId: string };
-
-/** 경로 상태 한 줄(스펙 §3.2). 구간이 없으면 null. */
-function legStatus(legs: TripLegs): string | null {
-  if (legs.total === 0) return null;
-  if (legs.answered < legs.total) {
-    return `이동 경로를 받는 중이에요 (${legs.answered}/${legs.total})`;
-  }
-  if (legs.estimated > 0) return `${legs.estimated}구간은 경로를 받지 못해 어림값으로 들어가요`;
-  // `queriedLabel`은 `10월 16일 조회`(계획 화면과 같은 날짜 규칙).
-  if (legs.oldestQueriedAt !== null) {
-    return `이동 시간은 ${queriedLabel(legs.oldestQueriedAt)} 기준이에요`;
-  }
-  return null;
-}
 
 /** 줄이는 방법: 켜진 체크만 말한다(스펙 §3.2). */
 function tooBigHint(includeMemo: boolean, candidates: number | null): string {
@@ -130,6 +116,7 @@ export function TripShareDialog({ open, onClose, tripId }: Props) {
           {status}
         </Typography>
       )}
+      <LiveShareEntry tripId={tripId} />
     </ShareFileDialog>
   );
 }

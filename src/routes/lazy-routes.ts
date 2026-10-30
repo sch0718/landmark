@@ -157,6 +157,20 @@ export const HelpIntroDialog = lazy(() =>
   loadHelpIntroDialog().then((m) => ({ default: m.HelpIntroDialog })),
 );
 
+export const loadTripLiveShareDialog = lazyChunk(
+  () => import('src/sections/trips/live/TripLiveShareDialog'),
+);
+export const TripLiveShareDialog = lazy(() =>
+  loadTripLiveShareDialog().then((m) => ({ default: m.TripLiveShareDialog })),
+);
+
+export const loadTripLiveLinkPage = lazyChunk(
+  () => import('src/sections/trips/live/TripLiveLinkPage'),
+);
+export const TripLiveLinkPage = lazy(() =>
+  loadTripLiveLinkPage().then((m) => ({ default: m.TripLiveLinkPage })),
+);
+
 export const loadAuthCallbackPage = lazyChunk(
   () => import('src/sections/library-sync/AuthCallbackPage'),
 );

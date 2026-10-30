@@ -47,6 +47,8 @@ describe('ensureSchema', () => {
         { name: 'schema_meta' },
         { name: 'sessions' },
         { name: 'share_links' },
+        { name: 'trip_share_tokens' },
+        { name: 'trip_shares' },
         { name: 'users' },
       ],
     });
@@ -66,7 +68,9 @@ describe('ensureSchema', () => {
 
   it('버전 1 DB는 약속 자료를 그대로 두고 짧은 링크 표를 더한다', async () => {
     // 버전 1 시점의 문장(짧은 링크 표 앞까지)만 실행한 DB.
-    const v1 = SCHEMA_STATEMENTS.filter((sql) => !sql.includes('share_links'));
+    const v1 = SCHEMA_STATEMENTS.filter(
+      (sql) => !sql.includes('share_links') && !sql.includes('trip_share'),
+    );
     await db.batch(v1.map((sql) => db.prepare(sql)));
     await db.prepare('INSERT INTO schema_meta (version) VALUES (1)').run();
     await db
@@ -245,4 +249,39 @@ describe('createSqliteD1', () => {
     ]);
     expect(await db.prepare('SELECT * FROM sample').first()).toEqual({ id: '성공' });
   });
+});
+
+it('버전 2 DB에서 갱신 공유 표와 색인을 더하고 기존 행을 지킨다', async () => {
+  await db.batch(
+    SCHEMA_STATEMENTS.filter((sql) => !sql.includes('trip_share')).map((sql) => db.prepare(sql)),
+  );
+  await db.prepare('INSERT INTO schema_meta VALUES (2)').run();
+  await db
+    .prepare('INSERT INTO meetings VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .bind('meeting001', '{}', 1, 1, '생성', '변경', '만료')
+    .run();
+  await db
+    .prepare('INSERT INTO share_links VALUES (?, ?, ?, ?, ?, ?)')
+    .bind('share001', '{}', 'trip', '해시', '생성', '만료')
+    .run();
+  await ensureSchema(db);
+  expect(await db.prepare('SELECT version FROM schema_meta').first()).toEqual({ version: 3 });
+  for (const name of [
+    'trip_shares',
+    'trip_shares_expires',
+    'trip_share_tokens',
+    'trip_share_tokens_share',
+  ]) {
+    expect(
+      await db.prepare('SELECT name FROM sqlite_master WHERE name = ?').bind(name).first(),
+    ).toEqual({ name });
+  }
+  for (const name of ['meetings', 'share_links'])
+    expect(await db.prepare(`SELECT COUNT(*) AS count FROM ${name}`).first()).toEqual({ count: 1 });
+});
+it('마지막 네 문장은 멱등 갱신 공유 표와 색인이다', () => {
+  for (const sql of SCHEMA_STATEMENTS.slice(-4)) {
+    expect(sql).toContain('trip_share');
+    expect(sql).toContain('IF NOT EXISTS');
+  }
 });
