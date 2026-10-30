@@ -190,6 +190,11 @@ export function createLibrarySyncEngine(deps: EngineDeps): LibrarySyncEngine {
     writeBase(storage, meta.userId!, base);
     writeSyncMeta(storage, meta);
   }
+  /** 진행 중인 실행이 끝난 뒤, 같은 잠금 안에서만 저장소의 충돌·보류를 바꾼다. */
+  async function whenIdle<T>(fn: () => Promise<T>): Promise<T> {
+    while (active) await active.catch(() => {});
+    return deps.locks ? deps.locks.request(SYNC_LOCK, fn) : fn();
+  }
   async function failed(error: unknown): Promise<SyncStatus> {
     const fail = error as SyncFail;
     const meta = readSyncMeta(storage);
@@ -519,60 +524,64 @@ export function createLibrarySyncEngine(deps: EngineDeps): LibrarySyncEngine {
       }
     },
     async resolveConflict(id, action) {
-      const conflicts = readConflicts(storage);
-      const c = conflicts.find((c) => c.id === id);
-      if (!c) return;
-      if (action === 'mine') {
-        const lib = await deps.runLibrary(
-          Effect.flatMap(LibraryStore, (store) =>
-            store.update((current) => {
-              const p = parseItemKey(c.key)!;
-              const doc = getItem(current, p.kind, p.id);
-              if (!doc) return Effect.succeed(current);
-              const now = new Date(deps.now()).toISOString();
-              const next =
-                c.whole || c.deleted
-                  ? reviveAsLatest(c.mine as AnyItem, now)
-                  : replacePath(doc, c.path, c.mine, now);
-              return Effect.succeed(putItems(current, [{ ...p, doc: next }]));
-            }),
-          ),
+      await whenIdle(async () => {
+        const conflicts = readConflicts(storage);
+        const c = conflicts.find((c) => c.id === id);
+        if (!c) return;
+        if (action === 'mine') {
+          const lib = await deps.runLibrary(
+            Effect.flatMap(LibraryStore, (store) =>
+              store.update((current) => {
+                const p = parseItemKey(c.key)!;
+                const doc = getItem(current, p.kind, p.id);
+                if (!doc) return Effect.succeed(current);
+                const now = new Date(deps.now()).toISOString();
+                const next =
+                  c.whole || c.deleted
+                    ? reviveAsLatest(c.mine as AnyItem, now)
+                    : replacePath(doc, c.path, c.mine, now);
+                return Effect.succeed(putItems(current, [{ ...p, doc: next }]));
+              }),
+            ),
+          );
+          setLibrary(lib);
+        }
+        writeConflicts(
+          storage,
+          conflicts.filter((c) => c.id !== id),
         );
-        setLibrary(lib);
-      }
-      writeConflicts(
-        storage,
-        conflicts.filter((c) => c.id !== id),
-      );
+      });
       engine.schedule('manual');
     },
     async resolveHeld(key, action) {
-      const meta = readSyncMeta(storage);
-      const p = parseItemKey(key);
-      if (!p) return;
-      let skip = action === 'skip';
-      if (action === 'mine') {
-        const lib = await deps.runLibrary(
-          Effect.flatMap(LibraryStore, (store) =>
-            store.update((current) => {
-              const doc = getItem(current, p.kind, p.id);
-              if (!doc) skip = true;
-              return Effect.succeed(
-                doc
-                  ? putItems(current, [
-                      { ...p, doc: reviveAsLatest(doc, new Date(deps.now()).toISOString()) },
-                    ])
-                  : current,
-              );
-            }),
-          ),
-        );
-        setLibrary(lib);
-      }
-      writeSyncMeta(storage, {
-        ...meta,
-        held: meta.held.filter((h) => h.key !== key),
-        skipped: skip ? [...new Set([...meta.skipped, key])] : meta.skipped,
+      await whenIdle(async () => {
+        const meta = readSyncMeta(storage);
+        const p = parseItemKey(key);
+        if (!p) return;
+        let skip = action === 'skip';
+        if (action === 'mine') {
+          const lib = await deps.runLibrary(
+            Effect.flatMap(LibraryStore, (store) =>
+              store.update((current) => {
+                const doc = getItem(current, p.kind, p.id);
+                if (!doc) skip = true;
+                return Effect.succeed(
+                  doc
+                    ? putItems(current, [
+                        { ...p, doc: reviveAsLatest(doc, new Date(deps.now()).toISOString()) },
+                      ])
+                    : current,
+                );
+              }),
+            ),
+          );
+          setLibrary(lib);
+        }
+        writeSyncMeta(storage, {
+          ...meta,
+          held: meta.held.filter((h) => h.key !== key),
+          skipped: skip ? [...new Set([...meta.skipped, key])] : meta.skipped,
+        });
       });
       engine.schedule('manual');
     },
