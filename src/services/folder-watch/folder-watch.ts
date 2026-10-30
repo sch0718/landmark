@@ -33,6 +33,7 @@ export type FolderLookup = (
 export type FolderChange = { shareId: string; name: string; fresh: number; missing: number };
 export type FolderWatchRun = {
   checked: number;
+  failed: number;
   changes: FolderChange[];
   skipped?: 'disabled' | 'busy' | 'gap' | 'none';
 };
@@ -56,6 +57,7 @@ export async function runFolderWatch(
 ): Promise<FolderWatchRun> {
   const empty = (skipped: NonNullable<FolderWatchRun['skipped']>): FolderWatchRun => ({
     checked: 0,
+    failed: 0,
     changes: [],
     skipped,
   });
@@ -97,6 +99,7 @@ export async function runFolderWatch(
     }
     const changes: FolderChange[] = [];
     let checked = 0;
+    let failed = 0;
     const stopped = () => {
       const latest = readFolderWatch(deps.storage);
       if (opts.manual || latest.enabled) return false;
@@ -104,7 +107,7 @@ export async function runFolderWatch(
       return true;
     };
     for (const id of ids) {
-      if (stopped()) return { checked, changes: [], skipped: 'disabled' };
+      if (stopped()) return { checked, failed, changes: [], skipped: 'disabled' };
       if (!liveFolderLink(deps.library(), id)) continue;
       let result;
       try {
@@ -112,7 +115,7 @@ export async function runFolderWatch(
       } catch {
         result = { ok: false as const, code: 'UNKNOWN' };
       }
-      if (stopped()) return { checked, changes: [], skipped: 'disabled' };
+      if (stopped()) return { checked, failed, changes: [], skipped: 'disabled' };
       const lib = deps.library();
       const link = liveFolderLink(lib, id);
       if (!link) continue;
@@ -132,28 +135,37 @@ export async function runFolderWatch(
           changes.push({ shareId: id, name: link.name.value, fresh, missing });
           notified = signature;
         }
-        entry = { checkedAt: now, fresh, missing, signature, notified, error: null };
+        entry = { checkedAt: now, okAt: now, fresh, missing, signature, notified, error: null };
       } else if (result.code === 'NOT_FOUND')
         entry = {
           checkedAt: now,
+          okAt: now,
           fresh: 0,
           missing: 0,
           signature: null,
           notified: prev?.notified ?? null,
           error: 'not-found',
         };
-      else
+      else {
+        failed++;
         entry = {
           ...(prev ?? { fresh: 0, missing: 0, signature: null, notified: null, error: null }),
           checkedAt: now,
+          okAt: prev ? (prev.okAt === undefined ? prev.checkedAt : prev.okAt) : null,
         };
+      }
       state = { ...state, folders: { ...state.folders, [id]: entry } };
       save();
     }
     prune();
-    state = { ...state, lastRunAt: now, ...(opts.manual ? { lastManualAt: now } : {}) };
+    state = {
+      ...state,
+      ...(checked > failed
+        ? { lastRunAt: now, ...(opts.manual ? { lastManualAt: now } : {}) }
+        : {}),
+    };
     save();
-    return { checked, changes };
+    return { checked, failed, changes };
   };
   const state = readFolderWatch(deps.storage);
   if (!opts.manual && !state.enabled) return empty('disabled');
@@ -221,7 +233,12 @@ export async function startFolderWatch(opts: {
     toast(changeMessage(changes), {
       action: { label: '보기', onClick: () => opts.navigate(paths.labels) },
     });
-  else if (opts.manual && !result.skipped) toast('바뀐 네이버 폴더가 없어요');
+  else if (opts.manual && !result.skipped)
+    toast(
+      result.failed === result.checked && result.failed > 0
+        ? '네이버 폴더를 확인하지 못했어요. 잠시 뒤 다시 해 주세요'
+        : `바뀐 네이버 폴더가 없어요${result.failed > 0 ? ` (확인하지 못한 폴더 ${result.failed}개)` : ''}`,
+    );
   else if (result.skipped === 'gap') toast('잠시 뒤에 다시 확인해 주세요');
   return result;
 }

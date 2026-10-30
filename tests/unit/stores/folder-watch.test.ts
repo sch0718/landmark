@@ -37,3 +37,14 @@ it('고치기 문구 네 모양을 만든다', () => {
     '마지막 확인 때 폴더를 찾지 못했어요',
   );
 });
+
+it('실패한 재시도는 표시 날짜와 연결 이후 표시 조건을 바꾸지 않는다', () => {
+  const failed = { ...entry, checkedAt: now + 86400000, okAt: now };
+  const notice = folderNotice(link, failed)!;
+  expect(notice.checkedAt).toBe(now);
+  expect(folderNoticeText(notice)).toContain('(10.30 확인)');
+  expect(
+    folderNotice({ ...link, checkedAt: new Date(now + 1000).toISOString() }, failed),
+  ).toBeNull();
+  expect(folderNotice(link, { ...failed, okAt: null })).toBeNull();
+});

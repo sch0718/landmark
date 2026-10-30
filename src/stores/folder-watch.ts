@@ -25,16 +25,18 @@ export function folderNotice(
   link: FolderLink,
   entry: FolderWatchEntry | undefined,
 ): FolderNotice | null {
+  const okAt = entry?.okAt === undefined ? entry?.checkedAt : entry.okAt;
   if (
     !entry ||
-    entry.checkedAt <= Date.parse(link.checkedAt) ||
+    okAt == null ||
+    okAt <= Date.parse(link.checkedAt) ||
     (entry.error === null && entry.fresh + entry.missing === 0)
   )
     return null;
   return {
     fresh: entry.fresh,
     missing: entry.missing,
-    checkedAt: entry.checkedAt,
+    checkedAt: okAt,
     notFound: entry.error === 'not-found',
   };
 }

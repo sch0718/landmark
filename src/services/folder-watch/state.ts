@@ -8,6 +8,8 @@ export const FOLDER_WATCH_DELAY_MS = 3_000;
 export const FOLDER_WATCH_LOCK = 'tripmap:folder-watch';
 export type FolderWatchEntry = {
   checkedAt: number;
+  /** 마지막 성공 확인. 없으면 옛 v1 기록의 checkedAt을 쓴다. null은 성공 이력이 없음. */
+  okAt?: number | null;
   fresh: number;
   missing: number;
   signature: string | null;
@@ -50,6 +52,7 @@ export function readFolderWatch(storage: Storage | undefined): FolderWatchState 
         if (
           record(entry) &&
           integer(entry.checkedAt) &&
+          (entry.okAt === undefined || nullableTime(entry.okAt)) &&
           integer(entry.fresh) &&
           integer(entry.missing) &&
           nullableString(entry.signature) &&

@@ -23,6 +23,8 @@ import { PlaceLookup } from 'src/services/place-lookup';
 import { setAppRuntimeForTest } from 'src/lib/effect/runtime';
 import { getDefaultStore } from 'jotai';
 import { libraryAtom } from 'src/stores/library-state';
+const { toast } = vi.hoisted(() => ({ toast: vi.fn() }));
+vi.mock('sonner', () => ({ toast }));
 const now = Date.parse('2026-10-30T00:00:00Z');
 const id = 'a'.repeat(32);
 function setup() {
@@ -61,7 +63,10 @@ function setup() {
     },
   };
 }
-beforeEach(() => localStorage.clear());
+beforeEach(() => {
+  localStorage.clear();
+  toast.mockClear();
+});
 it('같은 변화는 한 번만 알리고 새 변화는 다시 알린다', async () => {
   const h = setup();
   expect((await runFolderWatch(h.deps)).changes[0]?.fresh).toBe(1);
@@ -166,3 +171,77 @@ it('진행 중 알림을 끄면 다시 켜거나 다음 폴더를 조회하지 �
   expect(h.lookup).toHaveBeenCalledOnce();
   expect(result.changes).toEqual([]);
 });
+
+it('모두 실패한 수동 확인은 성공 시각과 수동 간격을 올리지 않아 바로 다시 시도할 수 있다', async () => {
+  const h = setup();
+  await runFolderWatch(h.deps, { manual: true });
+  h.advance();
+  h.lookup.mockResolvedValue({ ok: false, code: 'OFFLINE' });
+  const before = readFolderWatch(localStorage);
+  expect(await runFolderWatch(h.deps, { manual: true })).toMatchObject({ checked: 1, failed: 1 });
+  const after = readFolderWatch(localStorage);
+  expect(after.lastManualAt).toBe(before.lastManualAt);
+  expect(after.lastRunAt).toBe(before.lastRunAt);
+  expect(after.folders[id]).toMatchObject({ checkedAt: now + 86400000, okAt: now });
+  expect((await runFolderWatch(h.deps, { manual: true })).skipped).toBeUndefined();
+});
+it('첫 확인이 실패하면 성공 시각은 없다', async () => {
+  const h = setup();
+  h.lookup.mockRejectedValue(Error('연결 끊김'));
+  await runFolderWatch(h.deps, { manual: true });
+  expect(readFolderWatch(localStorage).folders[id]).toMatchObject({ checkedAt: now, okAt: null });
+  expect(readFolderWatch(localStorage).lastRunAt).toBeNull();
+});
+it.each(['all', 'partial', 'changed', 'not-found'] as const)(
+  '수동 확인 %s 결과를 사실대로 알린다',
+  async (mode) => {
+    const h = setup();
+    const first = h.deps.library();
+    getDefaultStore().set(libraryAtom, {
+      ...first,
+      folders: { ...first.folders, second: { ...first.folders![id]!, shareId: 'second' } },
+    });
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockImplementation(async () => new Response('{}', { status: 503 }));
+    if (mode !== 'all')
+      fetch.mockImplementationOnce(
+        async () =>
+          new Response(
+            JSON.stringify(
+              mode === 'not-found'
+                ? { error: { code: 'NOT_FOUND' } }
+                : {
+                    ...fixture,
+                    places:
+                      mode === 'changed'
+                        ? [...fixture.places, { ...fixture.places[0], sid: '999' }]
+                        : fixture.places,
+                  },
+            ),
+            { status: mode === 'not-found' ? 404 : 200 },
+          ),
+      );
+    const runtime = ManagedRuntime.make(
+      Layer.mergeAll(PlaceLookup.layerWith({ fetch }), Layer.empty),
+    );
+    setAppRuntimeForTest(runtime as Parameters<typeof setAppRuntimeForTest>[0]);
+    try {
+      const result = await startFolderWatch({ navigate: () => {}, manual: true });
+      expect(result.failed).toBe(mode === 'all' ? 2 : 1);
+      if (mode === 'all')
+        expect(toast).toHaveBeenCalledWith(
+          '네이버 폴더를 확인하지 못했어요. 잠시 뒤 다시 해 주세요',
+        );
+      else if (mode === 'changed')
+        expect(toast).toHaveBeenCalledWith(
+          expect.stringContaining('새로 저장한 곳이 1곳'),
+          expect.anything(),
+        );
+      else expect(toast).toHaveBeenCalledWith('바뀐 네이버 폴더가 없어요 (확인하지 못한 폴더 1개)');
+    } finally {
+      setAppRuntimeForTest(null);
+      await runtime.dispose();
+    }
+  },
+);

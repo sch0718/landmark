@@ -85,3 +85,31 @@ it('연결과 확인 기록 중 더 늦은 시각을 기준으로 하루를 센�
   state.folders[id]!.checkedAt = now - 2 * 86400000;
   expect(dueFolders(lib, state, now)).toEqual([id]);
 });
+
+it('v1의 옛 성공 시각과 새 성공 시각을 읽고 잘못된 성공 시각은 버린다', () => {
+  const entry = {
+    checkedAt: now,
+    fresh: 1,
+    missing: 0,
+    signature: 'a',
+    notified: null,
+    error: null,
+  };
+  localStorage.setItem(
+    FOLDER_WATCH_KEY,
+    JSON.stringify({
+      ...EMPTY_FOLDER_WATCH,
+      folders: {
+        legacy: entry,
+        failed: { ...entry, okAt: null },
+        success: { ...entry, okAt: now - 1 },
+        invalid: { ...entry, okAt: 'bad' },
+      },
+    }),
+  );
+  const folders = readFolderWatch(localStorage).folders;
+  expect(folders.legacy).toEqual(entry);
+  expect(folders.failed).toMatchObject({ okAt: null });
+  expect(folders.success).toMatchObject({ okAt: now - 1 });
+  expect(folders.invalid).toBeUndefined();
+});
