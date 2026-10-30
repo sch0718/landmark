@@ -157,6 +157,11 @@ export const HelpIntroDialog = lazy(() =>
   loadHelpIntroDialog().then((m) => ({ default: m.HelpIntroDialog })),
 );
 
+export const loadAuthCallbackPage = lazyChunk(
+  () => import('src/sections/library-sync/AuthCallbackPage'),
+);
+export const AuthCallbackPage = lazy(loadAuthCallbackPage);
+
 export const loadTripLiveShareDialog = lazyChunk(
   () => import('src/sections/trips/live/TripLiveShareDialog'),
 );

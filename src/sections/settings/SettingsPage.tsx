@@ -1,8 +1,9 @@
+import { loadSyncSection, syncFeatureVisible } from 'src/services/library-sync/boot';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { MonitorIcon, MoonIcon, SunIcon } from 'src/components/icons';
 import { liveLabels, livePlaces } from 'src/domain/library/query';
@@ -24,6 +25,8 @@ import { persistStateAtom } from 'src/stores/backup-state';
 import { libraryAtom } from 'src/stores/library-state';
 import { prefsAtom, setPrefsAtom } from 'src/stores/prefs-state';
 
+const SyncSection = lazy(loadSyncSection);
+
 const MODES: ReadonlyArray<Option<Prefs['mode']>> = [
   { value: 'system', label: '시스템', Icon: MonitorIcon },
   { value: 'light', label: '라이트', Icon: SunIcon },
@@ -40,10 +43,11 @@ const VIEWS: ReadonlyArray<Option<Prefs['libraryView']>> = [
 /** 쿼리로 대화상자를 바로 여는 키(보관함 빈 화면의 "옛 여행 가져오기"). */
 const IMPORT_PARAM = 'import';
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+function Section({ title, children, id }: { title: string; children: ReactNode; id?: string }) {
   return (
     <Box
       component="section"
+      id={id}
       aria-label={title}
       sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}
     >
@@ -62,6 +66,9 @@ const approxKb = (library: unknown): number =>
 /** 설정(스펙 §4.7): 테마·모드·보관함 보기·백업·보낸 짧은 링크·옛 여행 가져오기·데이터 정보·앱 정보(저작권·라이선스·후원). */
 export function SettingsPage() {
   useDocumentTitle('설정');
+  useEffect(() => {
+    if (location.hash === '#sync') document.getElementById('sync')?.scrollIntoView?.();
+  }, []);
   const prefs = useAtomValue(prefsAtom);
   const setPrefs = useSetAtom(setPrefsAtom);
   const library = useAtomValue(libraryAtom);
@@ -145,6 +152,13 @@ export function SettingsPage() {
       <Section title="백업">
         <BackupSection onRestore={() => setRestoreOpen(true)} />
       </Section>
+      {syncFeatureVisible() && (
+        <Section title="동기화" id="sync">
+          <Suspense fallback={<Typography>동기화 설정을 여는 중…</Typography>}>
+            <SyncSection />
+          </Suspense>
+        </Section>
+      )}
       <SentLinksSection />
       <LiveTripsSection />
       <CollabTripsSection />

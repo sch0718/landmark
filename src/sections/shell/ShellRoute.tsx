@@ -1,4 +1,5 @@
 import { useSetAtom } from 'jotai';
+import { useSyncBoot } from 'src/sections/library-sync/use-sync-boot';
 import { Component, Suspense, useEffect, type ReactNode } from 'react';
 import { LoadingNotice } from 'src/components/LoadingNotice';
 import { prefetchWhenIdle } from 'src/lib/prefetch';
@@ -41,6 +42,7 @@ export const PREFETCH_CHUNKS = [...ROUTE_CHUNKS, ...PANEL_CHUNKS];
 /** 보관함을 읽고(`useLibrarySync`, 앱에서 한 번) 셸을 그린다. 읽는 동안은 Suspense가 멈춘다. */
 function LibraryShell() {
   useLibrarySync();
+  useSyncBoot();
   // 이 컴포넌트가 그려졌다는 건 보관함을 읽고 셸이 나왔다는 뜻이다. 미리 받기는 한 번만 예약된다.
   useEffect(() => {
     prefetchWhenIdle(PREFETCH_CHUNKS);

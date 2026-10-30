@@ -3,10 +3,12 @@ import babel from '@rolldown/plugin-babel';
 import react, { reactCompilerPreset } from '@vitejs/plugin-react';
 import Icons from 'unplugin-icons/vite';
 import { defineConfig } from 'vite';
+import { firebaseAuthHelper } from '@sch0718/firebase-session/vite';
 import { compileReactIcon } from './build/compile-react-svg-icon.ts';
 
 export default defineConfig(({ command }) => ({
   plugins: [
+    firebaseAuthHelper(),
     {
       name: 'tripmap:view-route',
       configureServer(server) {
