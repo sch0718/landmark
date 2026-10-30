@@ -25,6 +25,7 @@ const mock = vi.hoisted(() => ({
   revoke: vi.fn(),
   connect: vi.fn(),
   resolve: vi.fn(),
+  unskipAll: vi.fn(),
   remove: vi.fn(),
   providers: { google: false, kakao: true, naver: false },
 }));
@@ -53,6 +54,7 @@ vi.mock('src/services/library-sync/boot', () => ({
     ensureLibrarySyncEngine: () => ({
       connect: mock.connect,
       resolveConflict: mock.resolve,
+      unskipAll: mock.unskipAll,
       deleteServerData: mock.remove,
       disconnect: vi.fn(),
       start: vi.fn(),
@@ -230,3 +232,28 @@ it.each([0, 2])(
     expect(await screen.findByText('서버 보관함: 항목 3개')).toBeInTheDocument();
   },
 );
+
+it.each([0, 2])('건너뛴 항목 %i개의 안내와 전체 풀기 단추를 연결한다', async (count) => {
+  const meta = {
+    ...newDeviceMeta(),
+    enabled: true,
+    userId: 'u',
+    provider: 'kakao' as const,
+    skipped: ['place:place00001', 'place:place00002'].slice(0, count),
+  };
+  writeSyncMeta(localStorage, meta);
+  writeSession(localStorage, { v: 1, sessionId: 'a'.repeat(43), provider: 'kakao' });
+  mock.unskipAll.mockImplementation(async () =>
+    writeSyncMeta(localStorage, { ...meta, skipped: [] }),
+  );
+  show(<SyncSection />);
+  if (count === 0) {
+    expect(screen.queryByText(/건너뛴 항목/)).toBeNull();
+    expect(screen.queryByRole('button', { name: '건너뛰기 모두 풀기' })).toBeNull();
+  } else {
+    expect(screen.getByText('건너뛴 항목 2개는 이 기기에서만 바뀝니다')).toBeInTheDocument();
+    await userEvent.setup().click(screen.getByRole('button', { name: '건너뛰기 모두 풀기' }));
+    await waitFor(() => expect(mock.unskipAll).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText(/건너뛴 항목/)).toBeNull();
+  }
+});

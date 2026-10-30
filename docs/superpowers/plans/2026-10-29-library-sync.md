@@ -140,10 +140,10 @@
   - `type RemoteItem = { kind: ItemKind; id: string; rev: number; deleted: boolean; doc: unknown }`.
   - `type Conflict = { id: string; key: ItemKey; kind: ItemKind; label: string; path: string; mine: unknown; theirs: unknown; at: string; whole?: true; deleted?: true }`.
   - `type HeldItem = { key: ItemKey; rev: number; reason: 'decode' | 'library' }`.
-  - `type ApplyOptions = { ctx: OpCtx; lastSyncAt: string | null; fullResync: boolean; conflictId: () => string; skip?: ReadonlySet<string> }` — `skip`은 사용자가 `건너뛰기`한 키(반영하지 않고 base만 remote로).
+  - `type ApplyOptions = { ctx: OpCtx; lastSyncAt: string | null; fullResync: boolean; conflictId: () => string; skip?: ReadonlySet<string> }` — `skip`은 사용자가 `건너뛰기`한 키(받기 반영과 올리기 모두 제외, 이후 로컬 수정도 이 기기에만 남김. 받기에서는 base만 remote로 갱신).
   - `type ApplyResult = { lib: Library; base: BaseMap; conflicts: Conflict[]; held: HeldItem[] }`.
   - `type DirtyItem = { key: ItemKey; kind: ItemKind; id: string; doc: AnyItem; hash: string; baseRev: number; baseDeleted: boolean | null }`.
-  - `dirtyItems(lib: Library, base: BaseMap, rejected: readonly { key: string; hash: string }[]): DirtyItem[]` — `listItems` 순서. base가 없거나 해시가 다른 항목. `rejected`에 같은 키·같은 해시가 있으면 뺀다. `baseRev`는 base 없으면 0, `baseDeleted`는 base 없으면 null.
+  - `dirtyItems(lib: Library, base: BaseMap, rejected: readonly { key: string; hash: string }[], skipped?: ReadonlySet<string>): DirtyItem[]` — `listItems` 순서. base가 없거나 해시가 다른 항목. `rejected`에 같은 키·같은 해시가 있거나 `skipped`에 있는 키면 뺀다. `baseRev`는 base 없으면 0, `baseDeleted`는 base 없으면 null.
   - `missingFromLocal(lib: Library, base: BaseMap): boolean` — base 키 중 보관함에 없는 것이 있는가.
   - `applyRemote(local: Library, base: BaseMap, remote: readonly RemoteItem[], opts: ApplyOptions): ApplyResult` — 설계 §받은 항목 반영 표 그대로, 그 뒤:
     1. `remote.doc`을 `decodeItem`으로 검사. 실패하면 반영하지 않고 `held`(`reason: 'decode'`).
@@ -482,6 +482,7 @@
     connect(mode: ConnectMode): Promise<SyncStatus>;
     resolveConflict(id: string, action: 'mine' | 'keep'): Promise<void>;
     resolveHeld(key: string, action: 'mine' | 'skip'): Promise<void>;
+    unskipAll(): Promise<void>;
     disable(): void;
     enable(): void;
     disconnect(): Promise<void>;
@@ -503,14 +504,14 @@
     - 받기: `cursor ?? { rev: 0, key: '' }`부터 `api.changes({ since, after, limit: 500, deviceId })` 반복. `resync` 실패면 한 번만 `{0,''}`부터 다시, `fullResync = true`. 시작 전에 `missingFromLocal`이면 `fullResync = true`, 커서 `{0,''}`.
     - 반영: `runLibrary(LibraryStore.update((current) => …))` 안에서 `applyRemote(current, base, items, { ctx: { now, newId: ids.next }, lastSyncAt: meta.lastSyncAt, fullResync, conflictId, skip: new Set(meta.skipped) })`. 결과 `lib`을 돌려 `setLibrary`. 받은 것이 없고 `fullResync`도 아니면 이 단계를 건너뛴다.
     - 커서: 마지막 `next`. `held`가 있으면 `{ rev: min(held.rev) - 1, key: '' }`(0 미만이면 0).
-    - 올리기: `runLibrary(LibraryStore.snapshot)`의 `library`로 `dirtyItems(lib, base, meta.rejected)` → `stableStringify(doc).length > ITEM_DOC_MAX_CHARS`는 보내지 않고 `rejected: too-large`. `PUSH_CHUNK_ITEMS`·`PUSH_CHUNK_BYTES`로 나눠 차례로 `api.push`. 응답마다 `applyPushResults`를 `LibraryStore.update` 안에서, `rejected`는 메타에 `{ key, hash, reason }`. `progress`를 갱신한다.
+    - 올리기: `runLibrary(LibraryStore.snapshot)`의 `library`로 `dirtyItems(lib, base, meta.rejected, new Set(meta.skipped))` → `stableStringify(doc).length > ITEM_DOC_MAX_CHARS`는 보내지 않고 `rejected: too-large`. `PUSH_CHUNK_ITEMS`·`PUSH_CHUNK_BYTES`로 나눠 차례로 `api.push`. 응답마다 `applyPushResults`를 `LibraryStore.update` 안에서, `rejected`는 메타에 `{ key, hash, reason }`. `progress`를 갱신한다.
     - 끝: 메타(`cursor`, `lastSyncAt = new Date(now()).toISOString()`, `held`, `rejected`), base(`writeBase`), 충돌(기존 + 새 것 `writeConflicts`)을 쓴다. 상태: 충돌·보류·거절이 하나라도 있으면 `conflict`, 아니면 `synced`. 새 충돌이 생겼으면 `notify('conflict')`.
     - 실패: `offline` → `local`(`offline: true`); `auth` → `clearSession`·`auth`·`notify('auth')`; `not-allowed` → `clearSession`·`not-allowed`; `limit`·`off`·`server`·`busy` → `unavailable`(busy는 `local`)이고 `visible()`일 때 `RETRY_STEPS_MS` 차례로 `retry` 예약; `SyncStorageError`·`StorageQuotaExceeded` → `error`(문구 "저장 공간이 부족해 동기화를 멈췄어요"). 실패해도 보관함·base는 마지막 성공 상태를 유지한다.
   - `schedule`: `save`는 `SAVE_DEBOUNCE_MS` 모음, 나머지는 바로. 실행 중이면 끝난 뒤 한 번 더(여러 번 불려도 한 번).
   - `start`: `events`에 `visibilitychange`(보이면 `visible`), `online` 구독, `schedule('open')`. `stop`: 구독·타이머 해제.
   - `connect(mode)`: 메타 `pendingChoice`일 때만. `replace-local`: 커서 0부터 모두 받아 `putItems(emptyLibrary(), …)`로 보관함을 만들고 `repairLibrary` 뒤 `LibraryStore.replace(lib, { requirePrevious: hasAnyEntry(지금) })`, base = 받은 항목 전부. `upload`·`merge`: `pendingChoice = false` 뒤 `runNow('connect')`(받기 → 합치기 → 올리기가 같은 길이다. 첫 연결이라 `lastSyncAt === null`이므로 충돌은 생기지 않는다).
   - `resolveConflict(id, 'mine')`: 그 충돌의 항목을 `LibraryStore.update`로 고친다 — 필드 충돌은 `path`의 필드를 `{ value: mine, updatedAt: now }`로(여행 Day 경로 `days.<i>.<필드>` 포함), `whole`·`deleted`는 `reviveAsLatest(kind, mine, now)`(문서 안 모든 `updatedAt`을 `now`로, `deletedAt: null`). 결과가 `LibrarySchema`를 못 지나면 충돌을 남기고 실패 알림. 성공·`keep`이면 목록에서 지우고 `schedule('manual')`.
-  - `resolveHeld(key, 'mine')`: 이 기기 항목을 `reviveAsLatest`로 바꿔 올리게 하고 `held`에서 뺀다(항목이 없으면 `skip`과 같음). `'skip'`: `skipped`에 키를 더하고 `held`에서 뺀다.
+  - `resolveHeld(key, 'mine')`: 이 기기 항목을 `reviveAsLatest`로 바꿔 올리게 하고 `held`에서 뺀다(항목이 없으면 `skip`과 같음). `'skip'`: `skipped`에 키를 더하고 `held`에서 뺀다. 해당 키는 받기·올리기 모두에서 제외한다. `unskipAll()`은 같은 잠금 안에서 건너뛰기와 해당 base를 지우고 커서를 처음으로 되돌린 뒤 수동 동기화를 예약한다.
   - `disable()`: 메타 `enabled: false`, `stop()`, 상태 `off`. `enable()`: `enabled: true`, `start()`.
   - `disconnect()`: `api.client.endSession()`(실패해도 계속) → `clearSession` → 메타 `enabled: false`(base·커서·`userId`는 남김) → `off`.
   - `deleteServerData()`: `api.deleteAccount()` 성공이면 `clearSession`·`clearSyncRecords`·메타 `enabled: false, userId: null` → `off`·true. 실패면 false.
@@ -637,3 +638,10 @@
 - 실행하지 못한 검증(네트워크·포트)과 이유.
 - 미리보기에서 사람이 확인할 것: Google·카카오·네이버 실제 로그인, 올리기 100개 CPU 시간(넘으면 `PUSH_MAX_ITEMS` 50), iOS Safari·카카오톡 인앱 복귀.
 - PR 본문 메모: 롤백·데이터 영향(설계 §호환·롤백), `docs/rollback.md`는 병합 뒤 별도 PR, 사용자가 할 일(설계 §사용자가 할 일).
+
+
+### 리뷰 보완 r1-01: 건너뛰기 해제
+
+- 설정 동기화 화면에 건너뛴 항목 수와 이 기기에서만 바뀐다는 안내, `건너뛰기 모두 풀기`를 제공한다.
+- 엔진 `unskipAll()`은 `resolveHeld`처럼 `whenIdle`과 `SYNC_LOCK` 안에서 `meta.skipped`를 비우고 해당 키의 base를 지운다. 이미 커서가 지난 서버 항목도 다시 받도록 커서를 처음으로 되돌린 뒤 `schedule('manual')`한다. 다음 받기에서 보류·병합을 다시 판단한다.
+- 회귀 시험은 건너뛴 뒤 로컬 수정의 올리기 제외(도메인·엔진), 해제 뒤 같은 revision 받기·보류·병합, 화면 안내와 풀기를 확인한다.

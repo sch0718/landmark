@@ -681,3 +681,97 @@ it('통신 밖의 예외도 저장 공간 부족으로 표시하지 않는다', 
     message: '예상하지 못한 오류로 동기화를 멈췄어요. 다시 시도해 주세요',
   });
 });
+
+it('건너뛴 키는 로컬을 고쳐도 올리지 않고 저장 직후 변경 수에서도 뺀다', async () => {
+  const server = createSyncMemoryServer();
+  disposers.push(() => server.db.close());
+  const a = await device(server, { ...emptyLibrary(), places: { [p.id]: p } });
+  await a.engine.connect('upload');
+  a.engine.stop();
+  const b = await device(server);
+  await b.engine.connect('merge');
+  b.engine.stop();
+  const key = `place:${p.id}` as const;
+  await a.edit('서버 값');
+  await a.engine.runNow('manual');
+  writeSyncMeta(b.storage, {
+    ...readSyncMeta(b.storage),
+    held: [{ key, rev: 2, reason: 'decode' }],
+  });
+  await b.engine.resolveHeld(key, 'skip');
+  const push = vi.spyOn(b.api, 'push');
+  expect(await b.engine.runNow('manual')).toMatchObject({ phase: 'synced', dirty: 0 });
+  await b.edit('건너뛴 뒤 로컬 수정');
+  vi.useFakeTimers();
+  const setStatus = vi.spyOn(b.deps, 'setStatus');
+  b.engine.schedule('save');
+  await vi.waitFor(() => expect(setStatus).toHaveBeenCalledTimes(2));
+  expect(b.state.status.dirty).toBe(0);
+  expect(await b.engine.runNow('manual')).toMatchObject({ phase: 'synced', dirty: 0 });
+  expect(push).not.toHaveBeenCalled();
+  await a.engine.runNow('manual');
+  expect(a.state.lib.places[p.id]?.memo.value).toBe('서버 값');
+  const local = await b.runtime.runPromise(Effect.flatMap(LibraryStore, (store) => store.snapshot));
+  expect(local.library.places[p.id]?.memo.value).toBe('건너뛴 뒤 로컬 수정');
+});
+
+it.each(['decode', 'merge'] as const)(
+  '건너뛰기를 풀면 같은 서버 revision도 다시 받아 %s 흐름으로 보낸다',
+  async (flow) => {
+    const server = createSyncMemoryServer();
+    disposers.push(() => server.db.close());
+    const otherId = 'other00001';
+    const a = await device(server, {
+      ...emptyLibrary(),
+      places: { [p.id]: p, [otherId]: { ...p, id: otherId } },
+    });
+    await a.engine.connect('upload');
+    a.engine.stop();
+    const key = `place:${p.id}` as const;
+    const other = 'place:other00001';
+    const remote =
+      flow === 'decode' ? {} : { ...p, memo: f('서버 값', '2099-01-01T00:00:00.000Z') };
+    const changes = vi.spyOn(a.api, 'changes').mockResolvedValue({
+      ok: true,
+      data: {
+        rev: 2,
+        purgedRev: 0,
+        next: { rev: 2, key },
+        more: false,
+        items: [{ kind: 'place', id: p.id, rev: 2, deleted: false, doc: remote }],
+      },
+    });
+    writeSyncMeta(a.storage, {
+      ...readSyncMeta(a.storage),
+      held: [{ key, rev: 2, reason: 'decode' }],
+    });
+    await a.engine.resolveHeld(key, 'skip');
+    await a.engine.runNow('manual');
+    expect(readSyncMeta(a.storage).cursor?.rev).toBe(2);
+    expect(readBase(a.storage).items[key]?.rev).toBe(2);
+    const base = readBase(a.storage);
+    const held = createHeldLocks();
+    held.hold();
+    a.deps.locks = held.locks;
+    const schedule = vi.spyOn(a.engine, 'schedule');
+    const undo = a.engine.unskipAll();
+    await Promise.resolve();
+    expect(readSyncMeta(a.storage).skipped).toContain(key);
+    expect(held.requested).toEqual(['tripmap:library-sync']);
+    held.release();
+    await undo;
+    expect(readSyncMeta(a.storage).skipped).toEqual([]);
+    expect(readBase(a.storage).items).not.toHaveProperty(key);
+    expect(readBase(a.storage).items[other]).toEqual(base.items[other]);
+    expect(schedule).toHaveBeenLastCalledWith('manual');
+    changes.mockClear();
+    await a.engine.runNow('manual');
+    expect(changes.mock.calls[0]?.[0]).toMatchObject({ since: 0, after: '' });
+    if (flow === 'decode')
+      expect(readSyncMeta(a.storage).held).toEqual([{ key, rev: 2, reason: 'decode' }]);
+    else {
+      expect(readSyncMeta(a.storage).held).toEqual([]);
+      expect(a.state.lib.places[p.id]?.memo.value).toBe('서버 값');
+    }
+  },
+);

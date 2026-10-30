@@ -65,8 +65,10 @@ export function dirtyItems(
   lib: Library,
   base: BaseMap,
   rejected: readonly { key: string; hash: string }[],
+  skipped?: ReadonlySet<string>,
 ): DirtyItem[] {
   return listItems(lib).flatMap((entry) => {
+    if (skipped?.has(entry.key)) return [];
     const hash = hashItem(entry.doc);
     const b = base[entry.key];
     return b?.hash === hash || rejected.some((r) => r.key === entry.key && r.hash === hash)

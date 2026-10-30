@@ -75,6 +75,7 @@ export interface LibrarySyncEngine {
   connect(mode: ConnectMode): Promise<SyncStatus>;
   resolveConflict(id: string, action: 'mine' | 'keep'): Promise<void>;
   resolveHeld(key: string, action: 'mine' | 'skip'): Promise<void>;
+  unskipAll(): Promise<void>;
   disable(): void;
   enable(): void;
   disconnect(): Promise<void>;
@@ -310,7 +311,12 @@ export function createLibrarySyncEngine(deps: EngineDeps): LibrarySyncEngine {
       cursor = { rev: Math.max(0, Math.min(...meta.held.map((h) => h.rev)) - 1), key: '' };
     meta = { ...meta, cursor };
     save(meta, base.items, conflicts);
-    const dirty = dirtyItems((await snapshot()).library, base.items, meta.rejected);
+    const dirty = dirtyItems(
+      (await snapshot()).library,
+      base.items,
+      meta.rejected,
+      new Set(meta.skipped),
+    );
     const send: DirtyItem[] = [];
     const currentLib = (await snapshot()).library;
     meta = {
@@ -376,7 +382,12 @@ export function createLibrarySyncEngine(deps: EngineDeps): LibrarySyncEngine {
       save(meta, base.items, conflicts);
     }
     if (!isCurrent()) return status;
-    const remaining = dirtyItems((await snapshot()).library, base.items, meta.rejected).length;
+    const remaining = dirtyItems(
+      (await snapshot()).library,
+      base.items,
+      meta.rejected,
+      new Set(meta.skipped),
+    ).length;
     // 아직 확인받지 않은 수정은 이전 동기화 뒤의 변경으로 계속 남긴다.
     if (remaining === 0) meta = { ...meta, lastSyncAt: new Date(deps.now()).toISOString() };
     save(meta, base.items, conflicts);
@@ -425,10 +436,15 @@ export function createLibrarySyncEngine(deps: EngineDeps): LibrarySyncEngine {
         });
         void snapshot()
           .then(({ library }) => {
+            const meta = readSyncMeta(storage);
             if (status.phase === 'local')
               publish({
-                dirty: dirtyItems(library, readBase(storage).items, readSyncMeta(storage).rejected)
-                  .length,
+                dirty: dirtyItems(
+                  library,
+                  readBase(storage).items,
+                  meta.rejected,
+                  new Set(meta.skipped),
+                ).length,
               });
           })
           .catch(() => {});
@@ -588,6 +604,18 @@ export function createLibrarySyncEngine(deps: EngineDeps): LibrarySyncEngine {
           held: meta.held.filter((h) => h.key !== key),
           skipped: skip ? [...new Set([...meta.skipped, key])] : meta.skipped,
         });
+      });
+      engine.schedule('manual');
+    },
+    async unskipAll() {
+      await whenIdle(async () => {
+        const meta = readSyncMeta(storage);
+        const base = readBase(storage);
+        const items = { ...base.items };
+        for (const key of meta.skipped) delete items[key];
+        writeBase(storage, base.userId!, items);
+        // 이미 커서가 지난 서버 항목도 같은 revision으로 다시 받는다.
+        writeSyncMeta(storage, { ...meta, skipped: [], cursor: { rev: 0, key: '' } });
       });
       engine.schedule('manual');
     },

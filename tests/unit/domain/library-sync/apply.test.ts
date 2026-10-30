@@ -206,3 +206,16 @@ it('복원으로 사라진 항목은 같은 revision의 전체 받기로 돌아�
   expect(missingFromLocal(result.lib, result.base)).toBe(false);
   expect(dirtyItems(result.lib, result.base, [])).toEqual([]);
 });
+
+it('건너뛴 키는 이후 로컬 수정도 올리기 대상에서 제외한다', () => {
+  const key = 'place:place00001';
+  const skipped = new Set([key]);
+  const result = applyRemote(lib, base, [remote({ future: '해석 불가' })], {
+    ...opts,
+    skip: skipped,
+  });
+  const changed = { ...lib, places: { [p.id]: { ...p, memo: f('건너뛴 뒤 수정', now) } } };
+  expect(dirtyItems(result.lib, result.base, [], skipped)).toEqual([]);
+  expect(dirtyItems(changed, result.base, [], skipped)).toEqual([]);
+  expect(dirtyItems(changed, result.base, [], new Set())).toHaveLength(1);
+});
