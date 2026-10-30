@@ -126,3 +126,52 @@ export function buildMeeting(
     ...overrides,
   };
 }
+
+/** 갱신 공유 시험에 쓰는 이틀 여행 보관함. */
+export function buildLiveLibrary(): import('src/schema/library').Library {
+  const f = <T>(value: T) => ({ value, updatedAt: FIXED_NOW });
+  const place = (n: number): import('src/schema/library').Place => ({
+    id: `place0000${n}`,
+    name: f(`장소 ${n}`),
+    address: `주소 ${n}`,
+    lng: 127 + n * 0.1,
+    lat: 37.5,
+    source: { kind: 'naver', sid: String(n) },
+    category: f(null),
+    saved: f(true),
+    labelIds: f([]),
+    memo: f('시험 메모'),
+    review: f(''),
+    visitedOn: f(null),
+    createdAt: FIXED_NOW,
+    deletedAt: null,
+  });
+  const places = [place(1), place(2)];
+  return {
+    schemaVersion: 2,
+    places: Object.fromEntries(places.map((p) => [p.id, p])),
+    labels: {},
+    folders: {},
+    meetings: {},
+    trips: {
+      trip000001: {
+        id: 'trip000001',
+        title: f('시험 여행'),
+        startDate: f('2026-12-09'),
+        endDate: f('2026-12-10'),
+        origin: f(null),
+        candidates: f([]),
+        legModes: f({}),
+        createdAt: FIXED_NOW,
+        deletedAt: null,
+        days: places.map((p, i) => ({
+          startTime: f('09:00'),
+          lodging: f(null),
+          stops: f([
+            { id: `stop000${i + 1}`, placeId: p.id, stayMin: 60, fixedTime: null, note: '' },
+          ]),
+        })),
+      },
+    },
+  };
+}

@@ -10,6 +10,13 @@ import { inlineAssets } from './build/inline-assets.ts';
  */
 const here = (path: string) => fileURLToPath(new URL(path, import.meta.url));
 
+function linkViewerHtml(template: string): string {
+  const count = template.split('__TRIPMAP_DATA__').length - 1;
+  if (count !== 1)
+    throw new Error(`보기 화면 틀의 데이터 자리는 정확히 1개여야 합니다(현재 ${count}개)`);
+  return template.replace('__TRIPMAP_DATA__', '');
+}
+
 export default defineConfig({
   root: here('./src/share-viewer'),
   base: './',
@@ -22,7 +29,7 @@ export default defineConfig({
       writeBundle() {
         // Pages는 view.html을 /view로 제공한다. 파일용 틀에는 데이터 자리를 그대로 남긴다.
         const template = readFileSync(here('./public/share-viewer.html'), 'utf8');
-        writeFileSync(here('./public/view.html'), template.replace('__TRIPMAP_DATA__', ''));
+        writeFileSync(here('./public/view.html'), linkViewerHtml(template));
       },
     },
   ],

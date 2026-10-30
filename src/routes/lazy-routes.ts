@@ -161,3 +161,17 @@ export const loadAuthCallbackPage = lazyChunk(
   () => import('src/sections/library-sync/AuthCallbackPage'),
 );
 export const AuthCallbackPage = lazy(loadAuthCallbackPage);
+
+export const loadTripLiveShareDialog = lazyChunk(
+  () => import('src/sections/trips/live/TripLiveShareDialog'),
+);
+export const TripLiveShareDialog = lazy(() =>
+  loadTripLiveShareDialog().then((m) => ({ default: m.TripLiveShareDialog })),
+);
+
+export const loadTripLiveLinkPage = lazyChunk(
+  () => import('src/sections/trips/live/TripLiveLinkPage'),
+);
+export const TripLiveLinkPage = lazy(() =>
+  loadTripLiveLinkPage().then((m) => ({ default: m.TripLiveLinkPage })),
+);

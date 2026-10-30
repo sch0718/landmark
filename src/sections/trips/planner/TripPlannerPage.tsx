@@ -1,3 +1,4 @@
+import { TripLivePublisher } from 'src/sections/trips/live/TripLivePublisher';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
@@ -465,6 +466,7 @@ export function TripPlannerPage() {
   return (
     <PlannerDnd key={trip.id} tripId={trip.id}>
       <Planner trip={trip} library={library} />
+      <TripLivePublisher tripId={trip.id} />
     </PlannerDnd>
   );
 }
