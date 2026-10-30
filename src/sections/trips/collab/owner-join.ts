@@ -1,7 +1,7 @@
 import { OWNER_LABEL } from 'src/domain/trip-collab/constants';
-import { mapServerPlaces, assignServerPlaceIds } from 'src/domain/trip-collab/places';
+import { mapServerPlaces, assignServerPlaceIds, serverIdOf } from 'src/domain/trip-collab/places';
 import { planFromDoc } from 'src/domain/trip-collab/plan';
-import { liveEditKey } from 'src/domain/trip-live/build-live-doc';
+import { buildLiveTripDoc, liveEditKey } from 'src/domain/trip-live/build-live-doc';
 import { alignDayIds } from 'src/domain/trip-live/live-doc';
 import type { TripCollabError } from 'src/services/trip-collab/client';
 import { tripLiveApi, type LiveState } from 'src/services/trip-live/client';
@@ -31,13 +31,48 @@ export async function joinCollabAsOwner(deps: CollabEngineDeps, live: LiveState)
     new Set(live.doc.share.places.map((p) => p.id)),
     deps.newPlaceId,
   );
-  // 2A는 마지막 공개본의 지문만 보관한다. 받은 판이 그 공개본임을 확인할 때만 기준으로 쓴다.
+  // 2A와 같은 옵션·Day id로 공개본을 다시 만들어 미공개 수정 여부를 확인한다.
+  const routeOf = deps.routeOf();
+  const published = buildLiveTripDoc(
+    deps.getLibrary(),
+    tripId,
+    (leg) => routeOf(leg.from.id, leg.to.id).time,
+    {
+      title: record.options.title,
+      options: record.options,
+      dayIds: alignDayIds(record.dayIds, trip.days.length, newDayId),
+      createdAt: record.createdAt,
+    },
+  );
   const matchesPublished =
     record.publishedKey !== undefined &&
     (await liveEditKey({ ...live.doc, v: 1 })) === record.publishedKey;
+  let base = matchesPublished ? planFromDoc(live.doc) : null;
+  if (!base && published && (await liveEditKey(published)) === record.publishedKey) {
+    // 로컬 투영 대신 공개 문서를 써서 공개에서 뺀 후보를 기준에 섞지 않는다.
+    const plan = planFromDoc(published),
+      toServer = serverIdOf(placeMap);
+    base = {
+      ...plan,
+      origin: plan.origin === null ? null : toServer(plan.origin),
+      candidates: plan.candidates.map(toServer),
+      legModes: Object.fromEntries(
+        Object.entries(plan.legModes).map(([key, mode]) => {
+          const [a, b] = key.split('>');
+          return [`${toServer(a!)}>${toServer(b!)}`, mode];
+        }),
+      ),
+      days: plan.days.map((day, i) => ({
+        ...day,
+        id: dayIds[i]!,
+        lodging: day.lodging === null ? null : toServer(day.lodging),
+        stops: day.stops.map((stop) => ({ ...stop, placeId: toServer(stop.placeId) })),
+      })),
+    };
+  }
   if (store.get(tripId)) return;
-  if (matchesPublished && !store.readBase(record.liveId))
-    store.writeBase(record.liveId, { rev: live.rev, plan: planFromDoc(live.doc), progress: null });
+  if (base && !store.readBase(record.liveId))
+    store.writeBase(record.liveId, { rev: live.rev, plan: base, progress: null });
   store.put({
     tripId,
     liveId: record.liveId,

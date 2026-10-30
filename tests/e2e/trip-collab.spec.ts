@@ -84,12 +84,7 @@ async function prepare(page: Page, browser: Browser, changedByOtherOwner = false
   const collab = page.getByRole('dialog', { name: /^함께 편집/ });
   await collab.getByRole('button', { name: '편집 초대 링크 만들기' }).click();
   if (changedByOtherOwner) {
-    const compare = page.getByRole('dialog', { name: '겹친 변경 비교' });
-    await expect(compare.getByText('08:00')).toBeVisible();
-    await compare.getByRole('button', { name: '모두 공동 여행으로' }).click();
-    await compare.getByRole('button', { name: '고른 대로 맞추기' }).click();
-    await expect(compare).not.toBeVisible();
-    await collab.getByRole('button', { name: '편집 초대 링크 만들기' }).click();
+    await expect(page.getByRole('dialog', { name: '겹친 변경 비교' })).not.toBeVisible();
   }
   await expect(collab.getByRole('textbox', { name: '편집 초대 링크' })).toBeVisible();
   await collab.getByRole('button', { name: '링크 복사', exact: true }).click();
@@ -132,7 +127,10 @@ async function sameOrder(sender: Page, receiver: Page, wanted: string[]) {
 }
 
 test.describe('여행 함께 편집 @desktop', () => {
-  test('켜기 전 다른 소유자의 2A 변경은 비교한 뒤 초대한다', async ({ page, browser }) => {
+  test('손대지 않은 기기는 다른 소유자의 2A 변경을 자동으로 받은 뒤 초대한다', async ({
+    page,
+    browser,
+  }) => {
     const { editor } = await prepare(page, browser, true);
     await expect(timeline(page).getByLabel('출발 시각')).toHaveValue('08:00');
     await expect(timeline(editor).getByLabel('출발 시각')).toHaveValue('08:00');
