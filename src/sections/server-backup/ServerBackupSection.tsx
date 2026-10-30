@@ -17,7 +17,13 @@ import { LibraryStore } from 'src/services/library-store';
 import { readBootFlag } from 'src/services/library-sync/boot';
 import { deviceLabel } from 'src/services/library-sync/login';
 import { getSharedSyncApi, getSharedSyncStorage } from 'src/services/library-sync/shared-api';
-import { readSession, readSyncMeta } from 'src/services/library-sync/storage';
+import {
+  readSession,
+  readSyncMeta,
+  SYNC_META_KEY,
+  SYNC_SESSION_KEY,
+} from 'src/services/library-sync/storage';
+import { syncStatusAtom } from 'src/stores/sync-status';
 import {
   createBackupApi,
   uploadBody,
@@ -40,6 +46,9 @@ const readLibrary = Effect.gen(function* () {
 export function ServerBackupSection() {
   const storage = getSharedSyncStorage();
   const session = readSession(storage);
+  const sessionKey = session?.sessionId ?? null;
+  useAtomValue(syncStatusAtom);
+  const [, sessionChanged] = useState(0);
   const api = useMemo(() => {
     const sync = getSharedSyncApi();
     return sync ? createBackupApi(sync) : null;
@@ -61,33 +70,56 @@ export function ServerBackupSection() {
     run(): Promise<void>;
   } | null>(null);
   const signedIn = session !== null && api !== null;
+  const refreshRun = useRef(0);
+  const restoreOwner = useRef<string | null>(null);
+  const sameOwner = () => (readSession(storage)?.sessionId ?? null) === sessionKey;
   const syncOn = readBootFlag(storage);
   const refresh = useCallback(async () => {
     if (!api) return;
+    const run = ++refreshRun.current;
+    const current = () =>
+      run === refreshRun.current && (readSession(storage)?.sessionId ?? null) === sessionKey;
     setLoading(true);
     setFailure(null);
     try {
       const result = await api.meta();
+      if (!current()) return;
       if (result.ok) {
         setMeta(result.data.backup);
         setWritable(result.data.writable);
       } else setFailure(result.reason);
     } catch {
-      setFailure('server');
+      if (current()) setFailure('server');
     } finally {
-      setLoading(false);
+      if (current()) setLoading(false);
     }
-  }, [api]);
+  }, [api, storage, sessionKey]);
   useEffect(() => {
     let active = true;
-    if (signedIn)
-      queueMicrotask(() => {
-        if (active) void refresh();
-      });
+    queueMicrotask(() => {
+      if (!active) return;
+      setMeta(null);
+      setWritable(false);
+      setFailure(null);
+      setError(null);
+      setRestore(null);
+      setConfirm(null);
+      if (signedIn) void refresh();
+      else setLoading(false);
+    });
     return () => {
       active = false;
+      refreshRun.current += 1;
     };
   }, [signedIn, refresh]);
+  useEffect(() => {
+    const changed = (event: StorageEvent) => {
+      if (event.key === null || event.key === SYNC_META_KEY || event.key === SYNC_SESSION_KEY)
+        sessionChanged((n) => n + 1);
+    };
+    window.addEventListener('storage', changed);
+    return () => window.removeEventListener('storage', changed);
+  }, []);
   useEffect(() => {
     const read = () => {
       const next = readServerBackupLocal(storage);
@@ -120,16 +152,33 @@ export function ServerBackupSection() {
         setError(copy.failureText('library', 'write'));
         return;
       }
-      const upload = async () => {
-        if (!api) return;
+      if (!sameOwner()) return;
+      const upload = async (confirmed = false) => {
+        if (!api || !sameOwner()) return;
         const built = await buildSnapshot({
           rawLibrary: snapshot.raw,
           library: snapshot.library,
           prefs,
           now: new Date(),
         });
+        if (!sameOwner()) return;
         if (!built.ok) {
           setError(copy.failureText(built.reason, 'write'));
+          return;
+        }
+        const latestConfirm = copy.overwriteConfirmText(
+          meta,
+          libraryCounts(snapshot.library),
+          readBootFlag(storage),
+          new Date(),
+        );
+        if (!confirmed && latestConfirm) {
+          setConfirm({
+            title: '서버 백업 바꾸기',
+            body: latestConfirm,
+            label: '바꾸기',
+            run: () => upload(true),
+          });
           return;
         }
         const result = await api.upload(
@@ -142,6 +191,7 @@ export function ServerBackupSection() {
             'manual',
           ),
         );
+        if (!sameOwner()) return;
         if (!result.ok) {
           setError(copy.failureText(result.reason, 'write'));
           return;
@@ -149,6 +199,7 @@ export function ServerBackupSection() {
         setMeta(result.data.backup);
         toast(`서버 백업을 만들었어요 (${countsText(result.data.backup.counts)})`);
         const { autoBackupInterval } = await loadAutoBackup();
+        if (!sameOwner()) return;
         writeServerBackupLocal(storage, {
           ...readServerBackupLocal(storage),
           nextCheckAt: Date.now() + autoBackupInterval(),
@@ -157,10 +208,11 @@ export function ServerBackupSection() {
       const body = copy.overwriteConfirmText(
         meta,
         libraryCounts(snapshot.library),
-        syncOn,
+        readBootFlag(storage),
         new Date(),
       );
-      if (body) setConfirm({ title: '서버 백업 바꾸기', body, label: '바꾸기', run: upload });
+      if (body)
+        setConfirm({ title: '서버 백업 바꾸기', body, label: '바꾸기', run: () => upload(true) });
       else await upload();
     });
   const remove = () =>
@@ -171,8 +223,9 @@ export function ServerBackupSection() {
         (local.auto ? ' 자동 백업이 켜져 있어 다음에 다시 만들어요.' : ''),
       label: '지우기',
       run: async () => {
-        if (!api) return;
+        if (!api || !sameOwner()) return;
         const result = await api.remove();
+        if (!sameOwner()) return;
         if (!result.ok) {
           setError(copy.failureText(result.reason, 'delete'));
           return;
@@ -186,13 +239,17 @@ export function ServerBackupSection() {
     loadingText: copy.RESTORE_LOADING,
     syncNote: syncOn,
     load: async () => {
+      if (!sameOwner() || restoreOwner.current !== sessionKey)
+        return { ok: false, message: copy.failureText('auth', 'restore') };
       if (!api || !restore) return { ok: false, message: copy.failureText('not-found', 'restore') };
       const result = await api.download(restore.id);
+      if (!sameOwner()) return { ok: false, message: copy.failureText('auth', 'restore') };
       if (!result.ok) {
         if (result.reason === 'not-found') setMeta(null);
         return { ok: false, message: copy.failureText(result.reason, 'restore') };
       }
       const read = await readSnapshotData(result.data.data);
+      if (!sameOwner()) return { ok: false, message: copy.failureText('auth', 'restore') };
       return read.ok
         ? { ok: true, backup: read.backup, header: copy.restoreHeader(restore) }
         : { ok: false, message: BACKUP_READ_MESSAGES[read.error] };
@@ -256,7 +313,10 @@ export function ServerBackupSection() {
             <Button
               variant="outlined"
               disabled={meta === null || busy}
-              onClick={() => setRestore(meta)}
+              onClick={() => {
+                restoreOwner.current = sessionKey;
+                setRestore(meta);
+              }}
               sx={{ minHeight: 44 }}
             >
               {copy.RESTORE_TITLE}
@@ -325,7 +385,10 @@ export function ServerBackupSection() {
       />
       <RestoreDialogHost
         open={restore !== null}
-        onClose={() => setRestore(null)}
+        onClose={() => {
+          setRestore(null);
+          void refresh();
+        }}
         mode="normal"
         remote={remote}
       />

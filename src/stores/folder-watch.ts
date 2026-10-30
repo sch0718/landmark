@@ -14,8 +14,8 @@ export const folderWatchAtom: PrimitiveAtom<FolderWatchState> = atomWithLazy(() 
 );
 export const setFolderWatchEnabledAtom: WritableAtom<null, [boolean], void> = atom(
   null,
-  (get, set, enabled: boolean) => {
-    const state = { ...get(folderWatchAtom), enabled };
+  (_get, set, enabled: boolean) => {
+    const state = { ...readFolderWatch(browserStorage()), enabled };
     writeFolderWatch(browserStorage(), state);
     set(folderWatchAtom, state);
   },

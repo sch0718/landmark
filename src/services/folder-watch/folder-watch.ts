@@ -70,6 +70,7 @@ export async function runFolderWatch(
     )
       return empty('gap');
     const save = () => {
+      state = { ...state, enabled: readFolderWatch(deps.storage).enabled };
       writeFolderWatch(deps.storage, state);
       deps.onState?.(state);
     };
@@ -96,7 +97,14 @@ export async function runFolderWatch(
     }
     const changes: FolderChange[] = [];
     let checked = 0;
+    const stopped = () => {
+      const latest = readFolderWatch(deps.storage);
+      if (opts.manual || latest.enabled) return false;
+      deps.onState?.(latest);
+      return true;
+    };
     for (const id of ids) {
+      if (stopped()) return { checked, changes: [], skipped: 'disabled' };
       if (!liveFolderLink(deps.library(), id)) continue;
       let result;
       try {
@@ -104,6 +112,7 @@ export async function runFolderWatch(
       } catch {
         result = { ok: false as const, code: 'UNKNOWN' };
       }
+      if (stopped()) return { checked, changes: [], skipped: 'disabled' };
       const lib = deps.library();
       const link = liveFolderLink(lib, id);
       if (!link) continue;

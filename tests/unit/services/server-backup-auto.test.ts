@@ -188,3 +188,36 @@ it('붙일 때 synced만 실행하고 진행 중 중복 신호와 해제 뒤 신
   attachAutoBackup(engine, d2, () => ({ phase: 'local' }));
   expect(d2.api.meta).not.toHaveBeenCalled();
 });
+it.each(['account', 'auto', 'phase'] as const)(
+  '진행 중 %s가 바뀌면 자동 업로드를 취소한다',
+  async (change) => {
+    const d = deps();
+    let userId = 'me';
+    const status = { phase: 'synced' as SyncStatus['phase'] };
+    d.syncUserId = () => userId;
+    d.build = vi.fn().mockImplementation(async () => {
+      if (change === 'account') userId = 'you';
+      if (change === 'auto')
+        writeServerBackupLocal(localStorage, {
+          ...readServerBackupLocal(localStorage),
+          auto: false,
+        });
+      if (change === 'phase') status.phase = 'off';
+      return {
+        ok: true,
+        snapshot: {
+          data: 'H4sI',
+          rawBytes: 1,
+          storedBytes: 3,
+          contentHash: 'abc',
+          counts: meta.counts,
+          exportedAt: meta.exportedAt,
+        },
+      };
+    });
+    expect(await runAutoBackup(status, d)).toBe(
+      change === 'account' ? 'auth' : change === 'auto' ? 'disabled' : 'not-synced',
+    );
+    expect(d.api.upload).not.toHaveBeenCalled();
+  },
+);

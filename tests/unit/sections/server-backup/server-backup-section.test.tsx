@@ -97,7 +97,7 @@ async function setup() {
     </Provider>,
   );
   const region = screen.getByRole('region', { name: '서버 백업' });
-  return () => within(region);
+  return Object.assign(() => within(region), { store });
 }
 it('빌드 변수가 없으면 설정 페이지에 구역이 없다', async () => {
   await renderLibrary(sampleLibrary(), { path: '/settings' });
@@ -204,4 +204,79 @@ it('서버 백업 id로 원격 복원 창을 연다', async () => {
   expect(
     await screen.findByText('서버 백업이 그사이 바뀌었어요. 창을 닫고 다시 열어 주세요'),
   ).toBeInTheDocument();
+});
+
+it('동기화를 끈 같은 설정 화면에서 자동 스위치를 끄고 덮어쓰기를 확인한다', async () => {
+  mocks.api.meta.mockResolvedValue({ ok: true, data: { writable: true, backup: meta } });
+  const q = await setup();
+  await q().findByText(/시험 기기/);
+  const { syncStatusAtom, OFF_STATUS } = await import('src/stores/sync-status');
+  const { act } = await import('@testing-library/react');
+  mocks.sync.mockReturnValue(false);
+  act(() => q.store.set(syncStatusAtom, { ...OFF_STATUS }));
+  expect(q().getByRole('switch', { name: '자동 백업' })).toBeDisabled();
+  await userEvent.click(q().getByRole('button', { name: '서버 백업 지금 만들기' }));
+  expect(await screen.findByRole('dialog', { name: '서버 백업 바꾸기' })).toBeInTheDocument();
+  expect(mocks.api.upload).not.toHaveBeenCalled();
+});
+it('계정 전환 뒤 늦게 온 메타는 새 계정 화면에 보이지 않는다', async () => {
+  let resolve!: (value: unknown) => void;
+  mocks.api.meta.mockImplementationOnce(
+    () =>
+      new Promise((r) => {
+        resolve = r;
+      }),
+  );
+  const q = await setup();
+  await waitFor(() => expect(mocks.api.meta).toHaveBeenCalledOnce());
+  mocks.api.meta.mockResolvedValue({
+    ok: true,
+    data: { writable: true, backup: { ...meta, deviceLabel: '새 계정 기기' } },
+  });
+  mocks.session.mockReturnValue({ provider: 'kakao', sessionId: '다음 시험 세션' });
+  const { act } = await import('@testing-library/react');
+  act(() => window.dispatchEvent(new StorageEvent('storage', { key: 'tripmap:sync-session:v1' })));
+  expect(await q().findByText(/새 계정 기기/)).toBeInTheDocument();
+  await act(async () => resolve({ ok: true, data: { writable: true, backup: meta } }));
+  expect(q().queryByText(/시험 기기/)).not.toBeInTheDocument();
+});
+it('계정 전환이 수동 압축 중 일어나면 이전 보관함을 올리지 않는다', async () => {
+  const q = await setup();
+  await q().findByText('서버 백업: 없음');
+  mocks.build.mockImplementationOnce(async () => {
+    mocks.session.mockReturnValue({ provider: 'kakao', sessionId: '다음 시험 세션' });
+    return {
+      ok: true,
+      snapshot: {
+        data: 'H4sI',
+        rawBytes: 1,
+        storedBytes: 3,
+        contentHash: 'abc',
+        counts: meta.counts,
+        exportedAt: meta.exportedAt,
+      },
+    };
+  });
+  await userEvent.click(q().getByRole('button', { name: '서버 백업 지금 만들기' }));
+  expect(mocks.api.upload).not.toHaveBeenCalled();
+});
+it('바뀐 서버 백업 창을 닫았다 다시 열면 최신 id를 받는다', async () => {
+  mocks.api.meta.mockResolvedValue({ ok: true, data: { writable: true, backup: meta } });
+  const q = await setup();
+  await q().findByText(/시험 기기/);
+  const next = { ...meta, id: 'fedcba9876543210', deviceLabel: '바뀐 기기' };
+  mocks.api.meta.mockResolvedValue({ ok: true, data: { writable: true, backup: next } });
+  mocks.api.download.mockResolvedValue({ ok: false, reason: 'changed' });
+  await userEvent.click(q().getByRole('button', { name: '서버 백업에서 되살리기' }));
+  await screen.findByText('서버 백업이 그사이 바뀌었어요. 창을 닫고 다시 열어 주세요');
+  const dialog = screen.getByRole('dialog', { name: '서버 백업에서 되살리기' });
+  await userEvent.click(within(dialog).getByRole('button', { name: '취소' }));
+  await q().findByText(/바뀐 기기/);
+  await waitFor(() =>
+    expect(
+      screen.queryByRole('dialog', { name: '서버 백업에서 되살리기' }),
+    ).not.toBeInTheDocument(),
+  );
+  await userEvent.click(q().getByRole('button', { name: '서버 백업에서 되살리기' }));
+  await waitFor(() => expect(mocks.api.download).toHaveBeenLastCalledWith(next.id));
 });

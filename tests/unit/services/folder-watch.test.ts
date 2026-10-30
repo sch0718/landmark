@@ -150,3 +150,19 @@ it('실제 조회 서비스에는 fresh 옵션을 붙이지 않는다', async ()
     await runtime.dispose();
   }
 });
+it('진행 중 알림을 끄면 다시 켜거나 다음 폴더를 조회하지 않는다', async () => {
+  const h = setup();
+  const first = h.deps.library();
+  h.deps.library = () => ({
+    ...first,
+    folders: { ...first.folders, second: { ...first.folders![id]!, shareId: 'second' } },
+  });
+  h.lookup.mockImplementation(async () => {
+    writeFolderWatch(localStorage, { ...readFolderWatch(localStorage), enabled: false });
+    return { ok: true, items: [...fixture.places, { ...fixture.places[0], sid: '999' }] };
+  });
+  const result = await runFolderWatch(h.deps);
+  expect(readFolderWatch(localStorage).enabled).toBe(false);
+  expect(h.lookup).toHaveBeenCalledOnce();
+  expect(result.changes).toEqual([]);
+});

@@ -1,7 +1,7 @@
 import { readJson } from '@sch0718/firebase-session/worker';
 import type { MeetDb } from '../meet/db';
 import { requireSyncUser } from './auth';
-import type { SyncEnv, SyncDeps } from './env';
+import type { SyncEnv, SyncDeps, SyncContext } from './env';
 import { SyncHttpError, syncJson } from './http';
 import { consumeCounter, counterKey } from './limits';
 import type { SyncRoute } from './router';
@@ -279,6 +279,15 @@ export function parseDataQuery(url: URL): { id: string | null } {
     invalid('id');
   return { id };
 }
+/** 요청을 준비한 계정과 인증이 끝난 계정이 다르면 적용하지 않는다. 옛 요청의 머리글 생략은 허용한다. */
+async function requireBackupUser(ctx: SyncContext, deps: SyncDeps) {
+  const user = await requireSyncUser(ctx, deps);
+  const expected = ctx.request.headers.get('X-Landmark-Backup-User');
+  if (expected !== null && expected !== user.userId)
+    throw new SyncHttpError(401, 'reauth-required');
+  return user;
+}
+
 export const BACKUP_ROUTES: SyncRoute[] = [
   {
     method: 'GET',
@@ -287,7 +296,7 @@ export const BACKUP_ROUTES: SyncRoute[] = [
     allowWhenOff: true,
     async run(ctx, deps) {
       const now = deps.now();
-      const user = await requireSyncUser(ctx, deps);
+      const user = await requireBackupUser(ctx, deps);
       if (
         !(await consumeCounter(
           ctx.env.DB!,
@@ -312,7 +321,7 @@ export const BACKUP_ROUTES: SyncRoute[] = [
     async run(ctx, deps) {
       const now = deps.now();
       if (ctx.env.AUTO_BACKUP === 'off') throw new SyncHttpError(503, 'off');
-      const user = await requireSyncUser(ctx, deps);
+      const user = await requireBackupUser(ctx, deps);
       const body = parseBackupBody(await readJson(ctx.request, BACKUP_MAX_BODY_BYTES));
       if (
         !(await consumeCounter(
@@ -337,7 +346,7 @@ export const BACKUP_ROUTES: SyncRoute[] = [
     async run(ctx, deps, _params, url) {
       const now = deps.now();
       const { id } = parseDataQuery(url);
-      const user = await requireSyncUser(ctx, deps);
+      const user = await requireBackupUser(ctx, deps);
       if (
         !(await consumeCounter(
           ctx.env.DB!,
@@ -361,7 +370,7 @@ export const BACKUP_ROUTES: SyncRoute[] = [
     pattern: '/v1/backup',
     allowWhenOff: true,
     async run(ctx, deps) {
-      const user = await requireSyncUser(ctx, deps);
+      const user = await requireBackupUser(ctx, deps);
       await deleteBackup(ctx.env.DB!, user.userId);
       return syncJson(204, null);
     },

@@ -186,3 +186,17 @@ it.each(['AUTO_BACKUP', 'LIBRARY_SYNC'] as const)(
 it('세션이 없으면 거절한다', async () => {
   expect((await request('GET', undefined, '', '')).status).toBe(401);
 });
+it('요청의 계정 경계와 실제 세션 계정이 다르면 쓰지 않는다', async () => {
+  await request('POST', validBody());
+  const owner = await server.db
+    .prepare('SELECT user_id FROM library_backups')
+    .first<{ user_id: string }>();
+  const other = await server.login('you');
+  const response = await server.fetch('http://localhost:8796/api/sync/v1/backup', {
+    method: 'POST',
+    headers: { 'X-Landmark-Session': other, 'X-Landmark-Backup-User': owner!.user_id },
+    body: JSON.stringify(validBody({ ifMatch: null })),
+  });
+  expect(response.status).toBe(401);
+  expect((await server.db.prepare('SELECT COUNT(*) AS n FROM library_backups').first())?.n).toBe(1);
+});

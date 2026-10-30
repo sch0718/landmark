@@ -44,3 +44,33 @@ it('경로·메서드·본문과 삭제 성공을 변환한다', async () => {
   send.mockResolvedValue({ ok: false, kind: 'busy' });
   expect(await api.meta()).toEqual({ ok: false, reason: 'changed' });
 });
+it('요청의 계정 경계를 인증을 기다리기 전에 고정한다', async () => {
+  const { newDeviceMeta, writeSyncMeta } = await import('src/services/library-sync/storage');
+  writeSyncMeta(localStorage, { ...newDeviceMeta(), userId: 'account-a' });
+  const send = vi.fn().mockResolvedValue({ ok: true, data: {} });
+  const api = createBackupApi({ client: { send } } as unknown as Pick<SyncApi, 'client'>);
+  try {
+    await api.meta();
+    expect(send).toHaveBeenCalledWith('GET', '/v1/backup', {
+      headers: { 'X-Landmark-Backup-User': 'account-a' },
+    });
+  } finally {
+    localStorage.clear();
+  }
+});
+it('메타를 읽은 계정 경계를 다음 지우기에서도 유지한다', async () => {
+  const { newDeviceMeta, writeSyncMeta } = await import('src/services/library-sync/storage');
+  writeSyncMeta(localStorage, { ...newDeviceMeta(), userId: 'account-a' });
+  const send = vi.fn().mockResolvedValue({ ok: true, data: {} });
+  const api = createBackupApi({ client: { send } } as unknown as Pick<SyncApi, 'client'>);
+  try {
+    await api.meta();
+    writeSyncMeta(localStorage, { ...newDeviceMeta(), userId: 'account-b' });
+    await api.remove();
+    expect(send).toHaveBeenLastCalledWith('DELETE', '/v1/backup', {
+      headers: { 'X-Landmark-Backup-User': 'account-a' },
+    });
+  } finally {
+    localStorage.clear();
+  }
+});

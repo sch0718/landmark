@@ -1,3 +1,5 @@
+import { getSharedSyncStorage } from 'src/services/library-sync/shared-api';
+import { readSyncMeta } from 'src/services/library-sync/storage';
 import type { SyncApi } from 'src/services/library-sync/api';
 import type { BuiltSnapshot } from './snapshot';
 export type BackupFailure =
@@ -75,19 +77,27 @@ export function toBackupFailure(fail: {
   }
 }
 export function createBackupApi(api: Pick<SyncApi, 'client'>): BackupApi {
+  // 요약을 읽은 계정에 후속 쓰기·되살리기·지우기를 묶는다.
+  let userId = readSyncMeta(getSharedSyncStorage()).userId;
   async function send<T>(
     method: 'GET' | 'POST' | 'DELETE',
     path: string,
     body?: BackupUpload,
   ): Promise<BackupResult<T>> {
+    // 인증 토큰을 기다리는 동안 다른 탭에서 계정을 바꿔도 서버가 이전 요청을 새 계정에 적용하지 않는다.
+    const headers = userId === null ? undefined : { 'X-Landmark-Backup-User': userId };
+    const options = { ...(body === undefined ? {} : { body }), ...(headers ? { headers } : {}) };
     const r =
-      body === undefined
+      Object.keys(options).length === 0
         ? await api.client.send<T>(method, path)
-        : await api.client.send<T>(method, path, { body });
+        : await api.client.send<T>(method, path, options);
     return r.ok ? { ok: true, data: r.data } : { ok: false, reason: toBackupFailure(r) };
   }
   return {
-    meta: () => send('GET', '/v1/backup'),
+    meta: () => {
+      userId = readSyncMeta(getSharedSyncStorage()).userId;
+      return send('GET', '/v1/backup');
+    },
     upload: (body) => send('POST', '/v1/backup', body),
     download: (id) => send('GET', '/v1/backup/data?id=' + encodeURIComponent(id)),
     remove: async () => {

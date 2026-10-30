@@ -64,3 +64,9 @@ export function useFolderWatchBoot(): void {
     };
   }, [store, navigate]);
 }
+
+/** 라우팅 구독이 보관함을 읽는 부모까지 다시 그리지 않도록 별도 컴포넌트에서 붙인다. */
+export function FolderWatchBoot() {
+  useFolderWatchBoot();
+  return null;
+}

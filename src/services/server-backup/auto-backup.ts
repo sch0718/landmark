@@ -67,11 +67,19 @@ export async function runAutoBackup(
   }
   if (status.phase !== 'synced') return 'not-synced';
   if (local.nextCheckAt !== null && deps.now() < local.nextCheckAt) return 'waiting';
+  const cancelled = (): AutoStep | null => {
+    const latest = readServerBackupLocal(deps.storage);
+    if (!latest.auto) return 'disabled';
+    if (status.phase !== 'synced') return 'not-synced';
+    if (deps.syncUserId() !== userId || latest.userId !== userId) return 'auth';
+    return null;
+  };
   const interval = deps.interval ?? autoBackupInterval();
   const run = async (): Promise<AutoStep> => {
     // 잠금을 기다리는 동안 다른 탭이 기록한 기한과 사용자 설정을 다시 확인한다.
     local = readServerBackupLocal(deps.storage);
-    if (!local.auto) return 'disabled';
+    const stopped = cancelled();
+    if (stopped) return stopped;
     if (local.nextCheckAt !== null && deps.now() < local.nextCheckAt) return 'waiting';
     const now = deps.now();
     const finish = (step: AutoStep, wait: number, outcome?: AutoOutcome): AutoStep => {
@@ -86,6 +94,8 @@ export async function runAutoBackup(
     };
     try {
       const reply = await deps.api.meta();
+      const afterMeta = cancelled();
+      if (afterMeta) return afterMeta;
       if (!reply.ok)
         return reply.reason === 'auth' || reply.reason === 'not-allowed'
           ? 'auth'
@@ -95,6 +105,8 @@ export async function runAutoBackup(
       if (backup && reply.data.now - backup.createdAt < interval)
         return finish('recent', interval - (reply.data.now - backup.createdAt));
       const { raw, library } = await deps.readLibrary();
+      const afterRead = cancelled();
+      if (afterRead) return afterRead;
       if (backup && libraryContentHash(library) === backup.contentHash)
         return finish('unchanged', interval);
       if (!hasLiveContent(library)) return finish('skipped-empty', interval, 'skipped-empty');
@@ -106,6 +118,8 @@ export async function runAutoBackup(
         prefs: deps.prefs(),
         now: new Date(now),
       });
+      const afterBuild = cancelled();
+      if (afterBuild) return afterBuild;
       if (!built.ok) return finish(built.reason, interval, built.reason);
       const result = await deps.api.upload(
         uploadBody(
@@ -115,6 +129,8 @@ export async function runAutoBackup(
           backup?.id ?? null,
         ),
       );
+      const afterUpload = cancelled();
+      if (afterUpload) return afterUpload;
       if (result.ok) return finish('uploaded', interval, 'uploaded');
       if (result.reason === 'auth' || result.reason === 'not-allowed') return 'auth';
       if (result.reason === 'changed') return finish('changed', AUTO_RETRY_MS);
@@ -122,7 +138,7 @@ export async function runAutoBackup(
         return finish(result.reason, interval, result.reason);
       return finish('failed', AUTO_RETRY_MS, 'failed');
     } catch {
-      return finish('failed', AUTO_RETRY_MS, 'failed');
+      return cancelled() ?? finish('failed', AUTO_RETRY_MS, 'failed');
     }
   };
   return deps.locks
@@ -139,9 +155,16 @@ export function attachAutoBackup(
   let active = true;
   let running = false;
   const run = (status: Pick<SyncStatus, 'phase'>) => {
-    if (!active || running) return;
+    if (!active || running || status.phase !== 'synced') return;
     running = true;
-    void runAutoBackup(status, deps)
+    void runAutoBackup(
+      {
+        get phase() {
+          return active ? current().phase : 'off';
+        },
+      },
+      deps,
+    )
       .catch(() => {})
       .finally(() => {
         running = false;
