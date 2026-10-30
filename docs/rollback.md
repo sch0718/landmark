@@ -4,7 +4,7 @@
 
 ## 버전
 
-| 태그 | 커밋 | 내용 | 이 버전으로 되돌릴 때 지금(`v0.12.0`) 데이터 |
+| 태그 | 커밋 | 내용 | 이 버전으로 되돌릴 때 지금(`v0.24.0`) 데이터 |
 |---|---|---|---|
 | `v0.1.0` | `bb1a705` | 보관함(하위 프로젝트 1)·HTML 공유 내보내기, 이름을 랜드마크로 | ⚠️ 여행이 하나라도 있거나 카카오·구글 장소가 있으면 손상 화면 |
 | `v0.2.0` | `e92eacb` | 장소 추가: 링크·네이버 폴더·지도 핀 (#2) | ⚠️ 여행이 하나라도 있으면 손상 화면 |
@@ -42,9 +42,13 @@
 | `v0.20.0` | `98956c2` | 카카오톡용 공유 짧은 링크: 장소 내보내기·일정 공유의 긴 링크가 400자를 넘으면 `카카오톡`이 브라우저에서 암호화한 사본을 D1에 올리고 `/s/<id>#k=<키>`(72자)를 보냄(누르면 만들고 다음 클릭에 보냄), 받는 쪽은 `/s/<id>`가 키로 풀어 `/view#d=…`로, 장소 30일·일정 여행 끝 + 7일(최대 180일) 보관, 설정 › `보낸 짧은 링크`에서 지우기, 서버 함수 `/api/share`·`/s/*`, D1 표 `share_links`(스키마 2), 기능 스위치 `SHARE_SHORT=off` (#67) | ✅ 보관함·백업·공유 문서 형식 그대로. 새 기기 키 `tripmap:share-links:v1`은 옛 버전이 읽지 않음. 서버(D1)의 짧은 링크 사본은 남음(아래) |
 | `v0.20.1` | `58278d5` | 카카오 공유 모듈을 앱 안 사본(`src/lib/kakao-share/`) 대신 공용 패키지 `@sch0718/kakao-share` 0.1.1(GitHub Packages)로. 화면·동작은 그대로(0.1.1의 소스·타입·빌드 결과가 사본과 같음), 저장소 `.npmrc`와 빌드 토큰 `GITHUB_PACKAGES_TOKEN`(Pages Production·Preview, Actions는 `packages: read`) (#69) | ✅ 저장 형식·공유 형식 그대로. 새 저장 키 없음 |
 | `v0.20.2` | `dd2964d` | 처음 안내 기록(`src/services/help-seen.ts`)을 공용 패키지 `@sch0718/seen-store` 0.1.0에 맡김(기기 키 `tripmap:help-seen:v1`·형식 그대로, #71), README·도움말 움직이는 그림 생성기의 기반 함수를 `@sch0718/motion-kit` 0.1.0(devDependency)에서 가져옴(생성물 31개 바이트 같음, #72) | ✅ 저장 형식·공유 형식 그대로. 처음 안내 기록 키·형식 그대로 |
+| `v0.21.0` | `01b9930` | 여행 갱신 공유(2A): `일정 공유` › `갱신 링크…`로 보기 링크 `/view#t=<id>.<보기 토큰>`(보는 동안 10초마다 최신 일정)과 소유자 링크 `/trips/live/<id>#h=…`(다른 기기에서 담고 이어 고치기), 계획 화면이 열려 있는 동안 고친 내용 자동 올리기, 설정 › `갱신 링크`, 마지막 갱신 뒤 30~180일 보관, 서버 함수 `/api/trip-live`, D1 표 `trip_shares`·`trip_share_tokens`(스키마 3), 기능 스위치 `TRIP_SHARE_LIVE=off` (#74) | ✅ 보관함(`tripmap:library:v2`, schema 2)·백업·공유 문서 형식 그대로. 새 기기 키 `tripmap:trip-live:v1`(소유자 토큰)은 옛 버전이 읽지 않음. 서버(D1)의 갱신 공유 표는 남음(아래) |
+| `v0.22.0` | `df7e4fe` | 여행 함께 편집·당일 진행(2B): 갱신 링크 창 › `함께 편집…`의 1회용 편집 초대 `/trips/join/<id>#i=…`, 기기별 편집 토큰·`편집 권한 거두기`, 3방향 병합과 같은 곳을 고쳤을 때의 `비교하기` 창, 당일 화면의 공동 다녀옴 체크·다음 장소, 공유 문서 `LiveTripDoc` v2, 서버 함수 `/api/trip-collab`, D1 표 `trip_collab_devices`·`trip_collab_meta`·`trip_progress`(스키마 4, 초대는 `trip_share_tokens`의 `kind = 'invite'`), 기능 스위치 `TRIP_COLLAB=off` (#77) | ⚠️ 보관함·백업·공유 문서 형식 그대로. 새 기기 키 `tripmap:trip-collab:v1`·`tripmap:trip-collab-base:v1:<공유 id>`·`tripmap:trip-live-plan:v1`은 옛 버전이 읽지 않음(2A 기록 모양은 그대로라 소유자 토큰 유지). D1 2B 표는 남음. **`v0.21.0`으로 되돌릴 때는 함께 편집으로 v2가 된 갱신 공유를 SQL로 v1로 돌려야 2A 보기 화면이 열림**(아래) |
+| `v0.23.0` | `be341e9` | 기기 간 보관함 동기화(3): 설정 › `동기화`에서 Google·카카오·네이버 로그인(`@sch0718/firebase-session` 0.2.1, 허용 목록 `ALLOWED_ACCOUNTS`·`ALLOWED_EMAILS`) 뒤 장소·라벨·여행·폴더 연결·약속을 항목별로 맞춤(필드 단위 마지막 변경, 묘비 90일, 충돌 목록), 기기 관리·`서버 자료 모두 지우기`, `/auth/callback`, 서버 함수 `/api/sync`, D1 표 `users`·`sessions`·`library_state`·`library_items`·`library_devices`(스키마 5), 기능 스위치 `LIBRARY_SYNC=off` (#75) | ✅ 보관함·백업 형식 그대로. 새 기기 키 `tripmap:sync:v1`·`tripmap:sync-base:v1`·`tripmap:sync-conflicts:v1`·`tripmap:sync-session:v1`은 옛 버전이 읽지 않음. 서버(D1)의 계정·보관함 사본은 남음(아래) |
+| `v0.24.0` | `56f8a5f` | 서버 자동 백업·네이버 폴더 변경 알림(4): 설정 › 백업 › `서버 백업`(로그인 계정당 하나, 지금 만들기·되살리기·지우기), 동기화를 켠 기기의 하루 한 번 자동 백업, 앱을 열 때 하루 한 번 네이버 폴더를 다시 읽어 새로 저장한 곳을 알림(토스트·라벨 관리, 설정 › 가져오기 스위치), 서버 함수 `/api/sync/v1/backup`, D1 표 `library_backups`·`library_backup_parts`(스키마 6), 기능 스위치 `AUTO_BACKUP=off` (#76) | ⚠️ 보관함·백업 파일 형식 그대로. 새 기기 키 `tripmap:server-backup:v1`·`tripmap:folder-watch:v1`은 옛 버전이 읽지 않음. D1 백업 표는 남음. **`v0.23.0`으로 되돌린 동안 `서버 자료 모두 지우기`를 한 계정의 서버 백업은 지워지지 않아 SQL로 정리**(아래) |
 
 - 마지막 열은 2026-10-17에 `v0.8.0`·`v0.9.0`·`v0.10.0`의 `src/schema`로 지금 형식의 문서(`visitedOn`·`review`·`folders` 포함)를 읽어 확인했다(차례로 셋 다 지움 / `folders`만 지움 / 모두 유지). `v0.3.0`~`v0.7.2`는 `v0.8.0`과 저장 형식이 같다. 새 버전을 낼 때 저장 형식에 필드를 더했다면 그보다 옛 버전 줄을 모두 다시 본다.
-- 보관함은 각 기기의 localStorage(`tripmap:library:v2`)에만 있다. `v0.3.0`~`v0.8.0` 사이는 저장 형식이 같아 데이터 걱정 없이 오갈 수 있다. 그 뒤로는 선택 필드만 더했다(`v0.9.0` 장소의 `visitedOn`·`review`, `v0.10.0` 보관함의 `folders`). `v0.11.0`~`v0.14.6`은 보관함 저장 형식을 바꾸지 않았다. `v0.14.7`은 라벨에 선택 필드 `emoji`만 더했다(`v0.13.0`이 더한 `tripmap:hours:v1`은 지워도 다시 받는 캐시다. `v0.14.0`이 가져온 여행·장소도 지금 스키마 그대로다). `v0.15.0`은 보관함에 선택 키 `meetings`(약속)만 더했다. 옛 버전은 모르는 필드를 손상으로 보지 않고 떼어 낸 채 읽으므로 화면은 그대로 열리지만, **옛 버전에서 무엇이든 저장하는 순간 그 필드가 지워진다.** 되돌리기 전에 설정 › 백업에서 백업 파일을 받아 두면, 새 버전으로 돌아온 뒤 그 파일로 되살릴 수 있다.
+- 보관함은 각 기기의 localStorage(`tripmap:library:v2`)에 있다(`v0.23.0`부터 동기화를 켠 계정은 D1에도 항목별 사본이 있지만 기기의 저장 형식은 그대로다). `v0.3.0`~`v0.8.0` 사이는 저장 형식이 같아 데이터 걱정 없이 오갈 수 있다. 그 뒤로는 선택 필드만 더했다(`v0.9.0` 장소의 `visitedOn`·`review`, `v0.10.0` 보관함의 `folders`). `v0.11.0`~`v0.14.6`은 보관함 저장 형식을 바꾸지 않았다. `v0.14.7`은 라벨에 선택 필드 `emoji`만 더했다(`v0.13.0`이 더한 `tripmap:hours:v1`은 지워도 다시 받는 캐시다. `v0.14.0`이 가져온 여행·장소도 지금 스키마 그대로다). `v0.15.0`은 보관함에 선택 키 `meetings`(약속)만 더했다. 옛 버전은 모르는 필드를 손상으로 보지 않고 떼어 낸 채 읽으므로 화면은 그대로 열리지만, **옛 버전에서 무엇이든 저장하는 순간 그 필드가 지워진다.** 되돌리기 전에 설정 › 백업에서 백업 파일을 받아 두면, 새 버전으로 돌아온 뒤 그 파일로 되살릴 수 있다.
 - `v0.9.0`부터 화면 선호(`tripmap:prefs`)에 선택 키 `query.visited`가 있다. 옛 버전은 이 키를 떼어 내고 읽어 테마·보기 설정은 그대로다(리터럴 값은 늘리지 않았다).
 - **손상 화면**: 옛 버전은 모르는 형식을 손상으로 보고 `tripmap:library:v2:corrupt-<시각>`에 백업을 남긴 뒤 `백업 파일 받기`·`새로 시작`을 보인다. 이때 **`새로 시작`을 누르지 않는다**(보관함이 비워진다). 다시 새 버전으로 되돌리면 원래 데이터를 그대로 읽는다(옛 버전은 원본 키를 지우지 않는다 — `새로 시작`을 눌렀을 때만 지운다).
 - 공유 HTML 파일은 그 안에 보기 화면이 들어 있어 앱 버전과 상관없이 열린다. 공유 지도 페이지(`gh-pages`)는 따로 배포된다(아래).
@@ -61,6 +65,7 @@
 - `v0.20.0`보다 옛 버전으로 되돌리면 서버 함수 `/api/share`·`/s/<id>`가 사라진다. 이미 보낸 카카오톡 짧은 링크는 SPA 기본 동작으로 앱 화면이 열려 `페이지를 찾을 수 없어요`가 되고, 장소·일정 공유 창의 `카카오톡`은 다시 꺼져 `링크 복사`를 안내한다. D1의 `share_links` 행과 `schema_meta` 버전 2는 남는다. 옛 코드의 `ensureSchema`는 버전이 1 이상이면 아무것도 하지 않으므로 약속은 그대로 동작한다. 옛 코드에는 짧은 링크 만료 정리가 없어 되돌린 동안 기한이 지난 행이 남는다(열리지 않고, 암호문이라 내용도 읽을 수 없다). 오래 되돌려 둘 때는 `wrangler d1 execute landmark --remote --command "DELETE FROM share_links WHERE expires_at <= strftime('%Y-%m-%dT%H:%M:%fZ','now')"`로 지운다. 기기 키 `tripmap:share-links:v1`(삭제 토큰)은 옛 버전이 읽지도 지우지도 않으므로, 다시 새 버전으로 오면 설정 › `보낸 짧은 링크`에 그대로 보이고 기한 안의 링크도 다시 열린다. 서버 쪽 문제만 피하려면 되돌리기 대신 Pages 환경 변수 `SHARE_SHORT=off`를 넣고 다시 배포한다. 새로 만들기만 멈추고 이미 보낸 링크는 계속 열린다.
 - `v0.20.1`보다 옛 버전으로 되돌리면 카카오 공유 모듈이 다시 앱 안 사본(`src/lib/kakao-share/`)이 되고 저장소 `.npmrc`가 사라진다. 사본은 패키지 0.1.1과 같은 코드라 화면·동작·데이터 걱정은 없다. Pages의 `GITHUB_PACKAGES_TOKEN`은 남겨 두어도 옛 버전 빌드가 쓰지 않는다. 반대로 `v0.20.1` 이상을 다시 빌드하려면 이 토큰이 Production·Preview 모두에 있어야 한다(없으면 `yarn install`이 `Failed to replace env in config: ${GITHUB_PACKAGES_TOKEN}`으로 멈춘다). 배포만 되돌리기(1절)는 빌드를 다시 하지 않으므로 토큰과 상관없다.
 - `v0.20.2`보다 옛 버전으로 되돌리면 처음 안내 기록과 그림 생성기 기반 함수가 다시 앱 안 코드가 된다. 패키지와 같은 코드·같은 키(`tripmap:help-seen:v1`)·같은 저장 형식이라 이미 본 안내는 다시 뜨지 않고 생성물도 같다. 데이터 걱정은 없다.
+- `v0.21.0`~`v0.24.0`(서버 로드맵 2A·2B·3·4)은 보관함·백업·공유 문서 형식을 바꾸지 않았다. 바뀐 것은 서버 함수·D1 표·기기별 새 키다. 되돌리는 순서, 기능 스위치, D1 스키마 버전, 2B → 2A의 SQL과 오래 되돌려 둘 때의 정리 명령은 아래 「서버 로드맵 2A·2B·3·4 되돌리기」 절에 모았다.
 
 ## 1. 배포만 되돌리기 (가장 빠름, 코드는 그대로)
 
@@ -89,16 +94,20 @@ PR을 만들어 CI를 통과하면 병합한다. 그 PR의 변경 일부(묶음 
 
 | 되돌리려는 PR | 먼저 되돌릴 PR(이 순서로) | 예 |
 |---|---|---|
-| #72 `dd2964d` | 없음 | |
-| #71 `4fe011e` | #72 | #72가 #71이 고친 `docs/development.md`·공통화 문서·`yarn.lock`을 다시 고쳤다(#72 브랜치에 #71 뒤 main을 병합) |
-| #69 `58278d5` | #72 → #71 | #71·#72가 #69가 고친 `docs/development.md`·공통화 문서·`package.json`·`yarn.lock`을, #71이 `public/third-party-notices.txt`를 다시 고쳤다 |
-| #67 `98956c2` | #72 → #71 → #69 | #69가 #67이 고친 `tests/e2e/share-link.spec.ts`·`docs/development.md`를 다시 고쳤다 |
-| #65 `fad26d5` | #72 → #71 → #69 | #69가 #65가 고친 `.github/workflows/ci.yml`·`docs/development.md`를 다시 고쳤다 |
-| #64 `701abc1` | #72 → #71 → #69 → #65 | #65가 #64가 고친 `.github/workflows/ci.yml`·`docs/development.md`를 다시 고쳤다 |
-| #62 `0c28592` | #72 → #71 → #69 → #67 | #67이 #62가 고친 도움말(`scripts/motion/help-pages.mjs`·`src/sections/help/help-content.ts`·`docs/help/share.md`)·`tests/e2e/share-link.spec.ts`·`tests/unit/sections/share-export/share-link-dialog.test.tsx`를 다시 고쳤다 |
-| #59 `808902c` | #72 → #71 → #69 → #67 → #62 | #62가 #59가 만든 `src/lib/kakao-share/*`·`tests/e2e/fixtures.ts`·`share-link.spec.ts`·공유 대화상자 시험과 도움말을 다시 고쳤다 |
-| #57 `6144b70` | #72 → #71 → #69 → #67 | #67이 #57이 고친 `src/sections/settings/SettingsPage.tsx`를 다시 고쳤다. #59와는 `docs/development.md`만 겹치고 충돌하지 않는다 |
-| #55 `cbe2d42` | #72 → #71 → #69 → #67 → #62 → #59 | #67이 #55가 만든 `src/server/meet/schema-sql.ts`·`limits.ts`·`handlers.ts`·`env.ts`를 고쳤다. #59가 #55가 고친 `src/sections/meetings/MeetingResults.tsx`·`share-link.ts`·`use-online-meeting.ts`·`src/vite-env.d.ts`·`playwright.config.ts`·`tests/e2e/meetings*.spec.ts`·`tests/unit/sections/meetings/online-host.test.tsx`·`share-link.test.ts`와 도움말을 다시 고쳤다. #57과 겹치는 코드는 없다. 다만 #56이 #55의 설계 문서를 고쳐 `docs/superpowers/specs/2026-10-25-meeting-online-design.md`가 충돌(UD)하므로 그 파일을 지워 해결한다 |
+| #76 `56f8a5f` | 없음 | |
+| #75 `be341e9` | #76 | #76이 #75가 만든 `src/server/library-sync/env.ts`·`library.ts`·`router.ts`·`src/services/library-sync/sync-engine.ts`와 시험(`tests/e2e/sync-server.ts`·`tests/unit/server/sync-schema.test.ts`·`tests/unit/services/library-sync-engine.test.ts`·`tests/unit/sections/backup/restore-sync-note.test.tsx`)을, #75가 고친 `src/server/meet/schema-sql.ts`·`src/sections/backup/RestoreDialog.tsx`·`src/sections/settings/SettingsPage.tsx`·`src/sections/shell/ShellRoute.tsx`·`src/vite-env.d.ts`·`package.json`·`playwright.config.ts`·`docs/development.md`·README를 다시 고쳤다(4는 3 위에 쌓였다) |
+| #77 `df7e4fe` | #76 → #75 | #75가 #77이 고친 `src/server/meet/schema-sql.ts`(`SCHEMA_VERSION` 4 → 5)·`tests/unit/server/meet-db.test.ts`·`package.json`을 다시 고쳤다. #76도 같은 파일을 고쳤다 |
+| #74 `01b9930` | #76 → #75 → #77 | #77이 #74가 만든 `src/server/trip-live/handlers.ts`·`src/domain/trip-live/*`·`src/sections/trips/live/*`·`src/services/trip-live/client.ts`와 시험 등 41개 파일을 다시 고쳤다(2B는 2A 위에 쌓였다) |
+| #72 `dd2964d` | #76 → #75 → #77 → #74 | #74·#77·#75·#76이 #72가 고친 `docs/development.md`·`package.json`을, #74·#77이 `scripts/motion/help-pages.mjs`를, #75가 `yarn.lock`을 다시 고쳤다 |
+| #71 `4fe011e` | #76 → #75 → #77 → #74 → #72 | #72가 #71이 고친 `docs/development.md`·공통화 문서·`yarn.lock`을 다시 고쳤다(#72 브랜치에 #71 뒤 main을 병합) |
+| #69 `58278d5` | #76 → #75 → #77 → #74 → #72 → #71 | #71·#72가 #69가 고친 `docs/development.md`·공통화 문서·`package.json`·`yarn.lock`을, #71이 `public/third-party-notices.txt`를 다시 고쳤다 |
+| #67 `98956c2` | #76 → #75 → #77 → #74 → #72 → #71 → #69 | #69가 #67이 고친 `tests/e2e/share-link.spec.ts`·`docs/development.md`를 다시 고쳤다 |
+| #65 `fad26d5` | #76 → #75 → #77 → #74 → #72 → #71 → #69 | #69가 #65가 고친 `.github/workflows/ci.yml`·`docs/development.md`를 다시 고쳤다 |
+| #64 `701abc1` | #76 → #75 → #77 → #74 → #72 → #71 → #69 → #65 | #65가 #64가 고친 `.github/workflows/ci.yml`·`docs/development.md`를 다시 고쳤다 |
+| #62 `0c28592` | #76 → #75 → #77 → #74 → #72 → #71 → #69 → #67 | #67이 #62가 고친 도움말(`scripts/motion/help-pages.mjs`·`src/sections/help/help-content.ts`·`docs/help/share.md`)·`tests/e2e/share-link.spec.ts`·`tests/unit/sections/share-export/share-link-dialog.test.tsx`를 다시 고쳤다 |
+| #59 `808902c` | #76 → #75 → #77 → #74 → #72 → #71 → #69 → #67 → #62 | #62가 #59가 만든 `src/lib/kakao-share/*`·`tests/e2e/fixtures.ts`·`share-link.spec.ts`·공유 대화상자 시험과 도움말을 다시 고쳤다 |
+| #57 `6144b70` | #76 → #75 → #77 → #74 → #72 → #71 → #69 → #67 | #67이 #57이 고친 `src/sections/settings/SettingsPage.tsx`를 다시 고쳤다. #59와는 `docs/development.md`만 겹치고 충돌하지 않는다 |
+| #55 `cbe2d42` | #76 → #75 → #77 → #74 → #72 → #71 → #69 → #67 → #62 → #59 | #67이 #55가 만든 `src/server/meet/schema-sql.ts`·`limits.ts`·`handlers.ts`·`env.ts`를 고쳤다. #59가 #55가 고친 `src/sections/meetings/MeetingResults.tsx`·`share-link.ts`·`use-online-meeting.ts`·`src/vite-env.d.ts`·`playwright.config.ts`·`tests/e2e/meetings*.spec.ts`·`tests/unit/sections/meetings/online-host.test.tsx`·`share-link.test.ts`와 도움말을 다시 고쳤다. #57과 겹치는 코드는 없다. 다만 #56이 #55의 설계 문서를 고쳐 `docs/superpowers/specs/2026-10-25-meeting-online-design.md`가 충돌(UD)하므로 그 파일을 지워 해결한다 |
 | #52 `edaa752` | #55 | #55가 #52가 고친 `src/routes/paths.ts`·`router.tsx`·`src/sections/help/help-content.ts`·`src/sections/meetings/MeetingsPage.tsx`·`MeetingEditorPage.tsx`·`public/help/img/meetings-*.svg`·`package.json`·`playwright.config.ts`와 `tests/unit/sections/help/help-page.test.tsx`를 다시 고쳤다 |
 | #48 `9467aea` | #55 → #52 | #55가 #48이 만든 `src/sections/meetings/*`(`MeetLinkPage.tsx`·`MeetingResults.tsx`·`share-link.ts`·`meet-drafts.ts` 등)·`src/domain/meeting/ops.ts`·`src/services/errors.ts`와 시험을 다시 고쳤고, #52가 #48이 만든 `src/sections/meetings/MeetingsPage.tsx`·`MeetingEditorPage.tsx`와 `src/routes/*`·`src/sections/shell/nav-items.ts`·`src/components/icons.tsx`·`package.json`·`playwright.config.ts`·`tests/e2e/fixtures.ts`를 다시 고쳤다 |
 | #47 `7b7d5aa` | #55 → #52 → #48 | #48이 #47이 고친 `src/components/icons.tsx`·`src/domain/library/ops.ts`를, #52가 `src/components/icons.tsx`·`src/sections/labels/LabelsPage.tsx`를 다시 고쳤다 |
@@ -188,6 +197,8 @@ F 묶음 사이에 다른 PR이 끼면 그 PR도 같은 기준(앞 PR의 파일�
 2026-10-29에 `58278d5`(#69 병합 뒤 `main`, `v0.20.1`)에서 #69를 `git revert -m 1`로 되돌렸다. 충돌이 없었고 결과 트리가 바로 전 커밋(`d450de1`, #68 병합)과 같았다. 이어서 #67을 되돌려도 충돌이 없었고 `src`·`tests`·`functions`가 #67 바로 전 커밋과 같았다. #69를 두고 되돌리면 #67은 `docs/development.md`·`tests/e2e/share-link.spec.ts`가, #65·#64는 `.github/workflows/ci.yml`·`docs/development.md`가, #62는 `src/lib/kakao-share/*`(UD)·도움말 등 8개 파일이, #59는 `kakao.ts`·`tests/e2e/fixtures.ts` 등 8개 파일이, #57은 `public/third-party-notices.txt`·`SettingsPage.tsx`가 충돌한다. #69 → #65 → #64, #69 → #67 → #62 → #59, #69 → #67 → #57 순서로는 모두 충돌이 없었고, 그 뒤 #55는 위의 설계 문서 충돌(UD) 하나만 남는다.
 
 2026-10-29에 `dd2964d`(#72 병합 뒤 `main`, `v0.20.2`)에서 #72를 `git revert -m 1`로 되돌렸다. 충돌이 없었고 결과 트리가 바로 전 커밋(`4fe011e`, #71 병합)과 같았다. 이어서 #71을 되돌려도 충돌이 없었고 결과 트리가 `34eac32`(#70 병합)와 같았다. #72를 두고 #71을 되돌리면 `docs/development.md`·공통화 문서·`yarn.lock`이, #72·#71을 두고 #69를 되돌리면 `docs/development.md`·공통화 문서·`package.json`·`public/third-party-notices.txt`·`yarn.lock`이 충돌한다. #72 → #71 → #69 → #67 → #62 → #59, #72 → #71 → #69 → #65 → #64, #72 → #71 → #69 → #67 → #57 순서로는 모두 충돌이 없었다.
+
+2026-10-30에 `56f8a5f`(#76 병합 뒤 `main`, `v0.24.0`)에서 #76 → #75 → #77 → #74 순서로 `git revert -m 1 <병합 커밋>`을 이어서 실행했다. 네 번 모두 충돌이 없었고 결과 트리가 차례로 `be341e9`(#75 병합)·`df7e4fe`(#77 병합)·`01b9930`(#74 병합)·`fb0fee5`(#73 병합)와 같았다. 이어서 #72 → #71 → #69도 충돌 없이 되돌려졌고 `docs/rollback.md`만 빼고 각 PR 바로 전 커밋(`4fe011e`·`34eac32`·`d450de1`)과 같았다. `56f8a5f`에서 순서를 건너뛰면 #75는 18개 파일(그중 8개는 UD)이, #77은 `package.json`·`src/server/meet/schema-sql.ts`·`tests/unit/server/meet-db.test.ts`가, #74는 41개 파일(그중 20개는 UD)이, #72는 `docs/development.md`가 충돌한다. D1의 표와 자료는 코드 되돌리기로 지워지지 않는다(아래 「서버 로드맵 2A·2B·3·4 되돌리기」).
 
 특정 버전의 코드를 그대로 보려면 `git switch --detach v0.4.0`.
 
@@ -367,6 +378,94 @@ yarn typecheck && yarn test
 
 - 작업 하나만 빼는 일은 확인하지 않았다. 리뷰 반영 커밋은 고친 파일의 작업과 함께 되돌린다: 창(`use-trip-legs.ts`·`ShareFileDialog`·`TripShareDialog`)은 Task 8, 보기 화면(`render-trip.ts`·`main.ts`)은 Task 7, `trip-view.ts`는 Task 6, `check-share-trip.ts`는 Task 2, `thinPaths`는 Task 4. `1b1bab8`은 계획 화면의 `use-day-plan.ts`도 고쳤으므로(동작은 그대로) Task 1과 함께 본다.
 - 지도 페이지만 빼려면 3절처럼 `gh-pages`의 배포 커밋(`c7f0924 deploy: c3bc22a`)을 되돌린다. 그러면 v2 파일의 지도에는 장소 마커만 보인다(버전 표 아래 설명).
+
+## 서버 로드맵 2A·2B·3·4 되돌리기 (갱신 공유·함께 편집·동기화·서버 백업)
+
+네 PR 모두 병합 커밋으로 들어갔다: 2A #74 `01b9930`(`v0.21.0`), 2B #77 `df7e4fe`(`v0.22.0`), 3 #75 `be341e9`(`v0.23.0`), 4 #76 `56f8a5f`(`v0.24.0`). 보관함(`tripmap:library:v2`, schema 2)·백업 파일·공유 문서(`ShareDoc` v1·v2) 형식은 넷 모두 바꾸지 않았으므로 옛 버전도 보관함을 그대로 읽는다. 바뀐 것은 서버 함수·D1 표·기기별 새 키다. 토큰과 동기화 정보는 보관함과 백업 파일에 들어가지 않는다.
+
+아래의 원격 D1 쓰기 명령(`UPDATE`·`DELETE`)은 사용자가 직접 실행한다. 미리보기 D1은 `landmark` 대신 `landmark-preview`다.
+
+### 되돌리는 순서
+
+- **4는 3 위에, 2B는 2A 위에 쌓였다.** 코드는 4 → 3 → 2B → 2A(#76 → #75 → #77 → #74, 병합의 역순)로 되돌린다. 3을 되돌리려면 4를, 2A를 되돌리려면 2B를 먼저 되돌린다. 3·4와 2A·2B는 공용 파일(`src/server/meet/schema-sql.ts`의 `SCHEMA_VERSION`, `package.json`, 설정 화면, 라우트, 문서)을 함께 고쳐 앞 PR만 되돌리면 충돌한다(2절 표와 실험 기록).
+- 배포만 되돌리기(1절)는 어느 버전으로든 바로 된다. 다만 2B보다 옛 버전(`v0.21.0`)으로 되돌리면 첫 단계로 아래 「2B → 2A」의 1번 SQL을 실행해야 갱신 링크의 보기 화면이 열린다.
+- 서버 쪽 장애만 피하려면 되돌리기 대신 아래 기능 스위치를 먼저 쓴다.
+
+### 기능 스위치로 끄기
+
+Cloudflare 대시보드 › Workers & Pages › `landmark` › Settings › Variables and Secrets에서 Production·Preview에 값을 `off`로 넣고 다시 배포한다. 변수가 없거나 `off`가 아니면 켜진 상태이므로 평소에는 넣지 않는다.
+
+| 변수 | 막는 것(`503 off`) | 계속 되는 것 |
+|---|---|---|
+| `TRIP_SHARE_LIVE=off` (2A) | 갱신 링크 만들기·올리기. 2B의 공동본 올리기·초대·수락도 막는다 | 이미 보낸 링크 읽기(마지막 공개본), 서버에서 지우기, 링크 다시 만들기 |
+| `TRIP_COLLAB=off` (2B) | 초대 만들기·수락, 공동본 올리기(2A `PUT`의 v2 문서 포함), 진행 올리기 | `state` 읽기, 기기 목록·거두기, 초대 취소, 그만두기, 2A 보기 링크. 각 기기가 고친 것은 기기에 남고 다시 켜면 병합한다 |
+| `LIBRARY_SYNC=off` (3) | 세션 만들기·`/v1/me`·받기·올리기, 서버 백업 쓰기 | 이 기기 세션 철회·기기 목록·다른 기기 철회·`서버 자료 모두 지우기`, 서버 백업 읽기·지우기. 앱은 `unavailable`로 보이고 이 기기 저장은 계속된다 |
+| `AUTO_BACKUP=off` (4) | `POST /v1/backup`(지금 만들기·자동 백업) | 서버 백업 읽기·되살리기·지우기. 자동 백업은 `off`를 기록하고 하루 뒤 다시 본다. 동기화·폴더 알림은 영향 없다 |
+
+네이버 폴더 변경 알림은 서버 기능이 아니라 각 기기의 설정 › 가져오기 스위치로 끈다(`/api/naver-folder`는 그대로).
+
+### D1 스키마 버전
+
+| 버전 | `SCHEMA_VERSION` | 더한 표 |
+|---|---|---|
+| `v0.20.0`~`v0.20.2` | 2 | `share_links` |
+| `v0.21.0` (2A) | 3 | `trip_shares`·`trip_share_tokens`(색인 `trip_shares_expires`·`trip_share_tokens_share`) |
+| `v0.22.0` (2B) | 4 | `trip_collab_devices`(고유 색인 `trip_collab_devices_token`)·`trip_collab_meta`·`trip_progress`. 초대는 2A의 `trip_share_tokens`에 `kind = 'invite'` 행 |
+| `v0.23.0` (3) | 5 | `users`·`sessions`·`library_state`·`library_items`·`library_devices` |
+| `v0.24.0` (4) | 6 | `library_backups`·`library_backup_parts` |
+
+- 표는 모두 `IF NOT EXISTS`로만 더했고 `ALTER TABLE`은 없다. 배포 뒤 첫 요청에서 `ensureSchema`(`src/server/meet/db.ts`)가 만든다.
+- `ensureSchema`는 `schema_meta`의 버전이 코드의 `SCHEMA_VERSION` 이상이면 아무것도 하지 않는다. 그래서 옛 코드로 되돌려도 `schema_meta`는 가장 높은 버전(지금은 6)으로 남고 표와 자료도 지워지지 않는다. 약속 온라인 집계·짧은 링크는 그대로 동작하고, 다시 새 버전으로 오면 남은 표를 이어 쓴다.
+- 확인(읽기 전용): `npx wrangler d1 execute landmark --remote --command "SELECT version FROM schema_meta"`.
+
+### 4 → 3 (`v0.23.0`으로)
+
+- 설정의 서버 백업 구역·자동 백업·네이버 폴더 변경 알림이 사라진다. 보관함과 동기화는 그대로다.
+- D1의 `library_backups`·`library_backup_parts`는 남고 읽히지 않는다. 다시 4로 오면 그대로 이어 쓴다. 기기 키 `tripmap:server-backup:v1`·`tripmap:folder-watch:v1`도 남았다가 다시 쓰인다.
+- **되돌린 사이에 `서버 자료 모두 지우기`를 한 계정의 백업 행은 3단계 코드가 지우지 않는다.** 이 경우에만 남은 백업 행을 정리한다.
+
+  ```bash
+  npx wrangler d1 execute landmark --remote --command "DELETE FROM library_backup_parts WHERE user_id NOT IN (SELECT id FROM users); DELETE FROM library_backups WHERE user_id NOT IN (SELECT id FROM users)"
+  ```
+
+### 3 → 2B (`v0.22.0`으로)
+
+- 동기화가 멈추고(설정 › `동기화`가 사라짐) 각 기기 보관함은 그대로다. `/auth/callback`은 옛 앱에서 `페이지를 찾을 수 없어요`가 된다.
+- D1의 `users`·`sessions`·`library_state`·`library_items`·`library_devices`는 지우지 않고 남는다. 새 버전으로 돌아오면 이어서 쓰고, 옛 버전에서 고친 내용도 항목 해시 비교로 다시 올라간다.
+- 기기 키 `tripmap:sync:v1`·`tripmap:sync-base:v1`·`tripmap:sync-conflicts:v1`·`tripmap:sync-session:v1`은 옛 버전이 읽지도 지우지도 않는다.
+- 서버에 올라간 계정·보관함 사본은 새 버전의 설정 › 동기화 › `서버 자료 모두 지우기`로 지운다(옛 버전에는 이 단추가 없다). 되돌린 동안 서버에서 직접 지우는 명령은 PR·설계서에 정해 두지 않았다.
+- 로그인용 Pages 변수(`VITE_FIREBASE_*`·`ALLOWED_ACCOUNTS`·`ALLOWED_EMAILS`·`KAKAO_CLIENT_ID`·`NAVER_CLIENT_ID` 등)는 남겨 두어도 옛 버전 코드가 읽지 않는다.
+
+### 2B → 2A (`v0.21.0`으로)
+
+1. 되돌리면 먼저 v2가 된 갱신 공유 문서를 2A가 읽는 v1로 돌린다. 모양이 같아 `v`만 바꾸고, 2A 클라이언트가 다시 받도록 `rev`를 올린다.
+
+   ```bash
+   npx wrangler d1 execute landmark --remote --command "UPDATE trip_shares SET doc = json_set(doc, '$.v', 1), rev = rev + 1 WHERE json_extract(doc, '$.v') = 2"
+   ```
+
+   이것을 하지 않으면 소유자가 다시 올릴 때까지 2A 보기 화면이 `일정을 불러오지 못했어요`를 보인다. 같은 SQL을 시험(`tests/unit/server/trip-collab-rollback.test.ts`)이 `docs/development.md`와 2B 설계서에서 뽑아 SQLite로 실행해 확인한다.
+
+2. 편집 기기의 연결된 여행은 보관함에 보통 여행으로 남는다. 초대 링크 `/trips/join/<id>`는 `페이지를 찾을 수 없어요`가 된다.
+3. 소유자 기기의 2A 반영 훅은 낡은 revision 때문에 `409`를 받고 2A 알림(`이 기기 일정으로 바꾸기`·`반영 멈추기`)을 띄운다. 소유자 기기 여행에는 마지막으로 맞춘 공동 편집 내용이 들어 있다.
+4. 기기 키 `tripmap:trip-collab:v1`·`tripmap:trip-collab-base:v1:<공유 id>`·`tripmap:trip-live-plan:v1`은 옛 버전이 읽지도 지우지도 않는다. 2A 기록 `tripmap:trip-live:v1`의 모양은 그대로라 2A 소유자 기록과 토큰은 유지된다.
+5. 2B 표는 남는다. 2A 코드의 공유 지우기·만료 정리는 2B 표를 모르므로, 오래 되돌려 둘 때만 정리한다.
+
+   ```bash
+   npx wrangler d1 execute landmark --remote --command "DELETE FROM trip_collab_devices; DELETE FROM trip_collab_meta; DELETE FROM trip_progress; DELETE FROM trip_share_tokens WHERE kind = 'invite'"
+   ```
+
+6. 다시 2B로 올리면 남은 연결 기록이 다음 맞추기에서 서버 판을 받고 평소 규칙대로 병합한다. 5번 정리를 했으면 편집 기기는 `401`로 끝나 다시 초대해야 한다.
+
+### 2A → `v0.20.2`
+
+- 서버 함수 `/api/trip-live`가 사라져 갱신 링크가 열리지 않는다. 옛 보기 화면은 `#t=`를 몰라 「링크가 손상됐거나 너무 길어요…」를 보이고, 소유자 링크 `/trips/live/<id>`는 `페이지를 찾을 수 없어요`가 된다. 받은 사람이 이미 저장한 HTML 파일과 `Landmark에 담기`로 가져간 여행은 남는다.
+- D1의 `trip_shares`·`trip_share_tokens`는 남고, 기기 키 `tripmap:trip-live:v1`은 옛 버전이 읽지도 지우지도 않는다. 새 버전으로 돌아오면 기한이 남은 공유가 이어서 열린다.
+- 옛 코드에는 갱신 공유 만료 정리가 없다. 오래 되돌려 둘 때만 지운다.
+
+  ```bash
+  wrangler d1 execute landmark --remote --command "DELETE FROM trip_share_tokens WHERE share_id IN (SELECT id FROM trip_shares WHERE expires_at <= strftime('%Y-%m-%dT%H:%M:%fZ','now')); DELETE FROM trip_shares WHERE expires_at <= strftime('%Y-%m-%dT%H:%M:%fZ','now')"
+  ```
 
 ## 3. 공유 지도 페이지 (`https://sch0718.github.io/landmark/`)
 
