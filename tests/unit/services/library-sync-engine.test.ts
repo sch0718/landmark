@@ -395,6 +395,23 @@ it('이 기기에 없는 보류 항목을 내 값으로 맞추면 건너뛰기�
   expect(readSyncMeta(a.storage).skipped).toContain(key);
 });
 
+it('이 기기에서 지운 보류 항목을 내 값으로 맞춰도 삭제 상태를 유지한다', async () => {
+  const server = createSyncMemoryServer();
+  disposers.push(() => server.db.close());
+  const a = await device(server, {
+    ...emptyLibrary(),
+    places: { [p.id]: { ...p, deletedAt: p.createdAt } },
+  });
+  await a.engine.connect('merge');
+  const key = `place:${p.id}` as const;
+  writeSyncMeta(a.storage, {
+    ...readSyncMeta(a.storage),
+    held: [{ key, rev: 2, reason: 'decode' }],
+  });
+  await a.engine.resolveHeld(key, 'mine');
+  expect(a.state.lib.places[p.id]?.deletedAt).not.toBeNull();
+});
+
 it('복원으로 사라진 항목을 전체 재동기화로 받고 다음 실행은 기존 커서를 쓴다', async () => {
   const server = createSyncMemoryServer();
   disposers.push(() => server.db.close());

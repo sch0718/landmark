@@ -99,8 +99,11 @@ function errorMessage(error: unknown): string {
   return '예상하지 못한 오류로 동기화를 멈췄어요. 다시 시도해 주세요';
 }
 
-/** 문서 전체를 되살릴 때 모든 LWW 시각을 새 명령의 시각으로 바꾼다. */
-function reviveAsLatest(doc: AnyItem, now: string): AnyItem {
+/**
+ * 문서 전체를 되살릴 때 모든 LWW 시각을 새 명령의 시각으로 바꾼다.
+ * keepDeleted면 묘비는 묘비로 두고 삭제 시각만 새 명령의 시각으로 갱신한다.
+ */
+function reviveAsLatest(doc: AnyItem, now: string, keepDeleted = false): AnyItem {
   const visit = (v: unknown): unknown => {
     if (Array.isArray(v)) return v.map(visit);
     if (!v || typeof v !== 'object') return v;
@@ -111,7 +114,7 @@ function reviveAsLatest(doc: AnyItem, now: string): AnyItem {
       ]),
     );
   };
-  return { ...(visit(doc) as AnyItem), deletedAt: null };
+  return { ...(visit(doc) as AnyItem), deletedAt: keepDeleted && doc.deletedAt ? now : null };
 }
 function replacePath(doc: AnyItem, path: string, value: unknown, now: string): AnyItem {
   if (path === 'dates' && 'days' in doc) {
@@ -568,7 +571,10 @@ export function createLibrarySyncEngine(deps: EngineDeps): LibrarySyncEngine {
                 return Effect.succeed(
                   doc
                     ? putItems(current, [
-                        { ...p, doc: reviveAsLatest(doc, new Date(deps.now()).toISOString()) },
+                        {
+                          ...p,
+                          doc: reviveAsLatest(doc, new Date(deps.now()).toISOString(), true),
+                        },
                       ])
                     : current,
                 );
