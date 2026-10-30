@@ -99,6 +99,7 @@ export class CollabEngine {
   private remote: CollabState | null = null;
   private lastPut = -Infinity;
   private retryAt = 0;
+  private retryReason: 'off' | 'limited' = 'off';
   private disposed = false;
   private changedWhileSyncing = false;
   constructor(private deps: CollabEngineDeps) {
@@ -190,10 +191,12 @@ export class CollabEngine {
       this.emit({ state: 'ended' });
     } else if (error === 'switched-off') {
       this.retryAt = now().getTime() + LIVE_OFF_RETRY_MS;
+      this.retryReason = 'off';
       this.emit({ state: 'off' });
       this.schedule(LIVE_OFF_RETRY_MS);
     } else if (error === 'rate-limited') {
       this.retryAt = now().getTime() + LIVE_LIMIT_RETRY_MS;
+      this.retryReason = 'limited';
       this.emit({ state: 'limited' });
       this.schedule(LIVE_LIMIT_RETRY_MS);
     } else
@@ -313,7 +316,6 @@ export class CollabEngine {
       this.error('offline');
       return;
     }
-    const waitingState = this.snapshot.state;
     if (d.now().getTime() >= this.retryAt) await this.flushProgress();
     if (terminal(this.snapshot.state)) return;
     this.emit({ state: 'syncing' });
@@ -479,7 +481,7 @@ export class CollabEngine {
       let rev = remote.rev;
       if (doc.v === 1 || !samePlan(chosen, theirs)) {
         if (d.now().getTime() < this.retryAt) {
-          this.emit({ state: waitingState === 'limited' ? 'limited' : 'off' });
+          this.emit({ state: this.retryReason });
           this.schedule(this.retryAt - d.now().getTime());
           return;
         }
