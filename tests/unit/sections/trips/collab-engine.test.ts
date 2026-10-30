@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { CollabEngine, type CollabEngineDeps } from 'src/sections/trips/collab/collab-engine';
+import {
+  CollabEngine,
+  collabEngineFor,
+  resetCollabEngines,
+  type CollabEngineDeps,
+} from 'src/sections/trips/collab/collab-engine';
 import { createTripCollabStore, type TripCollabRecord } from 'src/services/trip-collab/store';
 import { tripCollabApi, type CollabState } from 'src/services/trip-collab/client';
 import { createTripLiveStore } from 'src/services/trip-live/store';
@@ -13,6 +18,7 @@ beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date('2026-11-01T00:00:00.000Z'));
   localStorage.clear();
+  resetCollabEngines();
   Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
   Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
 });
@@ -330,4 +336,126 @@ describe('함께 편집 맞추기 엔진', () => {
     stop();
     stop = undefined;
   });
+});
+
+it('기록을 지운 뒤 새 공유에 연결하면 문서 캐시 없는 새 엔진을 쓴다', async () => {
+  const s = setup(),
+    first = collabEngineFor(s.record.tripId, () => s.deps);
+  await first.sync();
+  s.api.state.mockResolvedValueOnce({ ok: false, error: 'unauthorized' } as never);
+  await first.sync();
+  first.dismiss();
+  s.store.put({ ...s.record, liveId: 'newshare00', rev: 1 });
+  const second = collabEngineFor(s.record.tripId, () => s.deps);
+  expect(second).not.toBe(first);
+  await second.sync();
+  expect(s.api.state).toHaveBeenLastCalledWith('newshare00', s.record.token, {
+    rev: null,
+    prev: null,
+  });
+});
+it('같은 공유에 새 편집 토큰으로 다시 참여해도 종료된 엔진을 재사용하지 않는다', async () => {
+  const s = setup(),
+    first = collabEngineFor(s.record.tripId, () => s.deps);
+  s.api.state.mockResolvedValueOnce({ ok: false, error: 'unauthorized' } as never);
+  await first.sync();
+  s.store.put({ ...s.record, token: 'n'.repeat(43), deviceId: 'newdev00' });
+  const second = collabEngineFor(s.record.tripId, () => s.deps);
+  expect(second).not.toBe(first);
+  await second.sync();
+  expect(s.api.state).toHaveBeenLastCalledWith('abcdefghij', 'n'.repeat(43), {
+    rev: null,
+    prev: null,
+  });
+});
+it.each(['revoked', 'ended'] as const)(
+  '저장된 %s 기록을 다시 열면 종료 안내 상태를 복원한다',
+  (status) => {
+    const s = setup();
+    s.store.update(s.record.tripId, { status });
+    expect(new CollabEngine(s.deps).getSnapshot().state).toBe(status);
+  },
+);
+it('이전 연결의 늦은 오류는 새 연결 기록을 끊지 않는다', async () => {
+  const s = setup(),
+    first = collabEngineFor(s.record.tripId, () => s.deps);
+  let finish!: () => void;
+  s.api.state.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = () => resolve({ ok: false, error: 'unauthorized' } as never);
+      }),
+  );
+  const pending = first.sync();
+  await vi.advanceTimersByTimeAsync(0);
+  s.store.put({ ...s.record, liveId: 'newshare00', rev: 1 });
+  collabEngineFor(s.record.tripId, () => s.deps);
+  finish();
+  await pending;
+  expect(s.store.get(s.record.tripId)?.status).toBe('live');
+});
+it('소유자가 메모 포함을 끄면 이후 새 장소의 메모와 한 줄 평은 공개하지 않는다', async () => {
+  const s = setup();
+  s.doc.options.includeMemo = true;
+  s.store.update(s.record.tripId, { role: 'owner', token: null, deviceId: null });
+  s.deps.liveStore.put({
+    tripId: s.record.tripId,
+    liveId: s.record.liveId,
+    status: 'live',
+    ownerToken: 'o'.repeat(43),
+    viewToken: 'v'.repeat(43),
+    rev: 2,
+    dayIds: s.record.dayIds,
+    options: { title: '여행', includeMemo: false, includeCandidates: true },
+    createdAt: s.doc.share.createdAt,
+  });
+  await s.deps.run((lib) => ({
+    ...lib,
+    places: {
+      ...lib.places,
+      newlocal00: {
+        ...lib.places.place00001!,
+        id: 'newlocal00',
+        source: { kind: 'naver', sid: '999' },
+        review: { value: '새 한 줄 평', updatedAt: new Date().toISOString() },
+      },
+    },
+    trips: {
+      ...lib.trips,
+      trip000001: {
+        ...lib.trips.trip000001!,
+        candidates: { value: ['newlocal00'], updatedAt: new Date().toISOString() },
+      },
+    },
+  }));
+  await s.engine.sync();
+  const sent = vi.mocked(s.api.putDoc).mock.calls[0] as unknown as [
+    string,
+    string,
+    typeof s.doc,
+    number,
+  ];
+  expect(sent).toBeDefined();
+  expect(sent[2].share.places.find((p) => p.id === 'newlocal00')).not.toHaveProperty('memo');
+  expect(sent[2].share.places.find((p) => p.id === 'newlocal00')).not.toHaveProperty('review');
+  expect(sent[2].options.includeMemo).toBe(false);
+});
+it('기록을 지우면 진행 중인 엔진도 끝내고 같은 연결을 다시 넣어도 새로 만든다', async () => {
+  const s = setup(),
+    first = collabEngineFor(s.record.tripId, () => s.deps);
+  let finish!: () => void;
+  s.api.state.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = () => resolve({ ok: true, value: s.remote() });
+      }),
+  );
+  const pending = first.sync();
+  await vi.advanceTimersByTimeAsync(0);
+  s.store.remove(s.record.tripId);
+  finish();
+  await pending;
+  expect(s.store.readBase(s.record.liveId)).toBeNull();
+  s.store.put(s.record);
+  expect(collabEngineFor(s.record.tripId, () => s.deps)).not.toBe(first);
 });

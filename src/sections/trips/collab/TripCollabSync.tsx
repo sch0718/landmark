@@ -1,3 +1,4 @@
+import { CollabDialogHost, CollabConflictDialogHost } from './CollabDialogHost';
 import { useEffect, useRef, useState } from 'react';
 import { tripLiveApi } from 'src/services/trip-live/client';
 import { useTripLiveRecord } from 'src/services/trip-live/store';
@@ -9,8 +10,8 @@ export function TripCollabSync({ tripId }: { tripId: string }) {
     live = useTripLiveRecord(tripId),
     deps = useCollabDeps(tripId, false),
     checked = useRef<string | null>(null);
-  const [, setOpen] = useState(false),
-    [, setCompare] = useState(false);
+  const [open, setOpen] = useState(false),
+    [compare, setCompare] = useState(false);
   useEffect(() => {
     if (view.record || live?.status !== 'live' || checked.current === live.liveId) return;
     checked.current = live.liveId;
@@ -34,5 +35,11 @@ export function TripCollabSync({ tripId }: { tripId: string }) {
       if (!finished) checked.current = null;
     };
   }, [view.record, live, deps, tripId]);
-  return <CollabBar view={view} onOpen={() => setOpen(true)} onCompare={() => setCompare(true)} />;
+  return (
+    <>
+      <CollabBar view={view} onOpen={() => setOpen(true)} onCompare={() => setCompare(true)} />
+      <CollabDialogHost open={open} onClose={() => setOpen(false)} tripId={tripId} />
+      <CollabConflictDialogHost open={compare} onClose={() => setCompare(false)} tripId={tripId} />
+    </>
+  );
 }

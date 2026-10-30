@@ -369,6 +369,7 @@ describe('카드 메뉴', () => {
     expect(screen.getAllByRole('menuitem').map((m) => m.textContent)).toEqual([
       '이름 바꾸기',
       '일정 공유',
+      '함께 편집…',
       '삭제',
     ]);
     await user.click(screen.getByRole('menuitem', { name: '일정 공유' }));

@@ -1,3 +1,4 @@
+import { CollabDialogHost } from '../collab/CollabDialogHost';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
@@ -75,6 +76,7 @@ export function TripLiveShareDialog({
   const [title, setTitle] = useState(record?.options.title ?? trip?.title.value ?? ''),
     [includeMemo, setMemo] = useState(record?.options.includeMemo ?? false),
     [includeCandidates, setCandidates] = useState(record?.options.includeCandidates ?? true);
+  const [collabOpen, setCollabOpen] = useState(false);
   const [busy, setBusy] = useState(false),
     [message, setMessage] = useState(''),
     [otherDevice, setOtherDevice] = useState(false),
@@ -308,6 +310,7 @@ export function TripLiveShareDialog({
         : '소유자 링크 다시 만들기';
   return (
     <>
+      <CollabDialogHost open={collabOpen} onClose={() => setCollabOpen(false)} tripId={tripId} />
       <Dialog open={open} onClose={onClose} aria-labelledby={heading} fullWidth maxWidth="sm">
         <DialogTitle id={heading}>
           갱신 링크 <HelpButton page="share" />
@@ -416,6 +419,10 @@ export function TripLiveShareDialog({
                 )}
               </Box>
               <Typography variant="body2">{LIVE_OWNER_WARNING}</Typography>
+              <Typography>
+                보기 링크는 누구나 볼 수만 있고, 편집 초대 링크는 받은 한 사람이 함께 고칠 수 있어요
+              </Typography>
+              <Button onClick={() => setCollabOpen(true)}>함께 편집…</Button>
               <Button onClick={() => void shareLink(links.owner!, title)}>
                 다른 기기에서 관리
               </Button>

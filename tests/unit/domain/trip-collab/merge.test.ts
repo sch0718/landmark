@@ -193,3 +193,20 @@ describe('공동 계획 3방향 병합', () => {
     expect((['d10', 'd2', 'c'] as const).slice().sort(compareListIds)).toEqual(['c', 'd2', 'd10']);
   });
 });
+it('기간 축소로 옮긴 후보와 다른 쪽의 후보 추가가 겹치면 잘린 Day의 기간도 함께 고른다', () => {
+  const b = mkPlan({ days: [['a'], ['b'], ['c']] }),
+    m = copy(b),
+    t = copy(b);
+  m.endDate = '2026-11-02';
+  m.candidates.push(...m.days.pop()!.stops.map((s) => s.placeId));
+  t.candidates.push(pid('d'));
+  const merge = mergeCollabPlan(b, m, t);
+  expect(merge.conflicts.map((c) => c.id)).toEqual(['placement.period,c,d2']);
+  const result = resolveCollabMerge(merge, { 'placement.period,c,d2': 'theirs' });
+  expect(result.ok).toBe(true);
+  if (result.ok) {
+    expect(result.plan.endDate).toBe('2026-11-03');
+    expect(result.plan.days[2]!.stops.map((s) => s.placeId)).toEqual([pid('c')]);
+    expect(result.plan.candidates).toEqual([pid('d')]);
+  }
+});

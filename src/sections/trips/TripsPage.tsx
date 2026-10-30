@@ -1,3 +1,4 @@
+import { CollabDialogHost } from 'src/sections/trips/collab/CollabDialogHost';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
@@ -173,6 +174,7 @@ export function TripsPage() {
     };
   }, [library, today]);
 
+  const [collab, setCollab] = useState<{ tripId: string; open: boolean } | null>(null);
   const [creating, setCreating] = useState(false);
   const [menu, setMenu] = useState<{ tripId: string; anchor: HTMLElement } | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
@@ -292,6 +294,15 @@ export function TripsPage() {
           일정 공유
         </MenuItem>
         <MenuItem
+          sx={{ minHeight: 44 }}
+          onClick={() => {
+            if (menu) setCollab({ tripId: menu.tripId, open: true });
+            setMenu(null);
+          }}
+        >
+          함께 편집…
+        </MenuItem>
+        <MenuItem
           sx={{ minHeight: 44, color: 'error.main' }}
           onClick={() => {
             setDeleting(menu?.tripId ?? null);
@@ -320,6 +331,14 @@ export function TripsPage() {
             origin: renamingTrip.origin.value,
           }}
           onClose={() => setRenaming(null)}
+        />
+      )}
+      {collab && (
+        <CollabDialogHost
+          key={collab.tripId}
+          open={collab.open}
+          onClose={() => setCollab({ ...collab, open: false })}
+          tripId={collab.tripId}
         />
       )}
       {sharing !== null && (

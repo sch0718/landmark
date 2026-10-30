@@ -64,6 +64,7 @@ export function assignServerPlaceIds(
     used = new Set([...taken, ...Object.keys(placeMap)]);
   const refs = [
     trip.origin.value,
+    ...Object.keys(trip.legModes.value).flatMap((key) => key.split('>')),
     ...trip.candidates.value,
     ...trip.days.flatMap((d) => [...d.stops.value.map((s) => s.placeId), d.lodging.value]),
   ];

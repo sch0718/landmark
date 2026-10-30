@@ -95,11 +95,13 @@ export class CollabEngine {
   private remote: CollabState | null = null;
   private lastPut = -Infinity;
   private retryAt = 0;
+  private disposed = false;
   constructor(private deps: CollabEngineDeps) {
     const record = deps.store.get(deps.tripId),
       base = record ? deps.store.readBase(record.liveId) : null;
     this.snapshot = {
-      state: 'idle',
+      state:
+        record?.status === 'revoked' ? 'revoked' : record?.status === 'ended' ? 'ended' : 'idle',
       record,
       merge: null,
       syncedAt: record?.syncedAt ?? null,
@@ -117,6 +119,7 @@ export class CollabEngine {
   };
   getSnapshot = (): CollabSnapshot => this.snapshot;
   private emit(patch: Partial<CollabSnapshot>) {
+    if (this.disposed) return;
     this.snapshot = { ...this.snapshot, ...patch, record: this.deps.store.get(this.deps.tripId) };
     this.listeners.forEach((fn) => fn());
   }
@@ -132,6 +135,7 @@ export class CollabEngine {
     }, ms);
   }
   retain(): () => void {
+    if (this.disposed) return () => undefined;
     this.refs++;
     if (
       this.refs === 1 &&
@@ -169,6 +173,7 @@ export class CollabEngine {
       : (this.deps.liveStore.get(record.tripId)?.ownerToken ?? null);
   }
   private error(error: TripCollabError) {
+    if (this.disposed) return;
     const { store, tripId, now, liveStore } = this.deps;
     const record = store.get(tripId);
     if (error === 'unauthorized') {
@@ -209,6 +214,7 @@ export class CollabEngine {
     return this.start(choices);
   }
   private start(choices?: Readonly<Record<string, CollabSide>>): Promise<void> {
+    if (this.disposed) return Promise.resolve();
     if (this.inflight)
       return choices ? this.inflight.then(() => this.start(choices)) : this.inflight;
     const run = async () => {
@@ -235,6 +241,7 @@ export class CollabEngine {
     return done;
   }
   private async flushProgress(): Promise<void> {
+    if (this.disposed) return;
     if (this.sending) return this.sending;
     const { store, tripId, api } = this.deps,
       record = store.get(tripId);
@@ -247,6 +254,7 @@ export class CollabEngine {
     const sent = record.pendingProgress.slice(0, 50);
     this.sending = (async () => {
       const r = await api.progress(record.liveId, token, { ops: sent });
+      if (this.disposed) return;
       if (!r.ok) {
         this.error(r.error);
         return;
@@ -276,6 +284,7 @@ export class CollabEngine {
   }
   private async perform(choices?: Readonly<Record<string, CollabSide>>): Promise<void> {
     const d = this.deps;
+    if (this.disposed) return;
     if (terminal(this.snapshot.state)) return;
     let initial = d.store.get(d.tripId);
     if (!initial || initial.status !== 'live') {
@@ -303,6 +312,7 @@ export class CollabEngine {
         rev: this.doc ? record.rev : null,
         prev: this.doc ? record.prev : null,
       });
+      if (this.disposed) return;
       if (!response.ok) {
         this.error(response.error);
         return;
@@ -338,10 +348,12 @@ export class CollabEngine {
       });
       let placeMap = record.placeMap;
       const mapped = await d.run((lib, ctx) => {
+        if (this.disposed) return { ok: true, lib };
         const r = mapServerPlaces(lib, doc, placeMap, ctx);
         if (r.ok) placeMap = r.placeMap;
         return r;
       });
+      if (this.disposed) return;
       if (!mapped.ok) {
         d.reportError(mapped.error);
         this.emit({ state: 'failed' });
@@ -366,7 +378,10 @@ export class CollabEngine {
       const theirs = planFromDoc(doc),
         clashes = stopIdClashes(mine, theirs, base?.plan ?? null);
       if (clashes.length) {
-        const renamed = await d.run((lib, ctx) => renameStopIds(lib, d.tripId, clashes, ctx));
+        const renamed = await d.run((lib, ctx) =>
+          this.disposed ? { ok: true, lib } : renameStopIds(lib, d.tripId, clashes, ctx),
+        );
+        if (this.disposed) return;
         if (!renamed.ok) {
           this.emit({ state: 'failed' });
           return;
@@ -394,6 +409,7 @@ export class CollabEngine {
       if (changed) {
         let moved = false;
         const applied = await d.run((latest, ctx) => {
+          if (this.disposed) return { ok: true, lib: latest };
           const current = latest.trips[d.tripId];
           if (
             !current ||
@@ -406,6 +422,7 @@ export class CollabEngine {
           }
           return applyCollabPlan(latest, d.tripId, chosen, placeMap, ctx);
         });
+        if (this.disposed) return;
         if (!applied.ok) {
           d.reportError(applied.error);
           this.emit({ state: 'failed' });
@@ -432,7 +449,14 @@ export class CollabEngine {
           lib: d.getLibrary(),
           placeMap,
           role: record.role,
-          options: doc.options,
+          options:
+            record.role === 'owner'
+              ? {
+                  ...doc.options,
+                  includeMemo:
+                    d.liveStore.get(d.tripId)?.options.includeMemo ?? doc.options.includeMemo,
+                }
+              : doc.options,
           createdAt: doc.share.createdAt,
           routeOf: d.routeOf(),
         });
@@ -443,6 +467,7 @@ export class CollabEngine {
         }
         this.lastPut = d.now().getTime();
         const result = await d.api.putDoc(record.liveId, token, fitted, rev);
+        if (this.disposed) return;
         if (!result.ok) {
           if (result.error === 'conflict') {
             this.lastPut = -Infinity;
@@ -476,6 +501,7 @@ export class CollabEngine {
     this.schedule(30_000);
   }
   localChanged(): void {
+    if (this.disposed) return;
     if (terminal(this.snapshot.state) || this.snapshot.state === 'syncing') return;
     const d = this.deps,
       r = d.store.get(d.tripId),
@@ -498,6 +524,7 @@ export class CollabEngine {
     this.schedule(base ? LIVE_DEBOUNCE_MS : 0);
   }
   queueProgress(op: Omit<ProgressOp, 'at'>): void {
+    if (this.disposed) return;
     const d = this.deps,
       r = d.store.get(d.tripId);
     if (!r || r.status !== 'live') return;
@@ -512,6 +539,7 @@ export class CollabEngine {
     void this.flushProgress();
   }
   setNext(stopId: string | null, date: string): void {
+    if (this.disposed) return;
     const d = this.deps,
       r = d.store.get(d.tripId);
     if (!r || r.status !== 'live') return;
@@ -520,6 +548,7 @@ export class CollabEngine {
     void d.api
       .progress(r.liveId, token, { ops: [], next: { stopId, date, at: d.now().toISOString() } })
       .then((result) => {
+        if (this.disposed) return;
         if (!result.ok) {
           toast.error('다음 장소를 정하지 못했어요. 인터넷 연결을 확인하고 다시 해 주세요');
           return;
@@ -530,6 +559,11 @@ export class CollabEngine {
         this.emit({ progress: result.value });
       });
   }
+  dispose(): void {
+    this.disposed = true;
+    this.poll?.stop();
+    this.cancelTimer();
+  }
   dismiss(): void {
     if (this.snapshot.state === 'revoked' || this.snapshot.state === 'ended') {
       this.deps.store.remove(this.deps.tripId);
@@ -537,16 +571,46 @@ export class CollabEngine {
     }
   }
 }
-const engines = new Map<string, CollabEngine>();
+type EngineEntry = { engine: CollabEngine; connection: string; unsubscribe(): void };
+const engines = new Map<string, EngineEntry>();
+function connectionOf(deps: CollabEngineDeps): string {
+  const record = deps.store.get(deps.tripId);
+  return JSON.stringify([
+    record?.liveId,
+    record?.role,
+    record?.deviceId,
+    record?.role === 'editor' ? record.token : deps.liveStore.get(deps.tripId)?.ownerToken,
+  ]);
+}
 export function collabEngineFor(tripId: string, makeDeps: () => CollabEngineDeps): CollabEngine {
-  let engine = engines.get(tripId);
-  if (!engine) {
-    engine = new CollabEngine(makeDeps());
-    engines.set(tripId, engine);
+  const deps = makeDeps(),
+    connection = connectionOf(deps);
+  let entry = engines.get(tripId);
+  if (!entry || entry.connection !== connection) {
+    entry?.unsubscribe();
+    entry?.engine.dispose();
+    const next: EngineEntry = {
+      engine: new CollabEngine(deps),
+      connection,
+      unsubscribe: () => undefined,
+    };
+    engines.set(tripId, next);
+    next.unsubscribe = deps.store.subscribe(() => {
+      if (!deps.store.get(tripId) || connectionOf(deps) !== next.connection) {
+        next.engine.dispose();
+        next.unsubscribe();
+        if (engines.get(tripId) === next) engines.delete(tripId);
+      }
+    });
+    entry = next;
   }
-  return engine;
+  return entry.engine;
 }
 export function resetCollabEngines(): void {
+  for (const entry of engines.values()) {
+    entry.unsubscribe();
+    entry.engine.dispose();
+  }
   engines.clear();
   chains.clear();
 }

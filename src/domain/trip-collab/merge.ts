@@ -189,6 +189,20 @@ function analyze(
           nodes = [bLoc.get(p), m, t];
         if (m !== t && groups.some((g) => nodes.some((n) => n != null && g.has(n)))) link(nodes);
       }
+      // 잘린 Day를 되살릴 수 있는 배치 선택에는 그 Day의 기간도 함께 묶는다.
+      const span = daysBetween(period.value.startDate, period.value.endDate);
+      for (const group of [...groups]) {
+        if (
+          [...group].some(
+            (id) =>
+              id !== 'period' &&
+              id !== 'c' &&
+              Number(id.slice(1)) >= span &&
+              (listOf(mine, id) !== undefined || listOf(theirs, id) !== undefined),
+          )
+        )
+          link(['period', 'c', ...group]);
+      }
     }
   }
   const placements: PlacementConflict[] = forceAll

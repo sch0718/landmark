@@ -1,3 +1,4 @@
+import { useTripCollabRecord } from 'src/services/trip-collab/store';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
@@ -8,6 +9,9 @@ import { useTripLiveRecord } from 'src/services/trip-live/store';
 export function LiveShareEntry({ tripId }: { tripId: string }) {
   const [open, setOpen] = useState(false),
     record = useTripLiveRecord(tripId);
+  const editor = useTripCollabRecord(tripId)?.role === 'editor';
+  if (editor)
+    return <Typography>함께 편집 중인 여행의 갱신 링크는 만든 사람이 관리해요</Typography>;
   const live = record?.status === 'live',
     disconnected = record?.status === 'disconnected';
   return (

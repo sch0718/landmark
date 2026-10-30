@@ -11,6 +11,7 @@ import {
 import { buildLiveLibrary } from '../../../fixtures/builders';
 import { buildLiveDoc } from '../../../fixtures/live-trip';
 import { mkPlan } from './builders';
+import { projectLocalTrip } from 'src/domain/trip-collab/plan';
 const ctx = {
   now: '2026-11-01T00:00:00.000Z',
   newId: (kind: string) => (kind === 'stop' ? 'newstop0' : 'newplace00'),
@@ -84,5 +85,18 @@ describe('공동 여행 장소 대응', () => {
       r = renameStopIds(lib, 'trip000001', ['stop0001', '없는id'], ctx);
     expect(r.ok && r.lib.trips.trip000001!.days[0]!.stops.value[0]!.id).toBe('newstop0');
     expect(lib.trips.trip000001!.days[0]!.stops.value[0]!.id).toBe('stop0001');
+  });
+});
+
+it('일정에서 뺀 장소의 과거 이동 수단 키도 서버 id로 투영할 수 있다', () => {
+  const lib = buildLiveLibrary(),
+    trip = {
+      ...lib.trips.trip000001!,
+      legModes: { value: { 'place00001>orphan0000': 'walk' as const }, updatedAt: ctx.now },
+    };
+  const map = assignServerPlaceIds(trip, {}, new Set(), () => 'newplace00');
+  expect(map.orphan0000).toBe('orphan0000');
+  expect(projectLocalTrip(trip, serverIdOf(map), ['day00001', 'day00002']).legModes).toEqual({
+    'place00001>orphan0000': 'walk',
   });
 });
