@@ -399,6 +399,60 @@ describe('함께 편집 맞추기 엔진', () => {
     await s.engine.sync();
     expect(s.deps.liveStore.get(s.record.tripId)?.status).toBe('disconnected');
   });
+  it('429 한도 초과 대기 중 로컬 편집을 맞춰도 limited 상태를 유지한다', async () => {
+    const s = setup();
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(null, { status: 429 }));
+    s.api.putDoc.mockImplementationOnce(tripCollabApi.putDoc);
+    s.change(0, '10:00');
+    await s.engine.sync();
+    expect(s.engine.getSnapshot().state).toBe('limited');
+
+    s.change(1, '08:00');
+    s.engine.localChanged();
+    await vi.advanceTimersByTimeAsync(3000);
+
+    expect(s.engine.getSnapshot().state).toBe('limited');
+    expect(s.api.putDoc).toHaveBeenCalledOnce();
+    expect(s.api.state).toHaveBeenCalledTimes(2);
+  });
+  it('다음 장소 정하기 성공 뒤에도 보내지 않은 다녀옴 체크를 화면에 유지한다', async () => {
+    const s = setup();
+    await s.engine.sync();
+    s.api.progress.mockResolvedValueOnce({ ok: false, error: 'offline' });
+    s.engine.queueProgress({ stopId: 'stop0001', visited: true, date: '2026-11-01' });
+    await vi.advanceTimersByTimeAsync(0);
+    const pending = s.store.get(s.record.tripId)!.pendingProgress;
+    expect(pending).toHaveLength(1);
+    const next = {
+      stopId: 'stop0002',
+      date: '2026-11-01',
+      at: new Date().toISOString(),
+      label: s.record.label,
+    };
+    s.api.progress.mockResolvedValueOnce({ ok: true, value: { prev: 1, marks: [], next } });
+
+    s.engine.setNext(next.stopId, next.date);
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(s.api.progress).toHaveBeenLastCalledWith(s.record.liveId, s.record.token, {
+      ops: [],
+      next: { stopId: next.stopId, date: next.date, at: next.at },
+    });
+    expect(s.store.get(s.record.tripId)?.pendingProgress).toEqual(pending);
+    expect(s.engine.getSnapshot().progress).toEqual({
+      prev: 1,
+      next,
+      marks: [
+        {
+          stopId: pending[0]!.stopId,
+          date: pending[0]!.date,
+          at: pending[0]!.at,
+          by: { device: s.record.deviceId, label: s.record.label },
+        },
+      ],
+    });
+    expect(s.store.readBase(s.record.liveId)?.progress).toEqual({ prev: 1, marks: [], next });
+  });
   it('체크 전송 실패는 대기열에 남고 다음 맞추기에 보낸다', async () => {
     const s = setup();
     s.api.progress.mockResolvedValueOnce({ ok: false, error: 'offline' } as never);

@@ -122,6 +122,40 @@ describe('편집 초대', () => {
         .first(),
     ).toEqual({ n: 0 });
   });
+  it('만료된 같은 토큰은 새 초대로 만들고 새 기한으로 미리보기와 수락을 허용한다', async () => {
+    await setup();
+    const first = await (await createInvite()).json();
+    expect(first.expiresAt).toBe('2026-11-08T00:00:00.000Z');
+    await Promise.all(pending);
+    now = new Date(first.expiresAt);
+    expect(
+      await db.prepare("SELECT expires_at FROM trip_share_tokens WHERE kind = 'invite'").first(),
+    ).toEqual({ expires_at: first.expiresAt });
+
+    const renewed = await createInvite();
+    expect(renewed.status).toBe(201);
+    const body = await renewed.json();
+    expect(body).toEqual({
+      key: first.key,
+      created: true,
+      expiresAt: '2026-11-15T00:00:00.000Z',
+    });
+    expect(
+      await db
+        .prepare("SELECT created_at, expires_at FROM trip_share_tokens WHERE kind = 'invite'")
+        .all(),
+    ).toMatchObject({
+      results: [{ created_at: now.toISOString(), expires_at: body.expiresAt }],
+    });
+    const preview = await handleCollabInvitePreview(ctx('GET', invite), deps);
+    expect(preview.status).toBe(200);
+    expect(await preview.json()).toMatchObject({ title: '시험 여행', expiresAt: body.expiresAt });
+    const accepted = await accept();
+    expect(accepted.status).toBe(201);
+    expect(await accepted.json()).toMatchObject({ deviceId: expect.any(String), rev: 2 });
+    expect((await state()).status).toBe(200);
+    expect((await accept('x'.repeat(43))).status).toBe(401);
+  });
   it('공유 기한이 먼저이면 그때 초대도 끝난다', async () => {
     await setup();
     await db

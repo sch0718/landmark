@@ -1,17 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { createElement, type ReactNode } from 'react';
 import { createStore, Provider } from 'jotai';
 import { libraryAtom } from 'src/stores/library-state';
 import { useTripLivePublish } from 'src/sections/trips/live/use-trip-live-publish';
 import { useTripLegs } from 'src/sections/share-export/use-trip-legs';
 import { enableCollabAsOwner, joinCollabAsOwner } from 'src/sections/trips/collab/owner-join';
+import * as collabHooks from 'src/sections/trips/collab/use-trip-collab';
 import {
   collabEngineFor,
   resetCollabEngines,
   type CollabEngineDeps,
 } from 'src/sections/trips/collab/collab-engine';
-import { createTripCollabStore } from 'src/services/trip-collab/store';
+import { createTripCollabStore, type TripCollabRecord } from 'src/services/trip-collab/store';
+import { planFromDoc } from 'src/domain/trip-collab/plan';
 import { createTripLiveStore } from 'src/services/trip-live/store';
 import { createTripLivePlanStore, TRIP_LIVE_PLAN_KEY } from 'src/services/trip-live/plan-store';
 import { tripLiveApi } from 'src/services/trip-live/client';
@@ -163,6 +165,128 @@ async function setup(
   };
   return { deps, store, record, live, change };
 }
+function leaveStaleOwner(
+  s: Awaited<ReturnType<typeof setup>>,
+  status: TripCollabRecord['status'],
+  liveId = s.record.liveId,
+) {
+  s.store.put({
+    tripId: s.record.tripId,
+    liveId,
+    role: 'owner',
+    token: null,
+    deviceId: null,
+    label: '만든 사람',
+    status,
+    rev: 99,
+    prev: 7,
+    dayIds: ['oldday01', 'oldday02'],
+    placeMap: {},
+    syncedAt: '2026-10-01T00:00:00.000Z',
+    title: '낡은 연결',
+    pendingProgress: [
+      { stopId: 'stop0001', visited: true, date: '2026-10-01', at: '2026-10-01T00:00:00.000Z' },
+    ],
+  });
+  s.store.writeBase(liveId, {
+    rev: 99,
+    plan: { ...planFromDoc(s.live.doc), title: '낡은 기준' },
+    progress: null,
+  });
+}
+describe.each(['enableCollabAsOwner', 'joinCollabAsOwner'] as const)(
+  '%s 낡은 소유자 합류',
+  (entry) => {
+    it.each([
+      ['revoked', 'abcdefghij'],
+      ['ended', 'abcdefghij'],
+      ['live', 'klmnopqrst'],
+    ] as const)('%s·%s 기록과 기준을 지우고 현재 공유로 합류한다', async (status, liveId) => {
+      const s = await setup();
+      s.live.doc.v = 2;
+      leaveStaleOwner(s, status, liveId);
+
+      if (entry === 'enableCollabAsOwner')
+        expect(await enableCollabAsOwner(s.deps)).toEqual({ ok: true });
+      else await joinCollabAsOwner(s.deps, s.live);
+
+      expect(s.store.list()).toHaveLength(1);
+      expect(s.store.get(s.record.tripId)).toMatchObject({
+        liveId: s.record.liveId,
+        status: 'live',
+        role: 'owner',
+        rev: s.live.rev,
+        prev: 0,
+        dayIds: s.live.doc.ids.days,
+        title: s.live.doc.share.title,
+        placeMap: { place00001: 'place00001', place00002: 'place00002' },
+        pendingProgress: [],
+      });
+      expect(s.store.readBase(s.record.liveId)).toMatchObject({
+        rev: s.live.rev,
+        plan: planFromDoc(s.live.doc),
+      });
+      if (liveId !== s.record.liveId) expect(s.store.readBase(liveId)).toBeNull();
+    });
+  },
+);
+
+it('2A PUT의 409 version 뒤 실제 합류가 낡은 소유자 기록을 교체한다', async () => {
+  const s = await setup();
+  s.live.doc.v = 2;
+  s.live.rev = 3;
+  leaveStaleOwner(s, 'revoked');
+  vi.spyOn(collabHooks, 'useCollabDeps').mockReturnValue(s.deps);
+  s.change(1, '11:00');
+  vi.mocked(tripLiveApi.update).mockRestore();
+  const request = vi
+    .spyOn(globalThis, 'fetch')
+    .mockResolvedValueOnce(
+      Response.json(
+        { error: { code: 'CONFLICT', message: '공동 편집 버전이에요' }, reason: 'version' },
+        { status: 409 },
+      ),
+    );
+  vi.mocked(useTripLegs).mockReturnValue({
+    total: 0,
+    answered: 0,
+    estimated: 0,
+    oldestQueriedAt: null,
+    routeOf: ESTIMATE_ONLY,
+  });
+  const jotai = createStore();
+  jotai.set(libraryAtom, s.deps.getLibrary());
+  const hook = renderHook(() => useTripLivePublish(s.record.tripId, true), {
+    wrapper: ({ children }: { children: ReactNode }) =>
+      createElement(Provider, { store: jotai }, children),
+  });
+  try {
+    await waitFor(() => expect(hook.result.current.state).toBe('pending'));
+    await act(() => hook.result.current.overwrite());
+
+    expect(request).toHaveBeenCalledOnce();
+    expect(request).toHaveBeenCalledWith(
+      `/api/trip-live/${s.record.liveId}`,
+      expect.objectContaining({ method: 'PUT' }),
+    );
+    expect(tripLiveApi.get).toHaveBeenCalledWith(s.record.liveId, null, s.record.ownerToken);
+    expect(hook.result.current.state).toBe('collab');
+    expect(s.store.get(s.record.tripId)).toMatchObject({
+      status: 'live',
+      liveId: s.record.liveId,
+      role: 'owner',
+      rev: 3,
+      prev: 0,
+      pendingProgress: [],
+    });
+    expect(s.store.readBase(s.record.liveId)).toMatchObject({
+      rev: 3,
+      plan: planFromDoc(s.live.doc),
+    });
+  } finally {
+    hook.unmount();
+  }
+});
 describe('소유자 공동 편집 합류', () => {
   it('v1은 v2로 올리고 연결 기록·기준을 만든다', async () => {
     const s = await setup();
