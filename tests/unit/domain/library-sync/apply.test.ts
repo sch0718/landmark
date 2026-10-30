@@ -72,7 +72,7 @@ it('서버 묘비를 받으면 삭제로 인한 수정 유실을 기록한다', 
     ),
   ).toBe(true);
 });
-it('전체 재동기화에서 서버에 없는 미변경 live 항목만 묘비로 맞춘다', () => {
+it('전체 재동기화에서 서버에 없는 미변경 live 항목을 묘비로 맞춘다', () => {
   const result = applyRemote(lib, base, [], { ...opts, fullResync: true });
   expect(result.lib.places[p.id]?.deletedAt).toBe(now);
   expect(result.base['place:place00001']).toEqual({
@@ -106,23 +106,27 @@ it('전체 재동기화에서 정리된 묘비를 로컬에서 되살렸으면 �
     expect.objectContaining({ key: 'place:place00001', doc: p, baseRev: 0, baseDeleted: null }),
   ]);
 });
-it('전체 재동기화에서 서버에 없는 로컬 수정 항목을 유지하고 새 항목으로 올린다', () => {
-  const changed = { ...p, memo: f('내 값', later) };
-  const local = { ...lib, places: { [p.id]: changed } };
-  const result = applyRemote(local, base, [], { ...opts, fullResync: true });
-  expect(result.lib).toBe(local);
-  expect(result.lib.places[p.id]).toEqual(changed);
-  expect(result.base).not.toHaveProperty('place:place00001');
-  expect(result.conflicts).toEqual([]);
-  expect(dirtyItems(result.lib, result.base, [])).toEqual([
-    expect.objectContaining({
-      key: 'place:place00001',
-      doc: changed,
-      baseRev: 0,
-      baseDeleted: null,
-    }),
-  ]);
-});
+it.each([t, later, now, null])(
+  '전체 재동기화에서 서버에 없는 로컬 수정 항목을 묘비로 맞추고 지난 동기화 %s 이후 수정만 충돌로 남긴다',
+  (lastSyncAt) => {
+    const changed = { ...p, memo: f('내 값', later) };
+    const local = { ...lib, places: { [p.id]: changed } };
+    const tombstone = { ...changed, deletedAt: now };
+    const result = applyRemote(local, base, [], { ...opts, fullResync: true, lastSyncAt });
+    expect(result.lib.places[p.id]).toEqual(tombstone);
+    expect(result.base['place:place00001']).toEqual({
+      rev: 0,
+      hash: hashItem(tombstone),
+      deleted: true,
+    });
+    expect(result.conflicts).toEqual(
+      lastSyncAt !== null && later > lastSyncAt
+        ? [expect.objectContaining({ mine: changed, theirs: tombstone, deleted: true })]
+        : [],
+    );
+    expect(dirtyItems(result.lib, result.base, [])).toEqual([]);
+  },
+);
 it('전체 재동기화에서 로컬에도 없는 항목의 base를 지운다', () => {
   const result = applyRemote(emptyLibrary(), base, [], { ...opts, fullResync: true });
   expect(result.lib.places).toEqual({});

@@ -228,7 +228,7 @@ it('전송 중 추가 수정과 410 뒤 없어진 서버 묘비를 보존한다'
   expect(a.state.lib.places[p.id]?.deletedAt).not.toBeNull();
 });
 it.each(['복원', '수정'] as const)(
-  '410 전체 재동기화에서 서버에 없는 로컬 %s 항목을 다음 실행에 올린다',
+  '410 전체 재동기화에서 서버에 없는 로컬 %s 항목은 base 삭제 여부에 따라 처리한다',
   async (scenario) => {
     const server = createSyncMemoryServer();
     disposers.push(() => server.db.close());
@@ -237,6 +237,7 @@ it.each(['복원', '수정'] as const)(
     expect((await a.engine.connect('upload')).phase).toBe('synced');
     expect((await a.engine.runNow('manual')).phase).toBe('synced');
     expect(readBase(a.storage).items['place:place00001']?.deleted).toBe(scenario === '복원');
+    a.state.time += 1000;
     const restored = {
       ...p,
       memo: f('로컬에서 ' + scenario, new Date(a.state.time).toISOString()),
@@ -254,10 +255,36 @@ it.each(['복원', '수정'] as const)(
     const changes = vi.spyOn(a.api, 'changes');
     const push = vi.spyOn(a.api, 'push');
 
-    expect((await a.engine.runNow('manual')).phase).toBe('synced');
+    expect((await a.engine.runNow('manual')).phase).toBe(
+      scenario === '복원' ? 'synced' : 'conflict',
+    );
     expect(changes).toHaveBeenCalledTimes(2);
     expect(changes.mock.calls[0]?.[0].since).toBeGreaterThan(0);
     expect(changes.mock.calls[1]?.[0].since).toBe(0);
+    if (scenario === '수정') {
+      expect(a.state.lib.places[p.id]).toEqual({
+        ...restored,
+        deletedAt: new Date(a.state.time).toISOString(),
+      });
+      expect(readConflicts(a.storage)).toEqual([
+        expect.objectContaining({ mine: restored, deleted: true }),
+      ]);
+      expect(push).not.toHaveBeenCalled();
+      expect(readBase(a.storage).items['place:place00001']).toMatchObject({
+        rev: 0,
+        deleted: true,
+      });
+      // 명시적으로 내 값을 선택한 뒤에만 서버에 되살린다.
+      a.state.time += 1000;
+      await a.engine.resolveConflict(readConflicts(a.storage)[0]!.id, 'mine');
+      expect((await a.engine.runNow('manual')).phase).toBe('synced');
+      expect(a.state.lib.places[p.id]?.deletedAt).toBeNull();
+      expect(a.state.lib.places[p.id]?.memo.value).toBe(restored.memo.value);
+      expect(readConflicts(a.storage)).toEqual([]);
+      expect(push).toHaveBeenCalledTimes(1);
+      expect(readBase(a.storage).items['place:place00001']?.deleted).toBe(false);
+      return;
+    }
     expect(a.state.lib.places[p.id]).toEqual(restored);
     expect(readConflicts(a.storage)).toEqual([]);
     expect(push).toHaveBeenCalledExactlyOnceWith({
