@@ -778,3 +778,48 @@ it.each(['decode', 'merge'] as const)(
     }
   },
 );
+
+it('Web Locks가 없어도 보류 처리가 끝난 뒤 실행하고 겹친 실행은 한 번으로 모은다', async () => {
+  const server = createSyncMemoryServer();
+  disposers.push(() => server.db.close());
+  const a = await device(server, { ...emptyLibrary(), places: { [p.id]: p } });
+  await a.engine.connect('upload');
+  a.engine.stop();
+  expect(a.deps.locks).toBeUndefined();
+  const key = `place:${p.id}` as const;
+  writeSyncMeta(a.storage, {
+    ...readSyncMeta(a.storage),
+    held: [{ key, rev: 2, reason: 'decode' }],
+  });
+  let release!: () => void;
+  const paused = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let enter!: () => void;
+  const entered = new Promise<void>((resolve) => {
+    enter = resolve;
+  });
+  const original = a.deps.runLibrary.bind(a.deps);
+  const runLibrary = vi.spyOn(a.deps, 'runLibrary').mockImplementationOnce(async (effect) => {
+    enter();
+    await paused;
+    return original(effect);
+  });
+  const changes = vi.spyOn(a.api, 'changes');
+  const resolution = a.engine.resolveHeld(key, 'mine');
+  await entered;
+  const first = a.engine.runNow('manual');
+  const second = a.engine.runNow('visible');
+  try {
+    // 실행의 첫 snapshot도 보류 처리를 기다려야 한다.
+    expect(runLibrary).toHaveBeenCalledTimes(1);
+    expect(changes).not.toHaveBeenCalled();
+  } finally {
+    release();
+    await Promise.all([resolution, first, second]);
+  }
+  expect(changes).toHaveBeenCalledTimes(1);
+  expect(readSyncMeta(a.storage).held).toEqual([]);
+  expect(a.state.lib.places[p.id]?.memo.updatedAt).toBe(new Date(a.state.time).toISOString());
+  expect((await first).phase).toBe('synced');
+});

@@ -145,6 +145,7 @@ export function createLibrarySyncEngine(deps: EngineDeps): LibrarySyncEngine {
   const { storage, api } = deps;
   let status = { ...OFF_STATUS };
   let active: Promise<SyncStatus> | null = null;
+  let handling: Promise<unknown> | null = null;
   let queued = false;
   let timer: unknown;
   let retry = 0;
@@ -194,10 +195,21 @@ export function createLibrarySyncEngine(deps: EngineDeps): LibrarySyncEngine {
     writeBase(storage, meta.userId!, base);
     writeSyncMeta(storage, meta);
   }
-  /** 진행 중인 실행이 끝난 뒤, 같은 잠금 안에서만 저장소의 충돌·보류를 바꾼다. */
+  /**
+   * 진행 중인 실행이 끝난 뒤, 같은 잠금 안에서만 저장소의 충돌·보류를 바꾼다.
+   * 운영 대상 브라우저(빌드 대상 Safari 16.4 이상)에는 navigator.locks가 항상 있다고 전제한다.
+   * 잠금이 없는 시험·구형 환경에서도 처리 중인 promise를 추적해 같은 엔진의 실행을 기다리게 한다.
+   */
   async function whenIdle<T>(fn: () => Promise<T>): Promise<T> {
-    while (active) await active.catch(() => {});
-    return deps.locks ? deps.locks.request(SYNC_LOCK, fn) : fn();
+    while (active || handling) await (active ?? handling)!.catch(() => {});
+    if (deps.locks) return deps.locks.request(SYNC_LOCK, fn);
+    const work = Promise.resolve().then(fn);
+    handling = work;
+    try {
+      return await work;
+    } finally {
+      handling = null;
+    }
   }
   async function failed(error: unknown): Promise<SyncStatus> {
     const fail = error as SyncFail;
@@ -458,7 +470,8 @@ export function createLibrarySyncEngine(deps: EngineDeps): LibrarySyncEngine {
         reason === 'save' ? SAVE_DEBOUNCE_MS : 0,
       );
     },
-    runNow() {
+    runNow(reason) {
+      if (handling) return handling.catch(() => {}).then(() => engine.runNow(reason));
       if (active) return active;
       cancelTimer();
       active = (async () => {
