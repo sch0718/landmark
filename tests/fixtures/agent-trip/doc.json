@@ -1,0 +1,150 @@
+{
+  "format": "tripmap-share",
+  "version": 2,
+  "title": "속초 1박 2일",
+  "createdAt": "2026-11-01T08:02:51.692Z",
+  "labels": [],
+  "places": [
+    {
+      "id": "f1wvgmwq82",
+      "name": "강남역",
+      "address": "서울 강남구 강남대로",
+      "lng": 127.0276,
+      "lat": 37.4979,
+      "labelIds": []
+    },
+    {
+      "id": "wd8ljwd26g",
+      "name": "학사평 순두부마을",
+      "address": "강원 속초시 노학동",
+      "lng": 128.531,
+      "lat": 38.204,
+      "labelIds": []
+    },
+    {
+      "id": "i6hqaqnm7s",
+      "name": "속초해수욕장",
+      "address": "강원 속초시 조양동",
+      "lng": 128.601,
+      "lat": 38.1906,
+      "labelIds": []
+    },
+    {
+      "id": "xtlqcpkmvz",
+      "name": "속초 숙소",
+      "address": "강원 속초시 조양동",
+      "lng": 128.596,
+      "lat": 38.191,
+      "labelIds": []
+    },
+    {
+      "id": "i3kegd6f01",
+      "name": "속초관광수산시장",
+      "address": "강원 속초시 중앙로147번길",
+      "lng": 128.5905,
+      "lat": 38.2044,
+      "labelIds": []
+    }
+  ],
+  "trips": [
+    {
+      "title": "속초 1박 2일",
+      "startDate": "2026-11-20",
+      "endDate": "2026-11-21",
+      "originId": "f1wvgmwq82",
+      "candidateIds": [],
+      "days": [
+        {
+          "startTime": "09:00",
+          "lodgingId": "xtlqcpkmvz",
+          "stops": [
+            {
+              "placeId": "wd8ljwd26g",
+              "stayMin": 60,
+              "fixedTime": "12:00",
+              "note": "영업시간 확인 필요"
+            },
+            {
+              "placeId": "i6hqaqnm7s",
+              "stayMin": 90,
+              "fixedTime": null
+            }
+          ],
+          "legs": [
+            {
+              "from": "f1wvgmwq82",
+              "to": "wd8ljwd26g",
+              "mode": "car",
+              "durationS": 17969,
+              "distanceM": 199657,
+              "tollFare": null,
+              "status": "estimated",
+              "queriedAt": null,
+              "path": []
+            },
+            {
+              "from": "wd8ljwd26g",
+              "to": "i6hqaqnm7s",
+              "mode": "walk",
+              "durationS": 7366,
+              "distanceM": 8185,
+              "tollFare": null,
+              "status": "estimated",
+              "queriedAt": null,
+              "path": []
+            },
+            {
+              "from": "i6hqaqnm7s",
+              "to": "xtlqcpkmvz",
+              "mode": "walk",
+              "durationS": 514,
+              "distanceM": 571,
+              "tollFare": null,
+              "status": "estimated",
+              "queriedAt": null,
+              "path": []
+            }
+          ]
+        },
+        {
+          "startTime": "10:00",
+          "lodgingId": "f1wvgmwq82",
+          "stops": [
+            {
+              "placeId": "i3kegd6f01",
+              "stayMin": 60,
+              "fixedTime": null
+            }
+          ],
+          "legs": [
+            {
+              "from": "xtlqcpkmvz",
+              "to": "i3kegd6f01",
+              "mode": "car",
+              "durationS": 183,
+              "distanceM": 2035,
+              "tollFare": null,
+              "status": "estimated",
+              "queriedAt": null,
+              "path": []
+            },
+            {
+              "from": "i3kegd6f01",
+              "to": "f1wvgmwq82",
+              "mode": "car",
+              "durationS": 18500,
+              "distanceM": 205551,
+              "tollFare": null,
+              "status": "estimated",
+              "queriedAt": null,
+              "path": []
+            }
+          ]
+        }
+      ],
+      "legModes": {
+        "wd8ljwd26g>i6hqaqnm7s": "walk"
+      }
+    }
+  ]
+}

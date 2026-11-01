@@ -28,6 +28,7 @@
     "collect": "tsx pipeline/cli/collect.ts",
     "apply-edit": "tsx pipeline/cli/apply-edit.ts",
     "validate": "tsx pipeline/cli/validate.ts",
+    "trip": "tsx pipeline/cli/trip.ts",
     "effect:source": "node scripts/effect-source.mjs",
     "orphans": "node scripts/find-orphans.mjs",
     "size": "node scripts/check-bundle-size.mjs",
