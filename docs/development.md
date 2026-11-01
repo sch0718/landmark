@@ -355,7 +355,7 @@ Node 24와 설치된 의존성이 필요합니다. JSON을 다른 도구에서 �
 | `format`·`version` | `"landmark-trip-plan"`·`1`입니다 |
 | `title`·`startDate`·`endDate` | 제목 1~60자, 실제 날짜 `YYYY-MM-DD`, 양 끝을 포함해 1~30일입니다 |
 | `places[]` | 1~200곳. `key`는 영숫자·`_`·`-` 1~40자이며 겹치지 않습니다. `naverSid`(숫자 1~20자)·`link`·`search` 중 하나 이하를 쓰고, 없으면 핀으로 `name`·`lng`·`lat`을 모두 적습니다 |
-| 장소 내용 | 이름 1~100자, 주소 200자, 메모 10,000자까지입니다. 좌표는 경도 124~132·위도 33~39이며 `search.near`는 `[경도, 위도]`입니다. 출처가 있는 장소의 이름·주소·좌표는 조회 실패 때 대체 값이며, `search`에서는 `name`이 후보 이름 비교 기준이기도 하고 생략하면 `search.q`로 비교합니다 |
+| 장소 내용 | 이름 1~100자, 주소 200자, 메모 10,000자까지입니다. 좌표는 경도 124~132·위도 33~39이며 `search.near`는 `[경도, 위도]`입니다. 생략하면 서울시청 부근 `[126.9784, 37.5666]` 기준이므로 지방 장소는 여행지 근처 좌표를 줍니다. 출처가 있는 장소의 이름·주소·좌표는 조회 실패 때 대체 값이며, `search`에서는 `name`이 후보 이름 비교 기준이기도 하고 생략하면 `search.q`로 비교합니다 |
 | `days[]` | 기간의 날 수와 같은 개수입니다. `startTime`은 `HH:mm`(기본 `09:00`), `lodging`은 장소 key 또는 `null`입니다 |
 | `days[].stops[]` | `place`는 장소 key, `stayMin`은 0~1440 정수 또는 `null`, `fixedTime`은 `HH:mm` 또는 `null`, `note`는 500자까지입니다 |
 | `origin`·`candidates` | 첫날 출발지 key 또는 `null`·아직 Day에 넣지 않은 후보 key 목록입니다. Stop·후보 전체에서 장소를 두 번 넣을 수 없으며 출발지·숙소는 겹쳐도 됩니다 |
@@ -464,7 +464,7 @@ yarn build:viewer && VITE_SYNC_DEV_FAKE=1 wrangler pages dev --d1 DB --port 8795
 | `POST /api/agent/v1/share` | `share:create`, `{ body, kind: 'trip', keepUntil?, deleteToken }` | 50 | `201 { id, expiresAt, created: true }`(`expiresAt`은 ISO 문자열). 같은 삭제 토큰 재시도는 같은 `delete_hash` 행이 남아 있으면 만료 여부와 상관없이 기존 id·`expiresAt`을 `200 { id, expiresAt, created: false }`로 반환 |
 | `DELETE /api/agent/v1/share/:id` | `share:create`, `X-Delete-Token` 머리글 | 200 | 행 존재 여부와 삭제 토큰 일치로 결정: 만료됐어도 정리 전 행이 남아 있으면 토큰 일치 `204`·불일치 `403 delete-token`, 행이 없으면 `404 not-found` |
 
-`send`의 `key`는 해석한 계획·메모 포함 여부·경로 생략 여부를 키 정렬 JSON으로 만든 SHA-256 base64url 43자입니다. 같은 키의 살아 있는 항목이 있으면 문서 재검사 전에 반환하며, 없으면 검사한 뒤 받은함 개수 조건을 건 INSERT로 넣습니다. 한도가 찼을 때 같은 키 재전송은 기존 항목을 반환하고, 새 키는 `409 inbox-full`입니다.
+`send`의 `key`는 해석한 계획·메모 포함 여부·경로 생략 여부를 키 정렬 JSON으로 만든 SHA-256 base64url 43자입니다. 같은 키의 살아 있는 항목이 있으면 문서 재검사 전에 반환하며, 없으면 검사한 뒤 받은함 개수 조건을 건 INSERT로 넣습니다. 중복 방지는 같은 키의 만료되지 않은 항목이 받은함에 남아 있는 동안만이며, 가져오기·버리기로 지운 뒤나 만료 뒤 다시 보내면 새 항목이 생깁니다. 한도가 찼을 때 같은 키 재전송은 기존 항목을 반환하고, 새 키는 `409 inbox-full`입니다.
 
 동기화 세션 API는 `/api/sync` 아래이며, 앱의 기존 출처 검사·세션 인증을 사용합니다. `X-Landmark-Backup-User`로 요청 계정을 고정할 수 있습니다. 이 표의 시각은 epoch ms 숫자입니다.
 

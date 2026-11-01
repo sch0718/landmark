@@ -40,7 +40,7 @@ AI 에이전트(Claude Code 등)가 사람 손 없이 여행 일정을 만들어
 | 검색으로 장소 ID 찾기 | 새 명령을 두지 않고 `plan.json` 장소의 `search: { q, near? }`로 받는다. sid가 있는 결과의 이름을 `name`(생략하면 `search.q`)과 NFC·공백 제거·소문자로 맞춰 비교한다. 정확히 같은 곳이 하나뿐이거나 결과가 하나뿐이면 그 sid를 쓰고, 여럿이면 후보(최대 5곳: sid·이름·주소·분류)를 오류로 돌려준다. 결과가 없고 `lng`·`lat`이 있으면 핀 | 명령은 사용자가 정한 넷으로 둔다(설계 당시 근거이며, 이후 철회용 `unshare`가 추가됐다). AI는 후보 오류를 보고 `naverSid`로 고쳐 다시 부른다. 네이버 자동완성 응답의 `id`가 장소 sid다(2026-11-01 확인: `초당순두부마을` → `id`·`sid` `31506191`) |
 | 메모 포함 기본값 | `send`는 장소 메모를 넣는다(`--no-memo`로 뺌). `build`·`share`는 빼고 `--memo`일 때만 넣는다 | 받은함은 본인 보관함이다. 짧은 링크·데이터 링크는 남에게 간다. 앱 공유와 같이 이 옵션은 장소 `memo`만 좌우하고, Day 메모(Stop `note`)는 늘 들어간다(`buildTripShareDoc` 규칙) |
 | 받은함 저장 값 | `/import#d=`의 값 그대로(경로선 뺀 `hashDoc` 사본을 압축한 base64url, 32,000자 이하). CLI는 장소 라벨도 만들지 않는다. 서버는 한 번만 풀어 `agentRawProblem` → `validateShareValue`로 v2를 검사하고 라벨·경로선을 거절한다. `AGENT_INBOX_LIMITS`는 `fileBytes` 5,242,880·`hashChars` 32,000·`decodedBytes` 393,216(384KB)·`places` 200이다 | 앱은 이 값을 기존 `/import#d=` 진입과 같은 함수로 읽어 미리보기를 연다. 값 길이(`MAX_HASH_CHARS` 32,000자)와 요청 크기(`SHARE_REQUEST_MAX_BYTES`)는 그대로 쓰고, 서버 CPU 때문에 풀린 크기·장소 수만 `AGENT_INBOX_LIMITS`로 줄인다(아래 보안). 받은함은 동기화와 같은 일반 저장이다(서버 운영자가 읽을 수 있다). 구현에서는 대량 스키마 오류와 라벨별 모의 가져오기 비용을 줄이려고 사전 검사·384KB 상한을 적용했다 |
-| 같은 일정 두 번 | CLI가 요청 키 `key` = SHA-256(키 정렬 JSON `[plan 해석 결과, 메모 포함 여부, --no-routes 여부]`)의 base64url(43자)을 함께 보낸다. 서버는 사용자별로 만료되지 않은 같은 `key`가 있으면 문서 검사 전에 그 항목을 `200 created: false`로 돌려준다 | 문서 `d`는 실행마다 바뀐다(`createdAt`, 무작위 장소·Stop id, 경로 `queriedAt`). 그래서 `d`의 해시로는 같은 계획의 재실행을 알 수 없다. 응답을 잃고 다시 부른 AI가 받은함을 채우지 않는다(짧은 링크 `delete_hash` 재시도와 같은 방식). `key`는 권한 근거가 아니라 본인 받은함의 중복 판단에만 쓴다. 구현에서는 경로 조회 생략 여부가 다른 전송을 구분하도록 키에 넣었다 |
+| 같은 일정 두 번 | CLI가 요청 키 `key` = SHA-256(키 정렬 JSON `[plan 해석 결과, 메모 포함 여부, --no-routes 여부]`)의 base64url(43자)을 함께 보낸다. 서버는 사용자별로 만료되지 않은 같은 `key`가 있으면 문서 검사 전에 그 항목을 `200 created: false`로 돌려준다. 중복 방지는 그 항목이 받은함에 남아 있는 동안만이며, 가져오기·버리기로 지운 뒤나 만료 뒤 다시 보내면 새 항목이 생긴다 | 문서 `d`는 실행마다 바뀐다(`createdAt`, 무작위 장소·Stop id, 경로 `queriedAt`). 그래서 `d`의 해시로는 같은 계획의 재실행을 알 수 없다. 응답을 잃고 다시 부른 AI가 받은함을 채우지 않는다(짧은 링크 `delete_hash` 재시도와 같은 방식). `key`는 권한 근거가 아니라 본인 받은함의 중복 판단에만 쓴다. 구현에서는 경로 조회 생략 여부가 다른 전송을 구분하도록 키에 넣었다 |
 | 받은함 한도 | 사용자당 기다리는 항목 20개, 30일 보관. 넘으면 `409 inbox-full` | 사람이 확인하는 상자라 많을 필요가 없다. 프롬프트 주입으로 AI가 엉뚱한 일정을 보내도 쌓이는 양이 작다 |
 | 토큰 모양·저장 | 원문 `lmk_` + 32바이트 base64url(47자). D1에는 `hashToken`(SHA-256 base64url)만. 공개 id 12자로 목록·철회 | 접두가 있어 비밀 검사 도구가 찾는다. 짧은 링크 삭제 토큰과 같은 해시 함수다 |
 | 토큰 수·이름 | 사용자당 살아 있는 토큰 10개, 이름 1~40자(기본 `Claude Code`), 범위는 둘 중 하나 이상(기본 둘 다) | 도구·기기별로 나눠 철회할 수 있게 한다 |
@@ -145,7 +145,7 @@ Effect Schema `TripPlanSchema`(`pipeline/agent-trip/plan-schema.ts`)로 정의�
 |---|---|
 | `title` | 1~60자(`LIBRARY_LIMITS.tripTitleChars`). 공유 문서 제목과 여행 제목에 함께 쓴다 |
 | `startDate`·`endDate` | `YYYY-MM-DD`, 1~30일(`SHARE_TRIP_LIMITS.maxDays`) |
-| `places[]` | 1~200곳. `key`는 `^[A-Za-z0-9_-]{1,40}$`이고 겹치지 않는다. 출처는 `naverSid`(숫자 1~20자 문자열)·`link`·`search` 중 하나 이하. 셋 다 없으면 핀이라 `name`·`lng`·`lat`이 필수. 출처가 있을 때 `name`·`address`·`lng`·`lat`은 조회 실패 때의 대체 값이며, `search`에서는 `name`이 후보 이름 비교 기준이기도 하고 생략하면 `search.q`로 비교한다. 좌표(`lng`·`lat`·`search.near`)는 보관함·공유 스키마의 `Lng`·`Lat`(`src/schema/common.ts`: 경도 124~132, 위도 33~39)와 같은 범위. `name` 1~100자, `address` 200자까지, `memo` 10,000자까지(`memoChars`) |
+| `places[]` | 1~200곳. `key`는 `^[A-Za-z0-9_-]{1,40}$`이고 겹치지 않는다. 출처는 `naverSid`(숫자 1~20자 문자열)·`link`·`search` 중 하나 이하. 셋 다 없으면 핀이라 `name`·`lng`·`lat`이 필수. 출처가 있을 때 `name`·`address`·`lng`·`lat`은 조회 실패 때의 대체 값이며, `search`에서는 `name`이 후보 이름 비교 기준이기도 하고 생략하면 `search.q`로 비교한다. 좌표(`lng`·`lat`·`search.near`)는 보관함·공유 스키마의 `Lng`·`Lat`(`src/schema/common.ts`: 경도 124~132, 위도 33~39)와 같은 범위. `search.near`는 `[경도, 위도]`이며 생략하면 서울시청 부근 `[126.9784, 37.5666]` 기준이므로 지방 장소는 여행지 근처 좌표를 준다. `name` 1~100자, `address` 200자까지, `memo` 10,000자까지(`memoChars`) |
 | `days[]` | 기간의 날 수와 같은 개수. `startTime`(`HH:mm`, 기본 `09:00`), `lodging`(장소 key 또는 `null`, 마지막 날은 도착지), `stops[]` |
 | `stops[]` | `place`(key), `stayMin`(0~1440 정수 또는 `null` = 앱 기본값), `fixedTime`(`HH:mm` 또는 `null`), `note`(500자까지) |
 | `origin` | 1일차 출발지 key 또는 `null` |
@@ -169,7 +169,7 @@ yarn --silent trip --schema [--json]
 ```
 
 - 앱 주소: `--app` > `LANDMARK_APP_URL` > `DEFAULT_APP_URL`(`https://landmark.sch0718.dev`, `src/share-viewer/encode.ts`). `appUrl()`로 끝 `/`를 뗀다. 토큰을 쓰는 명령은 위 결정 표의 허용 출처만 받는다.
-- 서버 요청(`send`·`share`·`whoami`·`unshare`)은 본문 수신까지 15초 제한, 자동 재시도는 하지 않는다. 시간 초과는 끝 코드 5 `timeout`. 다시 부르면 `send`는 같은 요청 키라 받은함에 하나만 남고, `share`는 새 암호문·삭제 토큰으로 새 링크를 만든다(결과를 모르는 앞 링크는 예약으로 남아 `unshare pending:<uuid>`로 회수·삭제할 수 있다).
+- 서버 요청(`send`·`share`·`whoami`·`unshare`)은 본문 수신까지 15초 제한, 자동 재시도는 하지 않는다. 시간 초과는 끝 코드 5 `timeout`. 다시 부르면 `send`는 같은 요청 키의 만료되지 않은 항목이 받은함에 남아 있는 동안 하나만 남는다(가져오기·버리기로 지운 뒤나 만료 뒤 다시 보내면 새 항목이 생긴다). `share`는 새 암호문·삭제 토큰으로 새 링크를 만든다(결과를 모르는 앞 링크는 예약으로 남아 `unshare pending:<uuid>`로 회수·삭제할 수 있다).
 - `--no-routes`: 길찾기를 묻지 않고 같은 지점(`same-point`)을 제외한 구간을 직선 추정(`estimated`)으로 둔다(오프라인·시험용).
 
 - 계획 파일·`--out`의 상대 경로는 `INIT_CWD`(Yarn을 부른 폴더) 기준이며, 없으면 현재 작업 폴더 기준이다. `--out` 쓰기 실패는 경로 `--out`·코드 `schema`·끝 코드 2다.
