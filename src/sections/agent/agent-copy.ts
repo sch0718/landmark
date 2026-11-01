@@ -53,3 +53,10 @@ export function expiryLabel(expiresAt: number, now: Date): string {
   const days = calendarDay(expires) - calendarDay(now);
   return `만료 ${monthDay(expires)}(${days === 0 ? '오늘' : `${days}일 남음`})`;
 }
+
+export function lastUsedLabel(lastUsedAt: number | null, now: Date): string {
+  if (lastUsedAt === null) return '없음';
+  const used = new Date(lastUsedAt);
+  const gap = calendarDay(now) - calendarDay(used);
+  return gap === 0 ? '오늘' : gap === 1 ? '어제' : monthDay(used);
+}
