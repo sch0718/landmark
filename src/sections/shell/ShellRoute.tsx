@@ -1,5 +1,6 @@
 import { FolderWatchBoot } from 'src/sections/folder-watch/use-folder-watch-boot';
 import { useAgentInboxBoot } from 'src/sections/agent/use-agent-inbox-boot';
+import { AgentInboxHost } from 'src/sections/agent/AgentInboxHost';
 import { useAutoBackupBoot } from 'src/sections/server-backup/use-auto-backup-boot';
 import { useSetAtom } from 'jotai';
 import { useSyncBoot } from 'src/sections/library-sync/use-sync-boot';
@@ -55,6 +56,7 @@ function LibraryShell() {
   return (
     <>
       <FolderWatchBoot />
+      <AgentInboxHost />
       <AppShell />
     </>
   );
