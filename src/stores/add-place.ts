@@ -39,6 +39,8 @@ export const addFlowStepKey = (flow: AddFlow): string => {
         : `folder-${flow.shareId}-${flow.seq}`;
     case 'pin-card':
       return `pin-card-${flow.lng},${flow.lat}`;
+    case 'share':
+      return flow.inbox ? `share-inbox-${flow.inbox.id}` : 'share';
     default:
       return flow.step;
   }

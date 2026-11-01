@@ -56,3 +56,79 @@ it('조각을 받지 못해도 오류를 밖으로 던지지 않아요', async (
   await waitFor(() => expect(load).toHaveBeenCalledOnce());
   expect(start).not.toHaveBeenCalled();
 });
+
+it.each([false, true])(
+  '부트 플래그 %s에서 조각 받기가 실패하면 다음 synced에 재시도하고 성공 뒤 멈춰요',
+  async (bootFlag) => {
+    flag.mockReturnValue(bootFlag);
+    load.mockRejectedValueOnce(Error('파일을 받지 못했어요'));
+    const { store } = mount();
+    await act(async () => {
+      if (!bootFlag) store.set(syncStatusAtom, { ...OFF_STATUS, phase: 'synced' });
+    });
+    expect(load).toHaveBeenCalledOnce();
+    expect(start).not.toHaveBeenCalled();
+    await act(async () => store.set(syncStatusAtom, { ...OFF_STATUS, phase: 'synced' }));
+    expect(load).toHaveBeenCalledTimes(2);
+    expect(start).toHaveBeenCalledOnce();
+    await act(async () => store.set(syncStatusAtom, { ...OFF_STATUS, phase: 'synced' }));
+    expect(load).toHaveBeenCalledTimes(2);
+    expect(start).toHaveBeenCalledOnce();
+  },
+);
+
+it.each([false, true])(
+  '부트 플래그 %s에서 실행기 시작이 실패하면 다음 synced에 재시도해요',
+  async (bootFlag) => {
+    flag.mockReturnValue(bootFlag);
+    start.mockRejectedValueOnce(Error('시작하지 못했어요'));
+    const { store } = mount();
+    await act(async () => {
+      if (!bootFlag) store.set(syncStatusAtom, { ...OFF_STATUS, phase: 'synced' });
+    });
+    expect(start).toHaveBeenCalledOnce();
+    await act(async () => store.set(syncStatusAtom, { ...OFF_STATUS, phase: 'synced' }));
+    expect(load).toHaveBeenCalledTimes(2);
+    expect(start).toHaveBeenCalledTimes(2);
+    await act(async () => store.set(syncStatusAtom, { ...OFF_STATUS, phase: 'synced' }));
+    expect(start).toHaveBeenCalledTimes(2);
+  },
+);
+
+it('조각 받기와 실행기 시작을 기다리는 동안 synced가 와도 겹쳐 시작하지 않아요', async () => {
+  let resolveLoad!: (module: { startInboxCheck: typeof start }) => void;
+  let resolveStart!: () => void;
+  load.mockReturnValueOnce(new Promise((resolve) => (resolveLoad = resolve)));
+  start.mockReturnValueOnce(new Promise<void>((resolve) => (resolveStart = resolve)));
+  const { store } = mount();
+  await act(async () => {
+    store.set(syncStatusAtom, { ...OFF_STATUS, phase: 'synced' });
+    store.set(syncStatusAtom, { ...OFF_STATUS, phase: 'synced' });
+  });
+  expect(load).toHaveBeenCalledOnce();
+  await act(async () => resolveLoad({ startInboxCheck: start }));
+  await act(async () => store.set(syncStatusAtom, { ...OFF_STATUS, phase: 'synced' }));
+  expect(load).toHaveBeenCalledOnce();
+  expect(start).toHaveBeenCalledOnce();
+  await act(async () => resolveStart());
+  await act(async () => store.set(syncStatusAtom, { ...OFF_STATUS, phase: 'synced' }));
+  expect(load).toHaveBeenCalledOnce();
+});
+
+it.each([false, true])(
+  '부트 플래그 %s에서 언마운트 뒤 받은 조각은 시작하지 않아요',
+  async (bootFlag) => {
+    flag.mockReturnValue(bootFlag);
+    let resolveLoad!: (module: { startInboxCheck: typeof start }) => void;
+    load.mockReturnValueOnce(new Promise((resolve) => (resolveLoad = resolve)));
+    const { store, unmount } = mount();
+    await act(async () => {
+      if (!bootFlag) store.set(syncStatusAtom, { ...OFF_STATUS, phase: 'synced' });
+    });
+    unmount();
+    await act(async () => resolveLoad({ startInboxCheck: start }));
+    act(() => store.set(syncStatusAtom, { ...OFF_STATUS, phase: 'synced' }));
+    expect(load).toHaveBeenCalledOnce();
+    expect(start).not.toHaveBeenCalled();
+  },
+);

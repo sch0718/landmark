@@ -88,6 +88,22 @@ async function openShare(
 }
 
 describe('받은함 일정 가져오기', () => {
+  it('다른 받은함 항목을 열면 여행 스위치를 다시 켜요', async () => {
+    const { user, store } = await openShare();
+    const tripSwitch = () => panel().getByRole('switch', { name: '여행 계획도 가져오기' });
+    await user.click(tripSwitch());
+    expect(tripSwitch()).not.toBeChecked();
+    act(() =>
+      store.set(addFlowAtom, {
+        step: 'share',
+        doc: { ...makeDoc(), title: '속초 여행' },
+        inbox: { ...INBOX, id: 'inbox00000000002' },
+      }),
+    );
+    await panel().findByRole('heading', { name: '속초 여행 · 2곳' });
+    expect(tripSwitch()).toBeChecked();
+  });
+
   it.each(['Claude Code', null, '<img src=x onerror=alert(1)>'])(
     '보낸 연결 이름 %s을 머리에 텍스트로 보여요',
     async (from) => {
