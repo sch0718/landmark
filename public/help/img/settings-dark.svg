@@ -1,22 +1,22 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="960" height="520" viewBox="0 0 960 520" role="img" aria-labelledby="motion-title motion-desc">
 <title id="motion-title">랜드마크 도움말 — 설정</title>
-<desc id="motion-desc">설정 사용법: 1. 테마와 모드(파스텔·수첩·나이트, 라이트·다크) 2. 백업 파일 받기(보관함 전체를 파일 하나로) 3. 다른 기기에서 되살리기(‘백업 파일로 되살리기’ → 파일 고르기) 4. 백업 알림(오래 백업하지 않으면 보관함 위에 알려요)</desc>
+<desc id="motion-desc">설정 사용법: 1. 테마와 모드(파스텔·수첩·나이트, 라이트·다크) 2. 백업 파일 받기(보관함 전체를 파일 하나로) 3. 다른 기기에서 되살리기(‘백업 파일로 되살리기’ → 파일 고르기) 4. 백업 알림(오래 백업하지 않으면 보관함 위에 알려요) 5. 기기 간 동기화(설정 › 동기화에서 로그인)</desc>
 <style>
 text{font-family:'Pretendard Variable', Pretendard, 'Apple SD Gothic Neo', 'Noto Sans KR', system-ui, sans-serif}
-.sc{opacity:0;animation:scene 14.4s linear infinite backwards}
-.rise{transform-box:fill-box;animation:rise 14.4s cubic-bezier(.2,.8,.2,1) infinite backwards}
-.pop{transform-box:fill-box;transform-origin:center;animation:pop 14.4s ease-out infinite backwards}
-.draw{stroke-dasharray:1;stroke-dashoffset:1;animation:draw 14.4s ease-out infinite backwards}
-.slide{transform-box:fill-box;animation:slide 14.4s cubic-bezier(.2,.8,.2,1) infinite backwards}
-.pulse{transform-box:fill-box;transform-origin:center;opacity:0;animation:pulse 14.4s ease-out infinite backwards}
-.tap{transform-box:fill-box;transform-origin:center;opacity:0;animation:tap 14.4s ease-out infinite backwards}
-@keyframes scene{0%{opacity:0}2.431%{opacity:1}22.569%{opacity:1}25.000%{opacity:0}100%{opacity:0}}
-@keyframes rise{0%{opacity:0;transform:translateY(14px)}3.125%{opacity:1;transform:none}100%{opacity:1;transform:none}}
-@keyframes pop{0%{transform:scale(0)}2.083%{transform:scale(1.15)}3.125%{transform:scale(1)}100%{transform:scale(1)}}
-@keyframes draw{0%{stroke-dashoffset:1}6.250%{stroke-dashoffset:0}100%{stroke-dashoffset:0}}
-@keyframes slide{0%{opacity:0;transform:translateX(-120px)}4.167%{opacity:1;transform:none}100%{opacity:1;transform:none}}
-@keyframes pulse{0%{opacity:.7;transform:scale(1)}6.250%{opacity:0;transform:scale(2.4)}100%{opacity:0;transform:scale(2.4)}}
-@keyframes tap{0%{opacity:0;transform:scale(.4)}0.833%{opacity:1;transform:scale(1)}4.861%{opacity:0;transform:scale(1.9)}100%{opacity:0;transform:scale(1.9)}}
+.sc{opacity:0;animation:scene 18s linear infinite backwards}
+.rise{transform-box:fill-box;animation:rise 18s cubic-bezier(.2,.8,.2,1) infinite backwards}
+.pop{transform-box:fill-box;transform-origin:center;animation:pop 18s ease-out infinite backwards}
+.draw{stroke-dasharray:1;stroke-dashoffset:1;animation:draw 18s ease-out infinite backwards}
+.slide{transform-box:fill-box;animation:slide 18s cubic-bezier(.2,.8,.2,1) infinite backwards}
+.pulse{transform-box:fill-box;transform-origin:center;opacity:0;animation:pulse 18s ease-out infinite backwards}
+.tap{transform-box:fill-box;transform-origin:center;opacity:0;animation:tap 18s ease-out infinite backwards}
+@keyframes scene{0%{opacity:0}1.944%{opacity:1}18.056%{opacity:1}20.000%{opacity:0}100%{opacity:0}}
+@keyframes rise{0%{opacity:0;transform:translateY(14px)}2.500%{opacity:1;transform:none}100%{opacity:1;transform:none}}
+@keyframes pop{0%{transform:scale(0)}1.667%{transform:scale(1.15)}2.500%{transform:scale(1)}100%{transform:scale(1)}}
+@keyframes draw{0%{stroke-dashoffset:1}5.000%{stroke-dashoffset:0}100%{stroke-dashoffset:0}}
+@keyframes slide{0%{opacity:0;transform:translateX(-120px)}3.333%{opacity:1;transform:none}100%{opacity:1;transform:none}}
+@keyframes pulse{0%{opacity:.7;transform:scale(1)}5.000%{opacity:0;transform:scale(2.4)}100%{opacity:0;transform:scale(2.4)}}
+@keyframes tap{0%{opacity:0;transform:scale(.4)}0.667%{opacity:1;transform:scale(1)}3.889%{opacity:0;transform:scale(1.9)}100%{opacity:0;transform:scale(1.9)}}
 @media (prefers-reduced-motion:reduce){
 *{animation:none!important}
 .s0{opacity:1}
@@ -56,6 +56,13 @@ text{font-family:'Pretendard Variable', Pretendard, 'Apple SD Gothic Neo', 'Noto
 <g class="sc s3" style="animation-delay:10.80s"><circle cx="58" cy="392" r="13" fill="#D9F99D"/><text x="58" y="396.5" font-size="13" font-weight="800" fill="#18181B" text-anchor="middle">4</text></g>
 <text x="82" y="390" font-size="16" font-weight="800" fill="#F4F4F5" text-anchor="start">백업 알림</text>
 <text x="82" y="408" font-size="13" font-weight="400" fill="#8E8E98" text-anchor="start">오래 백업하지 않으면 보관함 위에 알려요</text>
+</g><g>
+<rect class="sc s4" style="animation-delay:14.40s" x="32" y="421" width="510" height="48" rx="14" fill="#2A3E18"/>
+<circle cx="58" cy="444" r="13" fill="none" stroke="#71717D" stroke-width="1.5"/>
+<text x="58" y="448.5" font-size="13" font-weight="800" fill="#B4B4BC" text-anchor="middle">5</text>
+<g class="sc s4" style="animation-delay:14.40s"><circle cx="58" cy="444" r="13" fill="#D9F99D"/><text x="58" y="448.5" font-size="13" font-weight="800" fill="#18181B" text-anchor="middle">5</text></g>
+<text x="82" y="442" font-size="16" font-weight="800" fill="#F4F4F5" text-anchor="start">기기 간 동기화</text>
+<text x="82" y="460" font-size="13" font-weight="400" fill="#8E8E98" text-anchor="start">설정 › 동기화에서 로그인</text>
 </g>
 <rect x="600" y="20" width="300" height="480" rx="42" fill="#26262B" stroke="#71717D" stroke-width="2"/>
 <rect x="612" y="32" width="276" height="456" rx="32" fill="#1B1B1F"/>
@@ -101,5 +108,17 @@ text{font-family:'Pretendard Variable', Pretendard, 'Apple SD Gothic Neo', 'Noto
 <text x="638" y="323" font-size="13.5" font-weight="800" fill="#F4F4F5" text-anchor="start">☕ 바다 뷰 카페</text>
 <text x="638" y="340" font-size="11" font-weight="400" fill="#8E8E98" text-anchor="start">강원 양양군</text>
 <rect x="802" y="328" width="62" height="18" rx="9" fill="#4A3018"/><text x="812" y="340.85" font-size="11" font-weight="700" fill="#FFCC9A" text-anchor="start">☕ 카페</text></g>
-<circle class="tap" style="animation-delay:12.60s" cx="677" cy="155" r="16" fill="#F4F4F5" fill-opacity=".28" stroke="#F4F4F5" stroke-opacity=".5" stroke-width="2"/></g></g>
+<circle class="tap" style="animation-delay:12.60s" cx="677" cy="155" r="16" fill="#F4F4F5" fill-opacity=".28" stroke="#F4F4F5" stroke-opacity=".5" stroke-width="2"/></g>
+<g class="sc s4" style="animation-delay:14.40s"><text x="630" y="72" font-size="18" font-weight="800" fill="#F4F4F5" text-anchor="start">설정</text><text x="626" y="98" font-size="13.5" font-weight="800" fill="#F4F4F5" text-anchor="start">동기화</text>
+<g class="rise" style="animation-delay:14.50s"><text x="626" y="126" font-size="11.5" font-weight="400" fill="#B4B4BC" text-anchor="start">장소·라벨·여행·약속·폴더 연결을</text>
+<text x="626" y="144" font-size="11.5" font-weight="400" fill="#B4B4BC" text-anchor="start">서버에 올려 내 다른 기기와 맞춰요.</text>
+<text x="626" y="162" font-size="11.5" font-weight="400" fill="#B4B4BC" text-anchor="start">메모·출발지도 올라가요.</text>
+<text x="626" y="192" font-size="11.5" font-weight="400" fill="#B4B4BC" text-anchor="start">서버에는 암호화하지 않고 저장해요</text>
+<text x="626" y="210" font-size="11.5" font-weight="400" fill="#B4B4BC" text-anchor="start">(운영자가 볼 수 있어요).</text>
+<text x="626" y="240" font-size="11.5" font-weight="400" fill="#B4B4BC" text-anchor="start">화면 설정과 약속 공유 연결은</text>
+<text x="626" y="258" font-size="11.5" font-weight="400" fill="#B4B4BC" text-anchor="start">기기마다 따로예요.</text></g>
+<g class="rise" style="animation-delay:14.80s"><rect x="626" y="278" width="248" height="36" rx="18" fill="none" stroke="#71717D"/><text x="750" y="300.68" font-size="13" font-weight="700" fill="#F4F4F5" text-anchor="middle">Google로 로그인</text>
+<rect x="626" y="322" width="248" height="36" rx="18" fill="none" stroke="#71717D"/><text x="750" y="344.68" font-size="13" font-weight="700" fill="#F4F4F5" text-anchor="middle">카카오로 로그인</text>
+<rect x="626" y="366" width="248" height="36" rx="18" fill="none" stroke="#71717D"/><text x="750" y="388.68" font-size="13" font-weight="700" fill="#F4F4F5" text-anchor="middle">네이버로 로그인</text></g>
+<circle class="tap" style="animation-delay:16.60s" cx="750" cy="340" r="16" fill="#F4F4F5" fill-opacity=".28" stroke="#F4F4F5" stroke-opacity=".5" stroke-width="2"/></g></g>
 </svg>

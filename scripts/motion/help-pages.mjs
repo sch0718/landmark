@@ -499,6 +499,7 @@ ${text(R, 286, '9,974자 남음', { size: 11.5, fill: c.t.text.muted, anchor: 'e
       '`합치기`는 두 라벨을 하나로 합치고, 붙어 있던 장소도 옮겨요.',
       '네이버 폴더로 가져온 라벨은 폴더와 연결돼 있어 `새로 저장한 곳 가져오기`로 새 장소만 받아요. `연결 끊기`로 끊을 수 있어요.',
       '`이름으로 이모지 정하기`는 알림의 `되돌리기`로 바로 취소할 수 있어요.',
+      '앱을 열 때 하루 한 번 연결한 네이버 폴더를 확인해, 새로 저장한 곳이 있으면 알려 줘요. 설정 › 가져오기에서 끌 수 있어요.',
     ],
     steps: [
       {
@@ -940,6 +941,7 @@ ${tapAt(c, X + W / 2, 339, 1.8)}`,
       '백업 파일에는 장소·라벨·여행·약속과 테마·보기 설정이 들어 있어요.',
       '`옛 여행 가져오기`는 예전 버전의 여행 파일(.json)이나 여행 ID로 불러와요.',
       '카카오톡으로 보낸 짧은 링크는 `보낸 짧은 링크`에서 지울 수 있어요. 지우면 받은 사람도 열 수 없어요.',
+      '동기화는 본인이 켠 기기끼리만 해요. 서버에는 암호화하지 않고 저장하며, 연결을 해제해도 기기 보관함은 남아요.',
       '동기화에 로그인했다면 `서버 백업`으로 보관함 사본 하나를 서버에 둘 수 있어요. `자동 백업`을 켜면 앱을 열 때 하루 한 번 새로 고쳐요.',
       '동기화에 로그인했다면 `AI 연결`에서 토큰을 만들어 Claude Code 같은 AI 도구가 일정을 받은함으로 보내게 할 수 있어요. 받은 일정은 내가 `가져오기`를 눌러야 들어가요.',
       '알림 「AI가 보낸 일정 N개」의 `보기`나 설정 › 동기화 › AI 연결의 `받은 일정 N개 · 보기`로 받은함을 열고, `미리보기`로 확인한 뒤 가져오거나 `버리기`로 지울 수 있어요.',
@@ -1041,6 +1043,30 @@ ${button(X + 12, TOP + 48, 78, '백업 받기', c.t, { h: 26, size: 11.5 })}${bu
         )}
 ${placeRow(c, TOP + 92, PLACES.view, { cls: '', offset: 0 })}${placeRow(c, TOP + 150, PLACES.noodle, { cls: '', offset: 0 })}${placeRow(c, TOP + 208, PLACES.cafe, { cls: '', offset: 0 })}
 ${tapAt(c, X + 51, TOP + 61, 1.8)}`,
+      },
+      {
+        title: '기기 간 동기화',
+        sub: '설정 › 동기화에서 로그인',
+        screen: (c) => `${sectionTitle(c, TOP + 4, '동기화')}
+${rise(
+  c,
+  0.1,
+  `${text(X, TOP + 32, '장소·라벨·여행·약속·폴더 연결을', { size: 11.5, fill: c.t.text.secondary })}
+${text(X, TOP + 50, '서버에 올려 내 다른 기기와 맞춰요.', { size: 11.5, fill: c.t.text.secondary })}
+${text(X, TOP + 68, '메모·출발지도 올라가요.', { size: 11.5, fill: c.t.text.secondary })}
+${text(X, TOP + 98, '서버에는 암호화하지 않고 저장해요', { size: 11.5, fill: c.t.text.secondary })}
+${text(X, TOP + 116, '(운영자가 볼 수 있어요).', { size: 11.5, fill: c.t.text.secondary })}
+${text(X, TOP + 146, '화면 설정과 약속 공유 연결은', { size: 11.5, fill: c.t.text.secondary })}
+${text(X, TOP + 164, '기기마다 따로예요.', { size: 11.5, fill: c.t.text.secondary })}`,
+)}
+${rise(
+  c,
+  0.4,
+  `${button(X, TOP + 184, W, 'Google로 로그인', c.t, { variant: 'outlined', h: 36, size: 13 })}
+${button(X, TOP + 228, W, '카카오로 로그인', c.t, { variant: 'outlined', h: 36, size: 13 })}
+${button(X, TOP + 272, W, '네이버로 로그인', c.t, { variant: 'outlined', h: 36, size: 13 })}`,
+)}
+${tapAt(c, X + W / 2, TOP + 246)}`,
       },
     ],
   },
