@@ -1,16 +1,20 @@
 // @vitest-environment node
 import { createHash } from 'node:crypto';
+import { Schema } from 'effect';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { resetSchemaMemo } from 'src/server/meet/db';
+import { ensureSchema, resetSchemaMemo } from 'src/server/meet/db';
 import type { MeetContext, MeetEnv } from 'src/server/meet/env';
 import type { MeetDeps } from 'src/server/meet/handlers';
 import { LIMITS } from 'src/server/meet/limits';
 import { hashIp, hashToken, newToken } from 'src/server/meet/tokens';
 import {
+  deleteShareLink,
   handleShareCreate,
   handleShareDelete,
   handleShareOpen,
+  insertShareLink,
   pruneExpiredShares,
+  SHARE_CREATE_FIELDS,
   SHARE_REQUEST_MAX_BYTES,
 } from 'src/server/share/handlers';
 import { OPEN_SCRIPT, OPEN_TEXT } from 'src/server/share/open-page';
@@ -497,5 +501,231 @@ describe('pruneExpiredShares', () => {
     expect(left.results.map((row) => row.id)).toContain('second00000000aa');
     expect(await pruneExpiredShares(db, NOW, 20)).toBe(1);
     expect(left.results).toHaveLength(3);
+  });
+});
+
+describe('SHARE_CREATE_FIELDS', () => {
+  it('Turnstile 없이 기존 만들기 필드만 검사할 수 있다', async () => {
+    expect(Object.keys(SHARE_CREATE_FIELDS).sort()).toEqual([
+      'body',
+      'deleteToken',
+      'keepUntil',
+      'kind',
+    ]);
+    const token = newToken();
+    const decoded = Schema.decodeUnknownSync(Schema.Struct(SHARE_CREATE_FIELDS))({
+      body: BODY,
+      kind: 'trip',
+      keepUntil: '2027-01-10',
+      deleteToken: token,
+    });
+    expect(decoded.body).toBe(BODY);
+    expect(decoded.kind).toBe('trip');
+    expect(decoded.keepUntil).toBe('2027-01-10');
+    expect(await hashToken(decoded.deleteToken)).toBe(await hashToken(token));
+  });
+});
+
+describe('insertShareLink', () => {
+  beforeEach(async () => {
+    await ensureSchema(db);
+  });
+
+  it('암호문과 삭제 해시를 저장하고 id·기한·생성 여부만 돌려준다', async () => {
+    const token = newToken();
+    const deleteHash = await hashToken(token);
+    const logs = ['log', 'info', 'warn', 'error'].map((method) =>
+      vi.spyOn(console, method as 'log' | 'info' | 'warn' | 'error').mockImplementation(() => {}),
+    );
+    try {
+      const result = await insertShareLink(db, { body: BODY, kind: 'places', deleteHash }, NOW);
+      expect(result.id).toMatch(/^[A-Za-z0-9_-]{16}$/);
+      expect(result).toEqual({
+        id: result.id,
+        expiresAt: new Date(NOW.getTime() + 30 * DAY).toISOString(),
+        created: true,
+      });
+      const stored = await db.prepare('SELECT * FROM share_links').all();
+      expect(stored).toEqual({
+        results: [
+          {
+            id: result.id,
+            body: BODY,
+            kind: 'places',
+            delete_hash: deleteHash,
+            created_at: NOW.toISOString(),
+            expires_at: result.expiresAt,
+          },
+        ],
+      });
+      const output = JSON.stringify({ result, stored, logs: logs.map((log) => log.mock.calls) });
+      expect(output.includes(token)).toBe(false);
+    } finally {
+      logs.forEach((log) => log.mockRestore());
+    }
+  });
+
+  it.each([
+    ['2026-10-30', new Date(NOW.getTime() + 30 * DAY).toISOString()],
+    ['2027-01-10', '2027-01-10T14:59:59.999Z'],
+    ['2028-01-01', new Date(NOW.getTime() + 180 * DAY).toISOString()],
+  ])('여행 기준일 %s의 기한을 기존 규칙으로 계산한다', async (keepUntil, expiresAt) => {
+    const result = await insertShareLink(
+      db,
+      { body: BODY, kind: 'trip', keepUntil, deleteHash: await hashToken(newToken()) },
+      NOW,
+    );
+    expect(result.expiresAt).toBe(expiresAt);
+  });
+
+  it('같은 삭제 해시면 본문·종류·기한을 바꾸지 않고 처음 행을 돌려준다', async () => {
+    const deleteHash = await hashToken(newToken());
+    const first = await insertShareLink(db, { body: BODY, kind: 'places', deleteHash }, NOW);
+    const newId = vi.fn(() => 'BBBBBBBBBBBBBBBB');
+    const again = await insertShareLink(
+      db,
+      { body: 'B'.repeat(10), kind: 'trip', keepUntil: '2028-01-01', deleteHash },
+      new Date(NOW.getTime() + 31 * DAY),
+      newId,
+    );
+    expect(again).toEqual({ ...first, created: false });
+    expect(newId).not.toHaveBeenCalled();
+    expect(await db.prepare('SELECT body, kind, expires_at FROM share_links').all()).toEqual({
+      results: [{ body: BODY, kind: 'places', expires_at: first.expiresAt }],
+    });
+  });
+
+  it('같은 삭제 해시로 동시에 넣어도 처음 링크 하나만 남는다', async () => {
+    const deleteHash = await hashToken(newToken());
+    const [first, again] = await Promise.all([
+      insertShareLink(db, { body: BODY, kind: 'places', deleteHash }, NOW),
+      insertShareLink(db, { body: 'B'.repeat(10), kind: 'trip', deleteHash }, NOW),
+    ]);
+    expect(first.created).toBe(true);
+    expect(again).toEqual({ ...first, created: false });
+    expect(await db.prepare('SELECT body FROM share_links').all()).toEqual({
+      results: [{ body: BODY }],
+    });
+  });
+
+  it('id가 두 번 겹쳐도 세 번째 id로 넣는다', async () => {
+    const first = await insertShareLink(
+      db,
+      { body: BODY, kind: 'places', deleteHash: await hashToken(newToken()) },
+      NOW,
+    );
+    const newId = vi
+      .fn<() => string>()
+      .mockReturnValueOnce(first.id)
+      .mockReturnValueOnce(first.id)
+      .mockReturnValue('BBBBBBBBBBBBBBBB');
+    const result = await insertShareLink(
+      db,
+      { body: BODY, kind: 'places', deleteHash: await hashToken(newToken()) },
+      NOW,
+      newId,
+    );
+    expect(result.id).toBe('BBBBBBBBBBBBBBBB');
+    expect(result.created).toBe(true);
+    expect(newId).toHaveBeenCalledTimes(3);
+    expect(await db.prepare('SELECT COUNT(*) AS count FROM share_links').first()).toEqual({
+      count: 2,
+    });
+  });
+
+  it('id가 세 번 모두 겹치면 오류를 그대로 던진다', async () => {
+    const first = await insertShareLink(
+      db,
+      { body: BODY, kind: 'places', deleteHash: await hashToken(newToken()) },
+      NOW,
+    );
+    const newId = vi.fn(() => first.id);
+    await expect(
+      insertShareLink(
+        db,
+        { body: BODY, kind: 'places', deleteHash: await hashToken(newToken()) },
+        NOW,
+        newId,
+      ),
+    ).rejects.toThrow(/UNIQUE constraint failed: share_links\.id/);
+    expect(newId).toHaveBeenCalledTimes(3);
+    expect(await db.prepare('SELECT COUNT(*) AS count FROM share_links').first()).toEqual({
+      count: 1,
+    });
+  });
+
+  it('만료 행 정리는 호출자에게 맡긴다', async () => {
+    await insertShareLink(
+      db,
+      { body: BODY, kind: 'places', deleteHash: await hashToken(newToken()) },
+      NOW,
+    );
+    await insertShareLink(
+      db,
+      { body: BODY, kind: 'places', deleteHash: await hashToken(newToken()) },
+      new Date(NOW.getTime() + 31 * DAY),
+    );
+    expect(await db.prepare('SELECT COUNT(*) AS count FROM share_links').first()).toEqual({
+      count: 2,
+    });
+  });
+});
+
+describe('deleteShareLink', () => {
+  beforeEach(async () => {
+    await ensureSchema(db);
+  });
+
+  it('삭제 토큰을 해시로 확인해 지우고 deleted를 돌려준다', async () => {
+    const token = newToken();
+    const { id } = await insertShareLink(
+      db,
+      { body: BODY, kind: 'places', deleteHash: await hashToken(token) },
+      NOW,
+    );
+    const result = await deleteShareLink(db, id, token);
+    expect(result).toBe('deleted');
+    expect(result.includes(token)).toBe(false);
+    expect(await db.prepare('SELECT id FROM share_links WHERE id = ?').bind(id).first()).toBeNull();
+  });
+
+  it('삭제 토큰이 다르면 행을 남기고 forbidden을 돌려준다', async () => {
+    const { id } = await insertShareLink(
+      db,
+      { body: BODY, kind: 'places', deleteHash: await hashToken(newToken()) },
+      NOW,
+    );
+    const token = newToken();
+    const result = await deleteShareLink(db, id, token);
+    expect(result).toBe('forbidden');
+    expect(result.includes(token)).toBe(false);
+    expect(await db.prepare('SELECT id FROM share_links WHERE id = ?').bind(id).first()).toEqual({
+      id,
+    });
+  });
+
+  it('id가 없으면 not-found를 돌려준다', async () => {
+    const token = newToken();
+    const result = await deleteShareLink(db, 'AAAAAAAAAAAAAAAA', token);
+    expect(result).toBe('not-found');
+    expect(result.includes(token)).toBe(false);
+  });
+});
+
+describe('짧은 링크 만들기 재시도의 정리', () => {
+  it('created: false이면 waitUntil 정리를 예약하지 않는다', async () => {
+    const token = newToken();
+    const first = await created({ deleteToken: token });
+    const scheduled = pending.length;
+    now = new Date(NOW.getTime() + 31 * DAY);
+    const response = await create({ deleteToken: token });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ ...first, created: false });
+    expect(pending).toHaveLength(scheduled);
+    expect(
+      await db.prepare('SELECT id FROM share_links WHERE id = ?').bind(first.id).first(),
+    ).toEqual({
+      id: first.id,
+    });
   });
 });

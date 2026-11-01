@@ -28,13 +28,21 @@ const PRIVATE_HEADERS = { 'Cache-Control': 'private, no-store' };
 const SHARE_INPUT_ERROR = '짧은 링크 요청이 올바르지 않아요';
 /** 본문(32,040자)과 나머지 필드를 넉넉히 담는 요청 크기. */
 export const SHARE_REQUEST_MAX_BYTES = 40_000;
-const createSchema = Schema.Struct({
+export const SHARE_CREATE_FIELDS = {
   body: Schema.String.check(Schema.isPattern(new RegExp(`^[A-Za-z0-9_-]{1,${SHORT_BODY_MAX}}$`))),
   kind: Schema.Literals(['places', 'trip']),
   keepUntil: Schema.optionalKey(Schema.String.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/))),
-  turnstile: Schema.String,
   deleteToken: Schema.String.check(Schema.isPattern(/^[A-Za-z0-9_-]{43}$/)),
-});
+};
+const createSchema = Schema.Struct({ ...SHARE_CREATE_FIELDS, turnstile: Schema.String });
+
+export type ShareInsertInput = {
+  body: string;
+  kind: ShortLinkKind;
+  keepUntil?: string;
+  deleteHash: string;
+};
+export type ShareInsertResult = { id: string; expiresAt: string; created: boolean };
 
 function newShareId(): string {
   return btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(12))))
@@ -102,6 +110,64 @@ function readShareId(ctx: MeetContext): string | null {
   return typeof id === 'string' && SHORT_ID_PATTERN.test(id) ? id : null;
 }
 
+/** 같은 삭제 해시는 처음 행을 돌려준다. 만료 행·한도 정리는 호출자가 예약한다. */
+export async function insertShareLink(
+  db: MeetDb,
+  input: ShareInsertInput,
+  now: Date,
+  newId: () => string = newShareId,
+): Promise<ShareInsertResult> {
+  // 응답이 사라져 같은 토큰으로 다시 오면 처음 만든 링크를 돌려준다(본문은 처음 것을 둔다).
+  async function existing(): Promise<ShareInsertResult | null> {
+    const row = await db
+      .prepare('SELECT id, expires_at FROM share_links WHERE delete_hash = ?')
+      .bind(input.deleteHash)
+      .first<{ id: string; expires_at: string }>();
+    return row ? { id: row.id, expiresAt: row.expires_at, created: false } : null;
+  }
+  const retried = await existing();
+  if (retried) return retried;
+  const expiresAt = shortExpiresAt(input.kind, input.keepUntil, now).toISOString();
+  for (let attempt = 0; ; attempt++) {
+    const id = newId();
+    try {
+      await db
+        .prepare(
+          'INSERT INTO share_links (id, body, kind, delete_hash, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)',
+        )
+        .bind(id, input.body, input.kind, input.deleteHash, now.toISOString(), expiresAt)
+        .run();
+      return { id, expiresAt, created: true };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '';
+      if (/UNIQUE constraint failed: share_links\.delete_hash\b/i.test(message)) {
+        const raced = await existing();
+        if (raced) return raced;
+      }
+      if (!/UNIQUE constraint failed: share_links\.id\b/i.test(message) || attempt >= 2) {
+        throw error;
+      }
+    }
+  }
+}
+
+/** 삭제 토큰 원문을 해시로 바꿔 지우고, 지우지 못했으면 id가 남았는지 확인한다. */
+export async function deleteShareLink(
+  db: MeetDb,
+  id: string,
+  deleteToken: string,
+): Promise<'deleted' | 'forbidden' | 'not-found'> {
+  const { meta } = await db
+    .prepare('DELETE FROM share_links WHERE id = ? AND delete_hash = ?')
+    .bind(id, await hashToken(deleteToken))
+    .run();
+  if (meta.changes === 0) {
+    const row = await db.prepare('SELECT id FROM share_links WHERE id = ?').bind(id).first();
+    return row ? 'forbidden' : 'not-found';
+  }
+  return 'deleted';
+}
+
 export function handleShareCreate(ctx: MeetContext, deps: MeetDeps): Promise<Response> {
   return withRequest(ctx, async () => {
     if (ctx.env.SHARE_SHORT === 'off') {
@@ -126,53 +192,25 @@ export function handleShareCreate(ctx: MeetContext, deps: MeetDeps): Promise<Res
       });
     }
     const db = ctx.env.DB;
-    const deleteHash = await hashToken(input.deleteToken);
-    // 응답이 사라져 같은 토큰으로 다시 오면 처음 만든 링크를 돌려준다(본문은 처음 것을 둔다).
-    async function existing(): Promise<Response | null> {
-      const row = await db
-        .prepare('SELECT id, expires_at FROM share_links WHERE delete_hash = ?')
-        .bind(deleteHash)
-        .first<{ id: string; expires_at: string }>();
-      return row
-        ? jsonResponse(
-            { id: row.id, expiresAt: row.expires_at, created: false },
-            { headers: PRIVATE_HEADERS },
-          )
-        : null;
+    const result = await insertShareLink(
+      db,
+      {
+        body: input.body,
+        kind: input.kind,
+        keepUntil: input.keepUntil,
+        deleteHash: await hashToken(input.deleteToken),
+      },
+      now,
+    );
+    if (result.created) {
+      ctx.waitUntil(
+        Promise.all([pruneExpiredShares(db, now, 20), pruneLimits(db, now)]).catch(() => undefined),
+      );
     }
-    const retried = await existing();
-    if (retried) return retried;
-    const kind: ShortLinkKind = input.kind;
-    const expiresAt = shortExpiresAt(kind, input.keepUntil, now).toISOString();
-    for (let attempt = 0; ; attempt++) {
-      const id = newShareId();
-      try {
-        await db
-          .prepare(
-            'INSERT INTO share_links (id, body, kind, delete_hash, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)',
-          )
-          .bind(id, input.body, kind, deleteHash, now.toISOString(), expiresAt)
-          .run();
-        ctx.waitUntil(
-          Promise.all([pruneExpiredShares(db, now, 20), pruneLimits(db, now)]).catch(
-            () => undefined,
-          ),
-        );
-        return jsonResponse(
-          { id, expiresAt, created: true },
-          { status: 201, headers: PRIVATE_HEADERS },
-        );
-      } catch (error) {
-        const message = error instanceof Error ? error.message : '';
-        if (/UNIQUE constraint failed: share_links\.delete_hash\b/i.test(message)) {
-          const raced = await existing();
-          if (raced) return raced;
-        }
-        if (!/UNIQUE constraint failed: share_links\.id\b/i.test(message) || attempt >= 2) {
-          throw error;
-        }
-      }
-    }
+    return jsonResponse(result, {
+      status: result.created ? 201 : 200,
+      headers: PRIVATE_HEADERS,
+    });
   });
 }
 
@@ -219,14 +257,11 @@ export function handleShareDelete(ctx: MeetContext, deps: MeetDeps): Promise<Res
       ctx.request.headers.get('Authorization') ?? '',
     );
     if (!match) throw new ApiError('UNAUTHORIZED', '지울 권한을 확인해 주세요');
-    const db = ctx.env.DB;
-    const { meta } = await db
-      .prepare('DELETE FROM share_links WHERE id = ? AND delete_hash = ?')
-      .bind(id, await hashToken(match[1]!))
-      .run();
-    if (meta.changes === 0) {
-      const row = await db.prepare('SELECT id FROM share_links WHERE id = ?').bind(id).first();
-      if (row) throw new ApiError('UNAUTHORIZED', '지울 권한을 확인해 주세요');
+    const result = await deleteShareLink(ctx.env.DB, id, match[1]!);
+    if (result === 'forbidden') {
+      throw new ApiError('UNAUTHORIZED', '지울 권한을 확인해 주세요');
+    }
+    if (result === 'not-found') {
       throw new ApiError('NOT_FOUND', '짧은 링크가 없어요');
     }
     return new Response(null, { status: 204, headers: PRIVATE_HEADERS });
