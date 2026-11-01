@@ -37,7 +37,7 @@ AI 에이전트(Claude Code 등)가 사람 손 없이 여행 일정을 만들어
 | 문서를 만드는 길 | `plan.json` → 메모리 보관함(`emptyLibrary` + 앱 연산) → `buildTripShareDoc` | 공유 문서의 장소 순서·숙소·후보·`legModes` 규칙을 다시 만들지 않는다. 앱 연산(`createTrip`·`insertStop` 등)이 제목·날짜·Stop 한도를 이미 검사한다 |
 | 경로 조회 | 서버 코드 `resolveRoute`(`src/server/route.ts`)를 Node에서 직접 부른다. 구간 수단은 앱 규칙(`legBetween`: 직선 800m 이하 도보, 사람이 고른 `legModes` 우선) | 앱과 같은 시간·거리·경로선(200점)·`queriedAt`이 나온다. 옛 `pipeline/naver-client.ts`의 `fetchCarRoute`·`pipeline/legs.ts`·`pipeline/route-cache.ts`는 옛 `trip-data` 모양(`durationMs`, `failed`)이라 쓰지 않는다. 디스크 캐시는 두지 않는다(결과는 조회 시각 교통 기준이고 `queriedAt`에 남는다) |
 | 장소 조회 | `naverSid` → `fetchPlaceSummary`(`pipeline/naver-client.ts`), `link` → `resolveLink`(`src/server/resolve.ts`, 네이버·카카오·구글 링크), `search` → 새 `searchNaverPlaces`(`src/server/search.ts`) | 앱 `/api/place`·`/api/search`가 쓰는 같은 함수다. 배포된 API는 출처 검사가 있어 CLI가 부를 수 없으므로 코드를 직접 쓴다 |
-| 검색으로 장소 ID 찾기 | 새 명령을 두지 않고 `plan.json` 장소의 `search: { q, near? }`로 받는다. sid가 있는 결과 중 이름(NFC·공백 제거·소문자로 맞춤)이 정확히 같은 곳이 하나뿐이거나 결과가 하나뿐이면 그 sid를 쓰고, 여럿이면 후보(최대 5곳: sid·이름·주소·분류)를 오류로 돌려준다. 결과가 없고 `lng`·`lat`이 있으면 핀 | 명령은 사용자가 정한 넷으로 둔다(설계 당시 근거이며, 이후 철회용 `unshare`가 추가됐다). AI는 후보 오류를 보고 `naverSid`로 고쳐 다시 부른다. 네이버 자동완성 응답의 `id`가 장소 sid다(2026-11-01 확인: `초당순두부마을` → `id`·`sid` `31506191`) |
+| 검색으로 장소 ID 찾기 | 새 명령을 두지 않고 `plan.json` 장소의 `search: { q, near? }`로 받는다. sid가 있는 결과의 이름을 `name`(생략하면 `search.q`)과 NFC·공백 제거·소문자로 맞춰 비교한다. 정확히 같은 곳이 하나뿐이거나 결과가 하나뿐이면 그 sid를 쓰고, 여럿이면 후보(최대 5곳: sid·이름·주소·분류)를 오류로 돌려준다. 결과가 없고 `lng`·`lat`이 있으면 핀 | 명령은 사용자가 정한 넷으로 둔다(설계 당시 근거이며, 이후 철회용 `unshare`가 추가됐다). AI는 후보 오류를 보고 `naverSid`로 고쳐 다시 부른다. 네이버 자동완성 응답의 `id`가 장소 sid다(2026-11-01 확인: `초당순두부마을` → `id`·`sid` `31506191`) |
 | 메모 포함 기본값 | `send`는 장소 메모를 넣는다(`--no-memo`로 뺌). `build`·`share`는 빼고 `--memo`일 때만 넣는다 | 받은함은 본인 보관함이다. 짧은 링크·데이터 링크는 남에게 간다. 앱 공유와 같이 이 옵션은 장소 `memo`만 좌우하고, Day 메모(Stop `note`)는 늘 들어간다(`buildTripShareDoc` 규칙) |
 | 받은함 저장 값 | `/import#d=`의 값 그대로(경로선 뺀 `hashDoc` 사본을 압축한 base64url, 32,000자 이하). CLI는 장소 라벨도 만들지 않는다. 서버는 한 번만 풀어 `agentRawProblem` → `validateShareValue`로 v2를 검사하고 라벨·경로선을 거절한다. `AGENT_INBOX_LIMITS`는 `fileBytes` 5,242,880·`hashChars` 32,000·`decodedBytes` 393,216(384KB)·`places` 200이다 | 앱은 이 값을 기존 `/import#d=` 진입과 같은 함수로 읽어 미리보기를 연다. 값 길이(`MAX_HASH_CHARS` 32,000자)와 요청 크기(`SHARE_REQUEST_MAX_BYTES`)는 그대로 쓰고, 서버 CPU 때문에 풀린 크기·장소 수만 `AGENT_INBOX_LIMITS`로 줄인다(아래 보안). 받은함은 동기화와 같은 일반 저장이다(서버 운영자가 읽을 수 있다). 구현에서는 대량 스키마 오류와 라벨별 모의 가져오기 비용을 줄이려고 사전 검사·384KB 상한을 적용했다 |
 | 같은 일정 두 번 | CLI가 요청 키 `key` = SHA-256(키 정렬 JSON `[plan 해석 결과, 메모 포함 여부, --no-routes 여부]`)의 base64url(43자)을 함께 보낸다. 서버는 사용자별로 만료되지 않은 같은 `key`가 있으면 문서 검사 전에 그 항목을 `200 created: false`로 돌려준다 | 문서 `d`는 실행마다 바뀐다(`createdAt`, 무작위 장소·Stop id, 경로 `queriedAt`). 그래서 `d`의 해시로는 같은 계획의 재실행을 알 수 없다. 응답을 잃고 다시 부른 AI가 받은함을 채우지 않는다(짧은 링크 `delete_hash` 재시도와 같은 방식). `key`는 권한 근거가 아니라 본인 받은함의 중복 판단에만 쓴다. 구현에서는 경로 조회 생략 여부가 다른 전송을 구분하도록 키에 넣었다 |
@@ -145,7 +145,7 @@ Effect Schema `TripPlanSchema`(`pipeline/agent-trip/plan-schema.ts`)로 정의�
 |---|---|
 | `title` | 1~60자(`LIBRARY_LIMITS.tripTitleChars`). 공유 문서 제목과 여행 제목에 함께 쓴다 |
 | `startDate`·`endDate` | `YYYY-MM-DD`, 1~30일(`SHARE_TRIP_LIMITS.maxDays`) |
-| `places[]` | 1~200곳. `key`는 `^[A-Za-z0-9_-]{1,40}$`이고 겹치지 않는다. 출처는 `naverSid`(숫자 1~20자 문자열)·`link`·`search` 중 하나 이하. 셋 다 없으면 핀이라 `name`·`lng`·`lat`이 필수. 출처가 있을 때 `name`·`address`·`lng`·`lat`은 조회 실패 때의 대체 값. 좌표(`lng`·`lat`·`search.near`)는 보관함·공유 스키마의 `Lng`·`Lat`(`src/schema/common.ts`: 경도 124~132, 위도 33~39)와 같은 범위. `name` 1~100자, `address` 200자까지, `memo` 10,000자까지(`memoChars`) |
+| `places[]` | 1~200곳. `key`는 `^[A-Za-z0-9_-]{1,40}$`이고 겹치지 않는다. 출처는 `naverSid`(숫자 1~20자 문자열)·`link`·`search` 중 하나 이하. 셋 다 없으면 핀이라 `name`·`lng`·`lat`이 필수. 출처가 있을 때 `name`·`address`·`lng`·`lat`은 조회 실패 때의 대체 값이며, `search`에서는 `name`이 후보 이름 비교 기준이기도 하고 생략하면 `search.q`로 비교한다. 좌표(`lng`·`lat`·`search.near`)는 보관함·공유 스키마의 `Lng`·`Lat`(`src/schema/common.ts`: 경도 124~132, 위도 33~39)와 같은 범위. `name` 1~100자, `address` 200자까지, `memo` 10,000자까지(`memoChars`) |
 | `days[]` | 기간의 날 수와 같은 개수. `startTime`(`HH:mm`, 기본 `09:00`), `lodging`(장소 key 또는 `null`, 마지막 날은 도착지), `stops[]` |
 | `stops[]` | `place`(key), `stayMin`(0~1440 정수 또는 `null` = 앱 기본값), `fixedTime`(`HH:mm` 또는 `null`), `note`(500자까지) |
 | `origin` | 1일차 출발지 key 또는 `null` |
@@ -154,7 +154,7 @@ Effect Schema `TripPlanSchema`(`pipeline/agent-trip/plan-schema.ts`)로 정의�
 
 장소 `name`·`memo`·`search.q`는 스키마 검사 뒤 앞뒤 공백을 뺀다. 빈 이름·검색어는 해당 경로의 `schema` 오류다. `search.q`는 1~40자, `link`는 1~2,000자다.
 
-의미 검사(스키마 다음, 장소 조회 전): 없는 key 참조, 여행 안 같은 장소 두 번(Stop·후보 — 출발지·숙소는 겹쳐도 됨), 날 수 불일치, 같은 네이버 sid 두 번, `legModes` 키 모양. 장소 조회 뒤에 출처 중복을 한 번 더 본다(아래 처리 순서 2). 여행이 참조하는 장소(출발지·숙소·Stop·후보)가 하나도 없으면 오류 `no-places`(경로 `days`, 끝 코드 2): `buildTripShareDoc`이 참조한 장소만 담아 `checkShareTrip`의 "장소가 하나도 없어요"에 걸리기 때문이다. 쓰지 않는 장소는 오류가 아니라 경고이고 문서에 들어가지 않는다(`buildTripShareDoc`가 쓰는 장소만 담는다).
+의미 검사(스키마 다음, 장소 조회 전): 없는 key 참조, 여행 안 같은 장소 두 번(Stop·후보 — 출발지·숙소는 겹쳐도 됨), 날 수 불일치, 같은 네이버 sid 두 번, `legModes` 키 모양. 장소 조회 뒤에 출처 중복을 한 번 더 본다(아래 처리 순서 2). 여행이 참조하는 장소(출발지·숙소·Stop·후보)가 하나도 없으면 오류 `no-places`(경로 `days`, 끝 코드 2): `buildTripShareDoc`이 참조한 장소만 담아 `checkShareTrip`의 "장소가 하나도 없어요"에 걸리기 때문이다. 선언한 모든 장소는 참조 여부와 상관없이 입력·조회·중복 검사를 통과해야 하고, 그중 참조하지 않는 장소만 경고 `unused-place` 뒤 문서에서 뺀다(`buildTripShareDoc`가 쓰는 장소만 담는다).
 
 ## CLI(`yarn trip`)
 
@@ -178,7 +178,7 @@ yarn --silent trip --schema [--json]
 ### 처리 순서(`build`·`send`·`share`)
 
 1. **읽기·검사**: `TripPlanSchema` 해석 → 의미 검사. 실패는 모두 모아 한 번에 낸다.
-2. **장소 조회**(`pipeline/agent-trip/resolve-places.ts`, 새 파일): 차례로, 외부 조회가 필요한 장소 항목(`naverSid`·`link`·`search`) 사이에 300ms 대기한다. 한 장소를 해석하는 내부 요청(예: 짧은 링크 리다이렉트 뒤 장소 조회) 사이에는 별도 대기가 없다. 모든 요청은 `makeRequester`(`src/server/request.ts`, 본문 수신까지 8초 제한)로 감싼다. `fetchPlaceSummary`는 그 자체로 시간 제한이 없으므로 `src/server/resolve.ts`의 내보낸 `httpDeps(request)`로 요청기를 `fetch`로 주입한다. 시간 초과는 조회 실패와 같게 다룬다. 조회 결과(특히 `resolveLink`의 구글 링크는 전 세계 좌표를 줄 수 있다)도 `Lng`·`Lat` 범위와 출처 id를 다시 보고, 벗어나면 대체 값이 있어도 그 장소 경로의 입력 오류 `out-of-range`(끝 코드 2)로 낸다. 조회 결과의 너무 긴 이름·주소는 100자·200자로 자르고 `out-of-range` 경고를 낸다. `naverSid` → `fetchPlaceSummary`(이름·주소·좌표·분류), `link` → `resolveLink`(네이버·카카오·구글 장소. 폴더 링크는 오류), `search` → `searchNaverPlaces`(위 결정 표). 요청이 실패하면 대체 값(`name`·`lng`·`lat`)이 있을 때 그것으로 쓰고 `lookup-failed` 경고, 없으면 오류다. 폴더 링크·검색 후보 여럿처럼 결과로 돌려준 오류는 대체 값으로 덮지 않는다. 출처는 `{ kind: 'naver', sid }`·`kakao`·`google`·`pin`. 조회가 끝나면 `sourceKey`(`src/domain/library/add-place.ts`)로 다시 겹침을 본다. `naverSid`와 `link`·`search`가 같은 네이버 장소로 풀리는 경우처럼 두 key가 같은 출처면 `LibrarySchema`의 출처 중복 검사에 걸리므로, 합치지 않고 뒤에 나온 장소 경로(예: `places[3]`)에 오류 `duplicate-source`를 붙이고 메시지로 앞 경로(예: `places[1]`)를 알린다. AI가 한 key로 합쳐 다시 부른다.
+2. **장소 조회**(`pipeline/agent-trip/resolve-places.ts`, 새 파일): 차례로, 외부 조회가 필요한 장소 항목(`naverSid`·`link`·`search`) 사이에 300ms 대기한다. 한 장소를 해석하는 내부 요청(예: 짧은 링크 리다이렉트 뒤 장소 조회) 사이에는 별도 대기가 없다. 모든 요청은 `makeRequester`(`src/server/request.ts`, 본문 수신까지 8초 제한)로 감싼다. `fetchPlaceSummary`는 그 자체로 시간 제한이 없으므로 `src/server/resolve.ts`의 내보낸 `httpDeps(request)`로 요청기를 `fetch`로 주입한다. 시간 초과는 조회 실패와 같게 다룬다. 조회 결과(특히 `resolveLink`의 구글 링크는 전 세계 좌표를 줄 수 있다)도 `Lng`·`Lat` 범위와 출처 id를 다시 보고, 벗어나면 대체 값이 있어도 그 장소 경로의 입력 오류 `out-of-range`(끝 코드 2)로 낸다. 조회 결과의 너무 긴 이름·주소는 100자·200자로 자르고 `out-of-range` 경고를 낸다. `naverSid` → `fetchPlaceSummary`(이름·주소·좌표·분류), `link` → `resolveLink`(네이버·카카오·구글 장소. 폴더 링크는 오류), `search` → `searchNaverPlaces`(`name`을 후보 이름 비교 기준으로 쓰고, 생략하면 `search.q`로 비교한다. NFC·공백 제거·소문자 정규화와 후보 선택 규칙은 위 결정 표). 요청이 실패하면 대체 값(`name`·`lng`·`lat`)이 있을 때 그것으로 쓰고 `lookup-failed` 경고, 없으면 오류다. 폴더 링크·검색 후보 여럿처럼 결과로 돌려준 오류는 대체 값으로 덮지 않는다. 출처는 `{ kind: 'naver', sid }`·`kakao`·`google`·`pin`. 조회가 끝나면 `sourceKey`(`src/domain/library/add-place.ts`)로 다시 겹침을 본다. `naverSid`와 `link`·`search`가 같은 네이버 장소로 풀리는 경우처럼 두 key가 같은 출처면 `LibrarySchema`의 출처 중복 검사에 걸리므로, 합치지 않고 뒤에 나온 장소 경로(예: `places[3]`)에 오류 `duplicate-source`를 붙이고 메시지로 앞 경로(예: `places[1]`)를 알린다. AI가 한 key로 합쳐 다시 부른다.
 3. **보관함 만들기**(`pipeline/agent-trip/build-library.ts`, 새 파일): `emptyLibrary()`에 `newPlace`(`src/domain/library/add-place.ts`)로 장소를 넣고, `createTrip`(`origin`·`candidates` 포함) → Day마다 `insertStop` → `setStopStay`·`setStopFixedTime`·`setStopNote` → `setLodging`(`alsoFollowingDays: false`) → `setDayStartTime` → `setLegMode`. id는 `src/services/id-gen.ts`의 내보낸 `randomId`. 연산이 `ok: false`면 해당 `plan.json` 경로로 바꿔 오류. 마지막에 `LibrarySchema`로 검사한다.
 4. **구간 시간**(`pipeline/agent-trip/route-legs.ts`, 새 파일): 모든 Day의 `dayLegs`를 모아 `routeOf(leg)`를 만든다. 앱 일정 공유 창(`src/sections/share-export/use-trip-legs.ts`)과 같은 규칙이다.
    - 직선 `SAME_POINT_M`(10m) 미만 → `same-point`(0초·0m).
@@ -204,6 +204,8 @@ yarn --silent trip --schema [--json]
 ### 출력
 
 사람용은 한국어 요약과 링크. `--json`은 표준 출력에 JSON 하나만 낸다(진행 상황은 표준 오류). Yarn 1은 `--silent` 없이는 시작·종료 줄을 표준 출력에 섞으므로 기계가 읽을 때는 `yarn --silent`로 부른다. `build`·`send`·`share`의 성공 공통 필드는 `trip`·`days`·`routes`·`links`·`warnings`다. `routes`는 `legs`·`routed`·`estimated`·`noRoute`·`samePoint`·`oldestQueriedAt`을 담는다. 상태별 개수는 서로 겹치지 않고, 같은 입력 키라도 실제 구간마다 센다. Day의 `estimatedLegs`는 `estimated`와 `no-route`를 합한 수다. 조회한 구간이 없으면 `oldestQueriedAt`은 `null`이다.
+
+아래 예시는 Day·Stop 일부를 생략했다(실제로는 모든 Day와 각 Day의 모든 Stop이 나온다).
 
 ```json
 {
@@ -439,7 +441,7 @@ CREATE INDEX IF NOT EXISTS agent_inbox_expires ON agent_inbox(expires_at);
 `/Users/shinchoonho/01.workspace/.claude/skills/korea-trip-planner`가 지킬 것. 스킬 파일 수정은 ④ 병합 뒤 마지막 단계에서 한다.
 
 1. **부르는 때**: 사용자가 "랜드마크로 보내줘"(받은함 → `send`), "랜드마크 링크로 공유해줘"(→ `share`), "랜드마크 링크만 만들어줘"(→ `build`)라고 할 때만. 계획서를 쓸 때 자동으로 부르지 않는다.
-2. **장소**: 저장 목록 장소는 `naver_bookmarks.py` 결과의 `sid` → `naverSid`, `name`·`address`·`px`→`lng`·`py`→`lat`(숫자로 바꿈)을 대체 값으로 함께 넣는다. 신규 제안은 `search: { q, near }`(`near`는 근처 저장 장소 좌표), 후보 오류가 나면 후보 중 하나의 `naverSid`로 고쳐 다시 부른다. 못 찾으면 이름 + 좌표 핀. 집 주소는 넣지 않고 인근 역 같은 대표 지점을 쓴다.
+2. **장소**: 저장 목록 장소는 `naver_bookmarks.py` 결과의 `sid` → `naverSid`, `name`·`address`·`px`→`lng`·`py`→`lat`(숫자로 바꿈)을 대체 값으로 함께 넣는다. 신규 제안은 `search: { q, near }`(`near`는 근처 저장 장소 좌표)로 찾는다. `search`의 `name`은 후보 이름 비교 기준이기도 하며 생략하면 `search.q`로 비교한다. 후보 오류가 나면 후보 중 하나의 `naverSid`로 고쳐 다시 부른다. 못 찾으면 이름 + 좌표 핀. 집 주소는 넣지 않고 인근 역 같은 대표 지점을 쓴다.
 3. **메모**: Stop `note`에 출처(`[네이버 저장]`·`[신규 제안]`)와 "확인 필요"를 짧게 남긴다(500자까지). 장소 `memo`는 저장 목록 메모만.
 4. **실행**: `plan.json`은 세션 스크래치 폴더에 쓰고 `yarn --silent --cwd /Users/shinchoonho/01.workspace/01.repositories/landmark trip <명령> <절대 경로> --json`(`--silent`가 없으면 Yarn 1이 시작·종료 줄을 표준 출력에 섞어 JSON으로 읽을 수 없다). 먼저 `build`로 요약·경고를 사용자에게 보이고, 그다음 `send`·`share`.
 5. **토큰**: 스킬은 토큰을 읽거나 출력하지 않는다. 끝 코드 4면 사용자에게 설정 › 동기화 › AI 연결에서 토큰을 만들어 키체인에 넣어 달라고 안내한다.

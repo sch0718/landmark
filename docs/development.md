@@ -355,7 +355,7 @@ Node 24와 설치된 의존성이 필요합니다. JSON을 다른 도구에서 �
 | `format`·`version` | `"landmark-trip-plan"`·`1`입니다 |
 | `title`·`startDate`·`endDate` | 제목 1~60자, 실제 날짜 `YYYY-MM-DD`, 양 끝을 포함해 1~30일입니다 |
 | `places[]` | 1~200곳. `key`는 영숫자·`_`·`-` 1~40자이며 겹치지 않습니다. `naverSid`(숫자 1~20자)·`link`·`search` 중 하나 이하를 쓰고, 없으면 핀으로 `name`·`lng`·`lat`을 모두 적습니다 |
-| 장소 내용 | 이름 1~100자, 주소 200자, 메모 10,000자까지입니다. 좌표는 경도 124~132·위도 33~39이며 `search.near`는 `[경도, 위도]`입니다. 출처가 있는 장소의 이름·주소·좌표는 조회 실패 때 대체 값입니다 |
+| 장소 내용 | 이름 1~100자, 주소 200자, 메모 10,000자까지입니다. 좌표는 경도 124~132·위도 33~39이며 `search.near`는 `[경도, 위도]`입니다. 출처가 있는 장소의 이름·주소·좌표는 조회 실패 때 대체 값이며, `search`에서는 `name`이 후보 이름 비교 기준이기도 하고 생략하면 `search.q`로 비교합니다 |
 | `days[]` | 기간의 날 수와 같은 개수입니다. `startTime`은 `HH:mm`(기본 `09:00`), `lodging`은 장소 key 또는 `null`입니다 |
 | `days[].stops[]` | `place`는 장소 key, `stayMin`은 0~1440 정수 또는 `null`, `fixedTime`은 `HH:mm` 또는 `null`, `note`는 500자까지입니다 |
 | `origin`·`candidates` | 첫날 출발지 key 또는 `null`·아직 Day에 넣지 않은 후보 key 목록입니다. Stop·후보 전체에서 장소를 두 번 넣을 수 없으며 출발지·숙소는 겹쳐도 됩니다 |
@@ -383,7 +383,7 @@ Node 24와 설치된 의존성이 필요합니다. JSON을 다른 도구에서 �
 
 CLI의 `inbox`·`share`·`connection`·저장된 링크 시각은 ISO 문자열입니다. API의 `whoami`·`inbox` 응답 시각은 아래처럼 epoch ms 숫자입니다. 실패는 `{ ok: false, command, errors: [{ path, code, message, reason?, candidates? }] }`입니다. 검색 후보가 여럿이면 `ambiguous`와 `candidates: [{ naverSid, name, address, category }]`를 냅니다. 토큰·삭제 토큰은 출력하지 않습니다.
 
-경고 코드에는 `lookup-failed`(대체 값 사용), `not-found`(검색 결과가 없어 핀 사용), `out-of-range`(조회한 이름·주소 잘림), `unused-place`(여행에서 쓰지 않음), `token-expiring`(`whoami`에서 만료까지 14일 이하), `token-origin`(환경변수 토큰을 운영 아닌 주소로 보냄), `share-store`(삭제 기록 저장 실패)가 있습니다. 경고가 있어도 성공은 0입니다.
+경고 코드에는 `lookup-failed`(대체 값 사용), `not-found`(검색 결과가 없어 핀 사용), `out-of-range`(조회한 이름·주소 잘림), `unused-place`(입력·조회·중복 검사를 모두 통과했지만 여행에서 쓰지 않아 문서에서 제외됨), `token-expiring`(`whoami`에서 만료까지 14일 이하), `token-origin`(환경변수 토큰을 운영 아닌 주소로 보냄), `share-store`(삭제 기록 저장 실패)가 있습니다. 경고가 있어도 성공은 0입니다.
 
 | 끝 코드 | 뜻·대표 코드 |
 | --- | --- |
