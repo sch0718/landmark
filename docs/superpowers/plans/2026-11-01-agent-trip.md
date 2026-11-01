@@ -125,14 +125,14 @@
   export function agentDocProblem(doc: ShareDocV2): 'title' | 'place-too-long' | null;
 
   // src/domain/share/read-share.ts
-  export type ShareReadLimits = Pick<typeof SHARE_IMPORT_LIMITS, 'places' | 'hashChars' | 'decodedBytes'>;
+  export type ShareReadLimits = { places: number; hashChars: number; decodedBytes: number }; // SHARE_IMPORT_LIMITS는 as const라 Pick을 쓰면 리터럴 타입이 된다
   export async function readShareHash(value: string, limits: ShareReadLimits = SHARE_IMPORT_LIMITS): Promise<ShareReadResult>;
   ```
   `readShareHash`는 `decodeCompressedJson(value, { maxChars: limits.hashChars, maxBytes: limits.decodedBytes })`로 풀고, 내부 `validate(json, limits.places)`가 `SHARE_IMPORT_LIMITS.places` 대신 받은 값을 쓴다. `readShareHtml`·`readShareFile`은 기본값 그대로.
 - [ ] **Step 1: 실패하는 시험**
   - `search.test.ts`: 가짜 응답 `{ place: [{ id: '31506191', sid: '31506191', title: '초당순두부마을', x: '128.9156023', y: '37.7906975', roadAddress: '…', ctg: '두부요리' }] }` → `searchNaverPlaces` 결과 `sid: '31506191'`, `id`가 없거나 숫자가 아니면 `sid: null`. 같은 응답의 `resolveSearch` 결과는 지금 시험의 모양 그대로(`sid` 키 없음 — `expect(Object.keys(r.results[0]!)).not.toContain('sid')`).
   - `agent-limits.test.ts`(같은 폴더): `agentDocProblem`이 제목 61자 `title`, 이름 101자·sid 21자리·`googleId` 65자 `place-too-long`, 정상 null.
-  - `read-share-limits.test.ts`: 장소 201곳 v2 문서(`tests/fixtures/builders.ts`의 빌더로 만듦)의 `encodeShareHash` 값 → 기본 한도 `ok`, `AGENT_INBOX_LIMITS`로는 `too-many`. 1,048,577바이트로 풀리는 문서(긴 `memo`) → 기본 `ok`, 에이전트 한도 `corrupt`.
+  - `read-share-limits.test.ts`: 타입 확인으로 `const a: ShareReadLimits = SHARE_IMPORT_LIMITS; const b: ShareReadLimits = AGENT_INBOX_LIMITS;`(둘 다 `yarn typecheck` 통과). 장소 201곳 v2 문서(`tests/fixtures/builders.ts`의 빌더로 만듦)의 `encodeShareHash` 값 → 기본 한도 `ok`, `AGENT_INBOX_LIMITS`로는 `too-many`. 1,048,577바이트로 풀리는 문서(긴 `memo`) → 기본 `ok`, 에이전트 한도 `corrupt`.
   - `id-gen.test.ts`: `randomId(10)`이 `/^[a-z0-9]{10}$/`.
 - [ ] **Step 2:** `yarn vitest run tests/unit/server/search.test.ts tests/unit/domain/share/read-share-limits.test.ts tests/unit/services/id-gen.test.ts` → 새 사례 FAIL
 - [ ] **Step 3: 구현** — `searchNaverPlaces`는 지금 `resolveSearch` 본문을 옮기고 각 결과에 `sid: typeof p.id === 'string' && /^\d+$/.test(p.id) ? p.id : null`을 더한다. `resolveSearch`는 `({ results: (await searchNaverPlaces(query, deps)).map(({ sid: _sid, ...rest }) => rest) })`. 나머지는 위 인터페이스대로.
@@ -286,6 +286,8 @@
     importHash: string;  // `#d=` 뒤 값(받은함 `d`)
     viewHash: string;    // `/view#d=` 뒤 값(짧은 링크 암호화 대상)
   };
+  /** 장소·라벨·여행 중 `stableStringify(item).length > max`인 항목 키(`place:<id>` 등). */
+  export function oversizedItems(lib: Library, max: number): string[];
   export async function buildDoc(
     built: BuiltLibrary, routeOf: (leg: Leg) => ShareLegTime,
     opts: { title: string; includeMemo: boolean; app: string; now: Date }, plan: TripPlan,
@@ -304,7 +306,7 @@
   3. `viewLink(doc, app)`·`importLink(doc, app)` — 둘 중 `kind !== 'direct'`면 `too-big`(EXIT.input, "장소·Day를 줄이거나 앱에서 파일로 공유해 주세요"). `importHash`를 `readShareHash(importHash, AGENT_INBOX_LIMITS)`로 다시 읽어 `ok: false`면 그 이유를 `too-big`(`too-many`·`corrupt`)으로 낸다. `agentDocProblem(doc)`(서버와 같은 검사: 제목 60자, 장소 이름 100자·주소 200자·메모 10,000자, `naverSid`·`kakaoId` 20자리 숫자, `googleId` 64자)이 null이 아니면 `internal`.
   - `summarize`: Day마다 `dayLegs`·`routeOf`로 `computeSchedule({ startTime, hasStart, stops, hasEnd, legs })`, 시각은 `formatClock`, `estimatedLegs`는 `status`가 `estimated`·`no-route`인 수.
 - [ ] **Step 1: 실패하는 시험**
-  - `build-doc.test.ts`: 고정 계획(가짜 조회·`skip` 구간) → 문서가 스키마·관계 검사 통과, `importHash`의 `readShareHash` 결과가 `hashDoc(doc)`과 같은 값(`toEqual`). `includeMemo: false`면 `places[].memo` 없음, Stop `note`는 있음. 제목 30·31·60자 모두 성공(31자는 `defaultTitleLabel`이 자르므로). 이름 같고 20m 떨어진 핀 두 개를 Day 0·Day 1 Stop에 넣으면 `merged-places`. 이름 99자 장소 10곳 + 긴 메모로 동기화 항목 상한을 넘기는 사례 `item-too-large`(상한 근처 경계 하나 성공·하나 실패). 경로선 많은 문서는 `viewLink`가 경로선 없이 다시 만들어도 `direct`. 32,000자를 넘는 문서 `too-big`.
+  - `build-doc.test.ts`: 고정 계획(가짜 조회·`skip` 구간) → 문서가 스키마·관계 검사 통과, `importHash`의 `readShareHash` 결과가 `hashDoc(doc)`과 같은 값(`toEqual`). `includeMemo: false`면 `places[].memo` 없음, Stop `note`는 있음. 제목 30·31·60자 모두 성공(31자는 `defaultTitleLabel`이 자르므로). 이름 같고 20m 떨어진 핀 두 개를 Day 0·Day 1 Stop에 넣으면 `merged-places`. 합법적인 최대 입력(이름 100자·주소 200자·메모 10,000자 장소 200곳, Stop 메모 500자)은 성공(어떤 항목도 상한에 닿지 않음). 크기 검사 자체는 `buildDoc`이 쓰는 내부 함수 `oversizedItems(lib, max)`를 내보내 직접 시험한다: `stableStringify` 길이가 정확히 `max`인 항목은 통과, `max + 1`이면 그 항목의 키(시험에서는 `max`를 작게 넘겨 만든다). 경로선 많은 문서는 `viewLink`가 경로선 없이 다시 만들어도 `direct`. 32,000자를 넘는 문서 `too-big`.
   - `summary.test.ts`: 설계 출력 예시와 같은 값 — 출발 09:00, 첫 구간 102분(가짜 `routeOf`), `stayMin` 60, `fixedTime` 12:00 → `arrive '10:42'`, `depart '13:00'`, `slackMin 78`.
 - [ ] **Step 2:** FAIL → **Step 3:** 구현 → **Step 4:** `yarn vitest run tests/unit/pipeline/agent-trip` PASS, `yarn typecheck`
 - [ ] **Step 5:** 커밋 `feat(agent-trip): 앱과 같은 공유 문서·모의 가져오기·데이터 링크·요약`
@@ -553,23 +555,25 @@
   // share-store.ts
   export type StoredShare = { app: string; id: string; deleteToken: string; title: string; createdAt: string; expiresAt: string };
   export type StoreDeps = { home: string /* LANDMARK_TRIP_HOME ?? os.homedir()/.landmark */; now(): Date };
-  export async function readShares(deps: StoreDeps): Promise<StoredShare[]>;     // 만료 뺌, 파일 없으면 []
+  export async function readShares(deps: StoreDeps): Promise<StoredShare[]>;     // 만료 뺌, 파일 없으면 [], 해석 실패면 share-store 오류(파일은 그대로)
   export const SHARE_STORE_MAX = 200;
   /** 잠금 안에서 읽기·고치기·바꾸기. 잠금은 `<home>/agent-shares.lock`을 `open(…, 'wx')`로 만들고 50ms 간격 5초까지 다시 시도, mtime 30초 넘은 잠금은 지우고 다시. 끝나면 지운다. */
   export async function withShareStore<T>(deps: StoreDeps, edit: (items: StoredShare[]) => { items: StoredShare[]; result: T }): Promise<T>;
-  /** 만료 안 된 항목이 200개면 true(share가 서버 부르기 전에 확인). */
-  export async function shareStoreFull(deps: StoreDeps): Promise<boolean>;
+  /** 잠금 안에서 만료 안 된 항목 + 예약 수가 200 미만이면 예약 항목(`{ id: 'pending:<무작위>', deleteToken: '', … }`)을 넣고 그 예약 id를 돌려준다. 200이면 null. */
+  export async function reserveShare(deps: StoreDeps, title: string): Promise<string | null>;
+  /** 예약을 실제 항목으로 바꾸거나(서버 성공) 지운다(서버 실패). 예약 항목은 5분 뒤 만료된 것으로 본다. */
+  export async function settleShare(deps: StoreDeps, reservation: string, item: StoredShare | null): Promise<void>;
   export async function addShare(item: StoredShare, deps: StoreDeps): Promise<void>; // 폴더 0o700, 임시 파일 0o600 → rename
   export async function removeShare(app: string, id: string, deps: StoreDeps): Promise<void>;
   ```
   명령(설계 「CLI」):
   - `send <plan.json> [--no-memo] [--no-routes] [--app] [--json]`: `pickApp(…, true)` → `findToken`(없으면 `no-token`, 끝 코드 4) → `runBuild({ includeMemo: !noMemo })` → `sendInbox({ v: 1, key: await requestKey(plan, includeMemo), d: doc.importHash })` → 출력 `inbox: { id, expiresAt(ISO), created }`.
-  - `share <plan.json> [--memo] [--no-routes] [--app] [--json]`: `shareStoreFull`이면 `share-store-full`(2, 서버 안 부름) → `runBuild` → `encryptShareHash(doc.viewHash)` → `deleteToken = newDeleteToken()` → `createShare({ body, kind: 'trip', keepUntil: shortKeepUntil([plan.endDate]) ?? undefined, deleteToken })` → `addShare`(실패하면 경고 `share-store` "이 링크는 기한까지 지울 수 없어요") → 출력 `links: { short: \`${app}/s/${id}#k=${key}\`, view }`, `expiresAt`. 삭제 토큰은 출력하지 않는다.
+  - `share <plan.json> [--memo] [--no-routes] [--app] [--json]`: `runBuild` → `reserveShare`가 null이면 `share-store-full`(2, 서버 안 부름) → `encryptShareHash(doc.viewHash)` → `deleteToken = newDeleteToken()` → `createShare({ body, kind: 'trip', keepUntil: shortKeepUntil([plan.endDate]) ?? undefined, deleteToken })` → 성공이면 `settleShare(…, item)`, 서버 실패면 `settleShare(…, null)`(파일 쓰기 실패는 경고 `share-store` "이 링크는 기한까지 지울 수 없어요") → 출력 `links: { short: \`${app}/s/${id}#k=${key}\`, view }`, `expiresAt`. 삭제 토큰은 출력하지 않는다.
   - `whoami [--app] [--json]`: 이름·범위·만료(14일 이하면 경고 `token-expired` 아닌 경고 문구 "N일 뒤 만료돼요")·공급자.
   - `unshare <id> [--app] [--json]`: `readShares`에서 같은 `app`·`id`(없으면 `unknown-share`, 2) → `deleteShare` → 204, 또는 404이면서 JSON 본문 `{ error: 'not-found' }`일 때만 `removeShare`. JSON이 아니거나 `error`가 다른 404는 `old-server`(5)이고 항목을 남긴다. 403은 남기고 4. `unshare --list`: 같은 `app`의 `id`·`title`·`expiresAt`(삭제 토큰 없이).
 - [ ] **Step 1: 실패하는 시험**
   - `token.test.ts`: 환경변수 우선, darwin에서 `execFile`이 받은 인자가 `['find-generic-password', '-s', 'landmark-agent-token', '-a', 'landmark.sch0718.dev', '-w']`, 다른 플랫폼은 키체인을 부르지 않음, 패턴 아닌 값 null, `execFile` 실패 null.
-  - `share-store.test.ts`(`mkdtemp` 폴더): 추가 뒤 파일 권한 `0o600`·폴더 `0o700`(`stat().mode & 0o777`), 만료 항목은 읽을 때 빠짐, 만료 안 된 200개면 `shareStoreFull` 참·199개면 거짓, `addShare` 10개를 `Promise.all`로 돌려도 10개 모두 남음, `addShare`·`removeShare` 동시 실행, 31초 된 잠금 파일은 지우고 진행, 깨진 JSON은 빈 목록으로 읽고 다음 쓰기에서 새로 씀.
+  - `share-store.test.ts`(`mkdtemp` 폴더): 추가 뒤 파일 권한 `0o600`·폴더 `0o700`(`stat().mode & 0o777`), 만료 항목은 읽을 때 빠짐, 만료 안 된 200개면 `reserveShare` null·199개면 예약 id, 199개에서 `reserveShare` 두 개를 `Promise.all` → 하나만 예약, 예약 5분 지나면 빈자리, `addShare` 10개를 `Promise.all`로 돌려도 10개 모두 남음, `addShare`·`removeShare` 동시 실행, 31초 된 잠금 파일은 지우고 진행, 깨진 JSON은 파일 없음과 구별해 `readShares`·`addShare`가 `TripFailure`(`share-store`, 끝 코드 1)로 멈추고 원본 바이트를 그대로 둠(덮어쓰지 않음 — 그 안의 삭제 토큰을 손으로 살릴 수 있게).
   - `cli-remote.test.ts`(메모리 서버 + `agentFetch`, 토큰은 시험 안에서 발급해 `env.LANDMARK_AGENT_TOKEN`으로): `send` 0·받은함 목록에 1개, 같은 계획 다시 `send` → `created: false`, `--no-memo`면 다른 `key`, `share` 0 → 출력 `links.short`가 `/s/<16자>#k=<22자>`, 파일에 삭제 토큰, `unshare --list`에 그 id, `unshare <id>` 0 → `/s/<id>` 404·파일에서 빠짐, 다시 `unshare` → `unknown-share` 2, 가짜 `fetch`가 HTML 404를 주면 `old-server` 5이고 파일 항목이 남음, 만료 안 된 200개를 미리 채우면 `share-store-full` 2이고 서버를 부르지 않음, `whoami` 0, 토큰 없음 4, 철회한 토큰 4(`token-revoked`), `AGENT_API=off`면 `send` 5, 응답 지연(가짜 `fetch`가 끝나지 않음, 가짜 타이머 15초) → `timeout` 5, `--app https://evil.example` → `app-origin` 2이고 `fetch`가 불리지 않음. **모든 사례에서 표준 출력·오류 합친 문자열에 토큰·삭제 토큰이 없다.**
 - [ ] **Step 2:** FAIL → **Step 3:** 구현 → **Step 4:** PASS
 - [ ] **Step 5:** 커밋 `feat(agent-trip): yarn trip send·share·whoami·unshare`
@@ -636,11 +640,10 @@
   ```ts
   // boot.ts (첫 로딩, 런타임 import는 lazy-chunk만)
   export const loadAgentInbox: () => Promise<typeof import('src/services/agent-inbox/inbox-check')>;
-  export const loadAgentSection: () => Promise<typeof import('src/sections/agent/AgentSection')>;
-  export const loadAgentInboxDialog: () => Promise<typeof import('src/sections/agent/AgentInboxDialog')>;
+  // loadAgentInboxDialog는 Task 17, loadAgentSection은 Task 18에서 대상 파일을 만들 때 이 파일에 더한다(없는 모듈을 import하면 이 과제의 typecheck가 깨진다).
   // inbox-check.ts (조각 agent-inbox)
   export const INBOX_CHECK_GAP_MS = 10 * 60 * 1000;
-  export type InboxCheckDeps = { api: AgentApi; storage: Storage; now(): number; notify(count: number): void; session(): string | null; schedule(): void };
+  export type InboxCheckDeps = { api(): AgentApi | null; storage: Storage; now(): number; notify(count: number): void; session(): string | null; schedule(): void };
   /** 한 번 확인. 새 id가 있으면 notify(전체 개수). 401·403이면 'paused'. */
   export async function checkInboxOnce(deps: InboxCheckDeps): Promise<'ok' | 'paused' | 'failed'>;
   /** engine.onRunFinished에 붙인다. 첫 synced에 바로, 그 뒤 10분 간격. 멈춘 세션 id와 지금 세션 id가 다르면 다시 시작. */
@@ -657,8 +660,9 @@
   - `startInboxCheck`: `createAgentApi()`가 null이면 끝. `loadSyncEngine()` → `ensureLibrarySyncEngine()` → `attachInboxCheck(engine, deps, () => store의 syncStatus)`. `notify(n)`은 `toast(\`AI가 보낸 일정 ${n}개\`, { action: { label: '보기', onClick: openInboxDialog } })`. `schedule`은 `engine.schedule('manual')`.
   - `paused`가 되면 그때의 `session()`(`readSession(getSharedSyncStorage())?.sessionId ?? null`)을 기억하고 `schedule()`을 한 번 부른다. 이후 실행 끝에서 `session()`이 달라졌으면 멈춤을 풀고 바로 확인한다.
   - 응답을 받은 뒤 `sameOwner(api.owner)`가 거짓이면 결과를 버린다.
+  - **계정 전환**: 실행기는 `AgentApi`를 고정해 두지 않는다. 실행이 끝날 때마다 `readSyncMeta(getSharedSyncStorage()).userId`를 보고 지난번 사용자와 다르면 `createAgentApi()`로 새로 만들고, 마지막 확인 시각·멈춤 상태·알린 기록(기기 키는 `readAgentInboxLocal`이 사용자별로 비움)을 처음으로 돌린 뒤 바로 확인한다. `InboxCheckDeps.api`는 `api(): AgentApi | null`(함수)로 둔다.
   - 받은함 창 열림 상태는 `src/stores/agent-inbox.ts`(새, 작은 atom `agentInboxOpenAtom`)에 둔다. `AgentInboxDialog`는 이 atom을 보는 호스트(`src/sections/agent/AgentInboxHost.tsx`, 새, `ShellRoute`의 `LibraryShell`에 `<AgentInboxHost />`로 둠 — 열릴 때만 `lazy(loadAgentInboxDialog)`)로 연다.
-- [ ] **Step 1: 실패하는 시험** — `agent-inbox-check.test.ts`: 첫 synced에 확인, 10분 안 두 번째 실행은 건너뜀, 10분 뒤 다시, 새 id만 알림(알린 기록은 기기 키), 다른 사용자면 기록 비움, 오프라인·5xx 조용히 `failed`, 401 → `paused` + `schedule` 한 번 + 이후 같은 세션이면 확인 안 함 + 세션 id 바뀌면 재개, 응답 사이 계정이 바뀌면 알림 없음. `use-agent-inbox-boot.test.tsx`: 동기화 꺼짐이면 `loadAgentInbox`를 부르지 않음, 같은 렌더에서 `syncStatusAtom`이 `synced`가 되면 한 번 부름.
+- [ ] **Step 1: 실패하는 시험** — `agent-inbox-check.test.ts`: 첫 synced에 확인, 10분 안 두 번째 실행은 건너뜀, 10분 뒤 다시, 새 id만 알림(알린 기록은 기기 키), 다른 사용자면 기록 비움, 오프라인·5xx 조용히 `failed`, 401 → `paused` + `schedule` 한 번 + 이후 같은 세션이면 확인 안 함 + 세션 id 바뀌면 재개, 응답 사이 계정이 바뀌면 알림 없음, 같은 페이지에서 A → B 계정 전환 뒤 다음 실행에서 새 API(머리글 `X-Landmark-Backup-User: B`)로 B의 받은함을 확인해 B 알림이 뜸. `use-agent-inbox-boot.test.tsx`: 동기화 꺼짐이면 `loadAgentInbox`를 부르지 않음, 같은 렌더에서 `syncStatusAtom`이 `synced`가 되면 한 번 부름.
 - [ ] **Step 2:** FAIL → **Step 3:** 구현 → **Step 4:** PASS, `yarn typecheck`
 - [ ] **Step 5:** 커밋 `feat(agent-app): 동기화 뒤 받은함 확인과 알림`
 
@@ -696,7 +700,7 @@
 
 **Interfaces:**
 - Consumes: Task 14·15·16, `readShareHash`, `SHARE_READ_MESSAGES`, `addFlowAtom`, `readSyncMeta`.
-- Produces: `export function AgentInboxDialog({ open, onClose }: { open: boolean; onClose(): void }): JSX.Element`, `agent-copy.ts`의 `inboxLine(item, now): string`(`{제목} · 11월 20일~21일 · 장소 5곳`), `fromLine(item, now): string`(`{연결 이름} · 오늘 오후 3:12`), `scopeLabel(scopes)`(`받은함·짧은 링크`), `expiryLabel(expiresAt, now)`(`만료 1월 30일(90일 남음)`).
+- Produces: `src/services/agent-inbox/boot.ts`에 `export const loadAgentInboxDialog = lazyChunk(() => import('src/sections/agent/AgentInboxDialog'));` 추가, `export function AgentInboxDialog({ open, onClose }: { open: boolean; onClose(): void }): JSX.Element`, `agent-copy.ts`의 `inboxLine(item, now): string`(`{제목} · 11월 20일~21일 · 장소 5곳`), `fromLine(item, now): string`(`{연결 이름} · 오늘 오후 3:12`), `scopeLabel(scopes)`(`받은함·짧은 링크`), `expiryLabel(expiresAt, now)`(`만료 1월 30일(90일 남음)`).
   - 열 때 `api.inbox()`(받는 중 표시) → 줄마다 `미리보기`·`버리기`. 응답 뒤 `sameOwner` 거짓이면 닫는다. 동기화 기록 키가 `storage` 이벤트로 바뀌면 닫는다.
   - `미리보기`: `api.item(id)` → `readShareHash(data)` → `ok`이면 창을 닫고 `setFlow({ step: 'share', doc, inbox: { id, from, owner: api.owner } })`, 아니면 그 줄에 `SHARE_READ_MESSAGES[error]`를 보이고 `버리기`만 남긴다.
   - `버리기`: 확인 대화상자 "이 일정을 버릴까요? 되살릴 수 없어요" → `api.discard(id)` → 목록에서 뺀다.
@@ -713,7 +717,7 @@
 - Test: `tests/unit/sections/agent/agent-section.test.tsx`
 
 **Interfaces:**
-- Produces: `export function AgentSection(): JSX.Element | null`, `export function AgentTokenDialog({ open, onClose, onIssued }: …)`.
+- Produces: `src/services/agent-inbox/boot.ts`에 `export const loadAgentSection = lazyChunk(() => import('src/sections/agent/AgentSection'));` 추가, `export function AgentSection(): JSX.Element | null`, `export function AgentTokenDialog({ open, onClose, onIssued }: …)`.
   - 보이는 조건: `readSyncMeta(getSharedSyncStorage()).userId !== null && readSession(getSharedSyncStorage()) !== null`. 아니면 `null`.
   - 설명 문구 설계 「설정 › 동기화 › AI 연결」 그대로. 목록 줄 `{이름} · {scopeLabel} · {expiryLabel} · 마지막 사용 {날짜|없음}` + `철회`(확인 뒤 `api.revoke`). 만료·철회 줄은 `color: var(--tm-text-secondary)`와 `철회됨`·`만료됨`.
   - `새 연결 만들기`: `canCreate`가 거짓이면 꺼짐 + 문구(`enabled` 거짓: "지금은 AI 연결을 쓸 수 없어요", 아니면 "동기화가 꺼져 있어 새 연결을 만들 수 없어요"), 살아 있는 토큰 10개면 꺼짐 + "연결은 10개까지예요. 쓰지 않는 연결을 철회해 주세요".
@@ -726,10 +730,11 @@
 ### Task 19: E2E와 ③ 마무리
 
 **Files:**
-- Modify: `tests/e2e/sync-server.ts`(`createSyncServer`의 `handle`이 `/api/agent/`도 `handleAgent`로 보냄, `installSyncServer`가 `**/api/agent/**`도 가로챔. 기존 시험은 그대로 통과)
+- Modify: `tests/e2e/sync-server.ts`(`createSyncServer`의 `handle`이 `/api/agent/`도 `handleAgent`로 보냄 — `handleAgent`도 `tsxRequire`로 읽는다, `installSyncServer`가 `**/api/agent/**`도 가로챔. 기존 시험은 그대로 통과), `playwright.config.ts`(desktop 프로젝트 `testMatch` 목록의 `'server-backup.spec.ts',` 다음 줄에 `'agent-inbox.spec.ts',` 한 줄만)
 - Create: `tests/e2e/agent-inbox.spec.ts`
 
 - [ ] **Step 1: 시험** — `agent-inbox.spec.ts`(desktop, `@smoke` 아님): 가짜 카카오 로그인(기존 `library-sync.spec.ts`의 도우미 그대로) → 설정 › AI 연결 › `새 연결 만들기` → 원문 칸 값을 읽어 시험 변수에 둠(출력하지 않음) → 시험 코드가 `server.handle(new Request(origin + '/api/agent/v1/inbox', { method: 'POST', headers: { Authorization: 'Bearer ' + token }, body: JSON.stringify({ v: 1, key, d }) }))`(`d`는 `tests/fixtures/agent-trip/doc.json`(Task 6)을 읽어 `encodeShareHash(hashDoc(doc))`(`src/share-viewer/encode.ts`, 상대 경로 import)로 만든 값, `key`는 43자 무작위 base64url) → 새로고침 → 알림 「AI가 보낸 일정 1개」 → `보기` → `미리보기` → 머리 문구 → `가져오기` → 여행 화면 → 설정의 `받은 일정 없음` → `철회` → 같은 토큰으로 whoami 401.
+- [ ] **Step 1-1: 실행** — `yarn build:map:e2e && E2E_PORT=4196 E2E_MAP_PORT=4197 npx playwright test agent-inbox.spec.ts library-sync.spec.ts server-backup.spec.ts --project desktop`(새 시험은 `@smoke`가 아니라 `test:e2e:ci`에 들어가지 않으므로 직접 돌린다. 프로젝트 이름은 `playwright.config.ts`의 desktop 프로젝트 `name`을 쓴다).
 - [ ] **Step 2: 로컬 화면 확인**(포트가 막히면 건너뜀) — `SYNC_VITE_PORT=4198 SYNC_DEV_PORT=8798 yarn dev:sync` → 브라우저 가짜 로그인 → 토큰 발급 → `LANDMARK_AGENT_TOKEN=… yarn trip send tests/fixtures/agent-trip/plan.json --no-routes --app http://localhost:8798` → 앱 알림 → 가져오기 → `http://127.0.0.1:8798`(다른 출처)로 같은 계정 로그인 → 여행이 동기화됨. 화면 캡처는 저장하지 않는다.
 - [ ] **Step 3: ③ 전체 검증** — Global Constraints의 전체 검증 명령, 첫 로딩 gzip 바이트와 조각 이름(`AgentSection-*.js`, `AgentInboxDialog-*.js`, `inbox-check-*.js`)을 보고에 적는다.
 - [ ] **Step 4:** 커밋 `test(agent-app): 받은함 E2E`
