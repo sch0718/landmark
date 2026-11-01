@@ -1,4 +1,5 @@
 import { agentDocProblem, AGENT_INBOX_LIMITS } from '../../domain/share/agent-limits';
+import { importedItemProblem } from '../../domain/share/agent-import-check';
 import { dayPoints } from '../../domain/share/check-share-trip';
 import { readShareHash } from '../../domain/share/read-share';
 import { legKey } from '../../domain/trips/query';
@@ -69,6 +70,8 @@ export async function checkInboxDoc(
   if (Object.keys(trip.legModes).some((key) => !actualLegs.has(key))) {
     throw new SyncHttpError(422, 'invalid', { reason: 'leg-modes' });
   }
+  const importProblem = importedItemProblem(doc);
+  if (importProblem) throw new SyncHttpError(422, 'invalid', { reason: importProblem });
   return {
     title: trip.title || doc.title,
     startDate: trip.startDate,

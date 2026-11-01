@@ -9,6 +9,7 @@ import { counterKey } from 'src/server/library-sync/limits';
 import { hashToken } from 'src/server/meet/tokens';
 import { handleShareOpen } from 'src/server/share/handlers';
 import { createSyncMemoryServer } from '../../helpers/sync-memory-server';
+import { largeAgentDoc } from '../../helpers/agent-import-doc';
 
 const origin = 'http://localhost:8795';
 const randomSecret = () => randomBytes(32).toString('base64url');
@@ -168,6 +169,15 @@ describe('에이전트 토큰 경로', () => {
   it('받은함 스키마·문서 검사 실패는 422', async () => {
     await error(await request('/v1/inbox', 'POST', { ...inbox, extra: true }), 422, 'invalid');
     await error(await request('/v1/inbox', 'POST', { ...inbox, d: 'a' }), 422, 'invalid');
+  });
+  it('받은함에 가져온 여행이 동기화 상한을 넘는 문서를 보내면 422 item-too-large이다', async () => {
+    const d = await encodeShareHash(hashDoc(largeAgentDoc()));
+    const response = await request('/v1/inbox', 'POST', { ...inbox, d });
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual({ error: 'invalid', reason: 'item-too-large' });
+    expect(await server.db.prepare('SELECT id FROM agent_inbox').all()).toMatchObject({
+      results: [],
+    });
   });
   it.each([
     ['agent-whoami', AGENT_LIMITS.whoami, '/v1/whoami', 'GET'],

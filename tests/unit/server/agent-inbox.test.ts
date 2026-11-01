@@ -3,6 +3,7 @@ import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { encodeCompressedJson } from 'src/domain/codec';
+import { ITEM_DOC_MAX_CHARS, stableStringify } from 'src/domain/library-sync/items';
 import { AGENT_INBOX_LIMITS } from 'src/domain/share/agent-limits';
 import { readShareHash } from 'src/domain/share/read-share';
 import type { ShareDoc, ShareDocV2 } from 'src/schema/share';
@@ -24,6 +25,7 @@ import { ensureSchema } from 'src/server/meet/db';
 import { hashToken } from 'src/server/meet/tokens';
 import { encodeShareHash, hashDoc } from 'src/share-viewer/encode';
 import { createSqliteD1 } from '../../helpers/sqlite-d1';
+import { importedAgentLibrary, largeAgentDoc } from '../../helpers/agent-import-doc';
 
 const fixture = JSON.parse(
   readFileSync(new URL('../../fixtures/agent-trip/doc.json', import.meta.url), 'utf8'),
@@ -122,6 +124,43 @@ describe('받은함 본문', () => {
 });
 
 describe('받은함 문서', () => {
+  it('장소 200곳·30일·Stop 줄바꿈 메모 500자의 가져온 여행이 크기 상한을 넘으면 거절한다', async () => {
+    const doc = largeAgentDoc();
+    const trip = Object.values(importedAgentLibrary(doc).trips)[0]!;
+    expect(stableStringify(trip).length).toBeGreaterThan(ITEM_DOC_MAX_CHARS);
+    const d = await encode(doc);
+    expect(d.length).toBeLessThanOrEqual(AGENT_INBOX_LIMITS.hashChars);
+    expect((await readShareHash(d, AGENT_INBOX_LIMITS)).ok).toBe(true);
+    const started = performance.now();
+    const checked = checkInboxDoc(d).finally(() => {
+      process.stdout.write(
+        `checkInboxDoc 상한 문서: ${(performance.now() - started).toFixed(2)} ms\n`,
+      );
+    });
+    await expect(checked).rejects.toMatchObject(invalid('item-too-large'));
+  });
+
+  it('가져온 여행 항목이 동기화 상한 바로 아래인 199,999자면 받는다', async () => {
+    const doc = largeAgentDoc();
+    const size = () => stableStringify(Object.values(importedAgentLibrary(doc).trips)[0]!).length;
+    let excess = size() - (ITEM_DOC_MAX_CHARS - 1);
+    expect(excess).toBeGreaterThan(0);
+    for (const day of doc.trips[0]!.days) {
+      for (const stop of day.stops) {
+        const replace = Math.min(excess, stop.note!.length);
+        stop.note = '가'.repeat(replace) + stop.note!.slice(replace);
+        excess -= replace;
+      }
+    }
+    expect(size()).toBe(ITEM_DOC_MAX_CHARS - 1);
+    await expect(checkInboxDoc(await encode(doc))).resolves.toEqual({
+      title: '상한 여행',
+      startDate: '2026-11-01',
+      endDate: '2026-11-30',
+      places: 200,
+    });
+  });
+
   it('압축한 v2 문서에서 목록용 정보를 꺼낸다', async () => {
     const doc = tripDoc();
     doc.title = '문서 제목';

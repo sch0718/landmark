@@ -1,12 +1,13 @@
 import { defaultTitleLabel, importSharePlaces } from 'src/domain/library/import-share';
 import { importSharedTrip } from 'src/domain/library/import-share-trip';
-import { ITEM_DOC_MAX_CHARS, stableStringify } from 'src/domain/library-sync/items';
+import { ITEM_DOC_MAX_CHARS } from 'src/domain/library-sync/items';
+import { oversizedItems } from 'src/domain/share/agent-import-check';
 import { AGENT_INBOX_LIMITS, agentDocProblem } from 'src/domain/share/agent-limits';
 import { buildTripShareDoc, type ShareLegTime } from 'src/domain/share/build-trip-share';
 import { checkShareTrip } from 'src/domain/share/check-share-trip';
 import { readShareHash } from 'src/domain/share/read-share';
 import type { Leg } from 'src/domain/trips/query';
-import { emptyLibrary, type Library, type Place } from 'src/schema/library';
+import { emptyLibrary, type Place } from 'src/schema/library';
 import { safeParse } from 'src/schema/parse';
 import { ShareDocV2Schema, type ShareDocV2 } from 'src/schema/share';
 import { randomId } from 'src/services/id-gen';
@@ -15,6 +16,8 @@ import type { BuiltLibrary } from './build-library';
 import { exitFor, TripFailure, type TripErrorCode, type TripIssue } from './errors';
 import type { TripPlan } from './plan-schema';
 
+export { oversizedItems } from 'src/domain/share/agent-import-check';
+
 export type BuiltDoc = {
   doc: ShareDocV2;
   view: string;
@@ -22,21 +25,6 @@ export type BuiltDoc = {
   importHash: string;
   viewHash: string;
 };
-
-/** 장소·라벨·여행의 키 정렬 JSON이 동기화 항목 상한을 넘는지 본다. */
-export function oversizedItems(lib: Library, max: number): string[] {
-  return (
-    [
-      ['place', lib.places],
-      ['label', lib.labels],
-      ['trip', lib.trips],
-    ] as const
-  ).flatMap(([kind, items]) =>
-    Object.entries(items).flatMap(([id, item]) =>
-      stableStringify(item).length > max ? [`${kind}:${id}`] : [],
-    ),
-  );
-}
 
 function fail(code: TripErrorCode, path: string, message: string): never {
   throw new TripFailure([{ code, path, message }], exitFor(code));
