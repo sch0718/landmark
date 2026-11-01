@@ -20,6 +20,7 @@ export type TripErrorCode =
   | 'no-token'
   | 'unauthorized'
   | 'token-expired'
+  | 'token-expiring'
   | 'token-revoked'
   | 'not-allowed'
   | 'scope'
@@ -71,6 +72,7 @@ const EXIT_BY_CODE = {
   'no-token': EXIT.auth,
   unauthorized: EXIT.auth,
   'token-expired': EXIT.auth,
+  'token-expiring': EXIT.auth,
   'token-revoked': EXIT.auth,
   'not-allowed': EXIT.auth,
   scope: EXIT.auth,

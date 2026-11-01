@@ -207,18 +207,31 @@ describe('여행 CLI build', () => {
     expect(deps.readFile).not.toHaveBeenCalled();
   });
 
-  it.each(['send', 'share', 'whoami', 'unshare'])(
-    '%s는 다음 버전 안내와 끝 코드 2를 낸다',
+  it.each(['send', 'share', 'unshare'])(
+    '%s는 인자가 없으면 서버를 부르지 않고 끝 코드 2를 낸다',
     async (command) => {
       const { deps, stdout } = setup();
       expect(await main([command, '--json'], deps)).toBe(2);
       expect(JSON.parse(stdout())).toMatchObject({
         ok: false,
         command,
-        errors: [{ code: 'schema', message: '다음 버전에서 쓸 수 있어요' }],
+        errors: [{ code: 'schema', message: '명령에 필요한 인자를 확인해 주세요' }],
       });
+      expect(deps.readFile).not.toHaveBeenCalled();
+      expect(deps.fetch).not.toHaveBeenCalled();
     },
   );
+
+  it('whoami는 토큰이 없으면 서버를 부르지 않고 끝 코드 4 no-token을 낸다', async () => {
+    const { deps, stdout } = setup();
+    expect(await main(['whoami', '--json'], { ...deps, platform: 'linux' })).toBe(4);
+    expect(JSON.parse(stdout())).toMatchObject({
+      ok: false,
+      command: 'whoami',
+      errors: [{ code: 'no-token' }],
+    });
+    expect(deps.fetch).not.toHaveBeenCalled();
+  });
 
   it('예상 밖 예외 메시지와 스택은 출력하지 않는다', async () => {
     const { deps, stdout, stderr } = setup();
