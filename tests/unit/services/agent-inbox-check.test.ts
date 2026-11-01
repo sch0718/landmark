@@ -387,3 +387,24 @@ it('API가 없으면 조용히 failed예요', async () => {
   expect(await checkInboxOnce(deps)).toBe('failed');
   expect(deps.notify).not.toHaveBeenCalled();
 });
+
+it.each([
+  'synced',
+  'conflict',
+  'local',
+  'auth',
+  'off',
+  'pending-choice',
+  'syncing',
+  'not-allowed',
+  'unavailable',
+  'error',
+])('%s 상태에서 완료된 동기화만 받은함을 확인해요', async (phase) => {
+  const { deps, inbox } = fixture();
+  const e = engine();
+  const detach = attachInboxCheck(e, deps, () => ({ phase: 'off' }));
+  e.emit(phase);
+  await settle();
+  expect(inbox).toHaveBeenCalledTimes(['synced', 'conflict'].includes(phase) ? 1 : 0);
+  detach();
+});

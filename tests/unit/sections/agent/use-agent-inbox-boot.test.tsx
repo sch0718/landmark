@@ -132,3 +132,10 @@ it.each([false, true])(
     expect(start).not.toHaveBeenCalled();
   },
 );
+
+it('conflict로 처음 끝나도 실행기를 한 번 시작해요', async () => {
+  const { store } = mount();
+  act(() => store.set(syncStatusAtom, { ...OFF_STATUS, phase: 'conflict' }));
+  await waitFor(() => expect(start).toHaveBeenCalledOnce());
+  expect(load).toHaveBeenCalledOnce();
+});

@@ -28,7 +28,7 @@ import { useLibraryQuery } from 'src/sections/library/use-library-query';
 import { ShareLabelRows } from 'src/sections/share-import/ShareLabelRows';
 import { SharePlaceRows } from 'src/sections/share-import/SharePlaceRows';
 import { ShareTripBox } from 'src/sections/share-import/ShareTripBox';
-import { objectParticle } from 'src/sections/trips/planner/format';
+import { objectParticle, subjectParticle } from 'src/sections/trips/planner/format';
 import { paths } from 'src/routes/paths';
 import { loadAgentInbox } from 'src/services/agent-inbox/boot';
 import { addFlowAtom, type InboxRef } from 'src/stores/add-place';
@@ -145,7 +145,7 @@ export function SharePreview({ doc, inbox }: { doc: ShareDoc; inbox?: InboxRef }
       // 로그인은 보관함 잠금을 쓰지 않으므로, 잠금을 얻은 뒤 계정을 다시 확인해요.
       if (inbox && m && !m.sameOwnerNow(inbox.owner)) {
         ownerChanged = true;
-        return { ok: true, lib };
+        return { ok: false, error: { _tag: 'NotFound', id: inbox.id } };
       }
       return tripDoc === null
         ? importShare(lib, doc, input, ctx)
@@ -212,7 +212,7 @@ export function SharePreview({ doc, inbox }: { doc: ShareDoc; inbox?: InboxRef }
         </Typography>
         {inbox && (
           <Typography variant="body2" sx={{ color: 'var(--tm-text-secondary)' }}>
-            {`AI 연결 「${inbox.from ?? '이름 없는 연결'}」이 보낸 일정`}
+            {`AI 연결 「${inbox.from ?? '이름 없는 연결'}」${subjectParticle(inbox.from ?? '이름 없는 연결')} 보낸 일정`}
           </Typography>
         )}
         <Typography variant="body2" sx={{ color: 'var(--tm-text-secondary)' }}>

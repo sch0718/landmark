@@ -4,7 +4,7 @@ import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import { useAtom } from 'jotai';
-import { lazy, Suspense, useId } from 'react';
+import { lazy, Suspense, useCallback, useId } from 'react';
 import { ChunkErrorBoundary } from 'src/components/ChunkErrorBoundary';
 import { ChunkErrorNotice } from 'src/components/ChunkErrorNotice';
 import { loadAgentInboxDialog } from 'src/services/agent-inbox/boot';
@@ -17,7 +17,7 @@ const AgentInboxDialog = lazy(() =>
 export function AgentInboxHost() {
   const [open, setOpen] = useAtom(agentInboxOpenAtom);
   const titleId = useId();
-  const close = () => setOpen(false);
+  const close = useCallback(() => setOpen(false), [setOpen]);
   return open ? (
     <ChunkErrorBoundary
       fallback={

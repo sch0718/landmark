@@ -73,7 +73,13 @@ export function attachInboxCheck(
   let lastCheckAt: number | undefined;
   let pausedSession: string | null | undefined;
   const run = (status: { phase: string }) => {
-    if (!active || running || status.phase !== 'synced' || deps.visible?.() === false) return;
+    if (
+      !active ||
+      running ||
+      (status.phase !== 'synced' && status.phase !== 'conflict') ||
+      deps.visible?.() === false
+    )
+      return;
     const api = deps.api();
     if (api?.owner !== owner) {
       owner = api?.owner;

@@ -13,6 +13,7 @@ export function ServerBackupConfirmDialog({
   onConfirm,
   onClose,
   busy,
+  onExited,
 }: {
   open: boolean;
   title: string;
@@ -21,6 +22,7 @@ export function ServerBackupConfirmDialog({
   onConfirm(): void;
   onClose(): void;
   busy: boolean;
+  onExited?(): void;
 }) {
   const id = useId();
   return (
@@ -29,6 +31,7 @@ export function ServerBackupConfirmDialog({
       onClose={() => {
         if (!busy) onClose();
       }}
+      slotProps={{ transition: { onExited } }}
       aria-labelledby={id}
       fullWidth
       maxWidth="xs"

@@ -79,8 +79,14 @@ test('@desktop AI 연결로 받은 일정을 가져오고 연결을 철회해요
       .getByRole('dialog', { name: 'AI가 보낸 일정', exact: true })
       .getByRole('button', { name: `「${doc.title}」 미리보기`, exact: true })
       .click();
-    await expect(page.getByText(`AI 연결 「${name}」이 보낸 일정`, { exact: true })).toBeVisible();
+    await expect(page.getByText(`AI 연결 「${name}」가 보낸 일정`, { exact: true })).toBeVisible();
+    const deleted = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'DELETE' &&
+        /\/api\/sync\/v1\/agent\/inbox\//.test(response.url()),
+    );
     await page.getByRole('button', { name: '여행 가져오기', exact: true }).click();
+    expect((await deleted).status()).toBe(204);
     await expect(page).toHaveURL(/\/trips\//);
     await page
       .getByRole('navigation', { name: /^(사이드|하단) 메뉴$/ })
@@ -88,7 +94,10 @@ test('@desktop AI 연결로 받은 일정을 가져오고 연결을 철회해요
       .click();
     await expect(agent.getByText('받은 일정 없음', { exact: true })).toBeVisible();
     await agent.getByRole('button', { name: `「${name}」 철회`, exact: true }).click();
-    const revoke = page.getByRole('dialog', { name: '이 연결을 철회할까요?', exact: true });
+    const revoke = page.getByRole('dialog', {
+      name: `「${name}」 연결을 철회할까요?`,
+      exact: true,
+    });
     await revoke.getByRole('button', { name: '철회', exact: true }).click();
     await expect(revoke).toBeHidden();
     const whoami = await server.handle(

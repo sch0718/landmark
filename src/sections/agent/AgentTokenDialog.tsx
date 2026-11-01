@@ -108,7 +108,15 @@ function TokenDialogContent({ api, onClose, onIssued }: Omit<Props, 'open'>) {
     }
   };
   return (
-    <Dialog open onClose={close} aria-labelledby={titleId} fullWidth maxWidth="sm">
+    <Dialog
+      open
+      onClose={() => {
+        if (token === null) close();
+      }}
+      aria-labelledby={titleId}
+      fullWidth
+      maxWidth="sm"
+    >
       <DialogTitle id={titleId}>새 AI 연결</DialogTitle>
       <DialogContent>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
@@ -163,7 +171,7 @@ function TokenDialogContent({ api, onClose, onIssued }: Omit<Props, 'open'>) {
                 sx={{ fontFamily: 'monospace', overflowWrap: 'anywhere' }}
               >{`security add-generic-password -U -s landmark-agent-token -a ${location.host} -w`}</Typography>
               <Typography variant="body2">
-                이 창을 닫으면 다시 볼 수 없어요. 잃어버리면 철회하고 새로 만드세요
+                이 창을 닫으면 다시 볼 수 없어요. 잃어버렸다면 철회하고 새로 만들어 주세요
               </Typography>
             </>
           )}

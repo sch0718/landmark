@@ -59,12 +59,16 @@ function SignedInAgentSection({ userId, sessionId }: { userId: string; sessionId
     Extract<Awaited<ReturnType<AgentApi['tokens']>>, { ok: true }>['data'] | null
   >(null);
   const [inboxCount, setInboxCount] = useState(0);
+  const [inboxFailed, setInboxFailed] = useState(false);
   const [now, setNow] = useState(() => new Date(Date.now()));
   const [loading, setLoading] = useState(true);
   const [failure, setFailure] = useState<AgentFailure | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [confirm, setConfirm] = useState<AgentTokenView | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const heading = useRef<HTMLHeadingElement>(null);
+  const focusAfterRevoke = useRef(false);
   const [busy, setBusy] = useState(false);
   const refreshRun = useRef(0);
   const revokeRun = useRef(0);
@@ -87,13 +91,16 @@ function SignedInAgentSection({ userId, sessionId }: { userId: string; sessionId
       return;
     }
     try {
-      const [tokens, inbox] = await Promise.all([api.tokens(), api.inbox()]);
+      const [tokens, inbox] = await Promise.allSettled([api.tokens(), api.inbox()]);
       if (!current()) return;
       setNow(new Date(Date.now()));
-      if (tokens.ok) setInfo(tokens.data);
-      if (inbox.ok) setInboxCount(inbox.data.items.length);
-      if (!tokens.ok) setFailure(tokens.reason);
-      else if (!inbox.ok) setFailure(inbox.reason);
+      if (tokens.status === 'rejected') setFailure('server');
+      else if (tokens.value.ok) setInfo(tokens.value.data);
+      else setFailure(tokens.value.reason);
+      if (inbox.status === 'fulfilled' && inbox.value.ok) {
+        setInboxCount(inbox.value.data.items.length);
+        setInboxFailed(false);
+      } else setInboxFailed(true);
     } catch {
       if (current()) setFailure('server');
     } finally {
@@ -118,7 +125,7 @@ function SignedInAgentSection({ userId, sessionId }: { userId: string; sessionId
     [],
   );
   const revoke = async () => {
-    if (!api || !confirm || busyRef.current || !currentOwner()) return;
+    if (!api || !confirm || !confirmOpen || busyRef.current || !currentOwner()) return;
     const run = ++revokeRun.current;
     const current = () => run === revokeRun.current && currentOwner();
     busyRef.current = true;
@@ -127,12 +134,14 @@ function SignedInAgentSection({ userId, sessionId }: { userId: string; sessionId
     try {
       const result = await api.revoke(confirm.id);
       if (!current()) return;
-      setConfirm(null);
+      focusAfterRevoke.current = true;
+      setConfirmOpen(false);
       if (result.ok) await refresh();
       else setError('연결을 철회하지 못했어요');
     } catch {
       if (current()) {
-        setConfirm(null);
+        focusAfterRevoke.current = true;
+        setConfirmOpen(false);
         setError('연결을 철회하지 못했어요');
       }
     } finally {
@@ -161,7 +170,7 @@ function SignedInAgentSection({ userId, sessionId }: { userId: string; sessionId
       aria-label="AI 연결"
       sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}
     >
-      <Typography component="h3" sx={{ fontSize: 14, fontWeight: 700 }}>
+      <Typography ref={heading} component="h3" tabIndex={-1} sx={{ fontSize: 14, fontWeight: 700 }}>
         AI 연결
       </Typography>
       <Typography variant="body2">
@@ -200,7 +209,10 @@ function SignedInAgentSection({ userId, sessionId }: { userId: string; sessionId
                 <Button
                   aria-label={`「${token.name}」 철회`}
                   disabled={busy}
-                  onClick={() => setConfirm(token)}
+                  onClick={() => {
+                    setConfirm(token);
+                    setConfirmOpen(true);
+                  }}
                   sx={{ minHeight: 44, minWidth: 44 }}
                 >
                   철회
@@ -217,7 +229,16 @@ function SignedInAgentSection({ userId, sessionId }: { userId: string; sessionId
           >
             새 연결 만들기
           </Button>
-          {inboxCount === 0 ? (
+          {inboxFailed ? (
+            <Box>
+              <Typography role="alert" variant="body2">
+                받은 일정을 불러오지 못했어요
+              </Typography>
+              <Button onClick={() => void refresh()} sx={{ minHeight: 44 }}>
+                다시 시도
+              </Button>
+            </Box>
+          ) : inboxCount === 0 ? (
             <Typography variant="body2">받은 일정 없음</Typography>
           ) : (
             <Button
@@ -233,12 +254,18 @@ function SignedInAgentSection({ userId, sessionId }: { userId: string; sessionId
         </Typography>
       )}
       <ServerBackupConfirmDialog
-        open={confirm !== null}
-        title="이 연결을 철회할까요?"
-        body={`「${confirm?.name ?? ''}」 연결을 철회할까요? 이 토큰으로는 더 이상 보낼 수 없어요`}
+        open={confirmOpen}
+        title={`「${confirm?.name ?? ''}」 연결을 철회할까요?`}
+        body="이 토큰으로는 더 이상 일정을 보내거나 링크를 만들 수 없어요."
         confirmLabel="철회"
         busy={busy}
-        onClose={() => setConfirm(null)}
+        onClose={() => setConfirmOpen(false)}
+        onExited={() => {
+          if (focusAfterRevoke.current) {
+            focusAfterRevoke.current = false;
+            heading.current?.focus({ preventScroll: true });
+          }
+        }}
         onConfirm={() => void revoke()}
       />
       {api && (

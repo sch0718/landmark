@@ -104,17 +104,19 @@ describe('받은함 일정 가져오기', () => {
     expect(tripSwitch()).toBeChecked();
   });
 
-  it.each(['Claude Code', null, '<img src=x onerror=alert(1)>'])(
-    '보낸 연결 이름 %s을 머리에 텍스트로 보여요',
-    async (from) => {
-      await openShare({ ...INBOX, from });
-      expect(
-        panel().getByText(`AI 연결 「${from ?? '이름 없는 연결'}」이 보낸 일정`),
-      ).toBeInTheDocument();
-      expect(screen.getByRole('region', { name: '장소 추가' }).querySelector('img')).toBeNull();
-      expect(inboxMock.load).not.toHaveBeenCalled();
-    },
-  );
+  it.each([
+    ['Claude Code', '이'],
+    ['여행 도우미', '가'],
+    [null, '이'],
+    ['<img src=x onerror=alert(1)>', '이'],
+  ])('보낸 연결 이름 %s을 머리에 텍스트로 보여요', async (from, particle) => {
+    await openShare({ ...INBOX, from });
+    expect(
+      panel().getByText(`AI 연결 「${from ?? '이름 없는 연결'}」${particle} 보낸 일정`),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: '장소 추가' }).querySelector('img')).toBeNull();
+    expect(inboxMock.load).not.toHaveBeenCalled();
+  });
 
   it('여행째 가져오면 저장하고 받은함 항목을 한 번 지워요', async () => {
     const { user, store, storage } = await openShare();
@@ -178,6 +180,7 @@ describe('받은함 일정 가져오기', () => {
     const { user, store, storage } = await openShare(INBOX, held.locks);
     const before = store.get(libraryAtom);
     const raw = storage.getItem(LIBRARY_KEY);
+    const write = vi.spyOn(storage, 'setItem');
     held.hold();
     try {
       await user.click(tripButton());
@@ -190,7 +193,8 @@ describe('받은함 일정 가져오기', () => {
     }
     await waitFor(() => expect(store.get(addFlowAtom)).toEqual({ step: 'closed' }));
     expect(inboxMock.sameOwnerNow).toHaveBeenCalledTimes(2);
-    expect(store.get(libraryAtom)).toEqual(before);
+    expect(write.mock.calls.filter(([key]) => key === LIBRARY_KEY)).toHaveLength(0);
+    expect(store.get(libraryAtom)).toBe(before);
     expect(storage.getItem(LIBRARY_KEY)).toBe(raw);
     expect(inboxMock.discardInboxItem).not.toHaveBeenCalled();
     expect(toastMock).toHaveBeenCalledExactlyOnceWith(OWNER_CHANGED);

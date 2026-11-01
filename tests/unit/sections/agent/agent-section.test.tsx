@@ -180,6 +180,7 @@ describe('설정 AI 연결', () => {
     await screen.findByText(/여행 도우미 .* · 철회됨 ·/);
     expect(api.revoke).toHaveBeenCalledExactlyOnceWith(token.id);
     expect(api.tokens).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'AI 연결' })).toHaveFocus());
   });
   it('철회 실패를 안내해요', async () => {
     vi.mocked(api.revoke).mockResolvedValue({ ok: false, reason: 'offline' });
@@ -187,6 +188,7 @@ describe('설정 AI 연결', () => {
     await user.click(await screen.findByRole('button', { name: '「여행 도우미」 철회' }));
     await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: '철회' }));
     expect(await screen.findByText('연결을 철회하지 못했어요')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'AI 연결' })).toHaveFocus());
   });
   it.each([
     [false, false, '지금은 AI 연결을 쓸 수 없어요'],
@@ -243,11 +245,21 @@ describe('설정 AI 연결', () => {
     await screen.findByText('받은 일정 없음');
     expect(api.tokens).toHaveBeenCalledTimes(2);
   });
-  it('받은함 읽기 실패도 안내해요', async () => {
-    vi.mocked(api.inbox).mockResolvedValue({ ok: false, reason: 'offline' });
-    mount();
-    expect(await screen.findByText('인터넷 연결을 확인해 주세요')).toBeInTheDocument();
-  });
+  it.each(['응답 실패', '예외'])(
+    '받은함 %s만 나면 토큰 관리와 다시 시도를 유지해요',
+    async (kind) => {
+      if (kind === '예외') vi.mocked(api.inbox).mockRejectedValueOnce(new Error('연결 실패'));
+      else vi.mocked(api.inbox).mockResolvedValueOnce({ ok: false, reason: 'offline' });
+      const { user } = mount();
+      expect(await screen.findByText('받은 일정을 불러오지 못했어요')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '「여행 도우미」 철회' })).toBeEnabled();
+      expect(screen.getByRole('button', { name: '새 연결 만들기' })).toBeEnabled();
+      expect(screen.queryByText('받은 일정 없음')).toBeNull();
+      expect(screen.getByRole('button', { name: '다시 시도' })).toHaveStyle({ minHeight: '44px' });
+      await user.click(screen.getByRole('button', { name: '다시 시도' }));
+      expect(await screen.findByText('받은 일정 없음')).toBeInTheDocument();
+    },
+  );
   it.each(['사용자', '세션'])(
     '%s가 바뀌면 API를 새로 만들고 이전 응답을 버려요',
     async (changed) => {
@@ -282,7 +294,28 @@ describe('설정 AI 연결', () => {
   });
 });
 
+it('철회 확인을 닫는 중에도 이름과 설명을 유지해요', async () => {
+  const { user } = mount();
+  await user.click(await screen.findByRole('button', { name: '「여행 도우미」 철회' }));
+  const dialog = screen.getByRole('dialog');
+  expect(within(dialog).getByRole('heading').textContent).toBe(
+    '「여행 도우미」 연결을 철회할까요?',
+  );
+  await user.click(within(dialog).getByRole('button', { name: '취소' }));
+  expect(dialog.textContent).toContain('「여행 도우미」');
+  expect(dialog.textContent).not.toContain('「」');
+  expect(dialog.textContent).toContain(
+    '이 토큰으로는 더 이상 일정을 보내거나 링크를 만들 수 없어요.',
+  );
+});
+
 describe('새 AI 연결 창', () => {
+  it('원문이 없을 때 Escape로 닫혀요', async () => {
+    const { user } = mount();
+    await openCreate(user);
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
   it('기본 이름·권한과 이름 길이·빈 권한을 검사해요', async () => {
     const { user } = mount();
     const dialog = await openCreate(user);
@@ -310,7 +343,7 @@ describe('새 AI 연결 창', () => {
     expect(api.issue).toHaveBeenCalledExactlyOnceWith({ name: '도우미', scopes: ['inbox:write'] });
   });
   it.each(['닫기', 'Escape', '바깥 클릭'] as const)(
-    '원문을 한 번만 보여 주고 %s 뒤 지우며 저장하지 않아요',
+    '원문 표시 중 %s 동작과 명시적 닫기 뒤 원문 폐기를 확인해요',
     async (closeMethod) => {
       const raw =
         'lmk_' +
@@ -326,9 +359,9 @@ describe('새 AI 연결 창', () => {
       expect((field as HTMLInputElement).value === raw).toBe(true);
       expect(field).toHaveAttribute('readonly');
       expect(dialog.queryByRole('button', { name: '만들기' })).toBeNull();
-      expect(
-        dialog.getByText('이 창을 닫으면 다시 볼 수 없어요. 잃어버리면 철회하고 새로 만드세요'),
-      ).toBeInTheDocument();
+      const warning = dialog.queryByText(
+        '이 창을 닫으면 다시 볼 수 없어요. 잃어버렸다면 철회하고 새로 만들어 주세요',
+      );
       expect(
         dialog.getByText(
           `security add-generic-password -U -s landmark-agent-token -a ${location.host} -w`,
@@ -347,7 +380,17 @@ describe('새 AI 연결 창', () => {
       if (closeMethod === '닫기') await user.click(dialog.getByRole('button', { name: '닫기' }));
       else if (closeMethod === 'Escape') await user.keyboard('{Escape}');
       else fireEvent.click(document.querySelector('.MuiBackdrop-root')!);
-      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+      if (closeMethod !== '닫기') {
+        // 원문이 실패 출력에 실리지 않도록 불리언만 단언해요.
+        expect(screen.queryByRole('dialog') !== null).toBe(true);
+        expect(
+          (dialog.queryByRole('textbox', { name: '연결 토큰' }) as HTMLInputElement | null)
+            ?.value === raw,
+        ).toBe(true);
+        await user.click(dialog.getByRole('button', { name: '닫기' }));
+      }
+      expect(warning !== null).toBe(true);
+      await waitFor(() => expect(screen.queryByRole('dialog') === null).toBe(true));
       const reopened = await openCreate(user);
       expect(reopened.queryByRole('textbox', { name: '연결 토큰' })).toBeNull();
       expect(document.body.textContent?.includes(raw)).toBe(false);

@@ -18,7 +18,7 @@ import { fromLine, inboxLine } from './agent-copy';
 type RowError = { message: string; invalid: boolean };
 
 /** 열린 동안만 API와 받은 결과를 보관하고, 닫은 뒤 도착한 응답은 버려요. */
-function InboxContent({ onClose }: { onClose(): void }) {
+function InboxContent({ onClose, titleId }: { onClose(): void; titleId: string }) {
   const [api] = useState(() => createAgentApi());
   const [now] = useState(() => new Date(Date.now()));
   const [items, setItems] = useState<InboxItemView[]>([]);
@@ -27,6 +27,14 @@ function InboxContent({ onClose }: { onClose(): void }) {
   const [errors, setErrors] = useState<Record<string, RowError>>({});
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState<InboxItemView | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const closeRef = useRef(onClose);
+  useEffect(() => {
+    closeRef.current = onClose;
+  }, [onClose]);
+  const previewButtons = useRef(new Map<string, HTMLButtonElement>());
+  const discardButtons = useRef(new Map<string, HTMLButtonElement>());
+  const focusAfterDiscard = useRef<{ id: string | null; failed: boolean } | null>(null);
   const active = useRef(true);
   const running = useRef(false);
   const setFlow = useSetAtom(addFlowAtom);
@@ -35,10 +43,10 @@ function InboxContent({ onClose }: { onClose(): void }) {
     if (!active.current || !api) return false;
     if (sameOwner(api.owner)) return true;
     active.current = false;
-    onClose();
+    closeRef.current();
     toast('로그인한 계정이 바뀌어 받은 일정을 닫았어요');
     return false;
-  }, [api, onClose]);
+  }, [api]);
 
   const refresh = useCallback(async () => {
     if (!api || !current()) return;
@@ -97,7 +105,7 @@ function InboxContent({ onClose }: { onClose(): void }) {
         return;
       }
       active.current = false;
-      onClose();
+      closeRef.current();
       setFlow({
         step: 'share',
         doc: read.doc,
@@ -112,14 +120,20 @@ function InboxContent({ onClose }: { onClose(): void }) {
   }
 
   async function discard() {
-    if (!api || !confirm || running.current || !current()) return;
+    if (!api || !confirm || !confirmOpen || running.current || !current()) return;
     const id = confirm.id;
+    focusAfterDiscard.current = { id, failed: true };
     running.current = true;
     setBusy(true);
     try {
       const result = await api.discard(id);
       if (!current()) return;
       if (result.ok || result.reason === 'not-found') {
+        const index = items.findIndex((row) => row.id === id);
+        focusAfterDiscard.current = {
+          id: (items[index + 1] ?? items[index - 1])?.id ?? null,
+          failed: false,
+        };
         setItems((previous) => previous.filter((row) => row.id !== id));
       } else toast('받은 일정을 버리지 못했어요');
     } catch {
@@ -128,7 +142,7 @@ function InboxContent({ onClose }: { onClose(): void }) {
       running.current = false;
       if (active.current) {
         setBusy(false);
-        setConfirm(null);
+        setConfirmOpen(false);
       }
     }
   }
@@ -169,6 +183,10 @@ function InboxContent({ onClose }: { onClose(): void }) {
                 <Box sx={{ display: 'flex', gap: 1 }}>
                   {!errors[item.id]?.invalid && (
                     <Button
+                      ref={(button: HTMLButtonElement | null) => {
+                        if (button) previewButtons.current.set(item.id, button);
+                        else previewButtons.current.delete(item.id);
+                      }}
                       disabled={busy}
                       sx={{ minHeight: 44 }}
                       aria-label={`「${item.title}」 미리보기`}
@@ -178,10 +196,17 @@ function InboxContent({ onClose }: { onClose(): void }) {
                     </Button>
                   )}
                   <Button
+                    ref={(button: HTMLButtonElement | null) => {
+                      if (button) discardButtons.current.set(item.id, button);
+                      else discardButtons.current.delete(item.id);
+                    }}
                     disabled={busy}
                     sx={{ minHeight: 44 }}
                     aria-label={`「${item.title}」 버리기`}
-                    onClick={() => setConfirm(item)}
+                    onClick={() => {
+                      setConfirm(item);
+                      setConfirmOpen(true);
+                    }}
                   >
                     버리기
                   </Button>
@@ -192,13 +217,26 @@ function InboxContent({ onClose }: { onClose(): void }) {
         )}
       </DialogContent>
       <ServerBackupConfirmDialog
-        open={confirm !== null}
+        open={confirmOpen}
         title="이 일정을 버릴까요?"
-        body="되살릴 수 없어요"
+        body={`「${confirm?.title ?? ''}」 · 되살릴 수 없어요`}
         confirmLabel="버리기"
         busy={busy}
         onConfirm={() => void discard()}
-        onClose={() => setConfirm(null)}
+        onClose={() => setConfirmOpen(false)}
+        onExited={() => {
+          const target = focusAfterDiscard.current;
+          focusAfterDiscard.current = null;
+          if (!active.current || !target) return;
+          const button =
+            target.id === null
+              ? null
+              : ((target.failed
+                  ? discardButtons.current.get(target.id)
+                  : previewButtons.current.get(target.id)) ??
+                discardButtons.current.get(target.id));
+          (button ?? document.getElementById(titleId))?.focus({ preventScroll: true });
+        }}
       />
     </>
   );
@@ -208,8 +246,10 @@ export function AgentInboxDialog({ open, onClose }: { open: boolean; onClose(): 
   const titleId = useId();
   return (
     <Dialog open={open} onClose={onClose} aria-labelledby={titleId} fullWidth maxWidth="sm">
-      <DialogTitle id={titleId}>AI가 보낸 일정</DialogTitle>
-      {open && <InboxContent onClose={onClose} />}
+      <DialogTitle id={titleId} tabIndex={-1}>
+        AI가 보낸 일정
+      </DialogTitle>
+      {open && <InboxContent onClose={onClose} titleId={titleId} />}
       <DialogActions>
         <Button onClick={onClose} sx={{ minHeight: 44 }}>
           닫기

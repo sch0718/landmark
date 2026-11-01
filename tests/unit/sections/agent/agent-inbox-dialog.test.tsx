@@ -80,7 +80,7 @@ async function confirmDiscard(user: ReturnType<typeof userEvent.setup>) {
   await screen.findByText('강릉 여행 · 11월 20일~21일 · 장소 5곳');
   await user.click(discard());
   const dialog = screen.getByRole('dialog', { name: '이 일정을 버릴까요?' });
-  expect(within(dialog).getByText('되살릴 수 없어요')).toBeInTheDocument();
+  expect(within(dialog).getByText('「강릉 여행」 · 되살릴 수 없어요')).toBeInTheDocument();
   await user.click(within(dialog).getByRole('button', { name: '버리기' }));
 }
 
@@ -103,6 +103,39 @@ describe('받은함 창', () => {
     await user.click(screen.getByRole('button', { name: '닫기' }));
     expect(close).toHaveBeenCalledOnce();
   });
+  it('부모가 새 onClose로 다시 그려져도 목록은 한 번만 읽어요', async () => {
+    const { rerender, store } = mount();
+    await screen.findByText('여행 도우미 · 오늘 오후 3:12');
+    rerender(
+      <Provider store={store}>
+        <AgentInboxDialog open onClose={() => {}} />
+      </Provider>,
+    );
+    await act(async () => {});
+    expect(api.inbox).toHaveBeenCalledOnce();
+  });
+  it.each([0, 1, 2])(
+    '버린 항목 %s 뒤 다음 또는 이전 항목, 빈 목록 제목으로 초점을 옮겨요',
+    async (index) => {
+      const rows = [
+        item,
+        { ...item, id: 'next', title: '속초 여행' },
+        { ...item, id: 'last', title: '부산 여행' },
+      ];
+      vi.mocked(api.inbox).mockResolvedValue({ ok: true, data: { items: rows } });
+      const { user } = mount();
+      await screen.findByRole('button', { name: '「강릉 여행」 버리기' });
+      await user.click(screen.getByRole('button', { name: `「${rows[index]!.title}」 버리기` }));
+      const dialog = screen.getByRole('dialog', { name: '이 일정을 버릴까요?' });
+      await user.click(within(dialog).getByRole('button', { name: '버리기' }));
+      expect(dialog.textContent).toContain(`「${rows[index]!.title}」`);
+      expect(dialog.textContent).not.toContain('「」');
+      const target = rows[index + 1] ?? rows[index - 1]!;
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: `「${target.title}」 미리보기` })).toHaveFocus(),
+      );
+    },
+  );
   it('사용자 문자열을 HTML로 실행하지 않아요', async () => {
     const title = '<img src=x onerror=alert(1)>';
     vi.mocked(api.inbox).mockResolvedValue({
@@ -163,6 +196,9 @@ describe('받은함 창', () => {
     await confirmDiscard(user);
     expect(await screen.findByText('받은 일정이 없어요')).toBeInTheDocument();
     expect(api.discard).toHaveBeenCalledExactlyOnceWith(item.id);
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: 'AI가 보낸 일정' })).toHaveFocus(),
+    );
   });
   it('버리기 실패는 알리고 항목을 남겨요', async () => {
     vi.mocked(api.discard).mockResolvedValue({ ok: false, reason: 'offline' });
@@ -170,6 +206,7 @@ describe('받은함 창', () => {
     await confirmDiscard(user);
     await waitFor(() => expect(mocks.toast).toHaveBeenCalledWith('받은 일정을 버리지 못했어요'));
     expect(screen.getByText('강릉 여행 · 11월 20일~21일 · 장소 5곳')).toBeInTheDocument();
+    await waitFor(() => expect(discard()).toHaveFocus());
   });
   it('빈 목록을 안내해요', async () => {
     vi.mocked(api.inbox).mockResolvedValue({ ok: true, data: { items: [] } });

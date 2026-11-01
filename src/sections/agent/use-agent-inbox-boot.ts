@@ -27,7 +27,8 @@ export function useAgentInboxBoot(): void {
       }
     };
     const off = store.sub(syncStatusAtom, () => {
-      if (store.get(syncStatusAtom).phase === 'synced') {
+      const phase = store.get(syncStatusAtom).phase;
+      if (phase === 'synced' || phase === 'conflict') {
         void start();
       }
     });
