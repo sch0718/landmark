@@ -36,7 +36,7 @@
 - 동기화 엔진은 **어디서나 `loadSyncEngine()`(동적 import)으로만**, 이 기능의 지연 조각(`inbox-check`·`AgentSection`·`AgentInboxDialog`)도 각자의 `lazyChunk` 함수로만 가져온다. 정적으로 섞이면 `INEFFECTIVE_DYNAMIC_IMPORT`로 빌드가 실패한다. 첫 로딩 상한 `perf-budget.json`의 `initialJsGzipMax` 327,680을 지킨다(`perf-budget.json`은 고치지 않는다).
 - 새 `VITE_` 변수 없음(`vitest.config.ts`의 `test.env`는 그대로). CLI는 `LANDMARK_APP_URL`·`LANDMARK_AGENT_TOKEN`·`LANDMARK_TRIP_HOME`만 읽는다.
 - 사용자 문자열은 React 텍스트로만. 주석·UI·CLI 문구는 한국어. `grep -rnP '[\x{2028}\x{2029}]' src functions tests pipeline` 출력 없음.
-- 고치지 않는다: `docs/rollback.md`, `perf-budget.json`, `.claude/`, `tests/e2e/global-setup*`, `src/sections/shell/AppShell.tsx`, 워크스페이스 스킬(`/Users/shinchoonho/01.workspace/.claude/skills/**`), 다른 기능의 기존 시험 단언(단, 스키마 버전 단언 6 → 7은 고친다).
+- 고치지 않는다: `docs/rollback.md`, `perf-budget.json`, `.claude/`, `tests/e2e/global-setup*`, `src/sections/shell/AppShell.tsx`, 워크스페이스 스킬(`/Users/shinchoonho/01.workspace/.claude/skills/**`), 다른 기능의 기존 시험 단언(단, 스키마 7 때문에 바뀌는 단언 — 버전 6 → 7과 `tests/unit/server/meet-db.test.ts`의 전체 표 목록에 `agent_inbox`·`agent_tokens`를 이름순 자리에 더하는 것 — 은 고친다).
 - Codex 샌드박스에서 네트워크·포트가 막히면 그 명령을 건너뛰고 보고에 적는다. 네이버에 실제로 묻는 시험은 만들지 않는다(가짜 `fetch`).
 - 과제마다 커밋. 메시지는 한국어 conventional(`feat(agent-trip): …`, `feat(agent-server): …`, `feat(agent-app): …`), 끝 줄 `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
 - 각 PR 마지막 과제의 전체 검증: `yarn typecheck`, `yarn lint`, `yarn test`, `npx prettier --check <바꾼 파일들>`, `yarn build:ci`, `E2E_PORT=4196 E2E_MAP_PORT=4197 yarn test:e2e:ci`.
@@ -154,7 +154,7 @@
     | 'schema' | 'unknown-place' | 'duplicate-in-trip' | 'day-count' | 'duplicate-sid' | 'leg-modes'
     | 'no-places' | 'lookup-failed' | 'ambiguous' | 'not-found' | 'duplicate-source' | 'out-of-range'
     | 'walk-too-far' | 'merged-places' | 'item-too-large' | 'too-big' | 'app-origin'
-    | 'no-token' | 'unauthorized' | 'token-expired' | 'token-revoked' | 'not-allowed' | 'scope'
+    | 'unused-place' | 'no-token' | 'unauthorized' | 'token-expired' | 'token-revoked' | 'not-allowed' | 'scope'
     | 'delete-token' | 'unknown-share' | 'share-store-full' | 'share-store' | 'inbox-full' | 'rate-limited' | 'off' | 'config'
     | 'old-server' | 'offline' | 'timeout' | 'server' | 'internal';
     export type TripIssue = {
@@ -230,9 +230,9 @@
   - 실패(던짐·시간 초과): 대체 값(`name`·`lng`·`lat`)이 있으면 그 값 + 원래 출처(`naverSid`면 `{ kind: 'naver', sid }`, `link`·`search`면 핀) + 경고 `lookup-failed`, 없으면 오류 `lookup-failed`.
   - 출처: 네이버 `{ kind: 'naver', sid }`, 카카오 `{ kind: 'kakao', kakaoId }`, 구글 `{ kind: 'google', googleId }`(구글 `providerId`가 null이면 핀), 핀 `{ kind: 'pin' }`.
   - 결과 검사: 좌표가 `Lng`·`Lat` 밖이면 `out-of-range`(대체 값이 있어도). 이름 0자면 대체 `name`, 그것도 없으면 `lookup-failed`. 이름·주소가 100·200자를 넘으면 자르고 경고 `out-of-range`.
-  - 출처 중복: `sourceKey(candidate.source)`가 같은 두 장소 → `duplicate-source`, `path`는 뒤 장소, `message`에 앞 장소 경로(`places[1]`과 같아요).
+  - 출처 중복: `sourceKey(candidate.source)`가 **null이 아니고** 같은 두 장소 → `duplicate-source`(일반 핀은 `sourceKey`가 null이라 검사하지 않는다 — 기존 `indexBySource`와 같음), `path`는 뒤 장소, `message`에 앞 장소 경로(`places[1]`과 같아요).
   - 요청 사이 `deps.sleep(gapMs)`(첫 요청 전 제외).
-- [ ] **Step 1: 실패하는 시험** — 가짜 `fetch`가 URL별 응답을 준다(`tests/unit/pipeline/naver-client.test.ts`의 `makeDeps` 방식, 장소 응답은 `tests/fixtures/naver/`의 기존 장소 요약 고정 파일을 쓴다 — 없으면 `{ data: { placeDetail: { name, address: { roadAddress }, coordinate: { longitude, latitude }, category: { category } } } }`를 직접 만든다). 사례: sid 성공, sid 실패 + 대체 값(경고), sid 실패 대체 없음(`lookup-failed`, EXIT 3), 링크(네이버 단축 링크는 `followRedirects`가 쓰는 3xx 응답을 가짜로), 폴더 링크 거절, 검색 정확한 이름 하나, 결과 하나, 여럿 `ambiguous`(후보 5곳 이하), 없음 + 좌표 → 핀, 시간 초과(가짜 `fetch`가 `AbortSignal`을 기다림 — `vi.useFakeTimers()`로 8초 넘김) → 대체 값, 구글 링크의 범위 밖 좌표 `out-of-range`, sid와 검색이 같은 sid → `duplicate-source`, 요청 사이 `sleep(300)` 호출 수.
+- [ ] **Step 1: 실패하는 시험** — 가짜 `fetch`가 URL별 응답을 준다(`tests/unit/pipeline/naver-client.test.ts`의 `makeDeps` 방식, 장소 응답은 `tests/fixtures/naver/`의 기존 장소 요약 고정 파일을 쓴다 — 없으면 `{ data: { placeDetail: { name, address: { roadAddress }, coordinate: { longitude, latitude }, category: { category } } } }`를 직접 만든다). 사례: sid 성공, sid 실패 + 대체 값(경고), sid 실패 대체 없음(`lookup-failed`, EXIT 3), 링크(네이버 단축 링크는 `followRedirects`가 쓰는 3xx 응답을 가짜로), 폴더 링크 거절, 검색 정확한 이름 하나, 결과 하나, 여럿 `ambiguous`(후보 5곳 이하), 없음 + 좌표 → 핀, 시간 초과(가짜 `fetch`가 `AbortSignal`을 기다림 — `vi.useFakeTimers()`로 8초 넘김) → 대체 값, 구글 링크의 범위 밖 좌표 `out-of-range`, sid와 검색이 같은 sid → `duplicate-source`, 서로 다른 핀 5곳(고정 계획)은 통과, 요청 사이 `sleep(300)` 호출 수.
 - [ ] **Step 2:** FAIL 확인 → **Step 3:** 구현 → **Step 4:** `yarn vitest run tests/unit/pipeline/agent-trip/resolve-places.test.ts` PASS, `yarn typecheck`
 - [ ] **Step 5:** 커밋 `feat(agent-trip): 계획 장소를 네이버·링크·검색으로 조회`
 
@@ -249,7 +249,7 @@
   // build-library.ts
   export type BuiltLibrary = { lib: Library; tripId: string; placeIds: Map<string, string> /* plan key → PlaceId */; now: string };
   /** 장소를 넣고 여행을 만든다. 연산 실패는 해당 계획 경로의 `TripFailure`(EXIT.input). 마지막에 `LibrarySchema`로 검사(실패는 EXIT.internal). */
-  export function buildLibrary(plan: TripPlan, places: ResolvedPlace[], now: Date): BuiltLibrary;
+  export function buildLibrary(plan: TripPlan, places: ResolvedPlace[], now: Date, warnings: TripIssue[]): BuiltLibrary;
   /** `legModes`의 각 키가 그날 이웃한 두 점인지(`leg-modes`), 50km 넘는 walk인지(`walk-too-far`). buildLibrary 안에서 setLegMode 전에 부른다. */
   export function checkLegModes(plan: TripPlan, places: ResolvedPlace[]): TripIssue[];
 
@@ -260,10 +260,11 @@
   export async function prepareRoutes(built: BuiltLibrary, deps: RouteDeps, warnings: TripIssue[]): Promise<{ routeOf(leg: Leg): ShareLegTime; stats: RouteStats }>;
   ```
   - `buildLibrary`: `ctx = { now: now.toISOString(), newId: (kind) => randomId(kind === 'label' || kind === 'stop' || kind === 'meetingMember' ? 8 : 10) }`. 장소마다 `newPlace(ctx.newId('place'), r.candidate, [], r.memo, ctx.now)`. `createTrip(lib, { title, startDate, endDate, origin, candidates }, ctx)`. Day마다 Stop 순서대로 `insertStop(lib, tripId, placeId, d, position, ctx)` → 그 Day의 `stops.value`에서 `placeId`가 같은 Stop id로 `setStopStay`(`stayMin`이 `undefined`면 부르지 않음)·`setStopFixedTime`·`setStopNote`. `lodging` → `setLodging(lib, tripId, d, id, false, ctx)`, `startTime` → `setDayStartTime`. `legModes` → `setLegMode`. 연산 결과 `ok: false`의 경로: `TripDatesInvalid` → `endDate`, `TitleInvalid`류 → `title`, 그 밖 → 해당 Day·Stop 경로.
+  - 쓰지 않는 장소: 출발지·숙소·Stop·후보 어디에도 없는 `places[i]`는 경고 `unused-place`("쓰지 않는 장소라 문서에 넣지 않았어요")로 `warnings`에 모은다. 문서에는 들어가지 않는다(`buildTripShareDoc`가 참조한 장소만 담음).
   - `checkLegModes`: Day마다 점 순서 `[출발점(Day 0은 origin, 그 뒤는 전날 lodging)?, …stops, lodging?]`의 이웃 쌍 집합을 만들어 `legModes` 키가 그 안에 없으면 `leg-modes`(`legModes["a>b"]`). `walk`이고 두 장소 `haversineM > WALK_MAX_M`이면 `walk-too-far`.
   - `prepareRoutes`: 모든 `dayLegs(lib, trip, d)` 중 `!(leg.straightM >= SAME_POINT_M)`가 아닌 것을 `routeInputKey({ mode: leg.mode, from: [lng, lat], to: [lng, lat] })`로 한 번씩 `resolveRoute(q, { fetch })`. 결과 맵을 보고 `routeOf`가 `use-trip-legs.ts`와 같은 값을 낸다: 같은 지점 → `{ durationS: 0, distanceM: 0, tollFare: null, status: 'same-point', queriedAt: null, path: [] }`; 성공 → `routed`(값 그대로); `ApiError` `NO_ROUTE` → `no-route` + `estimateLeg(leg.mode, leg.straightM)`; 그 밖 → `estimated` + `estimateLeg`. 둘 다 `tollFare: null`, `queriedAt: null`, `path: []`. `skip`이면 묻지 않고 모두 `estimated`.
 - [ ] **Step 1: 실패하는 시험**
-  - `build-library.test.ts`: 고정 계획 + 가짜 `ResolvedPlace` 5곳 → `LibrarySchema` 통과, Day 0 Stop 2개(순서·`stayMin`·`fixedTime`·`note`), Day 0 숙소, Day 1 시작 시각, `legModes`, `origin`. 날짜 31일 → `endDate` 오류. `checkLegModes`: 이웃이 아닌 쌍 `leg-modes`, 60km 떨어진 두 핀 `walk` → `walk-too-far`.
+  - `build-library.test.ts`: 고정 계획 + 가짜 `ResolvedPlace` 5곳 → `LibrarySchema` 통과, Day 0 Stop 2개(순서·`stayMin`·`fixedTime`·`note`), Day 0 숙소, Day 1 시작 시각, `legModes`, `origin`. 날짜 31일 → `endDate` 오류. 어디에도 쓰지 않는 장소 하나 → 경고 `unused-place`(그 `places[i]` 경로)이고 그 장소는 `buildDoc` 결과 문서의 `places`에 없음(Task 5 시험에서도 확인). `checkLegModes`: 이웃이 아닌 쌍 `leg-modes`, 60km 떨어진 두 핀 `walk` → `walk-too-far`.
   - `route-legs.test.ts`: 가짜 `fetch`로 자동차 성공·도보 성공·`code: 1`(→ `NO_ROUTE`)·HTTP 500·같은 지점(5m 떨어진 두 장소, 요청 없음)·같은 입력 키 두 번(요청 1번)·`skip`. 각 `routeOf` 값이 위 규칙과 같고 `stats`가 맞다. 요청 사이 `sleep(300)`.
 - [ ] **Step 2:** FAIL → **Step 3:** 구현 → **Step 4:** `yarn vitest run tests/unit/pipeline/agent-trip` PASS, `yarn typecheck`
 - [ ] **Step 5:** 커밋 `feat(agent-trip): 계획으로 메모리 보관함·구간 시간 만들기`
@@ -306,7 +307,7 @@
   3. `viewLink(doc, app)`·`importLink(doc, app)` — 둘 중 `kind !== 'direct'`면 `too-big`(EXIT.input, "장소·Day를 줄이거나 앱에서 파일로 공유해 주세요"). `importHash`를 `readShareHash(importHash, AGENT_INBOX_LIMITS)`로 다시 읽어 `ok: false`면 그 이유를 `too-big`(`too-many`·`corrupt`)으로 낸다. `agentDocProblem(doc)`(서버와 같은 검사: 제목 60자, 장소 이름 100자·주소 200자·메모 10,000자, `naverSid`·`kakaoId` 20자리 숫자, `googleId` 64자)이 null이 아니면 `internal`.
   - `summarize`: Day마다 `dayLegs`·`routeOf`로 `computeSchedule({ startTime, hasStart, stops, hasEnd, legs })`, 시각은 `formatClock`, `estimatedLegs`는 `status`가 `estimated`·`no-route`인 수.
 - [ ] **Step 1: 실패하는 시험**
-  - `build-doc.test.ts`: 고정 계획(가짜 조회·`skip` 구간) → 문서가 스키마·관계 검사 통과, `importHash`의 `readShareHash` 결과가 `hashDoc(doc)`과 같은 값(`toEqual`). `includeMemo: false`면 `places[].memo` 없음, Stop `note`는 있음. 제목 30·31·60자 모두 성공(31자는 `defaultTitleLabel`이 자르므로). 이름 같고 20m 떨어진 핀 두 개를 Day 0·Day 1 Stop에 넣으면 `merged-places`. 합법적인 최대 입력(이름 100자·주소 200자·메모 10,000자 장소 200곳, Stop 메모 500자)은 성공(어떤 항목도 상한에 닿지 않음). 크기 검사 자체는 `buildDoc`이 쓰는 내부 함수 `oversizedItems(lib, max)`를 내보내 직접 시험한다: `stableStringify` 길이가 정확히 `max`인 항목은 통과, `max + 1`이면 그 항목의 키(시험에서는 `max`를 작게 넘겨 만든다). 경로선 많은 문서는 `viewLink`가 경로선 없이 다시 만들어도 `direct`. 32,000자를 넘는 문서 `too-big`.
+  - `build-doc.test.ts`: 고정 계획(가짜 조회·`skip` 구간) → 문서가 스키마·관계 검사 통과, `importHash`의 `readShareHash` 결과가 `hashDoc(doc)`과 같은 값(`toEqual`). `includeMemo: false`면 `places[].memo` 없음, Stop `note`는 있음. 제목 30·31·60자 모두 성공(31자는 `defaultTitleLabel`이 자르므로). 이름 같고 20m 떨어진 핀 두 개를 Day 0·Day 1 Stop에 넣으면 `merged-places`. 합법적인 최대 입력을 둘로 나눈다: (가) 이름 100자·주소 200자 장소 200곳, 메모 없음(`includeMemo: false`) → 성공, 어떤 항목도 동기화 상한에 닿지 않음. (나) 같은 계획에 장소 메모 10,000자씩 + `includeMemo: true` → 풀린 크기가 `AGENT_INBOX_LIMITS.decodedBytes`(1MB)를 넘어 `too-big`(전체 문서 상한이 먼저 걸린다). 크기 검사 자체는 `buildDoc`이 쓰는 내부 함수 `oversizedItems(lib, max)`를 내보내 직접 시험한다: `stableStringify` 길이가 정확히 `max`인 항목은 통과, `max + 1`이면 그 항목의 키(시험에서는 `max`를 작게 넘겨 만든다). 경로선 많은 문서는 `viewLink`가 경로선 없이 다시 만들어도 `direct`. 32,000자를 넘는 문서 `too-big`.
   - `summary.test.ts`: 설계 출력 예시와 같은 값 — 출발 09:00, 첫 구간 102분(가짜 `routeOf`), `stayMin` 60, `fixedTime` 12:00 → `arrive '10:42'`, `depart '13:00'`, `slackMin 78`.
 - [ ] **Step 2:** FAIL → **Step 3:** 구현 → **Step 4:** `yarn vitest run tests/unit/pipeline/agent-trip` PASS, `yarn typecheck`
 - [ ] **Step 5:** 커밋 `feat(agent-trip): 앱과 같은 공유 문서·모의 가져오기·데이터 링크·요약`
@@ -358,7 +359,7 @@
 ### Task 7: 스키마 7과 연결 지점
 
 **Files:**
-- Modify: `src/server/meet/schema-sql.ts`, `src/server/library-sync/env.ts`, `src/server/library-sync/library.ts`, `src/server/library-sync/backup.ts`(`requireBackupUser` 앞에 `export`), `tests/unit/server/meet-db.test.ts`(30행 `toBe(6)` → 7), `tests/unit/server/sync-schema.test.ts`·`tests/unit/server/backup-schema.test.ts`(`{ version: 6 }` → 7)
+- Modify: `src/server/meet/schema-sql.ts`, `src/server/library-sync/env.ts`, `src/server/library-sync/library.ts`, `src/server/library-sync/backup.ts`(`requireBackupUser` 앞에 `export`), `tests/unit/server/meet-db.test.ts`(30·32행 버전 6 → 7, 34행 이하 `sqlite_master` 표 목록 `toEqual`에 `{ name: 'agent_inbox' }`·`{ name: 'agent_tokens' }`를 이름순 맨 앞에), `tests/unit/server/sync-schema.test.ts`·`tests/unit/server/backup-schema.test.ts`(`{ version: 6 }` → 7)
 - Test: `tests/unit/server/agent-schema.test.ts`(새)
 
 **Interfaces:**
@@ -630,7 +631,7 @@
 ### Task 15: 받은함 실행기와 부트
 
 **Files:**
-- Create: `src/services/agent-inbox/inbox-check.ts`, `src/services/agent-inbox/boot.ts`, `src/sections/agent/use-agent-inbox-boot.ts`
+- Create: `src/services/agent-inbox/inbox-check.ts`, `src/services/agent-inbox/boot.ts`, `src/sections/agent/use-agent-inbox-boot.ts`, `src/stores/agent-inbox.ts`
 - Modify: `src/sections/shell/ShellRoute.tsx`(`useAutoBackupBoot();` 다음 줄 `useAgentInboxBoot();`)
 - Test: `tests/unit/services/agent-inbox-check.test.ts`, `tests/unit/sections/agent/use-agent-inbox-boot.test.tsx`
 
@@ -661,7 +662,7 @@
   - `paused`가 되면 그때의 `session()`(`readSession(getSharedSyncStorage())?.sessionId ?? null`)을 기억하고 `schedule()`을 한 번 부른다. 이후 실행 끝에서 `session()`이 달라졌으면 멈춤을 풀고 바로 확인한다.
   - 응답을 받은 뒤 `sameOwner(api.owner)`가 거짓이면 결과를 버린다.
   - **계정 전환**: 실행기는 `AgentApi`를 고정해 두지 않는다. 실행이 끝날 때마다 `readSyncMeta(getSharedSyncStorage()).userId`를 보고 지난번 사용자와 다르면 `createAgentApi()`로 새로 만들고, 마지막 확인 시각·멈춤 상태·알린 기록(기기 키는 `readAgentInboxLocal`이 사용자별로 비움)을 처음으로 돌린 뒤 바로 확인한다. `InboxCheckDeps.api`는 `api(): AgentApi | null`(함수)로 둔다.
-  - 받은함 창 열림 상태는 `src/stores/agent-inbox.ts`(새, 작은 atom `agentInboxOpenAtom`)에 둔다. `AgentInboxDialog`는 이 atom을 보는 호스트(`src/sections/agent/AgentInboxHost.tsx`, 새, `ShellRoute`의 `LibraryShell`에 `<AgentInboxHost />`로 둠 — 열릴 때만 `lazy(loadAgentInboxDialog)`)로 연다.
+  - 받은함 창 열림 상태는 `src/stores/agent-inbox.ts`(새, 작은 atom `agentInboxOpenAtom`)에 둔다. `AgentInboxDialog`는 이 atom을 보는 호스트(`src/sections/agent/AgentInboxHost.tsx`, Task 17에서 만듦, `ShellRoute`의 `LibraryShell`에 `<AgentInboxHost />`로 둠 — 열릴 때만 `lazy(() => loadAgentInboxDialog().then((m) => ({ default: m.AgentInboxDialog })))`, `src/routes/lazy-routes.ts`의 `SharePreview`와 같은 방식)로 연다. **atom 파일 `src/stores/agent-inbox.ts`(`export const agentInboxOpenAtom = atom(false)`)는 이 과제(Task 15)에서 만든다.** `openInboxDialog()`는 `getDefaultStore().set(agentInboxOpenAtom, true)`.
 - [ ] **Step 1: 실패하는 시험** — `agent-inbox-check.test.ts`: 첫 synced에 확인, 10분 안 두 번째 실행은 건너뜀, 10분 뒤 다시, 새 id만 알림(알린 기록은 기기 키), 다른 사용자면 기록 비움, 오프라인·5xx 조용히 `failed`, 401 → `paused` + `schedule` 한 번 + 이후 같은 세션이면 확인 안 함 + 세션 id 바뀌면 재개, 응답 사이 계정이 바뀌면 알림 없음, 같은 페이지에서 A → B 계정 전환 뒤 다음 실행에서 새 API(머리글 `X-Landmark-Backup-User: B`)로 B의 받은함을 확인해 B 알림이 뜸. `use-agent-inbox-boot.test.tsx`: 동기화 꺼짐이면 `loadAgentInbox`를 부르지 않음, 같은 렌더에서 `syncStatusAtom`이 `synced`가 되면 한 번 부름.
 - [ ] **Step 2:** FAIL → **Step 3:** 구현 → **Step 4:** PASS, `yarn typecheck`
 - [ ] **Step 5:** 커밋 `feat(agent-app): 동기화 뒤 받은함 확인과 알림`
@@ -694,7 +695,7 @@
 ### Task 17: 받은함 창
 
 **Files:**
-- Create: `src/sections/agent/AgentInboxDialog.tsx`, `src/sections/agent/AgentInboxHost.tsx`, `src/sections/agent/agent-copy.ts`, `src/stores/agent-inbox.ts`
+- Create: `src/sections/agent/AgentInboxDialog.tsx`, `src/sections/agent/AgentInboxHost.tsx`, `src/sections/agent/agent-copy.ts`
 - Modify: `src/sections/shell/ShellRoute.tsx`(`<AgentInboxHost />`)
 - Test: `tests/unit/sections/agent/agent-inbox-dialog.test.tsx`
 
@@ -718,12 +719,12 @@
 
 **Interfaces:**
 - Produces: `src/services/agent-inbox/boot.ts`에 `export const loadAgentSection = lazyChunk(() => import('src/sections/agent/AgentSection'));` 추가, `export function AgentSection(): JSX.Element | null`, `export function AgentTokenDialog({ open, onClose, onIssued }: …)`.
-  - 보이는 조건: `readSyncMeta(getSharedSyncStorage()).userId !== null && readSession(getSharedSyncStorage()) !== null`. 아니면 `null`.
+  - 보이는 조건: `readSyncMeta(getSharedSyncStorage()).userId !== null && readSession(getSharedSyncStorage()) !== null`. 아니면 `null`. 같은 페이지의 로그인·로그아웃·연결 해제를 반영하려고 `ServerBackupSection.tsx`처럼 `useAtomValue(syncStatusAtom)`을 구독해 다시 그리고, 다른 탭의 변경은 `storage` 이벤트(`tripmap:sync:v1`·`tripmap:sync-session:v1`)로 다시 그린다. 사용자 id가 바뀌면 목록·받은함 개수를 다시 읽는다.
   - 설명 문구 설계 「설정 › 동기화 › AI 연결」 그대로. 목록 줄 `{이름} · {scopeLabel} · {expiryLabel} · 마지막 사용 {날짜|없음}` + `철회`(확인 뒤 `api.revoke`). 만료·철회 줄은 `color: var(--tm-text-secondary)`와 `철회됨`·`만료됨`.
   - `새 연결 만들기`: `canCreate`가 거짓이면 꺼짐 + 문구(`enabled` 거짓: "지금은 AI 연결을 쓸 수 없어요", 아니면 "동기화가 꺼져 있어 새 연결을 만들 수 없어요"), 살아 있는 토큰 10개면 꺼짐 + "연결은 10개까지예요. 쓰지 않는 연결을 철회해 주세요".
   - 만들기 창: 이름(기본 `Claude Code`, 1~40자), 권한 체크 둘(기본 둘 다, 둘 다 끄면 `만들기` 꺼짐) → `api.issue` → 같은 창에서 원문을 읽기 전용 칸에 보이고 `복사`(`navigator.clipboard.writeText`), 명령 예 `security add-generic-password -U -s landmark-agent-token -a {location.host} -w`, 안내 "이 창을 닫으면 다시 볼 수 없어요. 잃어버리면 철회하고 새로 만드세요". 원문은 컴포넌트 상태에만, 닫을 때 지운다. 저장소·로그에 쓰지 않는다.
   - `받은 일정 N개 · 보기`(`api.inbox()` 개수, 0이면 `받은 일정 없음`) → `openInboxDialog()`.
-- [ ] **Step 1: 실패하는 시험** — 로그인 없으면 렌더 없음, 목록 문구, 철회 확인, 만들기 창(기본값·권한 둘 끄면 꺼짐·원문 한 번 표시·닫으면 다시 열어도 없음·`localStorage`에 원문 없음), `canCreate`/`enabled` 경우별 문구, 10개.
+- [ ] **Step 1: 실패하는 시험** — 로그인 없으면 렌더 없음, 같은 렌더에서 동기화 기록·세션을 쓰고 `syncStatusAtom`을 바꾸면 구역이 나타남(로그아웃이면 사라짐), 목록 문구, 철회 확인, 만들기 창(기본값·권한 둘 끄면 꺼짐·원문 한 번 표시·닫으면 다시 열어도 없음·`localStorage`에 원문 없음), `canCreate`/`enabled` 경우별 문구, 10개.
 - [ ] **Step 2:** FAIL → **Step 3:** 구현 → **Step 4:** PASS, `yarn build && yarn size --require-lazy AgentSection --require-lazy AgentInboxDialog --require-lazy inbox-check` 통과
 - [ ] **Step 5:** 커밋 `feat(agent-app): 설정 AI 연결(발급·목록·철회)`
 
