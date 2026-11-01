@@ -3,6 +3,7 @@ import { randomBytes } from 'node:crypto';
 import { mkdtemp, readFile, rm, stat, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { TripFailure } from '../../../../pipeline/agent-trip/errors';
 import {
@@ -105,6 +106,59 @@ describe('공유 삭제 토큰 저장소', () => {
     await addShare(item(), deps);
     expect(await readShares(deps)).toHaveLength(1);
     await expect(stat(lock)).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+  it('31초 된 잠금을 동시에 회수해도 추가 8개를 잃지 않는다 (20회 반복)', async () => {
+    const lock = join(deps.home, 'agent-shares.lock');
+    const takeover = join(deps.home, 'agent-shares.lock.takeover');
+    for (let attempt = 0; attempt < 20; attempt++) {
+      await rm(join(deps.home, 'agent-shares.json'), { force: true });
+      await writeFile(lock, '');
+      const stale = new Date(Date.now() - 31_000);
+      await utimes(lock, stale, stale);
+      const shares = Array.from({ length: 8 }, item);
+      await Promise.all(shares.map((share) => addShare(share, deps)));
+      expect((await readShares(deps)).sort((a, b) => a.id.localeCompare(b.id))).toEqual(
+        shares.sort((a, b) => a.id.localeCompare(b.id)),
+      );
+      await expect(stat(lock)).rejects.toMatchObject({ code: 'ENOENT' });
+      await expect(stat(takeover)).rejects.toMatchObject({ code: 'ENOENT' });
+    }
+  });
+  it('31초 된 회수 잠금도 지우고 진행하며 두 잠금을 남기지 않는다', async () => {
+    const lock = join(deps.home, 'agent-shares.lock');
+    const takeover = join(deps.home, 'agent-shares.lock.takeover');
+    const stale = new Date(Date.now() - 31_000);
+    for (const path of [lock, takeover]) {
+      await writeFile(path, '');
+      await utimes(path, stale, stale);
+    }
+    const share = item();
+    await addShare(share, deps);
+    expect(await readShares(deps)).toEqual([share]);
+    await expect(stat(lock)).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(stat(takeover)).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+  it('다른 실행이 회수 잠금을 쥐고 있으면 본 잠금을 지우지 않고 기다린다', async () => {
+    const lock = join(deps.home, 'agent-shares.lock');
+    const takeover = join(deps.home, 'agent-shares.lock.takeover');
+    await writeFile(lock, '');
+    const stale = new Date(Date.now() - 31_000);
+    await utimes(lock, stale, stale);
+    const identity = await stat(lock);
+    await writeFile(takeover, '');
+    const share = item();
+    const adding = addShare(share, deps);
+    try {
+      await sleep(100);
+      expect(await stat(lock)).toMatchObject({ ino: identity.ino, dev: identity.dev });
+      expect(await readShares(deps)).toEqual([]);
+    } finally {
+      await rm(takeover, { force: true });
+      await adding;
+    }
+    expect(await readShares(deps)).toEqual([share]);
+    await expect(stat(lock)).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(stat(takeover)).rejects.toMatchObject({ code: 'ENOENT' });
   });
   it.each(['json', 'version', 'shape', 'item'])(
     '손상된 %s는 오류로 멈추고 원본 바이트를 보존한다',

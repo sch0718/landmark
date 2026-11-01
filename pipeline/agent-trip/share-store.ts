@@ -74,6 +74,7 @@ export async function withShareStore<T>(
   edit: (items: StoredShare[]) => { items: StoredShare[]; result: T },
 ): Promise<T> {
   const lockPath = join(deps.home, 'agent-shares.lock');
+  const takeoverPath = `${lockPath}.takeover`;
   let lock: Awaited<ReturnType<typeof open>> | undefined;
   let identity: Awaited<ReturnType<typeof stat>> | undefined;
   let temporary: string | undefined;
@@ -89,9 +90,43 @@ export async function withShareStore<T>(
       } catch (error) {
         if (!hasCode(error, 'EEXIST')) throw error;
         try {
-          if (Date.now() - (await stat(lockPath)).mtimeMs > 30_000) {
-            await unlink(lockPath);
-            continue;
+          const abandoned = await stat(lockPath);
+          if (Date.now() - abandoned.mtimeMs > 30_000) {
+            let takeover: Awaited<ReturnType<typeof open>> | undefined;
+            let takeoverIdentity: Awaited<ReturnType<typeof stat>> | undefined;
+            let reclaimed = false;
+            try {
+              takeover = await open(takeoverPath, 'wx', 0o600);
+              takeoverIdentity = await takeover.stat();
+              const current = await stat(lockPath);
+              if (
+                current.ino === abandoned.ino &&
+                current.dev === abandoned.dev &&
+                Date.now() - current.mtimeMs > 30_000
+              ) {
+                await unlink(lockPath);
+                reclaimed = true;
+              }
+            } catch (e) {
+              if (!hasCode(e, 'EEXIST')) throw e;
+              const abandonedTakeover = await stat(takeoverPath);
+              if (Date.now() - abandonedTakeover.mtimeMs > 30_000) {
+                // 회수 잠금은 몇 ms만 쥐므로 죽은 실행의 잠금을 지우는 경합은 사실상 생기지 않는다.
+                await unlink(takeoverPath);
+              }
+            } finally {
+              if (takeover) {
+                await takeover.close();
+                try {
+                  const current = await stat(takeoverPath);
+                  if (current.ino === takeoverIdentity?.ino && current.dev === takeoverIdentity.dev)
+                    await unlink(takeoverPath);
+                } catch {
+                  /* 다른 실행에서 이미 정리한 회수 잠금은 남기지 않는다. */
+                }
+              }
+            }
+            if (reclaimed) continue;
           }
         } catch (e) {
           if (hasCode(e, 'ENOENT')) continue;
