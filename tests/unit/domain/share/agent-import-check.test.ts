@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { readFileSync } from 'node:fs';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import * as syncItems from 'src/domain/library-sync/items';
 import { stableStringify } from 'src/domain/library-sync/items';
 import { importedItemProblem, oversizedItems } from 'src/domain/share/agent-import-check';
 import { emptyLibrary, type Library } from 'src/schema/library';
@@ -11,6 +12,8 @@ const fixture = () =>
   JSON.parse(
     readFileSync(new URL('../../../fixtures/agent-trip/doc.json', import.meta.url), 'utf8'),
   ) as ShareDocV2;
+
+afterEach(() => vi.restoreAllMocks());
 
 describe('가져온 항목 검사', () => {
   it('정상 고정 문서는 통과하며 입력을 바꾸지 않는다', () => {
@@ -33,6 +36,26 @@ describe('가져온 항목 검사', () => {
 });
 
 describe('동기화 항목 크기', () => {
+  it.each([
+    ['고정 문서', fixture],
+    ['상한 문서', largeAgentDoc],
+  ])('%s의 실제 장소·라벨·여행은 키 정렬 여부와 무관하게 JSON 길이가 같다', (_name, make) => {
+    const lib = importedAgentLibrary(make());
+    for (const collection of [lib.places, lib.labels, lib.trips]) {
+      expect(Object.keys(collection).length).toBeGreaterThan(0);
+      for (const item of Object.values(collection)) {
+        expect(stableStringify(item).length).toBe(JSON.stringify(item).length);
+      }
+    }
+  });
+
+  it('크기 비교에 키 정렬 직렬화를 호출하지 않는다', () => {
+    const lib = importedAgentLibrary(fixture());
+    const sorted = vi.spyOn(syncItems, 'stableStringify');
+    expect(oversizedItems(lib, 0).length).toBeGreaterThan(0);
+    expect(sorted).not.toHaveBeenCalled();
+  });
+
   it('빈 보관함에는 초과 항목이 없다', () => {
     expect(oversizedItems(emptyLibrary(), 0)).toEqual([]);
   });

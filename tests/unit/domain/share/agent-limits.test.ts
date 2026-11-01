@@ -1,7 +1,64 @@
 import { describe, expect, it } from 'vitest';
-import { agentDocProblem } from 'src/domain/share/agent-limits';
+import { agentDocProblem, agentRawProblem } from 'src/domain/share/agent-limits';
 import type { SharePlace } from 'src/schema/share';
 import { makeShareV2Doc } from '../../helpers/share-v2-doc';
+import { hashDoc } from 'src/share-viewer/encode';
+
+describe('에이전트 원시 문서 사전 검사', () => {
+  it('경로선을 뺀 정상 가져오기 사본은 통과하며 입력을 바꾸지 않는다', () => {
+    const doc = hashDoc(makeShareV2Doc());
+    const before = structuredClone(doc);
+    expect(agentRawProblem(doc)).toBeNull();
+    expect(doc).toEqual(before);
+  });
+
+  it.each([
+    null,
+    false,
+    1,
+    '문서',
+    [],
+    {},
+    { labels: {} },
+    { labels: [], trips: null },
+    { labels: [], trips: [] },
+    { labels: [], trips: [null] },
+    { labels: [], trips: [{ days: null }] },
+    { labels: [], trips: [{ days: [null] }] },
+    { labels: [], trips: [{ days: [{ stops: {}, legs: [] }] }] },
+    { labels: [], trips: [{ days: [{ stops: [], legs: null }] }] },
+    { labels: [], trips: [{ days: [{ stops: [], legs: [null] }] }] },
+    { labels: [], trips: [{ days: [{ stops: [], legs: [{ path: {} }] }] }] },
+    { labels: [], trips: [{ days: [], legModes: [] }] },
+    { labels: [], trips: [{ days: [], legModes: null }] },
+  ])('모양이 틀린 원시 값은 스키마 검사에 맡긴다: %#', (value) => {
+    expect(agentRawProblem(value)).toBeNull();
+  });
+
+  it('비어 있지 않은 라벨 배열은 원소 검사 없이 labels이다', () => {
+    expect(agentRawProblem({ labels: [null] })).toBe('labels');
+  });
+
+  it('모든 여행·날짜·구간의 비어 있지 않은 경로선을 찾는다', () => {
+    const doc = hashDoc(makeShareV2Doc());
+    if (doc.version !== 2) throw new Error('v2 시험 문서여야 함');
+    const other = structuredClone(doc.trips[0]!);
+    other.days[1]!.legs[0]!.path = [[0, 0]];
+    doc.trips.push(other);
+    expect(agentRawProblem(doc)).toBe('path');
+  });
+
+  it('첫 여행의 Stop 수 + 날짜 수만큼 구간 설정을 허용하고 하나 초과하면 거절한다', () => {
+    const doc = hashDoc(makeShareV2Doc());
+    if (doc.version !== 2) throw new Error('v2 시험 문서여야 함');
+    const trip = doc.trips[0]!;
+    const max = trip.days.reduce((sum, day) => sum + day.stops.length + 1, 0);
+    trip.legModes = Object.fromEntries(Array.from({ length: max }, (_, i) => [`k${i}`, 'car']));
+    expect(agentRawProblem(doc)).toBeNull();
+    trip.legModes.extra = 'walk';
+    expect(agentRawProblem(doc)).toBe('leg-modes');
+  });
+});
 
 describe('에이전트 공유 문서 내용 한도', () => {
   it('정상 문서는 통과한다', () => {

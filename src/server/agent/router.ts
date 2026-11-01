@@ -17,7 +17,7 @@ import {
   SHARE_REQUEST_MAX_BYTES,
 } from '../share/handlers';
 import { requireAgentToken, type AgentPrincipal } from './auth';
-import { checkInboxDoc, parseInboxBody, pruneInbox, putInbox } from './inbox';
+import { checkInboxDoc, findPendingInbox, parseInboxBody, pruneInbox, putInbox } from './inbox';
 import { AGENT_LIMITS, type AgentScope } from './tokens';
 
 export type AgentRoute = {
@@ -67,6 +67,8 @@ export const AGENT_ROUTES: AgentRoute[] = [
       const now = deps.now();
       await consume(ctx, who, 'agent-inbox', AGENT_LIMITS.inbox, now);
       const body = parseInboxBody(await readLimitedJson(ctx.request, SHARE_REQUEST_MAX_BYTES));
+      const existing = await findPendingInbox(ctx.env.DB!, who.userId, body.key, now);
+      if (existing) return syncJson(200, existing);
       const meta = await checkInboxDoc(body.d);
       const result = await putInbox(ctx.env.DB!, who, body, meta, base64url(deps.random(12)), now);
       ctx.waitUntil(pruneInbox(ctx.env.DB!, now).catch(() => undefined));

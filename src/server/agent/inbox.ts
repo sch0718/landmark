@@ -1,7 +1,12 @@
-import { agentDocProblem, AGENT_INBOX_LIMITS } from '../../domain/share/agent-limits';
+import { decodeCompressedJson } from '../../domain/codec';
+import {
+  agentDocProblem,
+  agentRawProblem,
+  AGENT_INBOX_LIMITS,
+} from '../../domain/share/agent-limits';
 import { importedItemProblem } from '../../domain/share/agent-import-check';
 import { dayPoints } from '../../domain/share/check-share-trip';
-import { readShareHash } from '../../domain/share/read-share';
+import { validateShareValue } from '../../domain/share/read-share';
 import { legKey } from '../../domain/trips/query';
 import { SyncHttpError } from '../library-sync/http';
 import type { MeetDb } from '../meet/db';
@@ -52,7 +57,18 @@ export function parseInboxBody(value: unknown): InboxBody {
 export async function checkInboxDoc(
   d: string,
 ): Promise<{ title: string; startDate: string; endDate: string; places: number }> {
-  const result = await readShareHash(d, AGENT_INBOX_LIMITS);
+  let json: unknown;
+  try {
+    json = await decodeCompressedJson(d, {
+      maxChars: AGENT_INBOX_LIMITS.hashChars,
+      maxBytes: AGENT_INBOX_LIMITS.decodedBytes,
+    });
+  } catch {
+    throw new SyncHttpError(422, 'invalid', { reason: 'corrupt' });
+  }
+  const rawProblem = agentRawProblem(json);
+  if (rawProblem) throw new SyncHttpError(422, 'invalid', { reason: rawProblem });
+  const result = validateShareValue(json, AGENT_INBOX_LIMITS.places);
   if (!result.ok) throw new SyncHttpError(422, 'invalid', { reason: result.error });
   const doc = result.doc;
   if (doc.version !== 2) throw new SyncHttpError(422, 'invalid', { reason: 'not-trip' });
@@ -80,7 +96,7 @@ export async function checkInboxDoc(
   };
 }
 
-async function findPending(db: MeetDb, userId: string, key: string, now: number) {
+export async function findPendingInbox(db: MeetDb, userId: string, key: string, now: number) {
   const row = await db
     .prepare(
       'SELECT id, expires_at FROM agent_inbox WHERE user_id = ? AND request_key = ? AND expires_at > ?',
@@ -98,7 +114,7 @@ export async function putInbox(
   id: string,
   now: number,
 ): Promise<{ id: string; expiresAt: number; created: boolean }> {
-  const existing = await findPending(db, p.userId, body.key, now);
+  const existing = await findPendingInbox(db, p.userId, body.key, now);
   if (existing) return existing;
 
   const expiresAt = now + INBOX_TTL_MS;
@@ -141,7 +157,7 @@ export async function putInbox(
   }
 
   // 같은 키 경쟁에서 진 요청은 0행 또는 UNIQUE 충돌 뒤에 승자의 항목을 돌려준다.
-  const winner = await findPending(db, p.userId, body.key, now);
+  const winner = await findPendingInbox(db, p.userId, body.key, now);
   if (winner) return winner;
   throw new SyncHttpError(409, 'inbox-full');
 }

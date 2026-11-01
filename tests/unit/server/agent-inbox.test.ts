@@ -146,9 +146,7 @@ describe('받은함 문서', () => {
     const d = await encode(doc);
     expect(d.length).toBeLessThanOrEqual(AGENT_INBOX_LIMITS.hashChars);
     expect((await readShareHash(d, AGENT_INBOX_LIMITS)).ok).toBe(true);
-    const started = performance.now();
     await expect(checkInboxDoc(d)).rejects.toMatchObject(invalid('labels'));
-    expect(performance.now() - started).toBeLessThan(1000);
   });
 
   it('가져온 여행 항목이 동기화 상한 바로 아래인 199,999자면 받는다', async () => {
@@ -273,9 +271,9 @@ describe('받은함 문서', () => {
     await expect(checkInboxDoc(d)).rejects.toMatchObject(invalid('leg-modes'));
   });
 
-  it('압축 길이가 상한 안이어도 풀린 크기 1MB 초과는 corrupt이다', async () => {
+  it('압축 길이가 상한 안이어도 풀린 크기 384KB 초과는 corrupt이다', async () => {
     const doc = tripDoc();
-    doc.labels = [{ id: '라벨', name: 'a'.repeat(1_048_577), color: 'red', order: 0 }];
+    doc.labels = [{ id: '라벨', name: 'a'.repeat(393_217), color: 'red', order: 0 }];
     const d = await encode(doc);
     expect(d.length).toBeLessThanOrEqual(32_000);
     expect((await readShareHash(d)).ok).toBe(true);

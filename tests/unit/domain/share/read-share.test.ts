@@ -128,9 +128,9 @@ describe('readShareFile', () => {
     expect(await readShareFile(htmlBlob(doc))).toEqual({ ok: false, error: 'corrupt' });
   });
 
-  it('checks duplicate ids before the empty and too-many limits', async () => {
+  it('장소 한도 초과는 중복 id 검사보다 먼저 거절한다', async () => {
     const dup = manyPlaces(1001).map((p) => ({ ...p, id: 'same' }));
-    expect(await readShareFile(htmlBlob(makeDoc(dup)))).toEqual({ ok: false, error: 'corrupt' });
+    expect(await readShareFile(htmlBlob(makeDoc(dup)))).toEqual({ ok: false, error: 'too-many' });
   });
 
   it('returns empty for zero places', async () => {

@@ -1,10 +1,10 @@
 import { defaultTitleLabel } from 'src/domain/library/import-share';
 import { importSharedTrip } from 'src/domain/library/import-share-trip';
-import { ITEM_DOC_MAX_CHARS, stableStringify } from 'src/domain/library-sync/items';
+import { ITEM_DOC_MAX_CHARS } from 'src/domain/library-sync/items';
 import { emptyLibrary, type Library } from 'src/schema/library';
 import type { ShareDocV2 } from 'src/schema/share';
 
-/** 장소·라벨·여행의 키 정렬 JSON이 동기화 항목 상한을 넘는지 본다. */
+/** 키 정렬은 JSON 길이를 바꾸지 않으므로, 정렬 없이 동기화 항목 상한을 비교한다. */
 export function oversizedItems(lib: Library, max: number): string[] {
   return (
     [
@@ -14,7 +14,7 @@ export function oversizedItems(lib: Library, max: number): string[] {
     ] as const
   ).flatMap(([kind, items]) =>
     Object.entries(items).flatMap(([id, item]) =>
-      stableStringify(item).length > max ? [`${kind}:${id}`] : [],
+      JSON.stringify(item).length > max ? [`${kind}:${id}`] : [],
     ),
   );
 }

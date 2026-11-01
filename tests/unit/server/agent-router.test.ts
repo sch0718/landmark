@@ -1,7 +1,8 @@
 // @vitest-environment node
 import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as inboxModule from 'src/server/agent/inbox';
 import { encodeShareHash, hashDoc } from 'src/share-viewer/encode';
 import type { ShareDocV2 } from 'src/schema/share';
 import { AGENT_LIMITS } from 'src/server/agent/tokens';
@@ -78,6 +79,7 @@ beforeEach(async () => {
   token = await issue();
 });
 afterEach(() => {
+  vi.restoreAllMocks();
   const output = (server.logs ?? []).join('\n');
   server.db.close();
   for (const secret of secrets) expect(output.includes(secret)).toBe(false);
@@ -169,6 +171,27 @@ describe('에이전트 토큰 경로', () => {
   it('받은함 스키마·문서 검사 실패는 422', async () => {
     await error(await request('/v1/inbox', 'POST', { ...inbox, extra: true }), 422, 'invalid');
     await error(await request('/v1/inbox', 'POST', { ...inbox, d: 'a' }), 422, 'invalid');
+  });
+  it('같은 키의 깨진 문서도 검사·저장 없이 기존 항목을 돌려주며 하루 한도에 센다', async () => {
+    const first = await request('/v1/inbox', 'POST', inbox);
+    expect(first.status).toBe(201);
+    const created = await first.json();
+    const check = vi.spyOn(inboxModule, 'checkInboxDoc');
+    const put = vi.spyOn(inboxModule, 'putInbox');
+    const retry = await request('/v1/inbox', 'POST', { ...inbox, d: 'a' });
+    expect(retry.status).toBe(200);
+    expect(await retry.json()).toEqual({ ...created, created: false });
+    expect(check).not.toHaveBeenCalled();
+    expect(put).not.toHaveBeenCalled();
+    const counters = await server.db
+      .prepare("SELECT count FROM rate_counters WHERE key LIKE 'agent-inbox:%'")
+      .all<{ count: number }>();
+    expect(counters.results).toEqual([{ count: 2 }]);
+    await server.db
+      .prepare("UPDATE rate_counters SET count = ? WHERE key LIKE 'agent-inbox:%'")
+      .bind(AGENT_LIMITS.inbox)
+      .run();
+    await error(await request('/v1/inbox', 'POST', { ...inbox, d: 'a' }), 429, 'rate-limited');
   });
   it('받은함에 가져온 여행이 동기화 상한을 넘는 문서를 보내면 422 item-too-large이다', async () => {
     const d = await encodeShareHash(hashDoc(largeAgentDoc()));

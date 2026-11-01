@@ -47,12 +47,17 @@ const isNewerVersion = (value: unknown): boolean => {
 };
 
 /**
- * 파일·해시 공통 검사. 더 새 버전(newer) → 스키마(모르는 필드 거절) → 장소·라벨 id 겹침
- * → 장소 0곳 → (v2만) 여행 관계 검사 → 장소 한도 초과.
+ * 파일·해시 공통 검사. 더 새 버전(newer) → 장소 한도 초과 → 스키마(모르는 필드 거절)
+ * → 장소·라벨 id 겹침 → 장소 0곳 → (v2만) 여행 관계 검사.
  * 내보내기는 id가 겹치는 파일을 만들지 않으므로, 겹치면 손상된 파일로 본다.
  */
-function validate(value: unknown, places: number = SHARE_IMPORT_LIMITS.places): ShareReadResult {
+export function validateShareValue(
+  value: unknown,
+  places: number = SHARE_IMPORT_LIMITS.places,
+): ShareReadResult {
   if (isNewerVersion(value)) return fail('newer');
+  const rawPlaces = (value as { places?: unknown } | null)?.places;
+  if (Array.isArray(rawPlaces) && rawPlaces.length > places) return fail('too-many');
   const isV2 = (value as { version?: unknown } | null)?.version === 2;
   const parsed = isV2
     ? safeParse(ShareDocV2Schema, value, { onExcessProperty: 'error' })
@@ -62,7 +67,6 @@ function validate(value: unknown, places: number = SHARE_IMPORT_LIMITS.places): 
   if (hasDuplicateId(doc.places) || hasDuplicateId(doc.labels)) return fail('corrupt');
   if (doc.places.length === 0) return fail('empty');
   if (doc.version === 2 && checkShareTrip(doc).length > 0) return fail('corrupt');
-  if (doc.places.length > places) return fail('too-many');
   return { ok: true, doc };
 }
 
@@ -79,7 +83,7 @@ export function readShareHtml(text: string): ShareReadResult {
   } catch {
     return fail('corrupt');
   }
-  return validate(json);
+  return validateShareValue(json);
 }
 
 /** 크기를 먼저 보고, 한도 안일 때만 내용을 읽는다. */
@@ -108,5 +112,5 @@ export async function readShareHash(
   } catch {
     return fail('corrupt');
   }
-  return validate(json, limits.places);
+  return validateShareValue(json, limits.places);
 }
