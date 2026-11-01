@@ -11,6 +11,7 @@ export type SearchResult = {
   lng: number;
   lat: number;
 };
+export type NaverSearchPlace = SearchResult & { sid: string | null };
 export function parseSearchQuery(url: URL): SearchQuery {
   const q = (url.searchParams.get('q') ?? '').trim().replace(/\s+/g, ' ');
   if (q.length < 1 || q.length > 40) throw new ApiError('BAD_REQUEST', '검색어는 1~40자입니다');
@@ -29,10 +30,11 @@ const record = (v: unknown): Record<string, unknown> | null =>
   typeof v === 'object' && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
 const badResponse = () => new ApiError('UPSTREAM_ERROR', '네이버 검색 응답을 읽지 못함');
 const DEFAULT_NEAR: [number, number] = [126.9784, 37.5666];
-export async function resolveSearch(
+/** 자동완성의 장소 결과(최대 10곳). 응답 id가 숫자 문자열일 때만 sid로 쓴다. */
+export async function searchNaverPlaces(
   query: SearchQuery,
   deps: Deps,
-): Promise<{ results: SearchResult[] }> {
+): Promise<NaverSearchPlace[]> {
   // 네이버는 `coords`가 없으면 HTTP 500을 준다(2026-10-24 확인). 주변 좌표가 없으면 서울시청 근처로 묻는다.
   const near = query.near ?? DEFAULT_NEAR;
   const params = new URLSearchParams({
@@ -52,7 +54,7 @@ export async function resolveSearch(
   }
   const body = record(json);
   if (body === null || !Array.isArray(body.place)) throw badResponse();
-  const results: SearchResult[] = [];
+  const results: NaverSearchPlace[] = [];
   for (const value of body.place) {
     const p = record(value);
     if (p === null || typeof p.title !== 'string' || p.title.trim() === '') continue;
@@ -77,8 +79,21 @@ export async function resolveSearch(
       category: typeof p.ctg === 'string' ? p.ctg : '',
       lng,
       lat,
+      sid: typeof p.id === 'string' && /^\d+$/.test(p.id) ? p.id : null,
     });
     if (results.length === 10) break;
   }
-  return { results };
+  return results;
+}
+
+export async function resolveSearch(
+  query: SearchQuery,
+  deps: Deps,
+): Promise<{ results: SearchResult[] }> {
+  return {
+    results: (await searchNaverPlaces(query, deps)).map(({ sid: _sid, ...rest }) => {
+      void _sid;
+      return rest;
+    }),
+  };
 }

@@ -50,7 +50,7 @@ const SHARE_ID = /^[0-9a-zA-Z]+$/;
 // 장소 북마크의 sid는 숫자다. 주소 북마크는 숫자가 아닌 sid를 가져 장소로 넣을 수 없다.
 const SID_DIGITS = /^\d+$/;
 
-function httpDeps(request: Requester, options?: RequestOptions): HttpDeps {
+export function httpDeps(request: Requester, options?: RequestOptions): HttpDeps {
   return {
     fetch: ((input: RequestInfo | URL, init?: RequestInit) =>
       request(String(input), init ?? {}, options)) as typeof fetch,
