@@ -6,7 +6,7 @@ const BYTE_LIMIT = 252;
 const LENGTH = { place: 10, label: 8, trip: 10, stop: 8, meeting: 10, meetingMember: 8 } as const;
 export type IdKind = keyof typeof LENGTH;
 
-function randomId(length: number): string {
+export function randomId(length: number): string {
   let id = '';
   while (id.length < length) {
     const bytes = crypto.getRandomValues(new Uint8Array(length * 2));

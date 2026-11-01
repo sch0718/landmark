@@ -6,6 +6,7 @@ import {
   searchInputKey,
   parseSearchInputKey,
   resolveSearch,
+  searchNaverPlaces,
 } from 'src/server/search';
 import { ApiError } from 'src/server/http';
 
@@ -18,6 +19,61 @@ const url = (q: string, near?: string) =>
   );
 afterEach(() => vi.useRealTimers());
 describe('장소 이름 검색', () => {
+  const tofu = {
+    id: '31506191',
+    sid: '31506191',
+    title: '초당순두부마을',
+    x: '128.9156023',
+    y: '37.7906975',
+    roadAddress: '강원 강릉시 초당순두부길',
+    ctg: '두부요리',
+  };
+
+  it('장소 검색은 응답의 숫자 문자열 id를 sid로 돌려준다', async () => {
+    const results = await searchNaverPlaces(
+      { q: '초당순두부마을' },
+      { fetch: async () => Response.json({ place: [tofu] }) },
+    );
+    expect(results).toEqual([
+      {
+        name: tofu.title,
+        address: tofu.roadAddress,
+        category: tofu.ctg,
+        lng: 128.9156023,
+        lat: 37.7906975,
+        sid: '31506191',
+      },
+    ]);
+  });
+
+  it.each([undefined, '', 'place-31506191', 31506191])(
+    'id가 숫자 문자열이 아니면 응답의 sid가 있어도 null이다: %s',
+    async (id) => {
+      const results = await searchNaverPlaces(
+        { q: '초당순두부마을' },
+        { fetch: async () => Response.json({ place: [{ ...tofu, id }] }) },
+      );
+      expect(results[0]!.sid).toBeNull();
+    },
+  );
+
+  it('기존 검색 응답에는 sid를 넣지 않는다', async () => {
+    const r = await resolveSearch(
+      { q: '초당순두부마을' },
+      { fetch: async () => Response.json({ place: [tofu] }) },
+    );
+    expect(r.results).toEqual([
+      {
+        name: tofu.title,
+        address: tofu.roadAddress,
+        category: tofu.ctg,
+        lng: 128.9156023,
+        lat: 37.7906975,
+      },
+    ]);
+    expect(Object.keys(r.results[0]!)).not.toContain('sid');
+  });
+
   it('공백 정리 후 40자까지 허용하고 near를 키에 포함한다', () => {
     expect(parseSearchQuery(url(' 강남   역 ', '127,37'))).toEqual({
       q: '강남 역',

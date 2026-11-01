@@ -1,0 +1,64 @@
+{
+  "format": "landmark-trip-plan",
+  "version": 1,
+  "title": "속초 1박 2일",
+  "startDate": "2026-11-20",
+  "endDate": "2026-11-21",
+  "origin": "gangnam",
+  "places": [
+    {
+      "key": "gangnam",
+      "name": "강남역",
+      "address": "서울 강남구 강남대로",
+      "lng": 127.0276,
+      "lat": 37.4979
+    },
+    {
+      "key": "tofu",
+      "name": "학사평 순두부마을",
+      "address": "강원 속초시 노학동",
+      "lng": 128.531,
+      "lat": 38.204,
+      "memo": "점심 대기 시간 확인"
+    },
+    {
+      "key": "market",
+      "name": "속초관광수산시장",
+      "address": "강원 속초시 중앙로147번길",
+      "lng": 128.5905,
+      "lat": 38.2044
+    },
+    {
+      "key": "beach",
+      "name": "속초해수욕장",
+      "address": "강원 속초시 조양동",
+      "lng": 128.601,
+      "lat": 38.1906
+    },
+    {
+      "key": "hotel",
+      "name": "속초 숙소",
+      "address": "강원 속초시 조양동",
+      "lng": 128.596,
+      "lat": 38.191,
+      "memo": "입실 시각 확인 필요"
+    }
+  ],
+  "days": [
+    {
+      "startTime": "09:00",
+      "lodging": "hotel",
+      "stops": [
+        { "place": "tofu", "stayMin": 60, "fixedTime": "12:00", "note": "영업시간 확인 필요" },
+        { "place": "beach", "stayMin": 90 }
+      ]
+    },
+    {
+      "startTime": "10:00",
+      "lodging": "gangnam",
+      "stops": [{ "place": "market", "stayMin": 60, "fixedTime": null }]
+    }
+  ],
+  "candidates": [],
+  "legModes": { "tofu>beach": "walk" }
+}

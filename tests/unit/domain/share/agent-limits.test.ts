@@ -1,0 +1,54 @@
+import { describe, expect, it } from 'vitest';
+import { agentDocProblem } from 'src/domain/share/agent-limits';
+import type { SharePlace } from 'src/schema/share';
+import { makeShareV2Doc } from '../../helpers/share-v2-doc';
+
+describe('에이전트 공유 문서 내용 한도', () => {
+  it('정상 문서는 통과한다', () => {
+    expect(agentDocProblem(makeShareV2Doc())).toBeNull();
+  });
+
+  it.each(['문서', '여행'])('%s 제목 61자는 title이다', (target) => {
+    const doc = makeShareV2Doc();
+    if (target === '문서') doc.title = '가'.repeat(61);
+    else doc.trips[0]!.title = '가'.repeat(61);
+    expect(agentDocProblem(doc)).toBe('title');
+  });
+
+  it('두 제목 모두 60자까지 허용한다', () => {
+    const doc = makeShareV2Doc();
+    doc.title = '가'.repeat(60);
+    doc.trips[0]!.title = '나'.repeat(60);
+    expect(agentDocProblem(doc)).toBeNull();
+  });
+
+  it.each<Partial<SharePlace>>([
+    { name: '가'.repeat(101) },
+    { address: '가'.repeat(201) },
+    { memo: '가'.repeat(10_001) },
+    { naverSid: '1'.repeat(21) },
+    { kakaoId: '1'.repeat(21) },
+    { naverSid: 'place123' },
+    { kakaoId: 'place123' },
+    { naverSid: '' },
+    { kakaoId: '' },
+    { googleId: 'g'.repeat(65) },
+  ])('장소 내용이나 출처 id가 한도 밖이면 place-too-long: %#', (extra) => {
+    const doc = makeShareV2Doc();
+    doc.places[doc.places.length - 1] = { ...doc.places.at(-1)!, ...extra };
+    expect(agentDocProblem(doc)).toBe('place-too-long');
+  });
+
+  it.each<Partial<SharePlace>>([
+    { name: '가'.repeat(100) },
+    { address: '가'.repeat(200) },
+    { memo: '가'.repeat(10_000) },
+    { naverSid: '1'.repeat(20) },
+    { kakaoId: '1'.repeat(20) },
+    { googleId: 'g'.repeat(64) },
+  ])('장소 내용과 출처 id는 경계값까지 허용한다: %#', (extra) => {
+    const doc = makeShareV2Doc();
+    doc.places[0] = { ...doc.places[0]!, ...extra };
+    expect(agentDocProblem(doc)).toBeNull();
+  });
+});

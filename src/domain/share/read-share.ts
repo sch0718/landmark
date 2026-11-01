@@ -11,6 +11,8 @@ export const SHARE_IMPORT_LIMITS = {
   decodedBytes: 5_242_880,
 } as const;
 
+export type ShareReadLimits = { places: number; hashChars: number; decodedBytes: number };
+
 /** 공유 링크에서 압축 데이터 앞에 붙는 접두사. */
 export const SHARE_HASH_PREFIX = '#d=';
 
@@ -49,7 +51,7 @@ const isNewerVersion = (value: unknown): boolean => {
  * → 장소 0곳 → (v2만) 여행 관계 검사 → 장소 한도 초과.
  * 내보내기는 id가 겹치는 파일을 만들지 않으므로, 겹치면 손상된 파일로 본다.
  */
-function validate(value: unknown): ShareReadResult {
+function validate(value: unknown, places: number = SHARE_IMPORT_LIMITS.places): ShareReadResult {
   if (isNewerVersion(value)) return fail('newer');
   const isV2 = (value as { version?: unknown } | null)?.version === 2;
   const parsed = isV2
@@ -60,7 +62,7 @@ function validate(value: unknown): ShareReadResult {
   if (hasDuplicateId(doc.places) || hasDuplicateId(doc.labels)) return fail('corrupt');
   if (doc.places.length === 0) return fail('empty');
   if (doc.version === 2 && checkShareTrip(doc).length > 0) return fail('corrupt');
-  if (doc.places.length > SHARE_IMPORT_LIMITS.places) return fail('too-many');
+  if (doc.places.length > places) return fail('too-many');
   return { ok: true, doc };
 }
 
@@ -93,15 +95,18 @@ export async function readShareFile(file: Blob): Promise<ShareReadResult> {
 }
 
 /** `value`는 `#d=` 뒤 부분. 압축 해제의 어떤 실패도 `corrupt`로 돌려준다. */
-export async function readShareHash(value: string): Promise<ShareReadResult> {
+export async function readShareHash(
+  value: string,
+  limits: ShareReadLimits = SHARE_IMPORT_LIMITS,
+): Promise<ShareReadResult> {
   let json: unknown;
   try {
     json = await decodeCompressedJson(value, {
-      maxChars: SHARE_IMPORT_LIMITS.hashChars,
-      maxBytes: SHARE_IMPORT_LIMITS.decodedBytes,
+      maxChars: limits.hashChars,
+      maxBytes: limits.decodedBytes,
     });
   } catch {
     return fail('corrupt');
   }
-  return validate(json);
+  return validate(json, limits.places);
 }

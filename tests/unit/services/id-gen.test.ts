@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Effect } from 'effect';
 import { LabelId, PlaceId } from 'src/schema/library';
 import { safeParse } from 'src/schema/parse';
-import { IdGen } from 'src/services/id-gen';
+import { IdGen, randomId } from 'src/services/id-gen';
 
 const run = <A>(use: (gen: IdGen['Service']) => A, layer = IdGen.layer) =>
   Effect.runSync(
@@ -13,6 +13,10 @@ const run = <A>(use: (gen: IdGen['Service']) => A, layer = IdGen.layer) =>
 const next = (kind: 'place' | 'label' | 'trip' | 'stop') => run((g) => g.next(kind));
 
 describe('IdGen', () => {
+  it('내보낸 randomId는 10자 영숫자 소문자를 만든다', () => {
+    expect(randomId(10)).toMatch(/^[a-z0-9]{10}$/);
+  });
+
   it('makes lowercase alphanumeric ids of length 10 (place) and 8 (label)', () => {
     for (let i = 0; i < 200; i++) {
       expect(next('place')).toMatch(/^[a-z0-9]{10}$/);
