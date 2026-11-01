@@ -63,3 +63,8 @@ export function directionParticle(word: string): '로' | '으로' {
   if (/\d/.test(last)) return ['0', '3', '6'].includes(last) ? '으로' : '로';
   return '로';
 }
+
+/** 주격 조사: 목적격 조사와 같은 받침·숫자 규칙으로 `이` 또는 `가`를 골라요. */
+export function subjectParticle(word: string): '이' | '가' {
+  return objectParticle(word) === '을' ? '이' : '가';
+}

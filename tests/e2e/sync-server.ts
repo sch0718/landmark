@@ -1,4 +1,4 @@
-import type { BrowserContext } from '@playwright/test';
+import type { BrowserContext, Route } from '@playwright/test';
 import { require as tsxRequire } from 'tsx/cjs/api';
 import type { SyncDeps } from '../../src/server/library-sync/env';
 import { createSqliteD1 } from '../helpers/sqlite-d1';
@@ -7,6 +7,10 @@ const { handleSync } = tsxRequire(
   '../../src/server/library-sync/router.ts',
   import.meta.url,
 ) as typeof import('../../src/server/library-sync/router');
+const { handleAgent } = tsxRequire(
+  '../../src/server/agent/router.ts',
+  import.meta.url,
+) as typeof import('../../src/server/agent/router');
 type OriginHeaders = { origin: string | null; referer: string | null; secFetchSite: string | null };
 function originHeaders(headers: Headers): OriginHeaders {
   // 진단에는 인증 헤더·콜백 질의 값을 담지 않는다.
@@ -43,9 +47,15 @@ export function createSyncServer() {
     db,
     getRequests,
     async handle(request: Request): Promise<Response | null> {
-      if (!new URL(request.url).pathname.startsWith('/api/sync/')) return null;
+      const path = new URL(request.url).pathname;
+      const handler = path.startsWith('/api/agent/')
+        ? handleAgent
+        : path.startsWith('/api/sync/')
+          ? handleSync
+          : null;
+      if (!handler) return null;
       const pending: Promise<unknown>[] = [];
-      const response = await handleSync(
+      const response = await handler(
         {
           request,
           env: { DB: db, SYNC_DEV_FAKE_SOCIAL: '1', ALLOWED_ACCOUNTS: 'kakao:dev-me,naver:dev-me' },
@@ -68,7 +78,7 @@ export async function installSyncServer(
   context: BrowserContext,
   server: ReturnType<typeof createSyncServer>,
 ): Promise<void> {
-  await context.route('**/api/sync/**', async (route) => {
+  const handleRoute = async (route: Route) => {
     const source = route.request();
     const browserHeaders = new Headers(await source.allHeaders());
     const forwardedHeaders = new Headers(browserHeaders);
@@ -105,5 +115,7 @@ export async function installSyncServer(
       headers: Object.fromEntries(response.headers),
       body: Buffer.from(await response.arrayBuffer()),
     });
-  });
+  };
+  await context.route('**/api/sync/**', handleRoute);
+  await context.route('**/api/agent/**', handleRoute);
 }

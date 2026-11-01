@@ -1,5 +1,6 @@
 import { FolderWatchSetting } from 'src/sections/folder-watch/FolderWatchSetting';
 import { loadServerBackupSection } from 'src/services/server-backup/boot';
+import { loadAgentSection } from 'src/services/agent-inbox/boot';
 import { ChunkErrorBoundary } from 'src/components/ChunkErrorBoundary';
 import { ChunkErrorNotice } from 'src/components/ChunkErrorNotice';
 import { loadSyncSection, syncFeatureVisible } from 'src/services/library-sync/boot';
@@ -34,6 +35,7 @@ const ServerBackupSection = lazy(() =>
 );
 
 const SyncSection = lazy(loadSyncSection);
+const AgentSection = lazy(() => loadAgentSection().then((m) => ({ default: m.AgentSection })));
 
 const MODES: ReadonlyArray<Option<Prefs['mode']>> = [
   { value: 'system', label: '시스템', Icon: MonitorIcon },
@@ -172,6 +174,11 @@ export function SettingsPage() {
           <Suspense fallback={<Typography>동기화 설정을 여는 중…</Typography>}>
             <SyncSection />
           </Suspense>
+          <ChunkErrorBoundary fallback={<ChunkErrorNotice />}>
+            <Suspense fallback={null}>
+              <AgentSection />
+            </Suspense>
+          </ChunkErrorBoundary>
         </Section>
       )}
       <SentLinksSection />

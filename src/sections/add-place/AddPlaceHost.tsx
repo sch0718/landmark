@@ -55,7 +55,7 @@ function StepView({ flow }: { flow: AddFlow }) {
     case 'share-pick':
       return <SharePickPanel />;
     case 'share':
-      return <SharePreview doc={flow.doc} />;
+      return <SharePreview doc={flow.doc} inbox={flow.inbox} />;
     default:
       return null;
   }
