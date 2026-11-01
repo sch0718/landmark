@@ -15,6 +15,7 @@
 - 로그인은 없습니다. 보관함은 **각 기기 브라우저의 localStorage**(`tripmap:library:v2`)에 저장되고, 화면 설정은 `tripmap:prefs`에 저장됩니다. 새 약속은 공유할 때 Cloudflare D1에 사본을 올려 친구 답장을 자동 집계합니다. 저장소를 쓸 수 없는 환경(예: 일부 사생활 보호 모드)에서는 메모리 모드로 동작하며 배너로 알립니다.
 - 옛 버전(정적 여행 뷰어)의 여행은 `/t/<publicId>`에서 **미리보기 → 결정 → 가져오기**로 새 보관함에 옮깁니다. 옛 편집 레이어(`tripmap:edit:<publicId>`)는 읽기만 하고 지우지 않습니다.
 - 앱은 Effect 4 기반입니다(`effect`·`@effect/vitest` 4.0.2 고정).
+- AI 일정 CLI는 `pipeline/cli/trip.ts`가 진입점이며, `pipeline/agent-trip/`에서 앱의 공유 문서·검사·장소 조회 코드를 재사용합니다.
 - 설계 문서(`docs/superpowers/specs/`, 계획은 `docs/superpowers/plans/`). 충돌하면 나중 문서가 우선합니다.
   - 기반·보관함 `2026-10-08-place-library-design.md`, 장소 추가 `2026-10-12-place-adding-design.md`, 여행 계획 `2026-10-12-trip-planning-design.md`
   - 공유: HTML 내보내기 `2026-10-11-html-share-export-design.md`, 가져오기 `2026-10-13-share-import-design.md`, 일정 공유 `2026-10-16-trip-share-design.md`, 링크 공유 `2026-10-22-share-link-design.md`
@@ -80,6 +81,10 @@ Yarn 1(1.22.22)은 `.npmrc`의 `GITHUB_PACKAGES_TOKEN`이 정의되지 않으면
 | `MEET_ONLINE` | `off`면 새 약속의 서버 올리기만 중단하고 링크 방식으로 공유. 기존 온라인 약속 읽기·답장은 계속 동작 |
 | `LIBRARY_SYNC` | `off`면 보관함 로그인·받기·올리기를 중단합니다. 연결 해제·서버 자료 지우기는 계속됩니다 |
 | `AUTO_BACKUP` | `off`면 서버 백업 쓰기만 중단합니다. 읽기·지우기는 계속됩니다 |
+| `AGENT_API` | Pages 서버 변수. `off`면 토큰 API의 상태 확인·받은함 올리기·짧은 링크 만들기와 새 토큰 발급을 중단합니다. 짧은 링크 지우기·토큰 목록·철회·앱 받은함 읽기·지우기는 계속됩니다 |
+| `LANDMARK_APP_URL` | CLI만 읽는 앱 주소입니다. `--app`이 우선하며 앱 번들에는 들어가지 않습니다 |
+| `LANDMARK_AGENT_TOKEN` | CLI만 읽는 연결 토큰입니다. 셸에서만 설정하고 파일에 적지 않으며 앱 번들에는 들어가지 않습니다 |
+| `LANDMARK_TRIP_HOME` | CLI만 읽는 삭제 토큰 저장 폴더입니다(기본 `~/.landmark`). 앱 번들에는 들어가지 않습니다 |
 | `VITE_AUTO_BACKUP_INTERVAL_MS` | 개발 모드에서만 자동 백업 간격을 양의 정수 ms로 바꿉니다(예: `60000`). 운영은 하루 |
 | `VITE_FIREBASE_*`, `VITE_KAKAO_LOGIN_CLIENT_ID`, `VITE_NAVER_LOGIN_CLIENT_ID` | 동기화 공급자 공개 설정. 아래 보관함 동기화 절 참고 |
 | `FIREBASE_PROJECT_ID`, `KAKAO_CLIENT_ID`, `NAVER_CLIENT_ID` | 서버 로그인 공급자 설정 |
@@ -317,6 +322,183 @@ npx wrangler d1 execute landmark --remote --command "SELECT version FROM schema_
 
 미리보기에서는 실제 보관함의 수동·자동 백업, 다른 기기 복원, iOS Safari의 바꾸기 전 파일 받기, 실제 네이버 폴더 알림을 확인합니다. `POST /api/sync/v1/backup` CPU가 10ms를 넘는지와 `SELECT stored_bytes, raw_bytes, parts FROM library_backups`로 실제 압축 크기도 확인하세요. 롤백·남은 표 정리는 설계서의 「호환·롤백」을 따르며 `docs/rollback.md`의 버전 표는 병합 뒤 별도 문서 PR에서 갱신합니다.
 
+### AI 에이전트 일정 보내기(`yarn trip`)
+
+Claude Code 같은 AI 도구가 `plan.json`으로 앱과 같은 여행 공유 문서를 만들고, 내 받은함에 보내거나 공유 짧은 링크를 만들 수 있습니다. 받은 일정은 사람이 미리 보고 `가져오기`를 눌러야 보관함에 들어갑니다. 배경과 워크스페이스 연결 규약은 [설계서](superpowers/specs/2026-11-01-agent-trip-design.md)를 참고하며, 아래 명령과 한도는 현재 코드 기준입니다.
+
+#### 명령과 계획 파일
+
+Node 24와 설치된 의존성이 필요합니다. JSON을 다른 도구에서 읽을 때는 Yarn의 안내 줄이 섞이지 않도록 `yarn --silent trip … --json`으로 실행합니다.
+
+| 명령 | 하는 일 | 명령별 옵션 |
+| --- | --- | --- |
+| `build <plan.json>` | 서버·토큰 없이 `/view#d=`·`/import#d=` 링크와 요약을 만듭니다 | `--memo`, `--no-routes`, `--out <doc.json>` |
+| `send <plan.json>` | 내 받은함에 일정을 보냅니다 | `--no-memo`, `--no-routes` |
+| `share <plan.json>` | 암호화한 짧은 링크 `/s/<id>#k=`를 만듭니다 | `--memo`, `--no-routes` |
+| `whoami` | 토큰의 연결 이름·범위·만료·로그인 공급자를 확인합니다 | 없음 |
+| `unshare <id>` | 이 컴퓨터에 삭제 토큰을 보관한 짧은 링크를 지웁니다 | `--list`는 아래 별도 형식으로 사용 |
+| `unshare --list` | 고른 앱의 저장된 링크와 결과 모름 예약을 봅니다(서버·토큰 불필요) | `--list` |
+| `--schema` | 계획 파일 v1의 JSON Schema 한 줄을 출력합니다 | `--json`만 함께 허용 |
+
+다섯 명령은 모두 `--app <주소>`·`--json`을 받습니다. `unshare --list`에는 id를 붙이지 않습니다. `--schema`에 다른 명령이나 옵션을 붙이면 끝 코드 2입니다(`--json`은 허용). `--help` 옵션은 없으며, 인자 없이 부르면 사용법 문구와 끝 코드 2를 냅니다.
+
+메모는 `send`에서 기본으로 넣고 `--no-memo`로 뺍니다. `build`·`share`는 `--memo`일 때만 넣습니다. `--no-routes`는 길찾기 조회를 생략하고 직선 추정을 사용합니다(같은 지점 구간은 `same-point`). 네이버 출처 장소의 조회는 생략하지 않으므로, 서버와 네트워크 없이 시험할 때는 핀만 담은 [고정 예시](../tests/fixtures/agent-trip/plan.json)를 사용합니다.
+
+앱 주소는 `--app` > `LANDMARK_APP_URL` > `https://landmark.sch0718.dev` 순서입니다. HTTP(S) 출처만 받으며 끝 `/`는 제거합니다. 토큰을 쓰는 명령은 운영 `https://landmark.sch0718.dev`, Pages `https://landmark-c5f.pages.dev`, 한 단계 미리보기 `https://<이름>.landmark-c5f.pages.dev`, `http://localhost:*`·`http://127.0.0.1:*`만 받습니다. 그 밖은 `app-origin`, 끝 코드 2입니다(`unshare --list`도 같은 주소 검사를 합니다). 에이전트 서버 요청은 본문 수신까지 15초 제한이며 자동 재시도는 없습니다.
+
+`plan.json`과 `--out`의 상대 경로는 Yarn을 부른 폴더(`INIT_CWD`) 기준입니다. `--out`은 공유 문서 JSON을 쓰며, 쓰기에 실패하면 경로 `--out`·코드 `schema`의 입력 오류(끝 코드 2)를 냅니다.
+
+계획 파일 예시는 위 고정 예시를 그대로 사용할 수 있습니다. 정확한 필드 형식·길이 규칙은 `yarn --silent trip --schema`를 보고, 참조·중복·실제 날짜·구간 같은 관계 규칙은 `build`로 확인합니다. 모르는 필드는 거절합니다.
+
+| 필드 | 규칙 |
+| --- | --- |
+| `format`·`version` | `"landmark-trip-plan"`·`1`입니다 |
+| `title`·`startDate`·`endDate` | 제목 1~60자, 실제 날짜 `YYYY-MM-DD`, 양 끝을 포함해 1~30일입니다 |
+| `places[]` | 1~200곳. `key`는 영숫자·`_`·`-` 1~40자이며 겹치지 않습니다. `naverSid`(숫자 1~20자)·`link`·`search` 중 하나 이하를 쓰고, 없으면 핀으로 `name`·`lng`·`lat`을 모두 적습니다 |
+| 장소 내용 | 이름 1~100자, 주소 200자, 메모 10,000자까지입니다. 좌표는 경도 124~132·위도 33~39이며 `search.near`는 `[경도, 위도]`입니다. 생략하면 서울시청 부근 `[126.9784, 37.5666]` 기준이므로 지방 장소는 여행지 근처 좌표를 줍니다. 출처가 있는 장소의 이름·주소·좌표는 조회 실패 때 대체 값이며, `search`에서는 `name`이 후보 이름 비교 기준이기도 하고 생략하면 `search.q`로 비교합니다 |
+| `days[]` | 기간의 날 수와 같은 개수입니다. `startTime`은 `HH:mm`(기본 `09:00`), `lodging`은 장소 key 또는 `null`입니다 |
+| `days[].stops[]` | `place`는 장소 key, `stayMin`은 0~1440 정수 또는 `null`, `fixedTime`은 `HH:mm` 또는 `null`, `note`는 500자까지입니다 |
+| `origin`·`candidates` | 첫날 출발지 key 또는 `null`·아직 Day에 넣지 않은 후보 key 목록입니다. Stop·후보 전체에서 장소를 두 번 넣을 수 없으며 출발지·숙소는 겹쳐도 됩니다 |
+| `legModes` | `"출발key>도착key": "car"` 또는 `"walk"`입니다. 그날 실제 이웃한 두 점만 허용하며 도보는 직선 50km까지입니다 |
+
+#### 출력과 끝 코드
+
+`--json`은 성공·실패 모두 표준 출력에 JSON 한 줄을 냅니다. 성공 공통 키는 `ok: true`·`command`입니다(`--schema`는 성공 봉투 없이 JSON Schema 자체를 냅니다). `build`·`send`·`share`는 다음 공통 필드를 더합니다.
+
+| 키 | 내용 |
+| --- | --- |
+| `trip` | `{ title, startDate, endDate, places }` |
+| `days` | Day별 `{ date, stops, travelMin, estimatedLegs }`. Stop은 `{ key, name, arrive, depart, fixedTime, slackMin }`입니다 |
+| `routes` | `{ legs, routed, estimated, noRoute, samePoint, oldestQueriedAt }` |
+| `links` | `{ view, import }` 데이터 링크입니다. `share`는 아래 형식으로 덮어씁니다 |
+| `warnings` | `{ path, code, message }` 목록입니다 |
+
+| 명령 | 추가·대체 필드 |
+| --- | --- |
+| `send` | `inbox: { id, expiresAt, created }` |
+| `share` | `links: { short, view }`(공통 `links`를 덮어써 `import`는 없음), `share: { id, expiresAt }` |
+| `whoami` | `connection: { name, scopes, expiresAt, provider }`, `warnings` |
+| `unshare --list` | `shares: [{ id, title, createdAt, expiresAt, unknown?: true }]` |
+| `unshare <id>` | `removed: { id }`, `warnings` |
+
+CLI의 `inbox`·`share`·`connection`·저장된 링크 시각은 ISO 문자열입니다. API의 `whoami`·`inbox` 응답 시각은 아래처럼 epoch ms 숫자입니다. 실패는 `{ ok: false, command, errors: [{ path, code, message, reason?, candidates? }] }`입니다. 검색 후보가 여럿이면 `ambiguous`와 `candidates: [{ naverSid, name, address, category }]`를 냅니다. 토큰·삭제 토큰은 출력하지 않습니다.
+
+경고 코드에는 `lookup-failed`(대체 값 사용), `not-found`(검색 결과가 없어 핀 사용), `out-of-range`(조회한 이름·주소 잘림), `unused-place`(입력·조회·중복 검사를 모두 통과했지만 여행에서 쓰지 않아 문서에서 제외됨), `token-expiring`(`whoami`에서 만료까지 14일 이하), `token-origin`(환경변수 토큰을 운영 아닌 주소로 보냄), `share-store`(삭제 기록 저장 실패)가 있습니다. 경고가 있어도 성공은 0입니다.
+
+| 끝 코드 | 뜻·대표 코드 |
+| --- | --- |
+| 0 | 성공(경고가 있을 수 있습니다) |
+| 1 | 내부 오류·서버가 CLI 문서 거절(`internal`), 삭제 토큰 저장 파일 읽기·쓰기 실패(`share-store`) |
+| 2 | 입력 오류(`schema`, `unknown-place`, `day-count`, `duplicate-sid`, `duplicate-source`, `duplicate-in-trip`, `leg-modes`, `no-places`, `out-of-range`, `walk-too-far`, `merged-places`, `item-too-large`, `too-big`, `app-origin`, `unknown-share`, `share-store-full`) |
+| 3 | 장소 조회 실패·검색 후보 여럿(`lookup-failed`, `not-found`, `ambiguous`) |
+| 4 | 토큰·계정·권한·삭제 토큰(`no-token`, `unauthorized`, `token-expired`, `token-revoked`, `not-allowed`, `scope`, `delete-token`) |
+| 5 | 서버 거절·장애(`inbox-full`, `rate-limited`, `off`, `config`, `old-server`, `offline`, `timeout`, `server`) |
+
+서버의 `422 invalid`는 CLI가 만든 문서의 결함으로 보고 `internal`(끝 코드 1)로 냅니다. 알려진 `reason`은 서버 값 그대로 오류에 싣습니다. `share-store`는 성공 뒤 기록 저장 실패라면 경고이지만, 저장 파일을 읽거나 쓰지 못해 명령이 멈추면 끝 코드 1입니다.
+
+#### 토큰 넣기와 짧은 링크 지우기
+
+설정 › 동기화 › `AI 연결` › `새 연결 만들기`에서 이름과 권한을 고릅니다. `inbox:write`·`share:create` 중 하나 이상이며, 보관함을 읽거나 고치는 권한은 없습니다. 토큰 원문은 발급 창에서만 보이고 서버에는 해시만 둡니다. 원문이 보이는 창은 `닫기`로만 닫히며, 닫은 뒤 잃어버렸다면 목록에서 철회하고 새로 만듭니다.
+
+macOS에서는 키체인에 앱 호스트별로 넣습니다. `-U`는 기존 항목을 바꾸며, `-w` 뒤에 값을 적지 않고 입력 프롬프트에 토큰을 붙여 넣습니다. `-a`는 포트를 포함한 호스트입니다(로컬은 `localhost:8795`).
+
+```bash
+security add-generic-password -U -s landmark-agent-token -a landmark.sch0718.dev -w
+```
+
+또는 셸에서만 `LANDMARK_AGENT_TOKEN`을 설정합니다. 저장소 파일·`.env`·`plan.json`에는 토큰을 적지 않습니다. 비어 있지 않은 환경변수가 우선이며 `lmk_` + base64url 43자 모양이 아니면 토큰 없음으로 보고 키체인으로 넘어가지 않습니다. 환경변수가 없거나 비어 있을 때 macOS에서만 키체인을 읽습니다.
+
+짧은 링크의 삭제 토큰은 `~/.landmark/agent-shares.json`에 보관합니다. 폴더 권한은 700·파일은 600이며, `agent-shares.lock`으로 읽기·변경·원자적 교체를 묶습니다. `LANDMARK_TRIP_HOME`으로 폴더를 바꿀 수 있습니다. 만료된 항목을 제외하고 최대 200개이며, 꽉 차면 `share`는 서버를 부르기 전에 `share-store-full`(끝 코드 2)로 멈춥니다. 앱의 `보낸 짧은 링크` 목록과는 별개입니다.
+
+**결과 모름 예약**: `share`는 서버를 부르기 전에 삭제 토큰을 넣은 `pending:<uuid>` 항목을 적고, 성공 응답을 받으면 실제 id로 바꿉니다. 시간 초과·연결 실패·알 수 없는 응답이면 서버에 이미 만들어졌을 수 있어 예약을 남깁니다. `unshare --list --json`에서 `unknown: true`로 보이며, 다음처럼 정리합니다.
+
+```bash
+yarn --silent trip unshare --list --json
+yarn --silent trip unshare pending:<uuid> --json
+```
+
+이 복구는 같은 삭제 토큰으로 만들기를 다시 요청해 기존 링크를 찾거나 빈 링크를 만든 뒤 지웁니다. 따라서 `share:create` 권한과 하루 만들기 한도를 쓰며, `AGENT_API=off`·`SHARE_SHORT=off`이면 끝 코드 5로 실패합니다. 두 단계 중 하나라도 실패하면 예약은 남습니다. 실패한 `share` 자체를 다시 실행하면 새 삭제 토큰으로 별도 링크를 만들므로, 남은 예약은 따로 정리합니다.
+
+`unshare <id>`는 서버의 204 또는 JSON `{ error: 'not-found' }`인 404일 때만 파일에서 항목을 뺍니다. 다른 404는 옛 서버로 보고 `old-server`(끝 코드 5), `403 delete-token`은 끝 코드 4로 끝내며 기록을 남깁니다. 일반 id 지우기는 위 두 스위치가 꺼져 있어도 가능합니다(연결 토큰과 삭제 권한은 필요합니다).
+
+#### 로컬에서 키 없이 해 보기(AI 연결)
+
+서버 없이 문서·추정 구간·링크만 만들 때는 다음 명령을 사용합니다. 고정 예시가 핀만 쓰므로 네이버 키나 네트워크가 필요 없습니다.
+
+```bash
+yarn --silent trip build tests/fixtures/agent-trip/plan.json --no-routes --json
+```
+
+받은함까지 시험할 때는 다음 순서로 진행합니다.
+
+1. `yarn dev:sync`를 실행합니다. 기본은 wrangler 8795·Vite 4185이며, 포트 변경은 위 서버 백업 절과 같습니다.
+2. `http://localhost:8795`에서 위 서버 백업 절의 순서대로 가짜 카카오 로그인(계정 `me`·`정상 로그인`·`계속`)을 하고 연결 방식에서 `올리기`를 누릅니다.
+3. 설정 › 동기화 › AI 연결에서 토큰을 만들고 키체인 `-a localhost:8795` 또는 셸의 `LANDMARK_AGENT_TOKEN`에 넣습니다.
+4. 아래 `whoami`·`send`를 실행합니다. 환경변수 토큰이면 로컬 주소에 보내는 `token-origin` 경고가 나옵니다.
+5. 동기화가 끝난 뒤 알림 「AI가 보낸 일정 N개」의 `보기` → `미리보기` → `가져오기`를 누릅니다. 설정 › 동기화 › AI 연결의 `받은 일정 N개 · 보기`에서도 열 수 있습니다.
+6. `http://127.0.0.1:8795`를 다른 기기 역할로 열어 같은 계정으로 로그인하고 `서버 보관함 받기`를 눌러 가져온 여행이 동기화되는지 확인합니다.
+7. `share`의 짧은 링크가 같은 서버의 `/s/<id>`에서 열리는지 보고 `unshare --list`·`unshare <id>`로 정리합니다.
+
+```bash
+yarn --silent trip whoami --app http://localhost:8795 --json
+yarn --silent trip send tests/fixtures/agent-trip/plan.json --app http://localhost:8795 --no-routes --json
+yarn --silent trip share tests/fixtures/agent-trip/plan.json --app http://localhost:8795 --no-routes --json
+yarn --silent trip unshare --list --app http://localhost:8795 --json
+yarn --silent trip unshare <id> --app http://localhost:8795 --json
+```
+
+`AGENT_API=off`를 시험할 때는 실행 중인 로컬 서버를 종료한 뒤, 위 서버 백업 절과 같은 긴 명령에 바인딩을 더합니다.
+
+```bash
+yarn build:viewer && VITE_SYNC_DEV_FAKE=1 wrangler pages dev --d1 DB --port 8795 --binding SYNC_DEV_FAKE_SOCIAL=1 --binding ALLOWED_ACCOUNTS=kakao:dev-me,naver:dev-me --binding AGENT_API=off --proxy 4185 -- vite --port 4185 --strictPort
+```
+
+#### API·크기·한도와 운영 확인
+
+에이전트 API는 `Authorization: Bearer <연결 토큰>`으로 호출합니다. 경로·메서드를 찾은 다음 `Origin` 헤더가 있으면 `403 origin` → DB 바인딩이 없으면 `503 config` → 스키마 확인 → `AGENT_API=off` 검사 → 토큰·허용 계정·범위 검사 → 사용자별 하루 한도 순서입니다. CORS를 열지 않으며 응답은 `Cache-Control: private, no-store`입니다.
+
+| 요청 | 범위·본문 | 하루 한도(사용자) | 성공 |
+| --- | --- | --- | --- |
+| `GET /api/agent/v1/whoami` | 추가 범위 없음 | 500 | `200 { name, scopes, expiresAt, provider }`(`expiresAt`은 epoch ms 숫자) |
+| `POST /api/agent/v1/inbox` | `inbox:write`, `{ v: 1, key, d }` | 50 | `201 { id, expiresAt, created: true }`(`expiresAt`은 epoch ms 숫자). 만료되지 않은 같은 사용자·같은 `key`는 `200 { id, expiresAt, created: false }` |
+| `POST /api/agent/v1/share` | `share:create`, `{ body, kind: 'trip', keepUntil?, deleteToken }` | 50 | `201 { id, expiresAt, created: true }`(`expiresAt`은 ISO 문자열). 같은 삭제 토큰 재시도는 같은 `delete_hash` 행이 남아 있으면 만료 여부와 상관없이 기존 id·`expiresAt`을 `200 { id, expiresAt, created: false }`로 반환 |
+| `DELETE /api/agent/v1/share/:id` | `share:create`, `X-Delete-Token` 머리글 | 200 | 행 존재 여부와 삭제 토큰 일치로 결정: 만료됐어도 정리 전 행이 남아 있으면 토큰 일치 `204`·불일치 `403 delete-token`, 행이 없으면 `404 not-found` |
+
+`send`의 `key`는 해석한 계획·메모 포함 여부·경로 생략 여부를 키 정렬 JSON으로 만든 SHA-256 base64url 43자입니다. 같은 키의 살아 있는 항목이 있으면 문서 재검사 전에 반환하며, 없으면 검사한 뒤 받은함 개수 조건을 건 INSERT로 넣습니다. 중복 방지는 같은 키의 만료되지 않은 항목이 받은함에 남아 있는 동안만이며, 가져오기·버리기로 지운 뒤나 만료 뒤 다시 보내면 새 항목이 생깁니다. 한도가 찼을 때 같은 키 재전송은 기존 항목을 반환하고, 새 키는 `409 inbox-full`입니다.
+
+동기화 세션 API는 `/api/sync` 아래이며, 앱의 기존 출처 검사·세션 인증을 사용합니다. `X-Landmark-Backup-User`로 요청 계정을 고정할 수 있습니다. 이 표의 시각은 epoch ms 숫자입니다.
+
+| 요청 | 하는 일·본문 | 하루 한도(사용자) | 성공 |
+| --- | --- | --- | --- |
+| `GET /api/sync/v1/agent/tokens` | 내 토큰 목록(만료·철회 후 30일 안 포함) | — | `200 { enabled, canCreate, maxActive: 10, tokens: [{ id, name, scopes, createdAt, expiresAt, lastUsedAt, revokedAt }] }` |
+| `POST /api/sync/v1/agent/tokens` | 발급 `{ name, scopes }` | 20 | `201 { token, id, name, scopes, expiresAt }`, 살아 있는 토큰 10개면 `409 too-many-tokens` |
+| `DELETE /api/sync/v1/agent/tokens/:id` | 철회 | — | `204`, 없음·남의 것 `404 not-found` |
+| `GET /api/sync/v1/agent/inbox` | 만료되지 않은 받은함 목록, 오래된 순 | 2,000(항목 읽기와 합산) | `200 { items: [{ id, title, startDate, endDate, places, from, createdAt, expiresAt }] }`. `from`은 보낸 토큰 이름 또는 `null` |
+| `GET /api/sync/v1/agent/inbox/:id` | 압축 문서 값 | 위와 합산 | `200 { id, data }`, 없음·만료 `404 not-found` |
+| `DELETE /api/sync/v1/agent/inbox/:id` | 가져온 뒤·버리기 | — | `204`, 없음 `404 not-found` |
+
+한도는 `AGENT_LIMITS` 기준으로 UTC 날짜마다 초기화합니다. 모양이 틀렸거나 해시로 찾지 못한 연결 토큰 요청은 IP당 하루 300번까지이며 넘으면 `429 rate-limited`입니다. 토큰 오류는 `401 unauthorized`·`token-expired`·`token-revoked`, 허용 계정·범위 오류는 `403 not-allowed`·`scope`입니다. 본문 크기 초과는 `413 too-large`, JSON 읽기 실패는 `400 bad-json`, 형식·문서 검사 실패는 `422 invalid`(문서 검사에는 `reason` 포함), 받은함 가득 참은 `409 inbox-full`, 하루 한도 초과는 `429 rate-limited`입니다.
+
+받은함 문서의 `reason`은 검사 단계에 따라 다음과 같습니다. 에이전트 문서는 라벨·경로선을 싣지 않으며 서버가 이를 거절합니다.
+
+- 풀기·원시 사전 검사: `corrupt`, `not-trip`, `too-many`, `labels`, `path`, `leg-modes`.
+- 읽기 검사(`validateShareValue`): `ShareReadError`인 `too-big`, `not-share`, `corrupt`, `empty`, `too-many`, `newer`.
+- 이후 문서·구간·가져오기 검사: `not-trip`, `title`, `labels`, `place-too-long`, `leg-modes`, `import`, `item-too-large`.
+
+받은함은 사용자당 20개이며, 30일 뒤 API 조회에서 제외하고 새 항목 저장·목록 조회 뒤 최대 50개씩 비동기로 정리합니다. 삭제 완료 시점은 보장하지 않습니다. 토큰은 살아 있는 것 10개·발급 후 90일 고정(사용해도 늘지 않음), 이름 1~40자입니다. 에이전트 POST 본문은 40,000바이트, 받은함 값은 32,000자, 풀린 JSON은 `AGENT_INBOX_LIMITS.decodedBytes` 393,216바이트(384KB), 장소는 200곳까지입니다. 받은함은 암호화하지 않고, 짧은 링크는 CLI에서 암호화한 사본을 브라우저 짧은 링크와 같은 기한으로 저장합니다.
+
+앱의 받은함 확인은 동기화가 켜진 기기에서 동기화 실행이 `synced`·`conflict`로 끝날 때 하며 10분에 한 번까지입니다. 자체 타이머는 없고 숨겨진 탭에서는 건너뜁니다. 새 id가 있을 때만 알림을 냅니다. 401·403이면 그 세션에서 확인을 멈추고 엔진 실행을 한 번 예약하며, 다시 로그인해 세션이 바뀌면 재개합니다. 여행째 가져왔을 때만 항목을 자동으로 지우며, 장소만 가져오거나 창을 닫으면 남깁니다. 기기 키 `tripmap:agent-inbox:v1`은 백업·동기화에서 제외합니다. 설정의 AI 연결 구역은 토큰 목록 실패와 받은함 읽기 실패를 따로 표시합니다.
+
+`AGENT_API=off`면 토큰으로 부르는 `whoami`·받은함 올리기·짧은 링크 만들기와 새 토큰 발급이 `503 off`입니다. 짧은 링크 지우기·토큰 목록·철회·앱 받은함 읽기·지우기는 계속됩니다. `SHARE_SHORT=off`는 에이전트 `share`도 막습니다. `LIBRARY_SYNC=off`는 AI 연결 경로 중 새 토큰 발급만 막으며 목록의 `canCreate`는 `false`입니다.
+
+배포 뒤 사용자가 버전을 확인할 때만 다음 읽기 전용 명령을 실행합니다. 결과는 `7`이며 미리보기 DB는 `landmark-preview`입니다.
+
+```bash
+npx wrangler d1 execute landmark --remote --command "SELECT version FROM schema_meta"
+```
+
+미리보기에서 큰 일정 `send`의 `POST /api/agent/v1/inbox` CPU 시간을 확인합니다. 10ms를 넘으면 `decodedBytes`를 낮춥니다. 이 저장소 작업에서는 워크스페이스 스킬을 고치지 않습니다. 스킬이 지킬 규약은 설계서의 「워크스페이스 스킬 연결 규약」을 따릅니다(`yarn --silent --cwd <저장소> trip <명령> <절대 경로> --json`).
+
 ### 공유 짧은 링크(`/s/<id>`)
 
 장소 내보내기·일정 공유의 긴 링크(`/view#d=…`)는 카카오톡 한도(400자)를 넘으므로, `카카오톡`을 누르면 브라우저가 해시를 압축 바이트로 되돌려 AES-GCM(링크마다 새 128비트 키)으로 암호화해 D1에 올리고 `<지금 출처>/s/<16자 id>#k=<22자 키>`(운영 72자)를 받습니다. 링크는 `VITE_APP_URL`이 아니라 사본을 올린 지금 출처로 만듭니다(다른 배포의 D1에는 그 링크가 없다). 키는 링크의 해시에만 있어 서버로 가지 않습니다. 약속과 같은 D1·Turnstile·`IP_HASH_SALT`를 쓰므로 새 설정은 없습니다(`SHARE_SHORT`만 선택). 설계: `docs/superpowers/specs/2026-10-28-share-short-link-design.md`.
@@ -541,7 +723,7 @@ node scripts/measure-ui-assets.mjs dist/assets
 
 ## 옛 파이프라인 (새 화면에는 연결되지 않은 남은 도구)
 
-> 옛 정적 뷰어의 데이터 파이프라인입니다. `yarn collect`/`yarn validate`와 `pipeline/**`(`yarn apply-edit` 포함)은 그대로 동작하지만, 새 앱 화면에는 연결되어 있지 않습니다. 이 방식으로 만든 `public/data/<publicId>.json`은 `/t/<publicId>`에서 보관함으로 가져옵니다. 지금 앱에서 장소를 모으는 길은 링크 붙여넣기·네이버 폴더 가져오기·핀 찍기이고, 여행은 `/trips`에서 만듭니다. `yarn apply-edit`이 읽는 옛 편집 내보내기 파일(`*.tripedit.json`)은 앱이 더는 만들지 않습니다.
+> 옛 정적 뷰어의 데이터 파이프라인입니다. `yarn collect`/`yarn validate`와 옛 `pipeline/` 도구(`yarn apply-edit` 포함)는 그대로 동작하지만, 새 앱 화면에는 연결되어 있지 않습니다. `pipeline/cli/trip.ts`·`pipeline/agent-trip/`은 위 AI 일정 CLI에 해당합니다. 이 방식으로 만든 `public/data/<publicId>.json`은 `/t/<publicId>`에서 보관함으로 가져옵니다. 지금 앱에서 장소를 모으는 길은 링크 붙여넣기·네이버 폴더 가져오기·핀 찍기이고, 여행은 `/trips`에서 만듭니다. `yarn apply-edit`이 읽는 옛 편집 내보내기 파일(`*.tripedit.json`)은 앱이 더는 만들지 않습니다.
 
 1. `trips/<여행>.yaml`을 작성합니다. 형식은 `trips/example.yaml` 참고.
    - `folders`에 네이버 지도 공유 폴더의 shareId를 적습니다(배포 JSON에는 들어가지 않음).
