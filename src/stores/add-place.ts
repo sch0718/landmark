@@ -2,6 +2,8 @@ import { atom, type PrimitiveAtom } from 'jotai';
 import type { PlaceCandidate } from 'src/domain/library/add-place';
 import type { ShareDoc } from 'src/schema/share';
 
+export type InboxRef = { id: string; from: string | null; owner: string | null };
+
 /**
  * 장소 추가 흐름(스펙 §2). ＋추가 시트에서 항목을 고르면 시작하고, 추가·취소하면 `closed`로 돌아간다.
  * - `link`: 링크 입력 창. `hint`는 안내 문구만 바꾼다(장소/폴더 판별은 서버 결과로 한다).
@@ -22,7 +24,7 @@ export type AddFlow =
   | { step: 'pin'; name: string; start: [number, number] | null }
   | { step: 'pin-card'; name: string; lng: number; lat: number }
   | { step: 'share-pick' }
-  | { step: 'share'; doc: ShareDoc };
+  | { step: 'share'; doc: ShareDoc; inbox?: InboxRef };
 
 export const addFlowAtom: PrimitiveAtom<AddFlow> = atom<AddFlow>({ step: 'closed' });
 

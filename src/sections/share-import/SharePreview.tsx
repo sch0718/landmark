@@ -30,7 +30,8 @@ import { SharePlaceRows } from 'src/sections/share-import/SharePlaceRows';
 import { ShareTripBox } from 'src/sections/share-import/ShareTripBox';
 import { objectParticle } from 'src/sections/trips/planner/format';
 import { paths } from 'src/routes/paths';
-import { addFlowAtom } from 'src/stores/add-place';
+import { loadAgentInbox } from 'src/services/agent-inbox/boot';
+import { addFlowAtom, type InboxRef } from 'src/stores/add-place';
 import { libraryAtom, useLibraryAction } from 'src/stores/library-state';
 import { nearbyOffAtom } from 'src/stores/my-location';
 
@@ -42,7 +43,7 @@ const NOTE_SX = { mt: 0.5, fontSize: 12, color: 'var(--tm-text-secondary)' } as 
  * 가져오기는 `LibraryStore.update` 한 번의 `importShare`로 최신본에 적용한다(토스트 개수도 그 결과에서 센다).
  * 공유 파일 가져오기에는 여행 대상이 붙지 않는다(＋ 시트가 여행 화면에서는 이 항목을 숨긴다).
  */
-export function SharePreview({ doc }: { doc: ShareDoc }) {
+export function SharePreview({ doc, inbox }: { doc: ShareDoc; inbox?: InboxRef }) {
   const library = useAtomValue(libraryAtom);
   const setFlow = useSetAtom(addFlowAtom);
   const { run } = useLibraryAction();
@@ -115,14 +116,45 @@ export function SharePreview({ doc }: { doc: ShareDoc }) {
     if (savingRef.current || !canImport) return;
     savingRef.current = true;
     setSaving(true);
+    const closeForOwnerChange = () => {
+      toast('로그인한 계정이 바뀌어 받은 일정을 닫았어요');
+      if (aliveRef.current) setFlow({ step: 'closed' });
+    };
+    let m: Awaited<ReturnType<typeof loadAgentInbox>> | undefined;
+    if (inbox) {
+      try {
+        m = await loadAgentInbox();
+      } catch {
+        toast('잠시 뒤 다시 시도해 주세요');
+        if (aliveRef.current) {
+          savingRef.current = false;
+          setSaving(false);
+        }
+        return;
+      }
+      if (!m.sameOwnerNow(inbox.owner)) {
+        closeForOwnerChange();
+        return;
+      }
+    }
+    let ownerChanged = false;
     const input = { selected: selectedIds, titleLabel, appendMemo };
     // 이어지는 연산이 없어 `summary`·`createdId`(제목 라벨 id)는 `run` 결과에 그대로 실려 온다.
     // 여행을 함께 가져올 때는 `importSharedTrip`이 장소를 먼저 합치고 새 여행을 만든다(`createdId`는 여행 id).
-    const result = await run((lib, ctx) =>
-      tripDoc === null
+    const result = await run((lib, ctx) => {
+      // 로그인은 보관함 잠금을 쓰지 않으므로, 잠금을 얻은 뒤 계정을 다시 확인해요.
+      if (inbox && m && !m.sameOwnerNow(inbox.owner)) {
+        ownerChanged = true;
+        return { ok: true, lib };
+      }
+      return tripDoc === null
         ? importShare(lib, doc, input, ctx)
-        : importSharedTrip(lib, tripDoc, { titleLabel, appendMemo }, ctx),
-    );
+        : importSharedTrip(lib, tripDoc, { titleLabel, appendMemo }, ctx);
+    });
+    if (ownerChanged) {
+      closeForOwnerChange();
+      return;
+    }
     // 칸이 닫힌 뒤에도 가져오기는 이미 저장소에 반영됐으므로 결과는 알린다.
     if (result.ok) {
       const placesMessage = result.summary === undefined ? null : resultMessage(result.summary);
@@ -132,6 +164,16 @@ export function SharePreview({ doc }: { doc: ShareDoc }) {
         const title = receivedTripTitle(tripDoc.trips[0]!.title);
         const head = `여행 ‘${title}’${objectParticle(title)} 가져왔어요`;
         toast(placesMessage === null ? head : `${head}. ${placesMessage}`);
+      }
+      if (inbox && m) {
+        if (tripDoc === null) {
+          toast('받은 일정은 받은함에 남겨 둘게요. 다 쓰셨으면 버려 주세요');
+        } else {
+          // 칸을 닫았더라도 이미 가져온 일정은 받은함에서 지워요.
+          void m.discardInboxItem(inbox.id, inbox.owner).then((ok) => {
+            if (!ok) toast('받은함에서 지우지 못했어요');
+          });
+        }
       }
     }
     // 칸이 닫혔다면 잠금 해제·필터·흐름 닫기는 건드리지 않는다(새 흐름을 닫을 수 있다).
@@ -168,6 +210,11 @@ export function SharePreview({ doc }: { doc: ShareDoc }) {
         <Typography variant="h6" component="h2" sx={{ fontWeight: 800, wordBreak: 'break-word' }}>
           {`${shareTitle(doc.title)} · ${doc.places.length}곳`}
         </Typography>
+        {inbox && (
+          <Typography variant="body2" sx={{ color: 'var(--tm-text-secondary)' }}>
+            {`AI 연결 「${inbox.from ?? '이름 없는 연결'}」이 보낸 일정`}
+          </Typography>
+        )}
         <Typography variant="body2" sx={{ color: 'var(--tm-text-secondary)' }}>
           {`${localDate(doc.createdAt)} 만든 파일`}
         </Typography>
