@@ -199,7 +199,7 @@
   - Stop·후보 전체에서 같은 장소 두 번(`duplicate-in-trip`, 두 번째 경로).
   - 참조 장소가 하나도 없으면 `no-places`(`days`).
   - `legModes` 키가 `^[^>]+>[^>]+$`이 아니거나 key가 없으면 `leg-modes`. 이웃 쌍 검사는 Task 4(장소 순서가 정해진 뒤)에서 한다.
-- [ ] **Step 1: 실패하는 시험** — `plan-schema.test.ts`(`// @vitest-environment node`): 고정 계획(Task 6의 `tests/fixtures/agent-trip/plan.json` 내용을 이 과제에서 먼저 만든다 — 설계 「계획 파일」 예시와 같은 1박 2일, 장소 5곳)이 통과. 위 규칙마다 한 사례씩 `TripFailure`의 `issues[].path`·`code`를 정확히 단언(예: `days[1].stops[0].place` `unknown-place`, `places[2]` 출처 둘 `schema`, `days` `day-count`, 모르는 필드 `places[0].foo` `schema`). 여러 오류가 한 번에 모이는지(두 개 이상). `toPlanPath('days.0.stops.2.place') === 'days[0].stops[2].place'`. `planJsonSchema()`가 `properties.places`를 가진 객체.
+- [ ] **Step 1: 실패하는 시험** — `plan-schema.test.ts`(`// @vitest-environment node`): 고정 계획(`tests/fixtures/agent-trip/plan.json`을 이 과제에서 만든다. 설계 「계획 파일」 예시와 같은 1박 2일·장소 5곳·Day 구성이되, 네트워크 없이 돌도록 **모든 장소를 핀**(`name`·`address`·`lng`·`lat`, 출처 필드 없음)으로 둔다. 좌표는 강원 속초·강릉 일대와 서울 강남역처럼 `Lng`·`Lat` 범위 안)이 통과. 출처 필드 규칙은 이 고정 계획을 복사해 고친 사례로 본다. 위 규칙마다 한 사례씩 `TripFailure`의 `issues[].path`·`code`를 정확히 단언(예: `days[1].stops[0].place` `unknown-place`, `places[2]` 출처 둘 `schema`, `days` `day-count`, 모르는 필드 `places[0].foo` `schema`). 여러 오류가 한 번에 모이는지(두 개 이상). `toPlanPath('days.0.stops.2.place') === 'days[0].stops[2].place'`. `planJsonSchema()`가 `properties.places`를 가진 객체.
 - [ ] **Step 2:** `yarn vitest run tests/unit/pipeline/agent-trip/plan-schema.test.ts` → FAIL
 - [ ] **Step 3: 구현** — `safeParse(TripPlanSchema, value, { onExcessProperty: 'error' })` 실패면 `issues.map(i => ({ path: toPlanPath(i.path), code: 'schema', message: i.message }))`. 성공이면 의미 검사를 모두 돌려 하나라도 있으면 던진다.
 - [ ] **Step 4:** PASS, `yarn typecheck`, `yarn lint pipeline tests/unit/pipeline`
@@ -312,7 +312,7 @@
 ### Task 6: `yarn trip build`·`--schema` 명령과 ① 마무리
 
 **Files:**
-- Create: `pipeline/agent-trip/output.ts`, `pipeline/agent-trip/run-build.ts`, `pipeline/cli/trip.ts`, `tests/fixtures/agent-trip/plan.json`(Task 2에서 만들었으면 그대로)
+- Create: `pipeline/agent-trip/output.ts`, `pipeline/agent-trip/run-build.ts`, `pipeline/cli/trip.ts`, `tests/fixtures/agent-trip/doc.json`(Step 5의 `--out` 결과, E2E가 쓴다)
 - Modify: `package.json`(`scripts.trip`)
 - Test: `tests/unit/pipeline/agent-trip/cli-build.test.ts`
 
@@ -345,7 +345,7 @@
   - `package.json`: `"trip": "tsx pipeline/cli/trip.ts"`(`validate` 줄 다음).
 - [ ] **Step 1: 실패하는 시험** — `cli-build.test.ts`(`// @vitest-environment node`): `main(['build', 'tests/fixtures/agent-trip/plan.json', '--no-routes', '--json'], deps)`(가짜 `fetch`가 장소 조회에만 답함) → 끝 코드 0, 표준 출력 JSON의 `links.view`가 `https://landmark.sch0718.dev/view#d=`로 시작, `links.import`의 `#d=` 값으로 `readShareHash` 성공, `routes.estimated === routes.legs - routes.samePoint`. 잘못된 계획 → 끝 코드 2와 `errors[0].path`. `--app http://localhost:8798`이면 링크 주소가 바뀜. `pickApp('https://evil.example', env, true)` → `app-origin`, `forToken: false`면 허용(데이터 링크는 토큰이 없다). `--schema` → JSON Schema. 사람용 출력에 Day별 줄과 경고 줄.
 - [ ] **Step 2:** FAIL → **Step 3:** 구현 → **Step 4:** PASS
-- [ ] **Step 5: 손으로 확인** — `yarn trip build tests/fixtures/agent-trip/plan.json --no-routes`(고정 계획은 `naverSid` 없이 핀·대체 값만 써서 네트워크 없이 돈다. 네트워크가 막혀도 성공해야 한다), `yarn trip --schema | head -5`. 나온 `/import#d=` 링크를 보고에 적는다(감독자가 브라우저로 가져오기를 확인).
+- [ ] **Step 5: 손으로 확인** — `yarn trip build tests/fixtures/agent-trip/plan.json --no-routes --out tests/fixtures/agent-trip/doc.json`(고정 계획은 `naverSid` 없이 핀·대체 값만 써서 네트워크 없이 돈다. 네트워크가 막혀도 성공해야 한다), `yarn trip --schema | head -5`. 나온 `/import#d=` 링크를 보고에 적는다(감독자가 브라우저로 가져오기를 확인).
 - [ ] **Step 6: ① 전체 검증** — Global Constraints의 전체 검증 명령.
 - [ ] **Step 7:** 커밋 `feat(agent-trip): yarn trip build와 계획 파일 JSON Schema`
 
@@ -729,7 +729,7 @@
 - Modify: `tests/e2e/sync-server.ts`(`createSyncServer`의 `handle`이 `/api/agent/`도 `handleAgent`로 보냄, `installSyncServer`가 `**/api/agent/**`도 가로챔. 기존 시험은 그대로 통과)
 - Create: `tests/e2e/agent-inbox.spec.ts`
 
-- [ ] **Step 1: 시험** — `agent-inbox.spec.ts`(desktop, `@smoke` 아님): 가짜 카카오 로그인(기존 `library-sync.spec.ts`의 도우미 그대로) → 설정 › AI 연결 › `새 연결 만들기` → 원문 칸 값을 읽어 시험 변수에 둠(출력하지 않음) → 시험 코드가 `server.handle(new Request(origin + '/api/agent/v1/inbox', { method: 'POST', headers: { Authorization: 'Bearer ' + token }, body: JSON.stringify({ v: 1, key, d }) }))`(`d`는 `tests/fixtures/agent-trip/plan.json`으로 만든 문서 — 시험 안에서 Task 6의 `runBuild`를 가짜 `fetch`·`noRoutes`로 불러 얻음) → 새로고침 → 알림 「AI가 보낸 일정 1개」 → `보기` → `미리보기` → 머리 문구 → `가져오기` → 여행 화면 → 설정의 `받은 일정 없음` → `철회` → 같은 토큰으로 whoami 401.
+- [ ] **Step 1: 시험** — `agent-inbox.spec.ts`(desktop, `@smoke` 아님): 가짜 카카오 로그인(기존 `library-sync.spec.ts`의 도우미 그대로) → 설정 › AI 연결 › `새 연결 만들기` → 원문 칸 값을 읽어 시험 변수에 둠(출력하지 않음) → 시험 코드가 `server.handle(new Request(origin + '/api/agent/v1/inbox', { method: 'POST', headers: { Authorization: 'Bearer ' + token }, body: JSON.stringify({ v: 1, key, d }) }))`(`d`는 `tests/fixtures/agent-trip/doc.json`(Task 6)을 읽어 `encodeShareHash(hashDoc(doc))`(`src/share-viewer/encode.ts`, 상대 경로 import)로 만든 값, `key`는 43자 무작위 base64url) → 새로고침 → 알림 「AI가 보낸 일정 1개」 → `보기` → `미리보기` → 머리 문구 → `가져오기` → 여행 화면 → 설정의 `받은 일정 없음` → `철회` → 같은 토큰으로 whoami 401.
 - [ ] **Step 2: 로컬 화면 확인**(포트가 막히면 건너뜀) — `SYNC_VITE_PORT=4198 SYNC_DEV_PORT=8798 yarn dev:sync` → 브라우저 가짜 로그인 → 토큰 발급 → `LANDMARK_AGENT_TOKEN=… yarn trip send tests/fixtures/agent-trip/plan.json --no-routes --app http://localhost:8798` → 앱 알림 → 가져오기 → `http://127.0.0.1:8798`(다른 출처)로 같은 계정 로그인 → 여행이 동기화됨. 화면 캡처는 저장하지 않는다.
 - [ ] **Step 3: ③ 전체 검증** — Global Constraints의 전체 검증 명령, 첫 로딩 gzip 바이트와 조각 이름(`AgentSection-*.js`, `AgentInboxDialog-*.js`, `inbox-check-*.js`)을 보고에 적는다.
 - [ ] **Step 4:** 커밋 `test(agent-app): 받은함 E2E`
