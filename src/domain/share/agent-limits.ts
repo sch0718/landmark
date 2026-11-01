@@ -16,11 +16,17 @@ export const AGENT_PLACE_LIMITS = {
   googleIdChars: 64,
 } as const;
 
-/** 문서 하나의 제목·장소 내용·출처 id를 받은함 기준으로 검사한다. */
-export function agentDocProblem(doc: ShareDocV2): 'title' | 'place-too-long' | null {
+/**
+ * 문서 하나의 제목·라벨·장소 내용·출처 id를 받은함 기준으로 검사한다.
+ * 에이전트 문서는 장소 라벨을 싣지 않는다(설계 「하지 않는 것」). 라벨 수를 묶지 않으면
+ * 서버의 모의 가져오기가 라벨마다 보관함을 복사해 작은 요청으로도 CPU를 오래 쓴다.
+ */
+export function agentDocProblem(doc: ShareDocV2): 'title' | 'labels' | 'place-too-long' | null {
   const limits = AGENT_PLACE_LIMITS;
   if (doc.title.length > limits.titleChars || doc.trips[0]!.title.length > limits.titleChars)
     return 'title';
+  if (doc.labels.length > 0 || doc.places.some((place) => place.labelIds.length > 0))
+    return 'labels';
   for (const place of doc.places) {
     if (
       place.name.length > limits.nameChars ||

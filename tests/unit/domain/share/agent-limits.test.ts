@@ -22,6 +22,15 @@ describe('에이전트 공유 문서 내용 한도', () => {
     expect(agentDocProblem(doc)).toBeNull();
   });
 
+  it('라벨을 싣거나 장소가 라벨을 가리키면 labels이다', () => {
+    const withLabel = makeShareV2Doc();
+    withLabel.labels = [{ id: 'l1', name: '라벨', color: 'blue', order: 0 }];
+    expect(agentDocProblem(withLabel)).toBe('labels');
+    const withRef = makeShareV2Doc();
+    withRef.places[0] = { ...withRef.places[0]!, labelIds: ['l1'] };
+    expect(agentDocProblem(withRef)).toBe('labels');
+  });
+
   it.each<Partial<SharePlace>>([
     { name: '가'.repeat(101) },
     { address: '가'.repeat(201) },

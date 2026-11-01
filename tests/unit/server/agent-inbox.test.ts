@@ -131,13 +131,24 @@ describe('받은함 문서', () => {
     const d = await encode(doc);
     expect(d.length).toBeLessThanOrEqual(AGENT_INBOX_LIMITS.hashChars);
     expect((await readShareHash(d, AGENT_INBOX_LIMITS)).ok).toBe(true);
+    await expect(checkInboxDoc(d)).rejects.toMatchObject(invalid('item-too-large'));
+  });
+
+  it('라벨 2,000개를 실은 작은 문서는 모의 가져오기 전에 labels로 거절한다', async () => {
+    const doc = tripDoc();
+    doc.labels = Array.from({ length: 2000 }, (_, i) => ({
+      id: `l${i}`,
+      name: `라벨${i}`,
+      color: 'blue' as const,
+      order: i,
+    }));
+    doc.places[0] = { ...doc.places[0]!, labelIds: doc.labels.map((label) => label.id) };
+    const d = await encode(doc);
+    expect(d.length).toBeLessThanOrEqual(AGENT_INBOX_LIMITS.hashChars);
+    expect((await readShareHash(d, AGENT_INBOX_LIMITS)).ok).toBe(true);
     const started = performance.now();
-    const checked = checkInboxDoc(d).finally(() => {
-      process.stdout.write(
-        `checkInboxDoc 상한 문서: ${(performance.now() - started).toFixed(2)} ms\n`,
-      );
-    });
-    await expect(checked).rejects.toMatchObject(invalid('item-too-large'));
+    await expect(checkInboxDoc(d)).rejects.toMatchObject(invalid('labels'));
+    expect(performance.now() - started).toBeLessThan(1000);
   });
 
   it('가져온 여행 항목이 동기화 상한 바로 아래인 199,999자면 받는다', async () => {
