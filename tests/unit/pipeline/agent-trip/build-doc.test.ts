@@ -182,10 +182,10 @@ describe('앱과 같은 공유 문서·가져오기·링크', () => {
     expect(oversizedItems(imported.lib, ITEM_DOC_MAX_CHARS)).toEqual([]);
   }, 30_000);
 
-  it('장소 200곳의 10,000자 메모는 압축 해제 1MB 상한을 넘어 too-big이다', async () => {
+  it('장소 200곳의 10,000자 메모는 압축 해제 384KB 상한을 넘어 too-big이다', async () => {
     const p = largePlan();
     p.places.forEach((place) => {
-      // 보기 링크의 5MB 상한은 넘지 않게 해, 받은함의 압축 해제 1MB 상한을 따로 검증한다.
+      // 보기 링크의 5MB 상한은 넘지 않게 해, 받은함의 압축 해제 384KB 상한을 따로 검증한다.
       place.memo = 'a'.repeat(10_000);
     });
     const { built, routeOf } = await setup(p);

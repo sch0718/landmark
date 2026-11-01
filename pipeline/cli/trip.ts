@@ -1,9 +1,22 @@
+import { execFile } from 'node:child_process';
 import { readFile, writeFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { homedir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { setTimeout } from 'node:timers/promises';
 import { pathToFileURL } from 'node:url';
-import { parseArgs } from 'node:util';
-import { EXIT, TripFailure, type ExitCode } from '../agent-trip/errors';
+import { parseArgs, promisify } from 'node:util';
+import { SHORT_ID_PATTERN, shortKeepUntil, shortExpiresAt } from 'src/domain/share/short-link';
+import { DEFAULT_APP_URL } from 'src/share-viewer/encode';
+import { encryptShareHash, newDeleteToken } from 'src/services/share-short/crypto';
+import { createAgentClient, requestKey, type AgentReply } from '../agent-trip/client';
+import {
+  EXIT,
+  exitFor,
+  TripFailure,
+  type ExitCode,
+  type TripErrorCode,
+  type TripIssue,
+} from '../agent-trip/errors';
 import {
   failureJson,
   failureText,
@@ -13,11 +26,22 @@ import {
 } from '../agent-trip/output';
 import { planJsonSchema } from '../agent-trip/plan-schema';
 import { pickApp, runBuild, type BuildDeps } from '../agent-trip/run-build';
+import {
+  PENDING_SHARE_PATTERN,
+  readShares,
+  removeShare,
+  reserveShare,
+  settleShare,
+} from '../agent-trip/share-store';
+import { findToken, type TokenDeps } from '../agent-trip/token';
 
 export type CliDeps = BuildDeps & {
   env: NodeJS.ProcessEnv;
   stdout(text: string): void;
   stderr(text: string): void;
+  platform?: NodeJS.Platform;
+  execFile?: TokenDeps['execFile'];
+  home?: string;
 };
 
 function commandName(value: string | undefined): CommandName | undefined {
@@ -45,6 +69,8 @@ function parseCliArgs(argv: string[]) {
       allowPositionals: true,
       options: {
         memo: { type: 'boolean' },
+        'no-memo': { type: 'boolean' },
+        list: { type: 'boolean' },
         'no-routes': { type: 'boolean' },
         out: { type: 'string' },
         app: { type: 'string' },
@@ -57,13 +83,42 @@ function parseCliArgs(argv: string[]) {
   }
 }
 
+function fail(code: TripErrorCode, message: string): never {
+  throw new TripFailure([{ path: '', code, message }], exitFor(code));
+}
+function unwrap<T>(reply: AgentReply<T>): T {
+  if (!reply.ok) throw new TripFailure([reply.issue], exitFor(reply.issue.code));
+  return reply.data;
+}
+const storeWarning = (): TripIssue => ({
+  path: '',
+  code: 'share-store',
+  message: '이 링크는 기한까지 지울 수 없어요',
+});
+
 /** 인자를 해석해 실행하고 끝 코드를 돌려준다. 출력은 주입한 함수만 쓴다. */
 export async function main(argv: string[], deps: CliDeps): Promise<ExitCode> {
   let json = argv.includes('--json');
   let command: CommandName = 'build';
   try {
-    const parsed = parseCliArgs(argv);
+    // 짧은 링크 id는 '-'로 시작할 수 있어(base64url) 옵션으로 읽히지 않게 먼저 떼어 둔다.
+    // 옵션 위치와 상관없이 `unshare` 명령의 16자 id 모양 인자 하나만 뗀다(값을 받는 옵션의 값은 제외).
+    const dashAt = argv.includes('unshare')
+      ? argv.findIndex(
+          (arg, i) =>
+            arg.startsWith('-') &&
+            SHORT_ID_PATTERN.test(arg) &&
+            argv[i - 1] !== '--app' &&
+            argv[i - 1] !== '--out',
+        )
+      : -1;
+    const dashId = dashAt >= 0 ? argv[dashAt] : undefined;
+    const parsed = parseCliArgs(dashAt >= 0 ? argv.filter((_, i) => i !== dashAt) : argv);
     const { values, positionals } = parsed;
+    if (dashId !== undefined) {
+      const at = positionals.indexOf('unshare');
+      positionals.splice(at >= 0 ? at + 1 : positionals.length, 0, dashId);
+    }
     json = values.json ?? false;
     command = commandName(positionals[0]) ?? 'build';
     if (values.schema) {
@@ -78,24 +133,206 @@ export async function main(argv: string[], deps: CliDeps): Promise<ExitCode> {
     const name = commandName(positionals[0]);
     if (name === undefined)
       inputFailure(
-        '사용법: yarn trip build <plan.json> [--memo] [--no-routes] [--out <파일>] [--app <주소>] 또는 yarn --silent trip --schema',
+        '사용법: yarn trip build|send|share <plan.json>, whoami, unshare <id>|--list [--app <주소>] [--json] 또는 yarn --silent trip --schema',
       );
-    if (name !== 'build') inputFailure('다음 버전에서 쓸 수 있어요');
-    if (positionals.length !== 2 || !positionals[1])
-      inputFailure('build에 계획 파일 하나를 적어 주세요');
+    const commandOptions: Record<CommandName, string[]> = {
+      build: ['memo', 'no-routes', 'out'],
+      send: ['no-memo', 'no-routes'],
+      share: ['memo', 'no-routes'],
+      whoami: [],
+      unshare: ['list'],
+    };
+    if (Object.keys(values).some((key) => !['app', 'json', ...commandOptions[name]].includes(key)))
+      inputFailure('이 명령에서 받지 않는 옵션이에요');
+    const withoutArgument = name === 'whoami' || (name === 'unshare' && values.list);
+    if (positionals.length !== (withoutArgument ? 1 : 2) || (!withoutArgument && !positionals[1]))
+      inputFailure('명령에 필요한 인자를 확인해 주세요');
+    if (
+      name === 'unshare' &&
+      !values.list &&
+      !SHORT_ID_PATTERN.test(positionals[1]!) &&
+      !PENDING_SHARE_PATTERN.test(positionals[1]!)
+    )
+      fail('unknown-share', '이 앱에서 만든 공유 링크를 찾지 못했어요');
+    const app = pickApp(values.app, deps.env, name !== 'build');
+    const store = {
+      home: deps.env.LANDMARK_TRIP_HOME || deps.home || join(homedir(), '.landmark'),
+      now: deps.now,
+    };
+    const print = (r: Parameters<typeof successJson>[1], extra: Record<string, unknown>) => {
+      deps.stdout((json ? successJson(command, r, extra) : successText(command, r, extra)) + '\n');
+    };
+    if (name === 'unshare' && values.list) {
+      const shares = (await readShares(store))
+        .filter((x) => x.app === app)
+        .map(({ id, title, createdAt, expiresAt }) => ({
+          id,
+          title,
+          createdAt,
+          expiresAt,
+          ...(PENDING_SHARE_PATTERN.test(id) ? { unknown: true } : {}),
+        }));
+      print(null, { shares });
+      return EXIT.ok;
+    }
+    const tokenWarnings: TripIssue[] = [];
+    let client: ReturnType<typeof createAgentClient> | undefined;
+    if (name !== 'build') {
+      const token = await findToken(app, {
+        env: deps.env,
+        platform: deps.platform ?? process.platform,
+        execFile:
+          deps.execFile ??
+          (async () => {
+            throw new Error('키체인 실행기가 없어요');
+          }),
+      });
+      if (token === null)
+        fail(
+          'no-token',
+          '토큰이 없어요. 설정 › 동기화 › AI 연결에서 만든 뒤 LANDMARK_AGENT_TOKEN 또는 키체인에 넣어 주세요',
+        );
+      if (token.source === 'env' && app !== DEFAULT_APP_URL) {
+        const warning: TripIssue = {
+          path: '',
+          code: 'token-origin',
+          message: `환경 변수 토큰을 운영 앱이 아닌 ${app}로 보내요. 운영 토큰이라면 키체인을 쓰거나 주소를 확인해 주세요`,
+        };
+        if (json) tokenWarnings.push(warning);
+        else deps.stderr(`경고: ${warning.message}\n`);
+      }
+      client = createAgentClient(app, token.token, { fetch: deps.fetch });
+    }
+    if (name === 'whoami') {
+      const info = unwrap(await client!.whoami());
+      const days = Math.ceil((info.expiresAt - deps.now().getTime()) / 86_400_000);
+      const warnings: TripIssue[] =
+        days <= 14
+          ? [{ path: '', code: 'token-expiring', message: `${Math.max(0, days)}일 뒤 만료돼요` }]
+          : [];
+      print(null, {
+        connection: {
+          name: info.name,
+          scopes: info.scopes,
+          expiresAt: new Date(info.expiresAt).toISOString(),
+          provider: info.provider,
+        },
+        warnings: [...tokenWarnings, ...warnings],
+      });
+      return EXIT.ok;
+    }
+    if (name === 'unshare') {
+      const item = (await readShares(store)).find((x) => x.app === app && x.id === positionals[1]);
+      if (!item) fail('unknown-share', '이 앱에서 만든 공유 링크를 찾지 못했어요');
+      // 응답을 잃은 예약은 같은 삭제 토큰으로 기존 링크를 찾거나 빈 링크를 만든 뒤 지운다.
+      // 두 단계 중 하나라도 실패하면 예약을 남겨 다음 실행에서 다시 정리할 수 있다.
+      const id = PENDING_SHARE_PATTERN.test(item.id)
+        ? unwrap(
+            await client!.createShare({ body: 'A', kind: 'trip', deleteToken: item.deleteToken }),
+          ).id
+        : item.id;
+      unwrap(await client!.deleteShare(id, item.deleteToken));
+      await removeShare(app, item.id, store);
+      print(null, { removed: { id: item.id }, warnings: tokenWarnings });
+      return EXIT.ok;
+    }
     const initCwd = deps.env.INIT_CWD;
     const resolveFile = (path: string) => (initCwd ? resolve(initCwd, path) : path);
     const r = await runBuild(
       {
-        file: resolveFile(positionals[1]),
-        includeMemo: values.memo ?? false,
+        file: resolveFile(positionals[1]!),
+        includeMemo: name === 'send' ? !values['no-memo'] : (values.memo ?? false),
         noRoutes: values['no-routes'] ?? false,
-        app: pickApp(values.app, deps.env, false),
+        app,
         out: values.out === undefined ? undefined : resolveFile(values.out),
       },
       deps,
     );
-    deps.stdout((json ? successJson(command, r, {}) : successText(command, r, {})) + '\n');
+    r.warnings.push(...tokenWarnings);
+    if (name === 'send') {
+      const inbox = unwrap(
+        await client!.sendInbox({
+          v: 1,
+          key: await requestKey(r.plan, {
+            includeMemo: !values['no-memo'],
+            noRoutes: values['no-routes'] ?? false,
+          }),
+          d: r.doc.importHash,
+        }),
+      );
+      print(r, {
+        inbox: {
+          id: inbox.id,
+          expiresAt: new Date(inbox.expiresAt).toISOString(),
+          created: inbox.created,
+        },
+      });
+    } else if (name === 'share') {
+      const encrypted = await encryptShareHash(r.doc.viewHash);
+      const deleteToken = newDeleteToken();
+      const keepUntil = shortKeepUntil([r.plan.endDate]) ?? undefined;
+      const reservation = await reserveShare(store, r.doc.doc.trips[0]!.title, {
+        app,
+        deleteToken,
+        expiresAt: shortExpiresAt('trip', keepUntil, deps.now()).toISOString(),
+      });
+      if (reservation === null)
+        fail(
+          'share-store-full',
+          '저장한 공유 링크가 200개예요. 기존 링크를 지우거나 만료 뒤 다시 해 주세요',
+        );
+      let preserveReservation = false;
+      try {
+        const reply = await client!.createShare({
+          body: encrypted.body,
+          kind: 'trip',
+          keepUntil,
+          deleteToken,
+        });
+        // 시간 초과·연결 끊김과 알 수 없는 응답(`server`: 관문 502·JSON 아닌 5xx 등)은 서버가 이미
+        // 저장했을 수 있어 삭제 토큰이 든 예약을 남긴다. 서버가 알려진 오류 코드로 거절했을 때만 푼다.
+        if (!reply.ok && ['timeout', 'offline', 'server'].includes(reply.issue.code)) {
+          preserveReservation = true;
+          throw new TripFailure(
+            [
+              {
+                ...reply.issue,
+                message:
+                  reply.issue.message +
+                  '. 링크가 만들어졌는지 몰라요. `yarn trip unshare --list`로 확인하고 지울 수 있어요',
+              },
+            ],
+            exitFor(reply.issue.code),
+          );
+        }
+        const share = unwrap(reply);
+        preserveReservation = true;
+        try {
+          await settleShare(store, reservation, {
+            app,
+            id: share.id,
+            deleteToken,
+            title: r.doc.doc.trips[0]!.title,
+            createdAt: deps.now().toISOString(),
+            expiresAt: share.expiresAt,
+          });
+        } catch {
+          r.warnings.push(storeWarning());
+        }
+        print(r, {
+          links: { short: `${app}/s/${share.id}#k=${encrypted.key}`, view: r.doc.view },
+          share: { id: share.id, expiresAt: share.expiresAt },
+        });
+      } finally {
+        if (!preserveReservation) {
+          try {
+            await settleShare(store, reservation, null);
+          } catch {
+            deps.stderr(`경고: ${storeWarning().message}\n`);
+          }
+        }
+      }
+    } else print(r, {});
     return EXIT.ok;
   } catch (error) {
     const failure =
@@ -121,6 +358,9 @@ function nodeDeps(): CliDeps {
     readFile: (path) => readFile(path, 'utf8'),
     writeFile: (path, text) => writeFile(path, text, 'utf8'),
     env: process.env,
+    platform: process.platform,
+    execFile: promisify(execFile),
+    home: join(homedir(), '.landmark'),
     stdout: (text) => {
       process.stdout.write(text);
     },

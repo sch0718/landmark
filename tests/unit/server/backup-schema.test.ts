@@ -12,7 +12,7 @@ it.each([0, 5])('버전 %i에서 백업 표 두 개를 멱등으로 만든다', 
       await db.prepare('INSERT INTO schema_meta VALUES (?)').bind(version).run();
     }
     await ensureSchema(db);
-    expect(await db.prepare('SELECT version FROM schema_meta').first()).toEqual({ version: 6 });
+    expect(await db.prepare('SELECT version FROM schema_meta').first()).toEqual({ version: 7 });
     for (const [table, columns] of Object.entries({
       library_backups:
         'user_id,id,format,parts,stored_bytes,raw_bytes,content_hash,places,labels,trips,meetings,exported_at,device_id,device_label,reason,created_at',

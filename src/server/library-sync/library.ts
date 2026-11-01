@@ -27,6 +27,8 @@ export const ACCOUNT_DATA_TABLES: string[] = [
   'library_state',
   'library_backup_parts',
   'library_backups',
+  'agent_inbox',
+  'agent_tokens',
 ];
 export type MeReply = {
   userId: string;

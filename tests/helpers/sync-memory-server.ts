@@ -1,5 +1,6 @@
 import { socialAuthorizeUrl, socialNonce } from '@sch0718/firebase-session/client';
 import { base64url } from '@sch0718/firebase-session/worker';
+import { handleAgent } from '../../src/server/agent/router';
 import { handleSync } from '../../src/server/library-sync/router';
 import { productionDeps, type SyncEnv } from '../../src/server/library-sync/env';
 import { createSqliteD1 } from './sqlite-d1';
@@ -12,16 +13,25 @@ export function createSyncMemoryServer(extra: Partial<SyncEnv> = {}) {
     ...extra,
   };
   const deps = productionDeps();
-  deps.log = () => {};
+  const logs: string[] = [];
+  deps.log = (line) => {
+    logs.push(line);
+  };
   deps.fetch = async () => {
     throw Error('시험에서 외부 요청은 허용하지 않아요');
   };
   deps.certs = { key: async () => null };
   deps.socialKeys = { kakao: deps.certs, naver: deps.certs };
   async function handle(request: Request): Promise<Response | null> {
-    if (!new URL(request.url).pathname.startsWith('/api/sync/')) return null;
+    const path = new URL(request.url).pathname;
+    const handler = path.startsWith('/api/agent/')
+      ? handleAgent
+      : path.startsWith('/api/sync/')
+        ? handleSync
+        : null;
+    if (!handler) return null;
     const pending: Promise<unknown>[] = [];
-    const response = await handleSync(
+    const response = await handler(
       {
         request,
         env,
@@ -39,6 +49,11 @@ export function createSyncMemoryServer(extra: Partial<SyncEnv> = {}) {
     const request = new Request(input, init);
     if (!request.headers.has('Origin')) request.headers.set('Origin', new URL(request.url).origin);
     const response = await handle(request);
+    if (!response) throw Error('시험 서버가 모르는 경로예요');
+    return response;
+  };
+  const agentFetch: typeof globalThis.fetch = async (input, init) => {
+    const response = await handle(new Request(input, init));
     if (!response) throw Error('시험 서버가 모르는 경로예요');
     return response;
   };
@@ -79,5 +94,5 @@ export function createSyncMemoryServer(extra: Partial<SyncEnv> = {}) {
     if (!response.ok) throw Error('시험 로그인 실패');
     return (await response.json()).sessionId as string;
   }
-  return { fetch, handle, db, login };
+  return { fetch, agentFetch, handle, db, login, env, logs };
 }

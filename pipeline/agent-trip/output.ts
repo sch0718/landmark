@@ -40,7 +40,31 @@ export function successText(
   r: BuildResult | null,
   extra: Record<string, unknown>,
 ): string {
-  if (r === null) return `${command} 성공\n${JSON.stringify(extra, null, 2)}`;
+  if (r === null) {
+    const lines: string[] = [];
+    if (extra.connection) {
+      const connection = extra.connection as {
+        name: string;
+        scopes: string[];
+        expiresAt: string;
+        provider: string;
+      };
+      lines.push(
+        `AI 연결: ${connection.name}`,
+        `범위: ${connection.scopes.join(', ')}`,
+        `만료: ${connection.expiresAt}`,
+        `공급자: ${connection.provider}`,
+      );
+    } else if (extra.shares) {
+      const shares = extra.shares as { id: string; title: string; expiresAt: string }[];
+      lines.push(...shares.map((x) => `${x.id} · ${x.title} · 만료 ${x.expiresAt}`));
+      if (shares.length === 0) lines.push('저장한 공유 링크가 없어요');
+    } else if (extra.removed) {
+      lines.push(`공유 링크를 지웠어요: ${(extra.removed as { id: string }).id}`);
+    } else lines.push(`${command} 성공`, JSON.stringify(extra, null, 2));
+    lines.push(...((extra.warnings ?? []) as TripIssue[]).map((x) => `경고: ${x.message}`));
+    return lines.join('\n');
+  }
   const lines = [
     `${r.doc.doc.trips[0]!.title} · ${r.plan.startDate}~${r.plan.endDate} · 장소 ${r.doc.doc.places.length}곳`,
     ...r.days.map(
@@ -51,8 +75,20 @@ export function successText(
     ),
     ...r.warnings.map((issue) => `경고 ${issue.path}: ${issue.message}`),
   ];
-  if (Object.keys(extra).length > 0) lines.push(JSON.stringify(extra, null, 2));
-  lines.push(`보기: ${r.doc.view}`, `가져오기: ${r.doc.importHref}`);
+  if (extra.inbox) {
+    const inbox = extra.inbox as { id: string; expiresAt: string; created: boolean };
+    lines.push(
+      `받은함: ${inbox.id} · 만료 ${inbox.expiresAt}${inbox.created ? '' : ' · 이미 보낸 일정이에요'}`,
+    );
+  }
+  if (extra.share) lines.push(`공유 만료: ${(extra.share as { expiresAt: string }).expiresAt}`);
+  if (extra.links) {
+    const links = extra.links as { short: string; view: string };
+    lines.push(`짧은 링크: ${links.short}`, `보기: ${links.view}`);
+  } else {
+    if (!extra.inbox && Object.keys(extra).length > 0) lines.push(JSON.stringify(extra, null, 2));
+    lines.push(`보기: ${r.doc.view}`, `가져오기: ${r.doc.importHref}`);
+  }
   return lines.join('\n');
 }
 

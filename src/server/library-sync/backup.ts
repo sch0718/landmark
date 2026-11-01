@@ -292,7 +292,7 @@ export function parseDataQuery(url: URL): { id: string | null } {
   return { id };
 }
 /** 요청을 준비한 계정과 인증이 끝난 계정이 다르면 적용하지 않는다. 옛 요청의 머리글 생략은 허용한다. */
-async function requireBackupUser(ctx: SyncContext, deps: SyncDeps) {
+export async function requireBackupUser(ctx: SyncContext, deps: SyncDeps) {
   const user = await requireSyncUser(ctx, deps);
   const expected = ctx.request.headers.get('X-Landmark-Backup-User');
   if (expected !== null && expected !== user.userId)

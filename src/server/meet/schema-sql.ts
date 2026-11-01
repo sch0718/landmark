@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 6;
+export const SCHEMA_VERSION = 7;
 
 export const SCHEMA_STATEMENTS: string[] = [
   `CREATE TABLE IF NOT EXISTS meetings (
@@ -154,4 +154,34 @@ CREATE TABLE IF NOT EXISTS library_backups (
   data TEXT NOT NULL,                    -- base64 조각(524,288자 이하)
   PRIMARY KEY (user_id, backup_id, idx)
 )`,
+  `-- 7: AI 연결 토큰과 받은함. 토큰 원문은 두지 않는다.
+CREATE TABLE IF NOT EXISTS agent_tokens (
+  id TEXT PRIMARY KEY,                   -- 공개 id 12자(a-z0-9). 목록·철회·받은함 출처
+  user_id TEXT NOT NULL,                 -- users.id
+  token_hash TEXT NOT NULL,              -- hashToken(원문), SHA-256 base64url
+  name TEXT NOT NULL,                    -- 1~40자
+  scopes TEXT NOT NULL,                  -- 'inbox:write share:create'(공백 구분)
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL,           -- created_at + 90일
+  last_used_at INTEGER,                  -- 1시간에 한 번만 갱신
+  revoked_at INTEGER
+)`,
+  'CREATE UNIQUE INDEX IF NOT EXISTS agent_tokens_hash ON agent_tokens(token_hash)',
+  'CREATE INDEX IF NOT EXISTS agent_tokens_user ON agent_tokens(user_id)',
+  `CREATE TABLE IF NOT EXISTS agent_inbox (
+  id TEXT PRIMARY KEY,                   -- 16자 base64url
+  user_id TEXT NOT NULL,
+  token_id TEXT NOT NULL,                -- 보낸 토큰(지워졌을 수 있다)
+  request_key TEXT NOT NULL,             -- CLI가 계획으로 만든 요청 키(43자). 같은 계획 다시 보내기 판단
+  data TEXT NOT NULL,                    -- /import#d= 값(압축 JSON base64url, 32,000자 이하)
+  title TEXT NOT NULL,                   -- 목록 표시용(문서에서 꺼냄)
+  start_date TEXT NOT NULL,
+  end_date TEXT NOT NULL,
+  places INTEGER NOT NULL,
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL            -- created_at + 30일
+)`,
+  'CREATE UNIQUE INDEX IF NOT EXISTS agent_inbox_key ON agent_inbox(user_id, request_key)',
+  'CREATE INDEX IF NOT EXISTS agent_inbox_user ON agent_inbox(user_id, created_at)',
+  'CREATE INDEX IF NOT EXISTS agent_inbox_expires ON agent_inbox(expires_at)',
 ];

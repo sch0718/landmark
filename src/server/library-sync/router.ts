@@ -1,3 +1,4 @@
+import { AGENT_SYNC_ROUTES } from '../agent/sync-routes';
 import { BACKUP_ROUTES } from './backup';
 import {
   publicSessionId,
@@ -202,6 +203,7 @@ export const SYNC_ROUTES: SyncRoute[] = [
     run: (c, d, p) => revoke(c, d, { id: p[0]! }),
   },
   ...BACKUP_ROUTES,
+  ...AGENT_SYNC_ROUTES,
 ];
 export async function handleSync(ctx: SyncContext, deps: SyncDeps): Promise<Response> {
   const start = deps.now();
