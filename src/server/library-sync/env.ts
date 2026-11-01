@@ -12,6 +12,9 @@ export type SyncEnv = {
   LIBRARY_SYNC?: string;
   /** 'off'면 서버 백업 쓰기를 막는다(읽기·지우기는 됨) */
   AUTO_BACKUP?: string;
+  /** 'off'면 AI 연결 토큰 경로와 새 발급을 막는다(목록·철회·받은함 읽기·지우기·짧은 링크 지우기는 됨) */
+  AGENT_API?: string;
+  SHARE_SHORT?: string;
   FIREBASE_PROJECT_ID?: string;
   ALLOWED_EMAILS?: string;
   ALLOWED_ACCOUNTS?: string;
