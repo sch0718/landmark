@@ -275,6 +275,15 @@ describe('원격 여행 CLI', () => {
     expect((await command(['unshare', item.id])).exit).toBe(0);
     expect(await readShares(store())).toEqual([]);
   });
+  it.each(['-', '--'])("'%s'로 시작하는 짧은 링크 id도 옵션이 아닌 id로 지운다", async (prefix) => {
+    const item = { ...saved(), id: prefix + 'a'.repeat(16 - prefix.length) };
+    secrets.push(item.deleteToken);
+    await addShare(item, store());
+    fetcher.mockImplementation(async () => new Response(null, { status: 204 }));
+    expect((await command(['unshare', item.id])).exit).toBe(0);
+    expect(String(fetcher.mock.calls[0]![0])).toContain('/api/agent/v1/share/' + item.id);
+    expect(await readShares(store())).toEqual([]);
+  });
   it('예상하지 않은 삭제 성공 상태 200은 로컬 항목을 남긴다', async () => {
     const item = saved();
     secrets.push(item.deleteToken);

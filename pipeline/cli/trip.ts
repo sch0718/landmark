@@ -94,8 +94,14 @@ export async function main(argv: string[], deps: CliDeps): Promise<ExitCode> {
   let json = argv.includes('--json');
   let command: CommandName = 'build';
   try {
-    const parsed = parseCliArgs(argv);
+    // 짧은 링크 id는 '-'로 시작할 수 있어(base64url) 옵션으로 읽히지 않게 먼저 떼어 둔다.
+    const dashId =
+      argv[0] === 'unshare' && argv[1]?.startsWith('-') && SHORT_ID_PATTERN.test(argv[1])
+        ? argv[1]
+        : undefined;
+    const parsed = parseCliArgs(dashId === undefined ? argv : [argv[0]!, ...argv.slice(2)]);
     const { values, positionals } = parsed;
+    if (dashId !== undefined) positionals.splice(1, 0, dashId);
     json = values.json ?? false;
     command = commandName(positionals[0]) ?? 'build';
     if (values.schema) {
