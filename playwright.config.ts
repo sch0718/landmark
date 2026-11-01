@@ -43,6 +43,7 @@ export default defineConfig({
         'library.spec.ts',
         'library-sync.spec.ts',
         'server-backup.spec.ts',
+        'agent-inbox.spec.ts',
         'folder-watch.spec.ts',
         'labels-emoji.spec.ts',
         'large-library.spec.ts',
