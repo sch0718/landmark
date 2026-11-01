@@ -5,6 +5,9 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { shortExpiresAt, shortKeepUntil } from 'src/domain/share/short-link';
+import { DEFAULT_APP_URL } from 'src/share-viewer/encode';
+import { exitFor } from '../../../../pipeline/agent-trip/errors';
 import { readShareHash } from 'src/domain/share/read-share';
 import { hashToken } from 'src/server/meet/tokens';
 import { handleShareOpen } from 'src/server/share/handlers';
@@ -131,6 +134,181 @@ describe('원격 여행 CLI', () => {
       .prepare('SELECT request_key FROM agent_inbox')
       .all<{ request_key: string }>();
     expect(new Set(rows.results.map((x) => x.request_key)).size).toBe(2);
+  });
+  it('send는 경로 생략 여부만 달라도 새 요청으로 보내고 같은 옵션은 재사용한다', async () => {
+    const first = await command(['send', file, '--no-routes']);
+    fetcher.mockImplementation(async (input, init) => {
+      if (new URL(String(input)).pathname.startsWith('/api/agent/'))
+        return server.agentFetch(input, init);
+      return Response.json({ code: 0, route: {} });
+    });
+    const routed = await command(['send', file]);
+    expect(routed.exit).toBe(0);
+    expect(routed.data.inbox.created).toBe(true);
+    expect(routed.data.inbox.id).not.toBe(first.data.inbox.id);
+    expect((await command(['send', file])).data.inbox.created).toBe(false);
+  });
+  it.each(['send', 'share', 'whoami', 'unshare'])(
+    '%s의 환경 변수 토큰 경고를 JSON과 stderr에 낸다',
+    async (name) => {
+      const item = saved();
+      secrets.push(item.deleteToken);
+      const args =
+        name === 'send' || name === 'share'
+          ? [name, file, '--no-routes']
+          : name === 'unshare'
+            ? [name, item.id]
+            : [name];
+      const stderr: string[] = [];
+      deps.stderr = (s) => {
+        stderr.push(s);
+        output.push(s);
+      };
+      for (const json of [true, false]) {
+        if (name === 'unshare') {
+          await addShare(item, store());
+          fetcher.mockResolvedValueOnce(new Response(null, { status: 204 }));
+        }
+        const r = await command(args, json);
+        expect(r.exit).toBe(0);
+        if (json) {
+          expect(r.data.warnings).toContainEqual({
+            path: '',
+            code: 'token-origin',
+            message: expect.stringContaining(app),
+          });
+          expect(stderr).toEqual([]);
+        } else {
+          expect(stderr.filter((s) => s.startsWith('경고: ') && s.includes(app))).toHaveLength(1);
+          expect(r.text).not.toContain('환경 변수 토큰');
+        }
+      }
+      expect(exitFor('token-origin')).toBe(4);
+    },
+  );
+  it.each(['production', 'keychain'])('%s 토큰 사용에는 출처 경고가 없다', async (kind) => {
+    if (kind === 'keychain') {
+      deps.env.LANDMARK_AGENT_TOKEN = '';
+      deps.platform = 'darwin';
+      deps.execFile = async () => ({ stdout: token });
+    }
+    const lines: string[] = [];
+    const exit = await main(
+      ['whoami', '--app', kind === 'production' ? DEFAULT_APP_URL : app, '--json'],
+      {
+        ...deps,
+        stdout: (s) => {
+          lines.push(s);
+          output.push(s);
+        },
+      },
+    );
+    expect(exit).toBe(0);
+    expect(JSON.parse(lines.join('')).warnings).not.toContainEqual(
+      expect.objectContaining({ code: 'token-origin' }),
+    );
+  });
+  it.each(['timeout', 'offline'])(
+    'share의 %s 뒤 삭제 토큰으로 결과 모르는 링크를 복구해 지운다',
+    async (kind) => {
+      const now = new Date();
+      deps.now = () => now;
+      let received!: () => void;
+      const ready = new Promise<void>((resolve) => {
+        received = resolve;
+      });
+      let createdId: string | undefined;
+      let persistedBeforeRequest = false;
+      fetcher.mockImplementationOnce(async (input, init) => {
+        const body = JSON.parse(String(init?.body));
+        secrets.push(body.deleteToken);
+        const raw = JSON.parse(await readFile(join(home, 'agent-shares.json'), 'utf8'));
+        persistedBeforeRequest = raw.items.some(
+          (x: StoredShare) => x.app === app && x.deleteToken === body.deleteToken,
+        );
+        if (kind === 'offline') {
+          received();
+          throw new Error(token);
+        }
+        const response = await server.agentFetch(input, init);
+        createdId = (await response.json()).id;
+        received();
+        return await new Promise<Response>(() => {});
+      });
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      const running = command(['share', file, '--no-routes']);
+      await ready;
+      if (kind === 'timeout') await vi.advanceTimersByTimeAsync(15_000);
+      const r = await running;
+      vi.useRealTimers();
+      expect(r.exit).toBe(5);
+      expect(r.data.errors[0].code).toBe(kind);
+      expect(r.data.errors[0].message).toContain('yarn trip unshare --list');
+      expect(persistedBeforeRequest).toBe(true);
+      const raw = JSON.parse(await readFile(join(home, 'agent-shares.json'), 'utf8'));
+      expect(raw.items).toHaveLength(1);
+      const unknown = raw.items[0] as StoredShare;
+      expect(/^[A-Za-z0-9_-]{43}$/.test(unknown.deleteToken)).toBe(true);
+      expect(unknown.expiresAt).toBe(
+        shortExpiresAt(
+          'trip',
+          shortKeepUntil([parsePlan(JSON.parse(fixture)).endDate]),
+          now,
+        ).toISOString(),
+      );
+      deps.now = () => new Date(now.getTime() + 300_001);
+      const list = await command(['unshare', '--list']);
+      expect(list.exit).toBe(0);
+      expect(list.data.shares).toEqual([
+        {
+          id: unknown.id,
+          title: unknown.title,
+          createdAt: unknown.createdAt,
+          expiresAt: unknown.expiresAt,
+          unknown: true,
+        },
+      ]);
+      const recovering = fetcher.mock.calls.length;
+      expect((await command(['unshare', unknown.id])).exit).toBe(0);
+      const recoveredBody = JSON.parse(String(fetcher.mock.calls[recovering]![1]?.body));
+      expect(recoveredBody.body).toBe('A');
+      expect(recoveredBody.kind).toBe('trip');
+      expect(recoveredBody.deleteToken === unknown.deleteToken).toBe(true);
+      if (createdId) expect(String(fetcher.mock.calls[recovering + 1]![0])).toContain(createdId);
+      expect((await server.db.prepare('SELECT id FROM share_links').all()).results).toEqual([]);
+      expect(JSON.parse(await readFile(join(home, 'agent-shares.json'), 'utf8')).items).toEqual([]);
+    },
+  );
+  it.each(['create', 'delete'])('예약 복구의 %s 단계가 실패하면 예약을 남긴다', async (phase) => {
+    const item = { ...saved(), id: 'pending:unknown' };
+    secrets.push(item.deleteToken);
+    await addShare(item, store());
+    fetcher.mockImplementation(async (input, init) => {
+      if ((init?.method === 'POST') === (phase === 'create'))
+        return Response.json({ error: 'off' }, { status: 503 });
+      return server.agentFetch(input, init);
+    });
+    const r = await command(['unshare', item.id]);
+    expect(r.exit).toBe(5);
+    expect(r.data.errors[0].code).toBe('off');
+    expect(JSON.parse(await readFile(join(home, 'agent-shares.json'), 'utf8')).items).toHaveLength(
+      1,
+    );
+  });
+  it('예약 복구는 같은 앱에 한정하고 정확한 삭제 404도 예약을 지운다', async () => {
+    const item = { ...saved(), app: 'http://localhost:8798', id: 'pending:unknown' };
+    secrets.push(item.deleteToken);
+    await addShare(item, store());
+    expect((await command(['unshare', item.id])).exit).toBe(2);
+    expect(fetcher).not.toHaveBeenCalled();
+    await addShare({ ...item, app }, store());
+    fetcher.mockImplementation(async (input, init) =>
+      init?.method === 'DELETE'
+        ? Response.json({ error: 'not-found' }, { status: 404 })
+        : server.agentFetch(input, init),
+    );
+    expect((await command(['unshare', item.id])).exit).toBe(0);
+    expect((await readShares(store())).map((x) => x.app)).toEqual([item.app]);
   });
   it.each([true, false])(
     'share 암호문을 풀면 같은 build 문서이고 기본 메모가 없다(경로 생략 %s)',
@@ -338,9 +516,11 @@ describe('원격 여행 CLI', () => {
       expiresAt: expect.stringMatching(/Z$/),
       provider: 'kakao',
     });
-    expect(r.data.warnings).toEqual([
-      { path: '', code: 'token-expiring', message: '3일 뒤 만료돼요' },
-    ]);
+    expect(r.data.warnings).toContainEqual({
+      path: '',
+      code: 'token-expiring',
+      message: '3일 뒤 만료돼요',
+    });
   });
   it('토큰 없음·철회는 끝 코드 4이고 off는 5다', async () => {
     deps.env.LANDMARK_AGENT_TOKEN = '';
@@ -448,10 +628,49 @@ describe('원격 클라이언트 오류와 시간 제한', () => {
   it('정렬된 trim 계획과 메모 옵션으로 43자 키를 만든다', async () => {
     const plan = parsePlan(JSON.parse(fixture));
     const reordered = Object.fromEntries(Object.entries(plan).reverse());
-    const key = await requestKey(plan, true);
+    const key = await requestKey(plan, { includeMemo: true, noRoutes: false });
     expect(key).toMatch(/^[A-Za-z0-9_-]{43}$/);
-    expect(await requestKey(parsePlan(reordered), true)).toBe(key);
-    expect(await requestKey(plan, false)).not.toBe(key);
+    expect(await requestKey(parsePlan(reordered), { includeMemo: true, noRoutes: false })).toBe(
+      key,
+    );
+    expect(await requestKey(plan, { includeMemo: false, noRoutes: false })).not.toBe(key);
+  });
+  it('경로 옵션만 다르면 요청 키가 다르고 같으면 같다', async () => {
+    const plan = parsePlan(JSON.parse(fixture));
+    const key = await requestKey(plan, { includeMemo: true, noRoutes: true });
+    expect(await requestKey(plan, { includeMemo: true, noRoutes: false })).not.toBe(key);
+    expect(await requestKey(plan, { includeMemo: true, noRoutes: true })).toBe(key);
+  });
+  it.each([
+    'corrupt',
+    'too-big',
+    'too-many',
+    'empty',
+    'newer',
+    'not-share',
+    'not-trip',
+    'title',
+    'labels',
+    'place-too-long',
+    'leg-modes',
+    'path',
+    'import',
+    'item-too-large',
+  ])('422의 알려진 사유 %s를 전달한다', (reason) => {
+    const issue = toIssue(422, { error: 'invalid', reason });
+    expect(issue).toMatchObject({ code: 'internal', reason });
+    expect(issue.message).toContain(`(${reason})`);
+    expect(exitFor(issue.code)).toBe(1);
+  });
+  it('모르는 422 사유와 다른 상태의 사유는 버린다', () => {
+    for (const reason of [token, null, {}, 42]) {
+      const issue = toIssue(422, { error: 'invalid', reason });
+      expect(Object.hasOwn(issue, 'reason')).toBe(false);
+      expect(issue.message.includes(token)).toBe(false);
+    }
+    expect(Object.hasOwn(toIssue(500, { error: 'invalid', reason: 'corrupt' }), 'reason')).toBe(
+      false,
+    );
   });
   it.each(['fetch', 'body'])(
     '%s가 신호를 무시하고 멈춰도 15초에 timeout으로 끝난다',

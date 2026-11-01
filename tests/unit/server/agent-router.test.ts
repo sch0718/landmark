@@ -296,6 +296,20 @@ describe('에이전트 토큰 경로', () => {
       ).status,
     ).toBe(204);
   });
+  it.each([true, false])('알 수 없는 500은 비밀 없이 오류 종류만 기록한다(D1 %s)', async (d1) => {
+    const secret = randomSecret();
+    secrets.push(secret);
+    vi.spyOn(server.db, 'prepare').mockImplementation(() => {
+      throw new TypeError((d1 ? 'D1_ERROR: ' : '') + secret);
+    });
+    server.logs.length = 0;
+    await error(await request('/v1/whoami'), 500, 'internal');
+    expect(server.logs).toHaveLength(1);
+    const logged = JSON.parse(server.logs[0]!);
+    expect(logged).toMatchObject({ status: 500, error: 'TypeError' });
+    expect(Object.values(logged).includes('D1_ERROR')).toBe(d1);
+    expect(server.logs.join('').includes(secret)).toBe(false);
+  });
   it('에이전트 로그는 패턴·상태·시간만 한 줄 남긴다', async () => {
     const input = shareBody();
     const { id } = await (await request('/v1/share', 'POST', input)).json();

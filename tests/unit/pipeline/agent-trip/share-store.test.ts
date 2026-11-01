@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { randomBytes } from 'node:crypto';
-import { mkdtemp, readFile, rm, stat, utimes, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, readFile, rm, stat, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -46,6 +46,27 @@ describe('공유 삭제 토큰 저장소', () => {
     expect((await stat(deps.home)).mode & 0o777).toBe(0o700);
     expect((await stat(join(deps.home, 'agent-shares.json'))).mode & 0o777).toBe(0o600);
     expect(JSON.stringify(await readShares(deps)) === JSON.stringify([share])).toBe(true);
+  });
+  it('기존 폴더 권한 755는 보존하고 파일만 600으로 만든다', async () => {
+    await chmod(deps.home, 0o755);
+    await addShare(item(), deps);
+    expect((await stat(deps.home)).mode & 0o777).toBe(0o755);
+    expect((await stat(join(deps.home, 'agent-shares.json'))).mode & 0o777).toBe(0o600);
+  });
+  it('없던 폴더는 700으로 만든다', async () => {
+    const nested = { ...deps, home: join(deps.home, '새 폴더') };
+    await addShare(item(), nested);
+    expect((await stat(nested.home)).mode & 0o777).toBe(0o700);
+  });
+  it('삭제 토큰을 가진 예약은 5분 뒤에도 남고 상한에 세며 기한에 만료된다', async () => {
+    await fill(199);
+    const unknown = { ...item(), id: 'pending:unknown' };
+    await addShare(unknown, deps);
+    now = new Date(now.getTime() + 300_001);
+    expect((await readShares(deps)).some((x) => x.id === unknown.id)).toBe(true);
+    expect(await reserveShare(deps, '새 여행')).toBeNull();
+    now = new Date(unknown.expiresAt);
+    expect(await readShares(deps)).toEqual([]);
   });
   it('만료 항목은 읽기에서 빠지고 같은 app·id만 지운다', async () => {
     const active = item();

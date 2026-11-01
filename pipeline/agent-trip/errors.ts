@@ -21,6 +21,7 @@ export type TripErrorCode =
   | 'unauthorized'
   | 'token-expired'
   | 'token-expiring'
+  | 'token-origin'
   | 'token-revoked'
   | 'not-allowed'
   | 'scope'
@@ -42,6 +43,7 @@ export type TripIssue = {
   path: string;
   code: TripErrorCode;
   message: string;
+  reason?: string;
   candidates?: { naverSid: string; name: string; address: string; category: string }[];
 };
 
@@ -73,6 +75,7 @@ const EXIT_BY_CODE = {
   unauthorized: EXIT.auth,
   'token-expired': EXIT.auth,
   'token-expiring': EXIT.auth,
+  'token-origin': EXIT.auth,
   'token-revoked': EXIT.auth,
   'not-allowed': EXIT.auth,
   scope: EXIT.auth,

@@ -15,6 +15,8 @@ export type StoredShare = {
 };
 export type StoreDeps = { home: string; now(): Date };
 export const SHARE_STORE_MAX = 200;
+export const PENDING_SHARE_PATTERN = /^pending:[A-Za-z0-9_-]+$/;
+const DELETE_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 const PENDING_MS = 5 * 60_000;
 const pending = (item: StoredShare) => item.id.startsWith('pending:');
 function failure(): TripFailure {
@@ -38,10 +40,12 @@ function validItem(value: unknown): value is StoredShare {
   const item = value as StoredShare;
   if (![item.createdAt, item.expiresAt].every((s) => Number.isFinite(Date.parse(s)))) return false;
   return pending(item)
-    ? /^pending:[A-Za-z0-9_-]+$/.test(item.id) && item.deleteToken === ''
+    ? PENDING_SHARE_PATTERN.test(item.id) &&
+        (item.deleteToken === '' ||
+          (item.app.length > 0 && DELETE_TOKEN_PATTERN.test(item.deleteToken)))
     : item.app.length > 0 &&
         SHORT_ID_PATTERN.test(item.id) &&
-        /^[A-Za-z0-9_-]{43}$/.test(item.deleteToken);
+        DELETE_TOKEN_PATTERN.test(item.deleteToken);
 }
 async function readItems(deps: StoreDeps): Promise<StoredShare[]> {
   let text: string;
@@ -59,14 +63,16 @@ async function readItems(deps: StoreDeps): Promise<StoredShare[]> {
     return (data.items as StoredShare[]).filter(
       (item) =>
         Date.parse(item.expiresAt) > now &&
-        (!pending(item) || Date.parse(item.createdAt) + PENDING_MS > now),
+        (!pending(item) ||
+          item.deleteToken !== '' ||
+          Date.parse(item.createdAt) + PENDING_MS > now),
     );
   } catch {
     throw failure();
   }
 }
 export async function readShares(deps: StoreDeps): Promise<StoredShare[]> {
-  return (await readItems(deps)).filter((item) => !pending(item));
+  return (await readItems(deps)).filter((item) => !pending(item) || item.deleteToken !== '');
 }
 /** 읽기·수정·원자적 교체를 한 잠금 안에서 처리한다. */
 export async function withShareStore<T>(
@@ -79,8 +85,8 @@ export async function withShareStore<T>(
   let identity: Awaited<ReturnType<typeof stat>> | undefined;
   let temporary: string | undefined;
   try {
-    await mkdir(deps.home, { recursive: true, mode: 0o700 });
-    await chmod(deps.home, 0o700);
+    const created = await mkdir(deps.home, { recursive: true, mode: 0o700 });
+    if (created !== undefined) await chmod(deps.home, 0o700);
     const started = Date.now();
     for (;;) {
       try {
@@ -162,7 +168,11 @@ export async function withShareStore<T>(
     }
   }
 }
-export async function reserveShare(deps: StoreDeps, title: string): Promise<string | null> {
+export async function reserveShare(
+  deps: StoreDeps,
+  title: string,
+  recovery?: Pick<StoredShare, 'app' | 'deleteToken' | 'expiresAt'>,
+): Promise<string | null> {
   return withShareStore(deps, (items) => {
     if (items.length >= SHARE_STORE_MAX) return { items, result: null };
     const id = 'pending:' + randomUUID();
@@ -177,6 +187,7 @@ export async function reserveShare(deps: StoreDeps, title: string): Promise<stri
           title,
           createdAt: now.toISOString(),
           expiresAt: new Date(now.getTime() + PENDING_MS).toISOString(),
+          ...recovery,
         },
       ],
       result: id,

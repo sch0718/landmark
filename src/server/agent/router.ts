@@ -127,6 +127,7 @@ export async function handleAgent(ctx: SyncContext, deps: SyncDeps): Promise<Res
   const path = new URL(ctx.request.url).pathname.replace(/^\/api\/agent/, '');
   let pattern = 'unknown';
   let response: Response;
+  let diagnostic: { error: string; d1?: string } | undefined;
   try {
     const matched = AGENT_ROUTES.filter((route) => route.path.test(path));
     const route = matched.find((candidate) => candidate.method === ctx.request.method);
@@ -144,7 +145,18 @@ export async function handleAgent(ctx: SyncContext, deps: SyncDeps): Promise<Res
       response = syncJson(413, { error: 'too-large' });
     else if (error instanceof ApiError && error.code === 'BAD_REQUEST')
       response = syncJson(400, { error: 'bad-json' });
-    else response = syncError(error) ?? syncJson(500, { error: 'internal' });
+    else {
+      const known = syncError(error);
+      if (known) response = known;
+      else {
+        const d1 = error instanceof Error ? /^(D1_[A-Z_]+)/.exec(error.message)?.[1] : undefined;
+        diagnostic = {
+          error: error instanceof Error ? error.name : typeof error,
+          ...(d1 ? { d1 } : {}),
+        };
+        response = syncJson(500, { error: 'internal' });
+      }
+    }
   }
   deps.log(
     JSON.stringify({
@@ -152,6 +164,7 @@ export async function handleAgent(ctx: SyncContext, deps: SyncDeps): Promise<Res
       path: pattern,
       status: response.status,
       ms: deps.now() - start,
+      ...diagnostic,
     }),
   );
   return response;

@@ -112,12 +112,40 @@ export function toIssue(status: number, body: unknown): TripIssue {
     429: ['rate-limited'],
     503: ['off', 'config'],
   };
-  if (status === 422 && code === 'invalid') return issue('internal');
+  if (status === 422 && code === 'invalid') {
+    const reason =
+      body !== null && typeof body === 'object' && 'reason' in body ? body.reason : undefined;
+    const known = [
+      'corrupt',
+      'too-big',
+      'too-many',
+      'empty',
+      'newer',
+      'not-share',
+      'not-trip',
+      'title',
+      'labels',
+      'place-too-long',
+      'leg-modes',
+      'path',
+      'import',
+      'item-too-large',
+    ];
+    const result = issue('internal');
+    return typeof reason === 'string' && known.includes(reason)
+      ? { ...result, reason, message: `${result.message} (${reason})` }
+      : result;
+  }
   if (typeof code === 'string' && allowed[status]?.includes(code))
     return issue(code as keyof typeof messages);
   return issue('server');
 }
-export async function requestKey(plan: TripPlan, includeMemo: boolean): Promise<string> {
-  const bytes = new TextEncoder().encode(stableStringify([plan, includeMemo]));
+export async function requestKey(
+  plan: TripPlan,
+  options: { includeMemo: boolean; noRoutes: boolean },
+): Promise<string> {
+  const bytes = new TextEncoder().encode(
+    stableStringify([plan, options.includeMemo, options.noRoutes]),
+  );
   return Buffer.from(await crypto.subtle.digest('SHA-256', bytes)).toString('base64url');
 }

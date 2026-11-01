@@ -12,7 +12,9 @@ describe('CLI 토큰 찾기', () => {
   it('환경변수를 우선하고 키체인을 부르지 않는다', async () => {
     const token = newToken();
     const deps = setup({ LANDMARK_AGENT_TOKEN: token });
-    expect((await findToken(app, deps)) === token).toBe(true);
+    const found = await findToken(app, deps);
+    expect(found?.token === token).toBe(true);
+    expect(found?.source).toBe('env');
     expect(deps.execFile).not.toHaveBeenCalled();
   });
   it.each([
@@ -22,7 +24,9 @@ describe('CLI 토큰 찾기', () => {
     const token = newToken();
     const deps = setup({ LANDMARK_AGENT_TOKEN: '' });
     deps.execFile.mockResolvedValue({ stdout: ` ${token}\n` });
-    expect((await findToken(url, deps)) === token).toBe(true);
+    const found = await findToken(url, deps);
+    expect(found?.token === token).toBe(true);
+    expect(found?.source).toBe('keychain');
     expect(deps.execFile).toHaveBeenCalledExactlyOnceWith('security', [
       'find-generic-password',
       '-s',

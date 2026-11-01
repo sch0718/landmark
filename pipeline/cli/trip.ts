@@ -5,7 +5,8 @@ import { join, resolve } from 'node:path';
 import { setTimeout } from 'node:timers/promises';
 import { pathToFileURL } from 'node:url';
 import { parseArgs, promisify } from 'node:util';
-import { SHORT_ID_PATTERN, shortKeepUntil } from 'src/domain/share/short-link';
+import { SHORT_ID_PATTERN, shortKeepUntil, shortExpiresAt } from 'src/domain/share/short-link';
+import { DEFAULT_APP_URL } from 'src/share-viewer/encode';
 import { encryptShareHash, newDeleteToken } from 'src/services/share-short/crypto';
 import { createAgentClient, requestKey, type AgentReply } from '../agent-trip/client';
 import {
@@ -25,7 +26,13 @@ import {
 } from '../agent-trip/output';
 import { planJsonSchema } from '../agent-trip/plan-schema';
 import { pickApp, runBuild, type BuildDeps } from '../agent-trip/run-build';
-import { readShares, removeShare, reserveShare, settleShare } from '../agent-trip/share-store';
+import {
+  PENDING_SHARE_PATTERN,
+  readShares,
+  removeShare,
+  reserveShare,
+  settleShare,
+} from '../agent-trip/share-store';
 import { findToken, type TokenDeps } from '../agent-trip/token';
 
 export type CliDeps = BuildDeps & {
@@ -130,7 +137,12 @@ export async function main(argv: string[], deps: CliDeps): Promise<ExitCode> {
     const withoutArgument = name === 'whoami' || (name === 'unshare' && values.list);
     if (positionals.length !== (withoutArgument ? 1 : 2) || (!withoutArgument && !positionals[1]))
       inputFailure('명령에 필요한 인자를 확인해 주세요');
-    if (name === 'unshare' && !values.list && !SHORT_ID_PATTERN.test(positionals[1]!))
+    if (
+      name === 'unshare' &&
+      !values.list &&
+      !SHORT_ID_PATTERN.test(positionals[1]!) &&
+      !PENDING_SHARE_PATTERN.test(positionals[1]!)
+    )
       fail('unknown-share', '이 앱에서 만든 공유 링크를 찾지 못했어요');
     const app = pickApp(values.app, deps.env, name !== 'build');
     const store = {
@@ -143,10 +155,17 @@ export async function main(argv: string[], deps: CliDeps): Promise<ExitCode> {
     if (name === 'unshare' && values.list) {
       const shares = (await readShares(store))
         .filter((x) => x.app === app)
-        .map(({ id, title, createdAt, expiresAt }) => ({ id, title, createdAt, expiresAt }));
+        .map(({ id, title, createdAt, expiresAt }) => ({
+          id,
+          title,
+          createdAt,
+          expiresAt,
+          ...(PENDING_SHARE_PATTERN.test(id) ? { unknown: true } : {}),
+        }));
       print(null, { shares });
       return EXIT.ok;
     }
+    const tokenWarnings: TripIssue[] = [];
     let client: ReturnType<typeof createAgentClient> | undefined;
     if (name !== 'build') {
       const token = await findToken(app, {
@@ -163,7 +182,16 @@ export async function main(argv: string[], deps: CliDeps): Promise<ExitCode> {
           'no-token',
           '토큰이 없어요. 설정 › 동기화 › AI 연결에서 만든 뒤 LANDMARK_AGENT_TOKEN 또는 키체인에 넣어 주세요',
         );
-      client = createAgentClient(app, token, { fetch: deps.fetch });
+      if (token.source === 'env' && app !== DEFAULT_APP_URL) {
+        const warning: TripIssue = {
+          path: '',
+          code: 'token-origin',
+          message: `환경 변수 토큰을 운영 앱이 아닌 ${app}로 보내요. 운영 토큰이라면 키체인을 쓰거나 주소를 확인해 주세요`,
+        };
+        if (json) tokenWarnings.push(warning);
+        else deps.stderr(`경고: ${warning.message}\n`);
+      }
+      client = createAgentClient(app, token.token, { fetch: deps.fetch });
     }
     if (name === 'whoami') {
       const info = unwrap(await client!.whoami());
@@ -179,16 +207,23 @@ export async function main(argv: string[], deps: CliDeps): Promise<ExitCode> {
           expiresAt: new Date(info.expiresAt).toISOString(),
           provider: info.provider,
         },
-        warnings,
+        warnings: [...tokenWarnings, ...warnings],
       });
       return EXIT.ok;
     }
     if (name === 'unshare') {
       const item = (await readShares(store)).find((x) => x.app === app && x.id === positionals[1]);
       if (!item) fail('unknown-share', '이 앱에서 만든 공유 링크를 찾지 못했어요');
-      unwrap(await client!.deleteShare(item.id, item.deleteToken));
+      // 응답을 잃은 예약은 같은 삭제 토큰으로 기존 링크를 찾거나 빈 링크를 만든 뒤 지운다.
+      // 두 단계 중 하나라도 실패하면 예약을 남겨 다음 실행에서 다시 정리할 수 있다.
+      const id = PENDING_SHARE_PATTERN.test(item.id)
+        ? unwrap(
+            await client!.createShare({ body: 'A', kind: 'trip', deleteToken: item.deleteToken }),
+          ).id
+        : item.id;
+      unwrap(await client!.deleteShare(id, item.deleteToken));
       await removeShare(app, item.id, store);
-      print(null, { removed: { id: item.id } });
+      print(null, { removed: { id: item.id }, warnings: tokenWarnings });
       return EXIT.ok;
     }
     const initCwd = deps.env.INIT_CWD;
@@ -203,11 +238,15 @@ export async function main(argv: string[], deps: CliDeps): Promise<ExitCode> {
       },
       deps,
     );
+    r.warnings.push(...tokenWarnings);
     if (name === 'send') {
       const inbox = unwrap(
         await client!.sendInbox({
           v: 1,
-          key: await requestKey(r.plan, !values['no-memo']),
+          key: await requestKey(r.plan, {
+            includeMemo: !values['no-memo'],
+            noRoutes: values['no-routes'] ?? false,
+          }),
           d: r.doc.importHash,
         }),
       );
@@ -219,24 +258,43 @@ export async function main(argv: string[], deps: CliDeps): Promise<ExitCode> {
         },
       });
     } else if (name === 'share') {
-      const reservation = await reserveShare(store, r.doc.doc.trips[0]!.title);
+      const encrypted = await encryptShareHash(r.doc.viewHash);
+      const deleteToken = newDeleteToken();
+      const keepUntil = shortKeepUntil([r.plan.endDate]) ?? undefined;
+      const reservation = await reserveShare(store, r.doc.doc.trips[0]!.title, {
+        app,
+        deleteToken,
+        expiresAt: shortExpiresAt('trip', keepUntil, deps.now()).toISOString(),
+      });
       if (reservation === null)
         fail(
           'share-store-full',
           '저장한 공유 링크가 200개예요. 기존 링크를 지우거나 만료 뒤 다시 해 주세요',
         );
-      let settled = false;
+      let preserveReservation = false;
       try {
-        const encrypted = await encryptShareHash(r.doc.viewHash);
-        const deleteToken = newDeleteToken();
-        const share = unwrap(
-          await client!.createShare({
-            body: encrypted.body,
-            kind: 'trip',
-            keepUntil: shortKeepUntil([r.plan.endDate]) ?? undefined,
-            deleteToken,
-          }),
-        );
+        const reply = await client!.createShare({
+          body: encrypted.body,
+          kind: 'trip',
+          keepUntil,
+          deleteToken,
+        });
+        if (!reply.ok && ['timeout', 'offline'].includes(reply.issue.code)) {
+          preserveReservation = true;
+          throw new TripFailure(
+            [
+              {
+                ...reply.issue,
+                message:
+                  reply.issue.message +
+                  '. 링크가 만들어졌는지 몰라요. `yarn trip unshare --list`로 확인하고 지울 수 있어요',
+              },
+            ],
+            exitFor(reply.issue.code),
+          );
+        }
+        const share = unwrap(reply);
+        preserveReservation = true;
         try {
           await settleShare(store, reservation, {
             app,
@@ -249,13 +307,12 @@ export async function main(argv: string[], deps: CliDeps): Promise<ExitCode> {
         } catch {
           r.warnings.push(storeWarning());
         }
-        settled = true;
         print(r, {
           links: { short: `${app}/s/${share.id}#k=${encrypted.key}`, view: r.doc.view },
           share: { id: share.id, expiresAt: share.expiresAt },
         });
       } finally {
-        if (!settled) {
+        if (!preserveReservation) {
           try {
             await settleShare(store, reservation, null);
           } catch {
