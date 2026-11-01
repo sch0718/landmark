@@ -1009,3 +1009,15 @@ it('trip-collab 진입점은 env.DB로 초대·수락·읽기·거두기를 처�
     db.close();
   }
 });
+
+it('에이전트 진입점은 DB 설정이 없으면 503 config', async () => {
+  const { onRequest } = await import('../../../functions/api/agent/[[path]]');
+  const response = await onRequest({
+    request: new Request('http://localhost:8788/api/agent/v1/whoami'),
+    env: {},
+    params: {},
+    waitUntil: () => {},
+  });
+  expect(response.status).toBe(503);
+  expect(await response.json()).toEqual({ error: 'config' });
+});
