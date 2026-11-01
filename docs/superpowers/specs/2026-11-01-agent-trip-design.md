@@ -48,12 +48,12 @@ AI 에이전트(Claude Code 등)가 사람 손 없이 여행 일정을 만들어
 | 마지막 사용 시각 | 1시간에 한 번만 갱신 | D1 쓰기를 줄인다(동기화 `DEVICE_TOUCH_MS`와 같은 간격) |
 | 브라우저 요청 | 에이전트 API는 `Origin` 헤더가 있으면 `403 origin` | 브라우저에서 부를 이유가 없다. CORS를 열지 않으므로 다른 사이트는 응답을 읽지 못하고, 이 규칙으로 앱 출처 안의 스크립트도 막는다 |
 | CLI가 토큰을 보낼 곳 | `isAllowedOrigin`(운영·Pages·미리보기) 또는 `http://localhost:*`·`http://127.0.0.1:*`만. 그 밖의 `--app`은 거절 | 프롬프트 주입으로 바뀐 주소에 토큰을 보내지 않는다 |
-| 짧은 링크 철회(사용자 결정 B안, 2026-11-01) | `share`가 서버 성공 뒤 삭제 토큰을 로컬 파일 `~/.landmark/agent-shares.json`(폴더 `~/.landmark` 권한 700, 파일 600, 임시 파일에 쓰고 `rename`)에 남긴다. 형식 `{ "v": 1, "items": [{ "app": "https://landmark.sch0718.dev", "id": "<16자>", "deleteToken": "<43자>", "title": "…", "createdAt": "<ISO>", "expiresAt": "<ISO>" }] }`, 최대 200개, 읽고 쓸 때 만료된 항목을 뺀다. 시험용으로 폴더를 `LANDMARK_TRIP_HOME`으로 바꿀 수 있다. `yarn trip unshare <id>`가 같은 `app`의 항목을 찾아 `DELETE /api/agent/v1/share/:id`로 지우고, `unshare --list`가 남은 링크(id·제목·기한)를 보인다. **PR ②**에 넣는다 | 삭제 토큰은 만든 쪽만 가진다(브라우저의 `tripmap:share-links:v1`과 같은 모델). 기존 `DELETE /api/share/:id`는 허용 출처 검사(`withRequest`)가 있어 CLI가 부를 수 없으므로 토큰 경로를 둔다. 서버에 소유 기록 표를 더하지 않는다 |
+| 짧은 링크 철회(사용자 결정 B안, 2026-11-01) | `share`가 서버 성공 뒤 삭제 토큰을 로컬 파일 `~/.landmark/agent-shares.json`(폴더 `~/.landmark` 권한 700, 파일 600, 임시 파일에 쓰고 `rename`)에 남긴다. 형식 `{ "v": 1, "items": [{ "app": "https://landmark.sch0718.dev", "id": "<16자>", "deleteToken": "<43자>", "title": "…", "createdAt": "<ISO>", "expiresAt": "<ISO>" }] }`, 최대 200개, 읽고 쓸 때 만료된 항목을 뺀다. 만료되지 않은 항목이 200개면 `share`는 서버를 부르기 전에 끝 코드 2 `share-store-full`("`unshare`로 정리해 주세요")로 멈춘다(있던 삭제 토큰을 밀어내지 않는다). 읽기·고치기·바꾸기 전체를 잠금 파일 `~/.landmark/agent-shares.lock`(`open(…, 'wx')`, 50ms 간격으로 5초까지 다시 시도, 30초 넘은 잠금은 버려진 것으로 보고 지움)으로 묶어 `share`·`unshare`가 동시에 돌아도 항목을 잃지 않는다. 시험용으로 폴더를 `LANDMARK_TRIP_HOME`으로 바꿀 수 있다. `yarn trip unshare <id>`가 같은 `app`의 항목을 찾아 `DELETE /api/agent/v1/share/:id`로 지우고, `unshare --list`가 남은 링크(id·제목·기한)를 보인다. **PR ②**에 넣는다 | 삭제 토큰은 만든 쪽만 가진다(브라우저의 `tripmap:share-links:v1`과 같은 모델). 기존 `DELETE /api/share/:id`는 허용 출처 검사(`withRequest`)가 있어 CLI가 부를 수 없으므로 토큰 경로를 둔다. 서버에 소유 기록 표를 더하지 않는다 |
 | 토큰 보관(CLI) | 환경변수 `LANDMARK_AGENT_TOKEN`이 먼저, 없으면 macOS 키체인 `security find-generic-password -s landmark-agent-token -a <앱 호스트> -w`(셸 없이 `execFile`) | 키체인 계정을 앱 호스트로 나눠 운영·로컬 토큰이 섞이지 않는다 |
 | 받은함 확인 시점 | 동기화가 켜진 기기(`readBootFlag()`)에서 앱을 연 뒤 첫 동기화 실행이 끝날 때, 그 뒤로는 실행이 끝날 때마다 하되 10분에 한 번까지 | 동기화는 저장 2초 뒤에도 돈다. 매번 묻으면 요청이 많다. 자동 백업과 같은 `onRunFinished` 길을 쓴다 |
 | 알림 반복 | 기기 키 `tripmap:agent-inbox:v1`에 알린 항목 id를 두고, 새 id가 있을 때만 알림 | 같은 항목으로 열 때마다 알리지 않는다 |
 | `버리기` | 확인 대화상자 뒤 서버에서 지운다 | 지운 항목은 되살릴 수 없다 |
-| `AGENT_API=off` 범위 | 토큰으로 부르는 에이전트 API 전부와 새 토큰 발급이 503 `off`. 토큰 목록·철회, 앱의 받은함 읽기·지우기는 계속 된다 | 다른 스위치와 같이 새 자료만 막고, 이미 받은 일정과 철회는 남긴다 |
+| `AGENT_API=off` 범위 | 토큰으로 부르는 에이전트 API(`whoami`·받은함 올리기·짧은 링크 만들기)와 새 토큰 발급이 503 `off`. 예외로 짧은 링크 지우기(`DELETE /api/agent/v1/share/:id`, 경로 속성 `allowWhenOff`)와 토큰 목록·철회, 앱의 받은함 읽기·지우기는 계속 된다 | 다른 스위치와 같이 새 자료만 막고, 이미 받은 일정과 철회는 남긴다 |
 | `SHARE_SHORT=off`와의 관계 | 에이전트 `share`도 막는다(503 `off`) | 짧은 링크 저장소의 스위치가 하나로 모인다 |
 
 ## 하지 않는 것
@@ -181,7 +181,7 @@ yarn trip --schema
 
 `send`는 6의 `/import#d=` 값을 받은함에 올리고, `share`는 `/view#d=` 값을 `encryptShareHash`(`src/services/share-short/crypto.ts`)로 암호화해 올린다(아래 API). 삭제 토큰은 `newDeleteToken()`으로 만들고, 기한 기준일은 `shortKeepUntil([endDate])`다. 서버가 `201`(또는 같은 삭제 토큰 재시도의 `200`)을 주면 삭제 토큰을 `~/.landmark/agent-shares.json`에 더한다(`pipeline/agent-trip/share-store.ts`, 새 파일). 파일 쓰기에 실패해도 링크는 만들어졌으므로 성공으로 끝내되 경고 `share-store`("이 링크는 기한까지 지울 수 없어요")를 낸다. 삭제 토큰은 출력·`--json`에 넣지 않는다.
 
-`unshare <id>`: 파일에서 같은 `app`·`id`를 찾는다(없으면 끝 코드 2 `unknown-share`) → `DELETE /api/agent/v1/share/:id`(헤더 `X-Delete-Token`) → `204`·`404`면 파일에서 뺀다. `403 delete-token`이면 파일 항목을 남기고 끝 코드 4.
+`unshare <id>`: 파일에서 같은 `app`·`id`를 찾는다(없으면 끝 코드 2 `unknown-share`) → `DELETE /api/agent/v1/share/:id`(헤더 `X-Delete-Token`) → `204`, 또는 `404`이면서 JSON 본문이 `{ error: 'not-found' }`(링크가 없거나 기한이 지남)일 때만 파일에서 뺀다. 본문이 JSON이 아니거나 `error`가 다른 `404`(옛 서버라 경로가 없음·정적 앱 응답)는 링크가 남아 있을 수 있으므로 항목을 남기고 끝 코드 5 `old-server`. `403 delete-token`이면 항목을 남기고 끝 코드 4.
 
 ### 출력
 
@@ -259,7 +259,7 @@ CREATE INDEX IF NOT EXISTS agent_inbox_expires ON agent_inbox(expires_at);
 
 진입점 `functions/api/agent/[[path]].ts`(새 파일) → `handleAgent(ctx, deps)`(`src/server/agent/router.ts`, 새 파일). 환경·의존성은 `SyncContext`·`SyncDeps`를 그대로 쓰고 `SyncEnv`에 `AGENT_API?: string`·`SHARE_SHORT?: string`을 더한다. 응답·오류는 동기화와 같은 `syncJson`·`SyncHttpError`(`{ error: '<code>', ...extra }`), 모두 `Cache-Control: private, no-store`. 로그는 `handleSync`처럼 `{ method, path(패턴), status, ms }` 한 줄만.
 
-공통 앞 단계: `Origin` 헤더가 있으면 `403 origin` → `DB` 없으면 `503 config` → `ensureSchema` → `AGENT_API === 'off'`면 `503 off` → 토큰 검사(`requireAgentToken`, 아래 보안) → 범위 → 사용자 하루 한도.
+공통 앞 단계: `Origin` 헤더가 있으면 `403 origin` → `DB` 없으면 `503 config` → `ensureSchema` → `AGENT_API === 'off'`이고 경로에 `allowWhenOff`가 없으면 `503 off`(`allowWhenOff`는 짧은 링크 지우기뿐) → 토큰 검사(`requireAgentToken`, 아래 보안) → 범위 → 사용자 하루 한도.
 
 | 요청 | 범위 | 하는 일 | 하루 한도(사용자) | 성공 |
 |---|---|---|---|---|
@@ -269,7 +269,7 @@ CREATE INDEX IF NOT EXISTS agent_inbox_expires ON agent_inbox(expires_at);
 | `DELETE /api/agent/v1/share/:id` | `share:create` | 헤더 `X-Delete-Token`(43자)이 맞는 짧은 링크를 지운다 | `agent-share-delete` 200 | `204`, 없는·만료 링크 `404`, 토큰 다름 `403 delete-token` |
 
 - 본문은 `readLimitedJson(request, SHARE_REQUEST_MAX_BYTES)`(40,000바이트, `src/server/share/handlers.ts`)로 읽는다. 이 함수는 `ApiError`(`TOO_LARGE`·`BAD_REQUEST`)를 던지고 `syncError`는 `ApiError`를 모르므로(그대로면 `500 internal`), `handleAgent`가 경계에서 바꾼다: `TOO_LARGE` → `413 { error: 'too-large' }`, `BAD_REQUEST`(본문을 못 읽음·JSON 아님) → `400 { error: 'bad-json' }`. 스키마 실패는 `422 { error: 'invalid' }`.
-- `inbox`: `key`는 `^[A-Za-z0-9_-]{43}$`, `d`는 `^[A-Za-z0-9_-]{1,32000}$`. `readShareHash(d, AGENT_INBOX_LIMITS)`가 `ok`이고 `version === 2`이며, 문서 `title`과 `trips[0].title`이 모두 60자(`LIBRARY_LIMITS.tripTitleChars`) 이하, 장소마다 `name` 100자·`address` 200자·`memo` 10,000자 이하, `trips[0].legModes`의 키가 모두 문서의 실제 구간(`dayPoints`의 이웃한 쌍)이어야 한다(관계 검사는 키의 장소 참조만 보고 개수를 제한하지 않아, 구간 설정 6,700개짜리 문서가 상한 안에서 통과한 뒤 가져온 여행이 `ITEM_DOC_MAX_CHARS`를 넘는다. 실제 구간만 받으면 키 수가 구간 수 이하로 묶인다)(공유 스키마는 이름 길이를 제한하지 않아 이름 21만 자 장소도 링크가 된다. 가져오면 동기화 항목 상한 `ITEM_DOC_MAX_CHARS`를 넘어 다른 기기에 퍼지지 않는다)(공유 스키마는 제목 길이를 제한하지 않아 50만 자 제목도 압축 1,000자 안에 들어간다. 목록 응답이 커지지 않게 서버가 막는다). 실패는 `422 { error: 'invalid', reason }`(`reason`은 `ShareReadError`·`not-trip`·`title`·`place-too-long`·`leg-modes`). 목록의 `title`은 `trips[0].title`(비면 문서 `title`)이다. 처리 순서:
+- `inbox`: `key`는 `^[A-Za-z0-9_-]{43}$`, `d`는 `^[A-Za-z0-9_-]{1,32000}$`. `readShareHash(d, AGENT_INBOX_LIMITS)`가 `ok`이고 `version === 2`이며, 문서 `title`과 `trips[0].title`이 모두 60자(`LIBRARY_LIMITS.tripTitleChars`) 이하, 장소마다 `name` 100자·`address` 200자·`memo` 10,000자 이하, 출처 id는 `naverSid`·`kakaoId` `^\d{1,20}$`, `googleId` 64자 이하(공유 스키마는 출처 id 길이를 제한하지 않아 21만 자 숫자 sid 하나로도 가져온 장소가 동기화 항목 상한을 넘는다), `trips[0].legModes`의 키가 모두 문서의 실제 구간(`dayPoints`의 이웃한 쌍)이어야 한다(관계 검사는 키의 장소 참조만 보고 개수를 제한하지 않아, 구간 설정 6,700개짜리 문서가 상한 안에서 통과한 뒤 가져온 여행이 `ITEM_DOC_MAX_CHARS`를 넘는다. 실제 구간만 받으면 키 수가 구간 수 이하로 묶인다)(공유 스키마는 이름 길이를 제한하지 않아 이름 21만 자 장소도 링크가 된다. 가져오면 동기화 항목 상한 `ITEM_DOC_MAX_CHARS`를 넘어 다른 기기에 퍼지지 않는다)(공유 스키마는 제목 길이를 제한하지 않아 50만 자 제목도 압축 1,000자 안에 들어간다. 목록 응답이 커지지 않게 서버가 막는다). 실패는 `422 { error: 'invalid', reason }`(`reason`은 `ShareReadError`·`not-trip`·`title`·`place-too-long`(이름·주소·메모·출처 id)·`leg-modes`). 목록의 `title`은 `trips[0].title`(비면 문서 `title`)이다. 처리 순서:
   1. 같은 사용자·같은 `key`의 **만료되지 않은** 행이 있으면 그 행을 `200 created: false`로 돌려준다(가득 찬 상태여도 먼저 본다).
   2. 같은 `key`의 만료된 행이 남아 있으면(정리 전) 같은 `batch`의 첫 문장에서 지운다.
   3. 넣기는 한 문장의 조건부 `INSERT … SELECT … WHERE (SELECT count(*) FROM agent_inbox WHERE user_id = ? AND expires_at > ?) < 20`. 바뀐 행이 0이거나 `UNIQUE` 충돌이면 1을 한 번 더 한다: 같은 `key`의 만료되지 않은 행이 있으면(같은 `key` 경쟁에서 진 쪽 — 19개 상태에서 두 요청이 동시에 오면 진 쪽은 `UNIQUE`가 아니라 개수 조건으로 0행이 된다) 그 행을 `200 created: false`로, 없으면 `409 inbox-full`. 두 요청이 동시에 와도 한도를 넘지 않는다.
@@ -298,7 +298,7 @@ CREATE INDEX IF NOT EXISTS agent_inbox_expires ON agent_inbox(expires_at);
 ### 받은함 확인
 
 - 부트 `src/services/agent-inbox/boot.ts`(새 파일): `loadAgentInbox = lazyChunk(() => import('src/services/agent-inbox/inbox-check'))`, `loadAgentSection`, `loadAgentInboxDialog`. `src/sections/agent/use-agent-inbox-boot.ts`(새 파일)를 `LibraryShell`(`src/sections/shell/ShellRoute.tsx`)의 `useAutoBackupBoot()` 다음 줄에서 부른다. `readBootFlag()`가 거짓이면 실행기를 받지 않는다. 같은 페이지에서 동기화를 켜는 경우(첫 연결, 설정의 `다시 켜기`는 엔진 `enable()`만 부르고 셸을 다시 마운트하지 않는다)를 위해, 훅은 `syncStatusAtom`(첫 로딩 묶음)을 구독해 `phase`가 처음 `synced`가 될 때 실행기를 받아 붙인다. 이미 붙었으면 다시 붙이지 않는다.
-- 실행기 `src/services/agent-inbox/inbox-check.ts`(새 파일, 조각 `agent-inbox`): `loadSyncEngine()`의 `ensureLibrarySyncEngine().onRunFinished`에 붙어(자동 백업 `attachAutoBackup`과 같은 모양) 위 결정 표의 간격으로 `GET /v1/agent/inbox`. 새 id가 있으면 `sonner` 알림 「AI가 보낸 일정 N개」 + `보기`. 실패(오프라인·5xx·429)는 조용히 다음 실행에서 다시 한다. 401·403(`auth`·`not-allowed`)은 이 페이지에서 받은함 확인을 멈추고 알림을 내지 않는다. 세션 지우기·상태 바꾸기는 하지 않고 동기화 엔진의 다음 실행(`schedule('manual')`을 한 번 부름)이 자기 실패 처리로 `auth`·`not-allowed`를 정하게 한다(같은 세션으로 엔진도 같은 응답을 받는다). 멈출 때 그 세션 id(`readSession()`)를 기억하고, 이후 `onRunFinished`가 올 때 저장된 세션 id가 달라졌으면(같은 페이지에서 다시 로그인 — Google 재로그인은 페이지 이동 없이 엔진을 다시 시작한다) 멈춤을 풀고 확인을 이어 간다.
+- 실행기 `src/services/agent-inbox/inbox-check.ts`(새 파일, 조각 `inbox-check` — Vite 조각 이름은 파일 이름을 따른다): `loadSyncEngine()`의 `ensureLibrarySyncEngine().onRunFinished`에 붙어(자동 백업 `attachAutoBackup`과 같은 모양) 위 결정 표의 간격으로 `GET /v1/agent/inbox`. 새 id가 있으면 `sonner` 알림 「AI가 보낸 일정 N개」 + `보기`. 실패(오프라인·5xx·429)는 조용히 다음 실행에서 다시 한다. 401·403(`auth`·`not-allowed`)은 이 페이지에서 받은함 확인을 멈추고 알림을 내지 않는다. 세션 지우기·상태 바꾸기는 하지 않고 동기화 엔진의 다음 실행(`schedule('manual')`을 한 번 부름)이 자기 실패 처리로 `auth`·`not-allowed`를 정하게 한다(같은 세션으로 엔진도 같은 응답을 받는다). 멈출 때 그 세션 id(`readSession()`)를 기억하고, 이후 `onRunFinished`가 올 때 저장된 세션 id가 달라졌으면(같은 페이지에서 다시 로그인 — Google 재로그인은 페이지 이동 없이 엔진을 다시 시작한다) 멈춤을 풀고 확인을 이어 간다.
 - 기기 키 `tripmap:agent-inbox:v1`(`src/services/agent-inbox/storage.ts`, 새 파일): `{ v: 1, userId, notified: string[] }`(최대 100개). 다른 사용자면 비운다. 백업·동기화에 넣지 않는다.
 
 ### 미리보기와 가져오기
@@ -320,11 +320,11 @@ CREATE INDEX IF NOT EXISTS agent_inbox_expires ON agent_inbox(expires_at);
 | 묶음 | 파일 | 첫 로딩 |
 |---|---|---|
 | 부트 | `src/services/agent-inbox/boot.ts`, `src/sections/agent/use-agent-inbox-boot.ts` | 들어감(합쳐 gzip 0.5KB 안) |
-| 실행기 | `src/services/agent-inbox/inbox-check.ts`(+ `storage.ts`, 앱 API `src/services/agent-inbox/api.ts`) | `agent-inbox-*.js` |
+| 실행기 | `src/services/agent-inbox/inbox-check.ts`(+ `storage.ts`, 앱 API `src/services/agent-inbox/api.ts`) | `inbox-check-*.js` |
 | 설정 구역 | `src/sections/agent/AgentSection.tsx`, `AgentTokenDialog.tsx` | `AgentSection-*.js` |
 | 받은함 창 | `src/sections/agent/AgentInboxDialog.tsx` | `AgentInboxDialog-*.js` |
 
-- `build:ci`에 `--require-lazy AgentSection --require-lazy AgentInboxDialog --require-lazy agent-inbox`를 더한다. 첫 로딩 상한(`perf-budget.json` 327,680)은 그대로.
+- `build:ci`에 `--require-lazy AgentSection --require-lazy AgentInboxDialog --require-lazy inbox-check`를 더한다. 첫 로딩 상한(`perf-budget.json` 327,680)은 그대로.
 - 동기화 엔진은 `loadSyncEngine()`(동적 import)으로만 받는다. 정적으로 가져오면 `INEFFECTIVE_DYNAMIC_IMPORT`로 빌드가 실패한다(4단계 설계와 같음).
 - 새 `VITE_` 변수가 없다. CLI는 `LANDMARK_APP_URL`·`LANDMARK_AGENT_TOKEN`만 읽는다(`vitest.config.ts`의 `test.env`는 그대로).
 
@@ -366,7 +366,7 @@ CREATE INDEX IF NOT EXISTS agent_inbox_expires ON agent_inbox(expires_at);
 
 - 보관함(`tripmap:library:v2`)·백업 파일·공유 문서(`ShareDoc` v1·v2) 형식은 바뀌지 않는다. 받은함 항목은 기존 `/import#d=` 값과 같다. 새 기기 키 `tripmap:agent-inbox:v1`은 옛 버전이 무시한다. `AddFlow`의 `inbox` 필드는 메모리 상태다.
 - `/api/search` 응답 모양은 그대로다(`searchNaverPlaces`는 `sid`를 더 주고, `resolveSearch`가 지금 모양으로 줄인다).
-- **스위치**: `AGENT_API=off`(Pages 변수, 다시 배포). 에이전트 API·발급이 503, 목록·철회·받은함 읽기·지우기는 계속. 짧은 링크 전체를 멈추려면 기존 `SHARE_SHORT=off`.
+- **스위치**: `AGENT_API=off`(Pages 변수, 다시 배포). 에이전트 API(짧은 링크 지우기 제외)·발급이 503, 짧은 링크 지우기·목록·철회·받은함 읽기·지우기는 계속. 짧은 링크 전체를 멈추려면 기존 `SHARE_SHORT=off`.
 - **D1**: `schema_meta`는 7로 남는다. 옛 코드(`SCHEMA_VERSION` 6)는 `version >= SCHEMA_VERSION`이라 문장을 다시 돌리지 않고, `agent_tokens`·`agent_inbox`는 남아 읽히지 않는다. 다시 새 버전으로 오면 이어 쓴다. 옛 코드에는 받은함 만료 정리가 없어 되돌린 동안 만료 행이 남는다(읽히지 않음).
 - **되돌리는 순서**: ④ → ③ → ② → ①(병합의 역순). ③은 ②의 동기화 경로를, ②는 ①의 CLI 모듈을 쓴다. ②가 `src/server/meet/schema-sql.ts`·`src/server/library-sync/router.ts`·`library.ts`·`env.ts`·`src/server/share/handlers.ts`를, ③이 `SettingsPage.tsx`·`ShellRoute.tsx`·`SharePreview.tsx`·`add-place.ts`·`package.json`을 고친다.
 - **③만 되돌리면**: 앱의 AI 연결·받은함 화면이 사라진다. 이미 만든 토큰은 만료까지 동작하고 받은함은 20개에서 막힌다. 막으려면 `AGENT_API=off`.
@@ -412,8 +412,8 @@ CREATE INDEX IF NOT EXISTS agent_inbox_expires ON agent_inbox(expires_at);
 - 단위(vitest)
   - CLI(`// @vitest-environment node`, 바깥 요청은 가짜 `fetch`): `TripPlanSchema`(필수·모르는 필드·`key` 모양·날짜·`stayMin` 범위·출처 둘 이상), 의미 검사(없는 key·같은 장소 두 번·날 수·같은 sid·`legModes` 키) 오류 경로 문자열, 장소 조회(sid 성공·실패와 대체 값·`link` 폴더 거절·검색 하나·정확한 이름 하나·후보 여럿 `ambiguous`·결과 없음 핀), 보관함 만들기(연산 오류를 경로로 바꿈·`LibrarySchema` 통과), 구간(같은 지점·`routed`·`NO_ROUTE`·실패 → 앱 `use-trip-legs`와 같은 값, 같은 키 한 번만, `--no-routes`), 문서가 `ShareDocV2Schema`·`checkShareTrip`을 통과하고 `importLink` 값이 `readShareHash`(`AGENT_INBOX_LIMITS` 포함)로 같은 문서(경로선 제외)가 됨, 요청 키가 같은 계획·같은 메모 옵션의 재실행에서 같고 메모 옵션이 다르면 다름, 조회 뒤 출처 중복 `duplicate-source`(sid와 검색이 같은 장소), 참조 장소 없음 `no-places`, 좌표 범위 밖(핀·대체 값·구글 링크 결과) `out-of-range`, 가져오기 모의 실행 `item-too-large`(이름 긴 장소 경계값)·제목 30·31·60자에서 성공·같은 이름 50m 안 핀 두 개 `merged-places`, 이웃하지 않은 `legModes` 쌍 `leg-modes`, 50km 넘는 도보 지정 `walk-too-far`, 네이버 응답 지연 시간 초과(대체 값 사용·오류), 메모 기본값 세 명령, `too-big`, 요약 시각(`computeSchedule`), `--json` 모양과 끝 코드, 허용 밖 `--app` 거절, 토큰 출처(환경변수 > 키체인, `execFile` 가짜), 어떤 출력에도 토큰 문자열이 없음.
   - `searchNaverPlaces`·`resolveSearch`(응답 모양 그대로), `randomId`.
-  - 서버(`node:sqlite` 가짜 D1 `createSqliteD1`, `createSyncMemoryServer`로 로그인): 스키마 7·멱등·6에서 올라감·`ALTER` 없음, 발급(원문 한 번·해시만 저장·10개 409·하루 20번·`AGENT_API=off` 503·`LIBRARY_SYNC=off` 503), 목록·철회(남의 것 404), `Origin` 있는 에이전트 요청 403, 토큰 모양·없음·만료·철회 401, 허용 목록에서 빠진 계정 403(카카오·Google 각각), 범위 403, 받은함(제목 61자·장소 이름 101자·실제 구간이 아닌 `legModes` 키(장소 100곳·구간 설정 6,700개 사례) 422, 토큰 9개에서 두 발급 경쟁 시 10개를 넘지 않음, 정상 201·같은 `key` 200(20개 찬 상태에서도, 19개 상태에서 같은 `key` 두 요청 경쟁 시 둘 다 같은 id)·만료된 같은 `key`는 새로 201·`readShareHash` 실패와 v1 문서 422·풀린 크기 1MB 넘음 422·본문 413·JSON 아님 400·20개 409·동시 두 요청이 20개를 넘지 않음·하루 50번 429·사용자 격리·만료 행은 읽히지 않음·정리), 짧은 링크 지우기(204·없음 404·틀린 삭제 토큰 403·`AGENT_API=off`에서도 됨·하루 200번), 짧은 링크(정상·`deleteToken` 재시도 같은 id·`SHARE_SHORT=off`·`AGENT_API=off`·`/s/<id>`가 CLI 암호문을 연다), 토큰 실패 IP 한도, 마지막 사용 1시간 간격, `DELETE /v1/account`가 두 표를 지움, 로그 줄에 토큰·문서 없음.
-  - CLI ↔ 서버: 메모리 서버의 `fetch`로 `send`·`share`·`whoami`·`unshare` 전체(`share` → 파일에 삭제 토큰·권한 600 → `unshare --list` → `unshare` → `/s/<id>` 404 → 파일에서 빠짐, 파일 쓰기 실패 경고, 출력에 삭제 토큰 없음. 발급 → 키체인 가짜 → 명령 → 받은함 목록).
+  - 서버(`node:sqlite` 가짜 D1 `createSqliteD1`, `createSyncMemoryServer`로 로그인): 스키마 7·멱등·6에서 올라감·`ALTER` 없음, 발급(원문 한 번·해시만 저장·10개 409·하루 20번·`AGENT_API=off` 503·`LIBRARY_SYNC=off` 503), 목록·철회(남의 것 404), `Origin` 있는 에이전트 요청 403, 토큰 모양·없음·만료·철회 401, 허용 목록에서 빠진 계정 403(카카오·Google 각각), 범위 403, 받은함(제목 61자·장소 이름 101자·실제 구간이 아닌 `legModes` 키(장소 100곳·구간 설정 6,700개 사례) 422, 토큰 9개에서 두 발급 경쟁 시 10개를 넘지 않음, 정상 201·같은 `key` 200(20개 찬 상태에서도, 19개 상태에서 같은 `key` 두 요청 경쟁 시 둘 다 같은 id)·만료된 같은 `key`는 새로 201·`readShareHash` 실패와 v1 문서 422·풀린 크기 1MB 넘음 422·본문 413·JSON 아님 400·20개 409·동시 두 요청이 20개를 넘지 않음·하루 50번 429·사용자 격리·만료 행은 읽히지 않음·정리), 짧은 링크 지우기(204·없음 404 `{ error: 'not-found' }`·틀린 삭제 토큰 403·`AGENT_API=off`에서도 되고 같은 스위치에서 whoami·inbox·share는 503·하루 200번), 출처 id 21자 sid `place-too-long`, 짧은 링크(정상·`deleteToken` 재시도 같은 id·`SHARE_SHORT=off`·`AGENT_API=off`·`/s/<id>`가 CLI 암호문을 연다), 토큰 실패 IP 한도, 마지막 사용 1시간 간격, `DELETE /v1/account`가 두 표를 지움, 로그 줄에 토큰·문서 없음.
+  - CLI ↔ 서버: 메모리 서버의 `fetch`로 `send`·`share`·`whoami`·`unshare` 전체(`share` → 파일에 삭제 토큰·권한 600 → `unshare --list` → `unshare` → `/s/<id>` 404 → 파일에서 빠짐, 파일 쓰기 실패 경고, 출력에 삭제 토큰 없음, 옛 서버 404(JSON 아님)면 파일 항목을 남기고 끝 코드 5, 만료 안 된 200개에서 `share-store-full`로 서버를 부르지 않음, `share` 두 개와 `share`·`unshare`를 동시에 돌려도 항목을 잃지 않음. 발급 → 키체인 가짜 → 명령 → 받은함 목록).
   - 앱: 받은함 실행기(첫 실행·10분 간격·새 id만 알림·다른 사용자·실패 무시·401/403이면 확인을 멈추고 엔진 실행을 한 번 예약·같은 페이지 재로그인 뒤 다시 확인), 받은함 창(줄 문구·미리보기·읽기 실패·버리기 확인), 실제 `AddPlaceHost`를 거친 `SharePreview`의 받은함 머리·여행째 가져온 뒤 지우기·장소만 가져오면 남김·지우기 실패 알림·응답 사이 계정이 바뀌면 버림·가져오기 직전 계정 재확인, AI 연결 구역(로그인 없으면 숨김·목록 문구·만들기 창·원문 한 번·10개·`enabled`·`canCreate` 경우별 문구), 새로고침 없이 `다시 켜기` → `synced` → 받은함 알림.
 - E2E(Playwright, desktop): `agent-inbox.spec.ts` — `installSyncServer`(`tests/e2e/sync-server.ts`)에 `/api/agent/**`를 더해 가짜 카카오 로그인 → AI 연결 만들기 → 시험 코드가 그 토큰으로 `POST /api/agent/v1/inbox` → 새로고침 → 알림 → 미리보기 → 가져오기 → 여행 화면 → 받은함 비었음 → 철회 → 같은 토큰 401.
 - 미리보기: 실제 계정으로 발급 → `yarn trip send --app <미리보기 주소>` → 휴대폰에서 알림·가져오기 → 다른 기기에 동기화. `share` 링크를 카카오톡으로 열기. CPU 시간.
