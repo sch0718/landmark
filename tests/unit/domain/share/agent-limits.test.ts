@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { agentDocProblem, agentRawProblem } from 'src/domain/share/agent-limits';
-import type { SharePlace } from 'src/schema/share';
+import type { ShareDocV2, SharePlace } from 'src/schema/share';
 import { makeShareV2Doc } from '../../helpers/share-v2-doc';
 import { hashDoc } from 'src/share-viewer/encode';
+import { agentRawCases } from '../../../helpers/agent-raw-cases';
+import { largeAgentDoc } from '../../../helpers/agent-import-doc';
 
 describe('에이전트 원시 문서 사전 검사', () => {
   it('경로선을 뺀 정상 가져오기 사본은 통과하며 입력을 바꾸지 않는다', () => {
@@ -12,40 +14,49 @@ describe('에이전트 원시 문서 사전 검사', () => {
     expect(doc).toEqual(before);
   });
 
-  it.each([
-    null,
-    false,
-    1,
-    '문서',
-    [],
-    {},
-    { labels: {} },
-    { labels: [], trips: null },
-    { labels: [], trips: [] },
-    { labels: [], trips: [null] },
-    { labels: [], trips: [{ days: null }] },
-    { labels: [], trips: [{ days: [null] }] },
-    { labels: [], trips: [{ days: [{ stops: {}, legs: [] }] }] },
-    { labels: [], trips: [{ days: [{ stops: [], legs: null }] }] },
-    { labels: [], trips: [{ days: [{ stops: [], legs: [null] }] }] },
-    { labels: [], trips: [{ days: [{ stops: [], legs: [{ path: {} }] }] }] },
-    { labels: [], trips: [{ days: [], legModes: [] }] },
-    { labels: [], trips: [{ days: [], legModes: null }] },
-  ])('모양이 틀린 원시 값은 스키마 검사에 맡긴다: %#', (value) => {
-    expect(agentRawProblem(value)).toBeNull();
+  it.each(agentRawCases(hashDoc(makeShareV2Doc()) as ShareDocV2))(
+    '$name 원시 값의 거절 사유: $reason',
+    ({ value, reason }) => {
+      expect(agentRawProblem(value)).toBe(reason);
+    },
+  );
+
+  it('v1 장소 문서는 모양을 더 보지 않고 not-trip이다', () => {
+    const doc = makeShareV2Doc();
+    const v1 = { format: doc.format, title: doc.title, createdAt: doc.createdAt, labels: [] };
+    expect(agentRawProblem({ ...v1, version: 1, places: [null] })).toBe('not-trip');
+  });
+
+  it('장소 200곳·30일의 상한 정상 문서를 허용한다', () => {
+    expect(agentRawProblem(hashDoc(largeAgentDoc()))).toBeNull();
   });
 
   it('비어 있지 않은 라벨 배열은 원소 검사 없이 labels이다', () => {
-    expect(agentRawProblem({ labels: [null] })).toBe('labels');
+    expect(agentRawProblem({ ...hashDoc(makeShareV2Doc()), labels: [null] })).toBe('labels');
   });
 
-  it('모든 여행·날짜·구간의 비어 있지 않은 경로선을 찾는다', () => {
+  it('마지막 날짜·구간의 비어 있지 않은 경로선을 찾는다', () => {
     const doc = hashDoc(makeShareV2Doc());
     if (doc.version !== 2) throw new Error('v2 시험 문서여야 함');
-    const other = structuredClone(doc.trips[0]!);
-    other.days[1]!.legs[0]!.path = [[0, 0]];
-    doc.trips.push(other);
+    doc.trips[0]!.days[1]!.legs[0]!.path = [[0, 0]];
     expect(agentRawProblem(doc)).toBe('path');
+  });
+
+  it('모양 → 장소 수 → 라벨 → 경로선 → 구간 설정 순으로 거절한다', () => {
+    const doc = hashDoc(makeShareV2Doc());
+    if (doc.version !== 2) throw new Error('v2 시험 문서여야 함');
+    doc.places = Array.from({ length: 201 }, () => doc.places[0]!);
+    doc.labels = [{ id: 'l', name: '라벨', color: 'blue', order: 0 }];
+    doc.trips[0]!.days[0]!.legs[0]!.path = [[0, 0]];
+    doc.trips[0]!.legModes = Object.fromEntries(Array.from({ length: 20 }, (_, i) => [i, 'car']));
+    expect(agentRawProblem({ ...doc, places: [null, ...doc.places] })).toBe('corrupt');
+    expect(agentRawProblem(doc)).toBe('too-many');
+    doc.places.length = 6;
+    expect(agentRawProblem(doc)).toBe('labels');
+    doc.labels = [];
+    expect(agentRawProblem(doc)).toBe('path');
+    doc.trips[0]!.days[0]!.legs[0]!.path = [];
+    expect(agentRawProblem(doc)).toBe('leg-modes');
   });
 
   it('첫 여행의 Stop 수 + 날짜 수만큼 구간 설정을 허용하고 하나 초과하면 거절한다', () => {

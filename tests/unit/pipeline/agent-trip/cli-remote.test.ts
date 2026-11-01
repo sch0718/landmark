@@ -208,7 +208,7 @@ describe('원격 여행 CLI', () => {
       expect.objectContaining({ code: 'token-origin' }),
     );
   });
-  it.each(['timeout', 'offline', 'server'])(
+  it.each(['timeout', 'offline', 'server', 'malformed'])(
     'share의 %s 뒤 삭제 토큰으로 결과 모르는 링크를 복구해 지운다',
     async (kind) => {
       const now = new Date();
@@ -235,6 +235,7 @@ describe('원격 여행 CLI', () => {
         received();
         // 서버는 저장했지만 중간 관문이 JSON이 아닌 502를 준 경우(결과 모름).
         if (kind === 'server') return new Response('<html>Bad Gateway</html>', { status: 502 });
+        if (kind === 'malformed') return Response.json({});
         return await new Promise<Response>(() => {});
       });
       vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
@@ -244,12 +245,13 @@ describe('원격 여행 CLI', () => {
       const r = await running;
       vi.useRealTimers();
       expect(r.exit).toBe(5);
-      expect(r.data.errors[0].code).toBe(kind);
+      expect(r.data.errors[0].code).toBe(kind === 'malformed' ? 'server' : kind);
       expect(r.data.errors[0].message).toContain('yarn trip unshare --list');
       expect(persistedBeforeRequest).toBe(true);
       const raw = JSON.parse(await readFile(join(home, 'agent-shares.json'), 'utf8'));
       expect(raw.items).toHaveLength(1);
       const unknown = raw.items[0] as StoredShare;
+      expect(unknown.id).toMatch(/^pending:/);
       expect(/^[A-Za-z0-9_-]{43}$/.test(unknown.deleteToken)).toBe(true);
       expect(unknown.expiresAt).toBe(
         shortExpiresAt(
@@ -281,6 +283,74 @@ describe('원격 여행 CLI', () => {
       expect(JSON.parse(await readFile(join(home, 'agent-shares.json'), 'utf8')).items).toEqual([]);
     },
   );
+  it.each([
+    ...['whoami', 'send', 'share'].flatMap((name) =>
+      [null, [], {}, true, '성공'].map((body) => ({ name, field: '루트', body })),
+    ),
+    ...Object.entries({
+      name: 1,
+      scopes: 'inbox:write',
+      expiresAt: '2026-11-01',
+      provider: null,
+    }).flatMap(([field, value]) =>
+      [undefined, value].map((invalid) => ({
+        name: 'whoami',
+        field,
+        body: {
+          name: '도우미',
+          scopes: ['inbox:write'],
+          expiresAt: 123,
+          provider: 'naver',
+          [field]: invalid,
+        },
+      })),
+    ),
+    {
+      name: 'whoami',
+      field: 'scopes 원소',
+      body: { name: '도우미', scopes: [1], expiresAt: 123, provider: 'naver' },
+    },
+    ...['send', 'share'].flatMap((name) =>
+      Object.entries({
+        id: 'bad/id',
+        expiresAt: name === 'send' ? '123' : '날짜 아님',
+        created: 1,
+      }).flatMap(([field, value]) =>
+        [undefined, value].map((invalid) => ({
+          name,
+          field,
+          body: {
+            id: 'a'.repeat(16),
+            expiresAt: name === 'send' ? 123 : '2026-11-01T00:00:00Z',
+            created: true,
+            [field]: invalid,
+          },
+        })),
+      ),
+    ),
+  ])('$name 성공 응답의 $field 모양 오류는 server 5다: $body', async ({ name, body }) => {
+    fetcher.mockResolvedValueOnce(Response.json(body));
+    const r = await command(name === 'whoami' ? [name] : [name, file, '--no-routes']);
+    expect(r.exit).toBe(5);
+    expect(r.data.errors[0].code).toBe('server');
+  });
+
+  it.each(['whoami', 'send'])('%s 성공 응답의 무한 만료 시각은 server 5다', async (name) => {
+    const body =
+      name === 'whoami'
+        ? '{"name":"도우미","scopes":[],"provider":"naver","expiresAt":1e400}'
+        : '{"id":"aaaaaaaaaaaaaaaa","created":true,"expiresAt":1e400}';
+    fetcher.mockResolvedValueOnce(new Response(body));
+    const r = await command(name === 'whoami' ? [name] : [name, file, '--no-routes']);
+    expect(r.exit).toBe(5);
+    expect(r.data.errors[0].code).toBe('server');
+  });
+  it.each(['whoami', 'send', 'share'])('%s의 본문 없는 204도 server 5다', async (name) => {
+    fetcher.mockResolvedValueOnce(new Response(null, { status: 204 }));
+    const r = await command(name === 'whoami' ? [name] : [name, file, '--no-routes']);
+    expect(r.exit).toBe(5);
+    expect(r.data.errors[0].code).toBe('server');
+  });
   it.each(['create', 'delete'])('예약 복구의 %s 단계가 실패하면 예약을 남긴다', async (phase) => {
     const item = { ...saved(), id: 'pending:unknown' };
     secrets.push(item.deleteToken);

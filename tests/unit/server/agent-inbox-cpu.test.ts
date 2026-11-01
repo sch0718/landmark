@@ -10,6 +10,7 @@ import type { ShareDocV2 } from 'src/schema/share';
 import { checkInboxDoc } from 'src/server/agent/inbox';
 import { encodeShareHash, hashDoc } from 'src/share-viewer/encode';
 import { largeAgentDoc } from '../../helpers/agent-import-doc';
+import { agentRawCases } from '../../helpers/agent-raw-cases';
 
 const fixture = () =>
   JSON.parse(
@@ -19,6 +20,26 @@ const fixture = () =>
 afterEach(() => vi.restoreAllMocks());
 
 describe('받은함 CPU 회귀 방지', () => {
+  it.each(agentRawCases(hashDoc(fixture()) as ShareDocV2))(
+    '$name 입력은 스키마와 모의 가져오기 전에 거절한다: $reason',
+    async ({ value, reason }) => {
+      expect(new TextEncoder().encode(JSON.stringify(value)).byteLength).toBeLessThan(
+        AGENT_INBOX_LIMITS.decodedBytes,
+      );
+      const d = await codec.encodeCompressedJson(value);
+      expect(d.length).toBeLessThanOrEqual(AGENT_INBOX_LIMITS.hashChars);
+      const schema = vi.spyOn(parse, 'safeParse');
+      const simulate = vi.spyOn(importCheck, 'importedItemProblem');
+      await expect(checkInboxDoc(d)).rejects.toMatchObject({
+        status: 422,
+        code: 'invalid',
+        extra: { reason },
+      });
+      expect(schema).not.toHaveBeenCalled();
+      expect(simulate).not.toHaveBeenCalled();
+    },
+  );
+
   it.each(['too-many', 'labels', 'path', 'leg-modes'] as const)(
     '%s 공격을 스키마 검사와 모의 가져오기 전에 거절한다',
     async (reason) => {

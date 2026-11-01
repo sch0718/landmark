@@ -186,7 +186,7 @@ describe('받은함 문서', () => {
     await expect(checkInboxDoc(await encode(doc))).resolves.toEqual(meta);
   });
 
-  it('v1 장소 문서는 not-trip으로 거절한다', async () => {
+  it('v1 장소 문서는 스키마 검사 전에 not-trip으로 거절한다', async () => {
     const source = tripDoc();
     const doc = {
       format: source.format,
@@ -280,26 +280,40 @@ describe('받은함 문서', () => {
     await expect(checkInboxDoc(d)).rejects.toMatchObject(invalid('corrupt'));
   });
 
-  it.each(['corrupt', 'newer', 'empty', 'too-many'] as const)(
-    '공유 문서 판독 실패 %s를 그대로 돌려준다',
-    async (reason) => {
-      const doc = tripDoc();
-      let d: string;
-      if (reason === 'corrupt') d = '손상';
-      else if (reason === 'newer') d = await encodeCompressedJson({ ...doc, version: 3 });
-      else if (reason === 'empty') d = await encode({ ...doc, places: [] });
-      else {
-        doc.places = Array.from({ length: 201 }, (_, i) => ({ ...doc.places[0]!, id: `p${i}` }));
-        const trip = doc.trips[0]!;
-        trip.originId = null;
-        trip.candidateIds = doc.places.map((p) => p.id);
-        trip.days = trip.days.map((day) => ({ ...day, lodgingId: null, stops: [], legs: [] }));
-        trip.legModes = {};
-        d = await encode(doc);
-      }
-      await expect(checkInboxDoc(d)).rejects.toMatchObject(invalid(reason));
-    },
-  );
+  it.each([
+    ['corrupt', 'corrupt'],
+    ['newer', 'newer'],
+    ['empty', 'corrupt'],
+    ['too-many', 'too-many'],
+  ] as const)('%s 문서의 최종 거절 사유는 %s다', async (reason, expectedReason) => {
+    const doc = tripDoc();
+    let d: string;
+    if (reason === 'corrupt') d = '손상';
+    else if (reason === 'newer') d = await encodeCompressedJson({ ...doc, version: 3 });
+    // 장소 없이 Stop·후보가 남으면 원시 모양의 필요조건부터 어긴다.
+    else if (reason === 'empty') d = await encode({ ...doc, places: [] });
+    else {
+      doc.places = Array.from({ length: 201 }, (_, i) => ({ ...doc.places[0]!, id: `p${i}` }));
+      const trip = doc.trips[0]!;
+      trip.originId = null;
+      trip.candidateIds = doc.places.map((p) => p.id);
+      trip.days = trip.days.map((day) => ({ ...day, lodgingId: null, stops: [], legs: [] }));
+      trip.legModes = {};
+      d = await encode(doc);
+    }
+    await expect(checkInboxDoc(d)).rejects.toMatchObject(invalid(expectedReason));
+  });
+
+  it('장소·Stop·후보가 모두 없는 문서는 empty로 거절한다', async () => {
+    const doc = tripDoc();
+    doc.places = [];
+    const trip = doc.trips[0]!;
+    trip.originId = null;
+    trip.candidateIds = [];
+    trip.days = trip.days.map((day) => ({ ...day, lodgingId: null, stops: [], legs: [] }));
+    trip.legModes = {};
+    await expect(checkInboxDoc(await encode(doc))).rejects.toMatchObject(invalid('empty'));
+  });
 
   it('공유 문서 → 제목 → 장소 → 실제 구간 순서로 검사한다', async () => {
     const doc = tripDoc();

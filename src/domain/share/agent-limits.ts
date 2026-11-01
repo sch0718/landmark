@@ -1,4 +1,5 @@
 import type { ShareDocV2 } from 'src/schema/share';
+import { SHARE_TRIP_LIMITS } from './check-share-trip';
 
 export const AGENT_INBOX_LIMITS = {
   fileBytes: 5_242_880,
@@ -10,28 +11,61 @@ export const AGENT_INBOX_LIMITS = {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
-/** 원시 JSON의 큰 배열·구간 설정을 스키마 순회 전에 거절한다. 모양 오류는 스키마에 맡긴다. */
-export function agentRawProblem(json: unknown): 'labels' | 'path' | 'leg-modes' | null {
-  if (!isRecord(json) || !Array.isArray(json.labels)) return null;
-  if (json.labels.length > 0) return 'labels';
-  if (!Array.isArray(json.trips) || json.trips.length === 0) return null;
+/** 모양과 큰 모음의 길이를 먼저 검사해 스키마의 대량 오류 수집을 막는다. */
+export function agentRawProblem(
+  json: unknown,
+): 'corrupt' | 'not-trip' | 'too-many' | 'labels' | 'path' | 'leg-modes' | null {
+  // 장소만 담은 v1 공유 문서는 모양을 더 보지 않고 여행 문서가 아니라고 알린다.
+  if (isRecord(json) && json.format === 'tripmap-share' && json.version === 1) return 'not-trip';
+  if (
+    !isRecord(json) ||
+    !Array.isArray(json.labels) ||
+    !Array.isArray(json.places) ||
+    !Array.isArray(json.trips) ||
+    json.trips.length !== 1
+  )
+    return 'corrupt';
+  const trip: unknown = json.trips[0];
+  if (
+    !isRecord(trip) ||
+    !Array.isArray(trip.days) ||
+    trip.days.length > SHARE_TRIP_LIMITS.maxDays ||
+    !isRecord(trip.legModes) ||
+    !Array.isArray(trip.candidateIds)
+  )
+    return 'corrupt';
 
+  let placedCount = trip.candidateIds.length;
+  if (placedCount > json.places.length) return 'corrupt';
   let maxLegModes = 0;
-  for (let i = 0; i < json.trips.length; i++) {
-    const trip: unknown = json.trips[i];
-    if (!isRecord(trip) || !Array.isArray(trip.days)) return null;
-    for (const day of trip.days) {
-      if (!isRecord(day) || !Array.isArray(day.stops) || !Array.isArray(day.legs)) return null;
-      if (i === 0) maxLegModes += day.stops.length + 1;
-      for (const leg of day.legs) {
-        if (!isRecord(leg) || !Array.isArray(leg.path)) return null;
-        if (leg.path.length > 0) return 'path';
-      }
+  let hasPath = false;
+  for (const day of trip.days) {
+    if (
+      !isRecord(day) ||
+      !Array.isArray(day.stops) ||
+      !Array.isArray(day.legs) ||
+      day.legs.length > day.stops.length + 1
+    )
+      return 'corrupt';
+    placedCount += day.stops.length;
+    if (placedCount > json.places.length) return 'corrupt';
+    maxLegModes += day.stops.length + 1;
+    for (const stop of day.stops) {
+      if (!isRecord(stop)) return 'corrupt';
+    }
+    for (const leg of day.legs) {
+      if (!isRecord(leg) || !Array.isArray(leg.path)) return 'corrupt';
+      if (leg.path.length > 0) hasPath = true;
     }
   }
-
-  const trip: unknown = json.trips[0];
-  if (!isRecord(trip) || !isRecord(trip.legModes)) return null;
+  let hasLabels = json.labels.length > 0;
+  for (const place of json.places) {
+    if (!isRecord(place) || !Array.isArray(place.labelIds)) return 'corrupt';
+    if (place.labelIds.length > 0) hasLabels = true;
+  }
+  if (json.places.length > AGENT_INBOX_LIMITS.places) return 'too-many';
+  if (hasLabels) return 'labels';
+  if (hasPath) return 'path';
   let count = 0;
   for (const key in trip.legModes) {
     if (Object.hasOwn(trip.legModes, key) && ++count > maxLegModes) return 'leg-modes';

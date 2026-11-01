@@ -1,4 +1,5 @@
 import { stableStringify } from 'src/domain/library-sync/items';
+import { SHORT_ID_PATTERN } from 'src/domain/share/short-link';
 import type { TripErrorCode, TripIssue } from './errors';
 import type { TripPlan } from './plan-schema';
 
@@ -26,6 +27,32 @@ const issue = (code: keyof typeof messages): TripIssue => ({
   code,
   message: messages[code],
 });
+
+/** 끝점별 성공 필드를 확인한 뒤에만 CLI와 저장 파일에 넘긴다. */
+function validSuccess(path: string, value: unknown): boolean {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const data = value as Record<string, unknown>;
+  if (path === '/whoami')
+    return (
+      typeof data.name === 'string' &&
+      Array.isArray(data.scopes) &&
+      data.scopes.every((scope) => typeof scope === 'string') &&
+      typeof data.expiresAt === 'number' &&
+      Number.isFinite(data.expiresAt) &&
+      typeof data.provider === 'string'
+    );
+  if (
+    typeof data.id !== 'string' ||
+    !SHORT_ID_PATTERN.test(data.id) ||
+    typeof data.created !== 'boolean'
+  )
+    return false;
+  if (path === '/inbox')
+    return typeof data.expiresAt === 'number' && Number.isFinite(data.expiresAt);
+  if (path === '/share')
+    return typeof data.expiresAt === 'string' && Number.isFinite(Date.parse(data.expiresAt));
+  return false;
+}
 
 export function createAgentClient(app: string, token: string, deps: AgentClientDeps) {
   async function request<T>(
@@ -72,10 +99,11 @@ export function createAgentClient(app: string, token: string, deps: AgentClientD
           value.error === 'not-found'
         )
           return { ok: true, status: 404, data: null as T };
-        if (response.status === 204) return { ok: true, status: 204, data: null as T };
+        if (method === 'DELETE' && response.status === 204)
+          return { ok: true, status: 204, data: null as T };
         if (!response.ok) return { ok: false, issue: toIssue(response.status, value) };
         if (method === 'DELETE') return { ok: false, issue: issue('server') };
-        if (value === null) return { ok: false, issue: issue('server') };
+        if (!validSuccess(path, value)) return { ok: false, issue: issue('server') };
         return { ok: true, status: response.status, data: value as T };
       } catch {
         return { ok: false, issue: issue('offline') };
