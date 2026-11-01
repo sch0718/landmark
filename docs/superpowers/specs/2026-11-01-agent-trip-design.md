@@ -393,7 +393,7 @@ CREATE INDEX IF NOT EXISTS agent_inbox_expires ON agent_inbox(expires_at);
 1. **부르는 때**: 사용자가 "랜드마크로 보내줘"(받은함 → `send`), "랜드마크 링크로 공유해줘"(→ `share`), "랜드마크 링크만 만들어줘"(→ `build`)라고 할 때만. 계획서를 쓸 때 자동으로 부르지 않는다.
 2. **장소**: 저장 목록 장소는 `naver_bookmarks.py` 결과의 `sid` → `naverSid`, `name`·`address`·`px`→`lng`·`py`→`lat`(숫자로 바꿈)을 대체 값으로 함께 넣는다. 신규 제안은 `search: { q, near }`(`near`는 근처 저장 장소 좌표), 후보 오류가 나면 후보 중 하나의 `naverSid`로 고쳐 다시 부른다. 못 찾으면 이름 + 좌표 핀. 집 주소는 넣지 않고 인근 역 같은 대표 지점을 쓴다.
 3. **메모**: Stop `note`에 출처(`[네이버 저장]`·`[신규 제안]`)와 "확인 필요"를 짧게 남긴다(500자까지). 장소 `memo`는 저장 목록 메모만.
-4. **실행**: `plan.json`은 세션 스크래치 폴더에 쓰고 `yarn --cwd /Users/shinchoonho/01.workspace/01.repositories/landmark trip <명령> <절대 경로> --json`. 먼저 `build`로 요약·경고를 사용자에게 보이고, 그다음 `send`·`share`.
+4. **실행**: `plan.json`은 세션 스크래치 폴더에 쓰고 `yarn --silent --cwd /Users/shinchoonho/01.workspace/01.repositories/landmark trip <명령> <절대 경로> --json`(`--silent`가 없으면 Yarn 1이 시작·종료 줄을 표준 출력에 섞어 JSON으로 읽을 수 없다). 먼저 `build`로 요약·경고를 사용자에게 보이고, 그다음 `send`·`share`.
 5. **토큰**: 스킬은 토큰을 읽거나 출력하지 않는다. 끝 코드 4면 사용자에게 설정 › 동기화 › AI 연결에서 토큰을 만들어 키체인에 넣어 달라고 안내한다.
 6. **결과 보고**: 받은함이면 "앱을 열면 「AI가 보낸 일정」 알림이 떠요", 짧은 링크면 링크와 기한, 추정 구간이 있으면 그 수와 조회 시각.
 
