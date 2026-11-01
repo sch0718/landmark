@@ -188,7 +188,8 @@
   export function parsePlan(value: unknown): TripPlan;
   /** Effect 경로 'days.0.stops.2.place' → 'days[0].stops[2].place'. */
   export function toPlanPath(path: string): string;
-  export function planJsonSchema(): unknown; // Schema.toJsonSchemaDocument(TripPlanSchema)
+  /** effect 4.0.2의 `Schema.toJsonSchemaDocument(TripPlanSchema)`는 `{ dialect, schema, definitions }`를 돌려준다(루트에 properties가 없다). 이것을 표준 문서 `{ $schema: 'https://json-schema.org/draft/2020-12/schema', ...schema, $defs: definitions }`로 조립하고, 모든 객체 스키마에 `additionalProperties: false`를 넣는다(런타임은 `onExcessProperty: 'error'`로 모르는 필드를 거절하므로 같게). 생성 옵션에 같은 뜻의 설정이 있으면 그것을 쓴다. */
+  export function planJsonSchema(): Record<string, unknown>;
   ```
   스키마 규칙(설계 「계획 파일」 표 그대로): `key` `^[A-Za-z0-9_-]{1,40}$`, `naverSid` `^\d{1,20}$`, `link` 1~2,000자, `search.q` 1~40자(`parseSearchQuery`와 같음), `name` 1~100자, `address` 200자까지, `memo` 10,000자까지, 좌표·`near`는 `Lng`·`Lat`, `places` 1~200, `title` 1~60, `startTime`·`fixedTime` `HHmm`, `stayMin` 0~1440 정수 또는 null, `note` 500자까지, `legModes` 키는 문자열(모양은 의미 검사).
   의미 검사(코드·경로):
@@ -199,7 +200,7 @@
   - Stop·후보 전체에서 같은 장소 두 번(`duplicate-in-trip`, 두 번째 경로).
   - 참조 장소가 하나도 없으면 `no-places`(`days`).
   - `legModes` 키가 `^[^>]+>[^>]+$`이 아니거나 key가 없으면 `leg-modes`. 이웃 쌍 검사는 Task 4(장소 순서가 정해진 뒤)에서 한다.
-- [ ] **Step 1: 실패하는 시험** — `plan-schema.test.ts`(`// @vitest-environment node`): 고정 계획(`tests/fixtures/agent-trip/plan.json`을 이 과제에서 만든다. 설계 「계획 파일」 예시와 같은 1박 2일·장소 5곳·Day 구성이되, 네트워크 없이 돌도록 **모든 장소를 핀**(`name`·`address`·`lng`·`lat`, 출처 필드 없음)으로 둔다. 좌표는 강원 속초·강릉 일대와 서울 강남역처럼 `Lng`·`Lat` 범위 안)이 통과. 출처 필드 규칙은 이 고정 계획을 복사해 고친 사례로 본다. 위 규칙마다 한 사례씩 `TripFailure`의 `issues[].path`·`code`를 정확히 단언(예: `days[1].stops[0].place` `unknown-place`, `places[2]` 출처 둘 `schema`, `days` `day-count`, 모르는 필드 `places[0].foo` `schema`). 여러 오류가 한 번에 모이는지(두 개 이상). `toPlanPath('days.0.stops.2.place') === 'days[0].stops[2].place'`. `planJsonSchema()`가 `properties.places`를 가진 객체.
+- [ ] **Step 1: 실패하는 시험** — `plan-schema.test.ts`(`// @vitest-environment node`): 고정 계획(`tests/fixtures/agent-trip/plan.json`을 이 과제에서 만든다. 설계 「계획 파일」 예시와 같은 1박 2일·장소 5곳·Day 구성이되, 네트워크 없이 돌도록 **모든 장소를 핀**(`name`·`address`·`lng`·`lat`, 출처 필드 없음)으로 둔다. 좌표는 강원 속초·강릉 일대와 서울 강남역처럼 `Lng`·`Lat` 범위 안)이 통과. 출처 필드 규칙은 이 고정 계획을 복사해 고친 사례로 본다. 위 규칙마다 한 사례씩 `TripFailure`의 `issues[].path`·`code`를 정확히 단언(예: `days[1].stops[0].place` `unknown-place`, `places[2]` 출처 둘 `schema`, `days` `day-count`, 모르는 필드 `places[0].foo` `schema`). 여러 오류가 한 번에 모이는지(두 개 이상). `toPlanPath('days.0.stops.2.place') === 'days[0].stops[2].place'`. `planJsonSchema()`의 루트에 `$schema`·`properties.places`가 있고, 루트와 `places` 항목 스키마(직접 또는 `$defs` 참조)의 `additionalProperties`가 `false`.
 - [ ] **Step 2:** `yarn vitest run tests/unit/pipeline/agent-trip/plan-schema.test.ts` → FAIL
 - [ ] **Step 3: 구현** — `safeParse(TripPlanSchema, value, { onExcessProperty: 'error' })` 실패면 `issues.map(i => ({ path: toPlanPath(i.path), code: 'schema', message: i.message }))`. 성공이면 의미 검사를 모두 돌려 하나라도 있으면 던진다.
 - [ ] **Step 4:** PASS, `yarn typecheck`, `yarn lint pipeline tests/unit/pipeline`
@@ -264,7 +265,7 @@
   - `checkLegModes`: Day마다 점 순서 `[출발점(Day 0은 origin, 그 뒤는 전날 lodging)?, …stops, lodging?]`의 이웃 쌍 집합을 만들어 `legModes` 키가 그 안에 없으면 `leg-modes`(`legModes["a>b"]`). `walk`이고 두 장소 `haversineM > WALK_MAX_M`이면 `walk-too-far`.
   - `prepareRoutes`: 모든 `dayLegs(lib, trip, d)` 중 `!(leg.straightM >= SAME_POINT_M)`가 아닌 것을 `routeInputKey({ mode: leg.mode, from: [lng, lat], to: [lng, lat] })`로 한 번씩 `resolveRoute(q, { fetch })`. 결과 맵을 보고 `routeOf`가 `use-trip-legs.ts`와 같은 값을 낸다: 같은 지점 → `{ durationS: 0, distanceM: 0, tollFare: null, status: 'same-point', queriedAt: null, path: [] }`; 성공 → `routed`(값 그대로); `ApiError` `NO_ROUTE` → `no-route` + `estimateLeg(leg.mode, leg.straightM)`; 그 밖 → `estimated` + `estimateLeg`. 둘 다 `tollFare: null`, `queriedAt: null`, `path: []`. `skip`이면 묻지 않고 모두 `estimated`.
 - [ ] **Step 1: 실패하는 시험**
-  - `build-library.test.ts`: 고정 계획 + 가짜 `ResolvedPlace` 5곳 → `LibrarySchema` 통과, Day 0 Stop 2개(순서·`stayMin`·`fixedTime`·`note`), Day 0 숙소, Day 1 시작 시각, `legModes`, `origin`. 날짜 31일 → `endDate` 오류. 어디에도 쓰지 않는 장소 하나 → 경고 `unused-place`(그 `places[i]` 경로)이고 그 장소는 `buildDoc` 결과 문서의 `places`에 없음(Task 5 시험에서도 확인). `checkLegModes`: 이웃이 아닌 쌍 `leg-modes`, 60km 떨어진 두 핀 `walk` → `walk-too-far`.
+  - `build-library.test.ts`: 고정 계획 + 가짜 `ResolvedPlace` 5곳 → `LibrarySchema` 통과, Day 0 Stop 2개(순서·`stayMin`·`fixedTime`·`note`), Day 0 숙소, Day 1 시작 시각, `legModes`, `origin`. 날짜 31일 → `endDate` 오류. 어디에도 쓰지 않는 장소 하나 → 경고 `unused-place`(그 `places[i]` 경로)(문서에서 빠지는지는 `buildDoc`이 생기는 Task 5 시험에서 본다). `checkLegModes`: 이웃이 아닌 쌍 `leg-modes`, 60km 떨어진 두 핀 `walk` → `walk-too-far`.
   - `route-legs.test.ts`: 가짜 `fetch`로 자동차 성공·도보 성공·`code: 1`(→ `NO_ROUTE`)·HTTP 500·같은 지점(5m 떨어진 두 장소, 요청 없음)·같은 입력 키 두 번(요청 1번)·`skip`. 각 `routeOf` 값이 위 규칙과 같고 `stats`가 맞다. 요청 사이 `sleep(300)`.
 - [ ] **Step 2:** FAIL → **Step 3:** 구현 → **Step 4:** `yarn vitest run tests/unit/pipeline/agent-trip` PASS, `yarn typecheck`
 - [ ] **Step 5:** 커밋 `feat(agent-trip): 계획으로 메모리 보관함·구간 시간 만들기`
@@ -309,6 +310,7 @@
 - [ ] **Step 1: 실패하는 시험**
   - `build-doc.test.ts`: 고정 계획(가짜 조회·`skip` 구간) → 문서가 스키마·관계 검사 통과, `importHash`의 `readShareHash` 결과가 `hashDoc(doc)`과 같은 값(`toEqual`). `includeMemo: false`면 `places[].memo` 없음, Stop `note`는 있음. 제목 30·31·60자 모두 성공(31자는 `defaultTitleLabel`이 자르므로). 이름 같고 20m 떨어진 핀 두 개를 Day 0·Day 1 Stop에 넣으면 `merged-places`. 합법적인 최대 입력을 둘로 나눈다: (가) 이름 100자·주소 200자 장소 200곳, 메모 없음(`includeMemo: false`) → 성공, 어떤 항목도 동기화 상한에 닿지 않음. (나) 같은 계획에 장소 메모 10,000자씩 + `includeMemo: true` → 풀린 크기가 `AGENT_INBOX_LIMITS.decodedBytes`(1MB)를 넘어 `too-big`(전체 문서 상한이 먼저 걸린다). 크기 검사 자체는 `buildDoc`이 쓰는 내부 함수 `oversizedItems(lib, max)`를 내보내 직접 시험한다: `stableStringify` 길이가 정확히 `max`인 항목은 통과, `max + 1`이면 그 항목의 키(시험에서는 `max`를 작게 넘겨 만든다). 경로선 많은 문서는 `viewLink`가 경로선 없이 다시 만들어도 `direct`. 32,000자를 넘는 문서 `too-big`.
   - `summary.test.ts`: 설계 출력 예시와 같은 값 — 출발 09:00, 첫 구간 102분(가짜 `routeOf`), `stayMin` 60, `fixedTime` 12:00 → `arrive '10:42'`, `depart '13:00'`, `slackMin 78`.
+  - `build-doc.test.ts`(이어서): 쓰지 않는 장소 하나가 있는 계획 → 결과 문서 `places`에 그 장소가 없고 경고 `unused-place`가 남음.
 - [ ] **Step 2:** FAIL → **Step 3:** 구현 → **Step 4:** `yarn vitest run tests/unit/pipeline/agent-trip` PASS, `yarn typecheck`
 - [ ] **Step 5:** 커밋 `feat(agent-trip): 앱과 같은 공유 문서·모의 가져오기·데이터 링크·요약`
 
@@ -623,7 +625,7 @@
   export function readAgentInboxLocal(storage: Storage, userId: string | null): AgentInboxLocal;  // 다른 사용자·깨진 값 → 빈 기록
   export function writeAgentInboxLocal(storage: Storage, value: AgentInboxLocal): void;           // notified 최대 100(뒤쪽 유지)
   ```
-  실패 해석: `toBackupFailure` 결과에서 `changed` → `server`, `too-large` → `invalid`, 그리고 409 `too-many-tokens`(패키지 기본 `{ kind: 'server', status: 409 }`)는 `too-many`로 따로 본다(원래 응답 `code`로 구별).
+  실패 해석: `toBackupFailure` 결과에서 `changed` → `server`, `too-large` → `invalid`, 그리고 `issue()`의 실패가 `{ kind: 'server', status: 409 }`이면 `too-many`로 본다. 패키지 클라이언트는 `mapStatus`가 처리하지 않는 409의 `error` 코드를 버리지만(`src/services/library-sync/api.ts`의 `mapStatus`는 `busy`만 안다), 발급 경로가 내는 409는 `too-many-tokens`뿐이라 상태로 구별해도 된다. 시험은 가짜 `send`가 아니라 실제 `createSyncApi`(가짜 `fetch`가 409 `{ error: 'too-many-tokens' }`)를 거쳐 `too-many`가 나오는지 본다.
 - [ ] **Step 1: 실패하는 시험** — 가짜 `client.send`로 경로·메서드·머리글·실패 해석 표(401 auth, 403 not-allowed, 503 off, 429 limit, 409 too-many-tokens → too-many, 404 not-found). 기기 키 읽기·쓰기·다른 사용자·100개.
 - [ ] **Step 2:** FAIL → **Step 3:** 구현 → **Step 4:** PASS
 - [ ] **Step 5:** 커밋 `feat(agent-app): AI 연결·받은함 앱 API와 기기 키`
@@ -734,8 +736,9 @@
 - Modify: `tests/e2e/sync-server.ts`(`createSyncServer`의 `handle`이 `/api/agent/`도 `handleAgent`로 보냄 — `handleAgent`도 `tsxRequire`로 읽는다, `installSyncServer`가 `**/api/agent/**`도 가로챔. 기존 시험은 그대로 통과), `playwright.config.ts`(desktop 프로젝트 `testMatch` 목록의 `'server-backup.spec.ts',` 다음 줄에 `'agent-inbox.spec.ts',` 한 줄만)
 - Create: `tests/e2e/agent-inbox.spec.ts`
 
+- [ ] **Step 0: 토큰이 결과물에 남지 않게** — 이 파일 맨 위에 `test.use({ trace: 'off', screenshot: 'off', video: 'off' })`. 토큰 값은 `expect(token).toMatch(…)`처럼 실패 메시지에 값이 찍히는 단언에 넣지 않고 `expect(/^lmk_[A-Za-z0-9_-]{43}$/.test(token)).toBe(true)`로만 본다. 시험이 끝나면(성공·실패 모두) `test-results/`·`playwright-report/`에서 이 파일 결과를 `grep -rl 'lmk_' test-results playwright-report`로 찾아 출력이 없음을 Step 1-1에서 확인한다.
 - [ ] **Step 1: 시험** — `agent-inbox.spec.ts`(desktop, `@smoke` 아님): 가짜 카카오 로그인(기존 `library-sync.spec.ts`의 도우미 그대로) → 설정 › AI 연결 › `새 연결 만들기` → 원문 칸 값을 읽어 시험 변수에 둠(출력하지 않음) → 시험 코드가 `server.handle(new Request(origin + '/api/agent/v1/inbox', { method: 'POST', headers: { Authorization: 'Bearer ' + token }, body: JSON.stringify({ v: 1, key, d }) }))`(`d`는 `tests/fixtures/agent-trip/doc.json`(Task 6)을 읽어 `encodeShareHash(hashDoc(doc))`(`src/share-viewer/encode.ts`, 상대 경로 import)로 만든 값, `key`는 43자 무작위 base64url) → 새로고침 → 알림 「AI가 보낸 일정 1개」 → `보기` → `미리보기` → 머리 문구 → `가져오기` → 여행 화면 → 설정의 `받은 일정 없음` → `철회` → 같은 토큰으로 whoami 401.
-- [ ] **Step 1-1: 실행** — `yarn build:map:e2e && E2E_PORT=4196 E2E_MAP_PORT=4197 npx playwright test agent-inbox.spec.ts library-sync.spec.ts server-backup.spec.ts --project desktop`(새 시험은 `@smoke`가 아니라 `test:e2e:ci`에 들어가지 않으므로 직접 돌린다. 프로젝트 이름은 `playwright.config.ts`의 desktop 프로젝트 `name`을 쓴다).
+- [ ] **Step 1-1: 실행** — `yarn build:map:e2e && E2E_PORT=4196 E2E_MAP_PORT=4197 npx playwright test agent-inbox.spec.ts library-sync.spec.ts server-backup.spec.ts --project desktop`(새 시험은 `@smoke`가 아니라 `test:e2e:ci`에 들어가지 않으므로 직접 돌린다. 프로젝트 이름은 `playwright.config.ts`의 desktop 프로젝트 `name`을 쓴다). 이어서 `grep -rl 'lmk_' test-results playwright-report 2>/dev/null` 출력 없음.
 - [ ] **Step 2: 로컬 화면 확인**(포트가 막히면 건너뜀) — `SYNC_VITE_PORT=4198 SYNC_DEV_PORT=8798 yarn dev:sync` → 브라우저 가짜 로그인 → 토큰 발급 → `LANDMARK_AGENT_TOKEN=… yarn trip send tests/fixtures/agent-trip/plan.json --no-routes --app http://localhost:8798` → 앱 알림 → 가져오기 → `http://127.0.0.1:8798`(다른 출처)로 같은 계정 로그인 → 여행이 동기화됨. 화면 캡처는 저장하지 않는다.
 - [ ] **Step 3: ③ 전체 검증** — Global Constraints의 전체 검증 명령, 첫 로딩 gzip 바이트와 조각 이름(`AgentSection-*.js`, `AgentInboxDialog-*.js`, `inbox-check-*.js`)을 보고에 적는다.
 - [ ] **Step 4:** 커밋 `test(agent-app): 받은함 E2E`
