@@ -102,13 +102,23 @@ export async function main(argv: string[], deps: CliDeps): Promise<ExitCode> {
   let command: CommandName = 'build';
   try {
     // 짧은 링크 id는 '-'로 시작할 수 있어(base64url) 옵션으로 읽히지 않게 먼저 떼어 둔다.
-    const dashId =
-      argv[0] === 'unshare' && argv[1]?.startsWith('-') && SHORT_ID_PATTERN.test(argv[1])
-        ? argv[1]
-        : undefined;
-    const parsed = parseCliArgs(dashId === undefined ? argv : [argv[0]!, ...argv.slice(2)]);
+    // 옵션 위치와 상관없이 `unshare` 명령의 16자 id 모양 인자 하나만 뗀다(값을 받는 옵션의 값은 제외).
+    const dashAt = argv.includes('unshare')
+      ? argv.findIndex(
+          (arg, i) =>
+            arg.startsWith('-') &&
+            SHORT_ID_PATTERN.test(arg) &&
+            argv[i - 1] !== '--app' &&
+            argv[i - 1] !== '--out',
+        )
+      : -1;
+    const dashId = dashAt >= 0 ? argv[dashAt] : undefined;
+    const parsed = parseCliArgs(dashAt >= 0 ? argv.filter((_, i) => i !== dashAt) : argv);
     const { values, positionals } = parsed;
-    if (dashId !== undefined) positionals.splice(1, 0, dashId);
+    if (dashId !== undefined) {
+      const at = positionals.indexOf('unshare');
+      positionals.splice(at >= 0 ? at + 1 : positionals.length, 0, dashId);
+    }
     json = values.json ?? false;
     command = commandName(positionals[0]) ?? 'build';
     if (values.schema) {

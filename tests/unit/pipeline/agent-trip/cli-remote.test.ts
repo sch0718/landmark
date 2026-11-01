@@ -534,6 +534,19 @@ describe('원격 여행 CLI', () => {
     expect(String(fetcher.mock.calls[0]![0])).toContain('/api/agent/v1/share/' + item.id);
     expect(await readShares(store())).toEqual([]);
   });
+  it.each([
+    (id: string) => ['--json', 'unshare', id, '--app', app],
+    (id: string) => ['unshare', '--json', id, '--app', app],
+    (id: string) => ['--app', app, 'unshare', '--json', id],
+  ])("'-'로 시작하는 id는 옵션 위치와 상관없이 지운다 %#", async (argv) => {
+    const item = { ...saved(), id: '-' + 'b'.repeat(15) };
+    secrets.push(item.deleteToken);
+    await addShare(item, store());
+    fetcher.mockImplementation(async () => new Response(null, { status: 204 }));
+    expect(await main(argv(item.id), deps)).toBe(0);
+    expect(String(fetcher.mock.calls[0]![0])).toContain('/api/agent/v1/share/' + item.id);
+    expect(await readShares(store())).toEqual([]);
+  });
   it('예상하지 않은 삭제 성공 상태 200은 로컬 항목을 남긴다', async () => {
     const item = saved();
     secrets.push(item.deleteToken);
