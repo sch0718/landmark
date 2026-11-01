@@ -34,6 +34,7 @@ import {
   settleShare,
 } from '../agent-trip/share-store';
 import { findToken, type TokenDeps } from '../agent-trip/token';
+import { commandOptions, helpText } from '../agent-trip/help';
 
 export type CliDeps = BuildDeps & {
   env: NodeJS.ProcessEnv;
@@ -100,7 +101,24 @@ const storeWarning = (): TripIssue => ({
 export async function main(argv: string[], deps: CliDeps): Promise<ExitCode> {
   let json = argv.includes('--json');
   let command: CommandName = 'build';
+  let usageFailure = false;
   try {
+    // 값을 받는 옵션의 바로 뒤는 건너뛰고, 검사보다 먼저 도움말을 찾는다.
+    let help = false;
+    let firstPositional: string | undefined;
+    for (let i = 0; i < argv.length; i++) {
+      const arg = argv[i]!;
+      if (arg === '--app' || arg === '--out') {
+        i++;
+        continue;
+      }
+      if (arg === '--help' || arg === '-h') help = true;
+      else if (!arg.startsWith('-') && firstPositional === undefined) firstPositional = arg;
+    }
+    if (help) {
+      deps.stdout(helpText(commandName(firstPositional)));
+      return EXIT.ok;
+    }
     // 짧은 링크 id는 '-'로 시작할 수 있어(base64url) 옵션으로 읽히지 않게 먼저 떼어 둔다.
     // 옵션 위치와 상관없이 `unshare` 명령의 16자 id 모양 인자 하나만 뗀다(값을 받는 옵션의 값은 제외).
     const dashAt = argv.includes('unshare')
@@ -131,17 +149,12 @@ export async function main(argv: string[], deps: CliDeps): Promise<ExitCode> {
       return EXIT.ok;
     }
     const name = commandName(positionals[0]);
-    if (name === undefined)
+    if (name === undefined) {
+      usageFailure = true;
       inputFailure(
-        '사용법: yarn trip build|send|share <plan.json>, whoami, unshare <id>|--list [--app <주소>] [--json] 또는 yarn --silent trip --schema',
+        '사용법: yarn trip build|send|share <plan.json>, whoami, unshare <id>|--list [--app <주소>] [--json] 또는 yarn --silent trip --schema (자세한 사용법: yarn trip --help)',
       );
-    const commandOptions: Record<CommandName, string[]> = {
-      build: ['memo', 'no-routes', 'out'],
-      send: ['no-memo', 'no-routes'],
-      share: ['memo', 'no-routes'],
-      whoami: [],
-      unshare: ['list'],
-    };
+    }
     if (Object.keys(values).some((key) => !['app', 'json', ...commandOptions[name]].includes(key)))
       inputFailure('이 명령에서 받지 않는 옵션이에요');
     const withoutArgument = name === 'whoami' || (name === 'unshare' && values.list);
@@ -343,7 +356,7 @@ export async function main(argv: string[], deps: CliDeps): Promise<ExitCode> {
             EXIT.internal,
           );
     if (json) deps.stdout(failureJson(command, failure.issues) + '\n');
-    else deps.stderr(failureText(failure.issues) + '\n');
+    else deps.stderr(failureText(failure.issues) + '\n' + (usageFailure ? '\n' + helpText() : ''));
     return failure.exit;
   }
 }

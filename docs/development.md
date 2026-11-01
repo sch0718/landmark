@@ -340,7 +340,7 @@ Node 24와 설치된 의존성이 필요합니다. JSON을 다른 도구에서 �
 | `unshare --list` | 고른 앱의 저장된 링크와 결과 모름 예약을 봅니다(서버·토큰 불필요) | `--list` |
 | `--schema` | 계획 파일 v1의 JSON Schema 한 줄을 출력합니다 | `--json`만 함께 허용 |
 
-다섯 명령은 모두 `--app <주소>`·`--json`을 받습니다. `unshare --list`에는 id를 붙이지 않습니다. `--schema`에 다른 명령이나 옵션을 붙이면 끝 코드 2입니다(`--json`은 허용). `--help` 옵션은 없으며, 인자 없이 부르면 사용법 문구와 끝 코드 2를 냅니다.
+다섯 명령은 모두 `--app <주소>`·`--json`을 받습니다. `unshare --list`에는 id를 붙이지 않습니다. `--schema`에 다른 명령이나 옵션을 붙이면 끝 코드 2입니다(`--json`은 허용, `--help`가 있으면 도움말이 우선). `yarn trip --help`·`-h`·`yarn trip <명령> --help`는 표준 출력에 도움말을 쓰고 끝 코드 0을 냅니다. 도움말은 다른 인자·옵션 검사보다 우선하며, `--app`·`--out` 바로 뒤의 값 자리는 제외합니다. `--json`과 함께 써도 사람용 문구를 냅니다. 인자 없음·명령 없음·모르는 명령은 표준 오류에 오류 한 줄과 빈 줄, 전체 도움말을 쓰고 끝 코드 2를 냅니다(`--json`이면 도움말 위치를 덧붙인 JSON 실패만 표준 출력에 씁니다).
 
 메모는 `send`에서 기본으로 넣고 `--no-memo`로 뺍니다. `build`·`share`는 `--memo`일 때만 넣습니다. `--no-routes`는 길찾기 조회를 생략하고 직선 추정을 사용합니다(같은 지점 구간은 `same-point`). 네이버 출처 장소의 조회는 생략하지 않으므로, 서버와 네트워크 없이 시험할 때는 핀만 담은 [고정 예시](../tests/fixtures/agent-trip/plan.json)를 사용합니다.
 
@@ -671,7 +671,7 @@ npx wrangler pages dev --d1 DB --port 8788 --proxy 4180 -- npx vite --port 4180 
 | `yarn build:viewer`  | 공유 파일의 보기 화면 틀을 `public/share-viewer.html`로 빌드(gitignore). `dev`·`dev:full`·`build`가 먼저 실행                                                     |
 | `yarn build:map`     | 공유 파일 안 iframe이 띄우는 지도 페이지를 `dist-map/`으로 빌드(아래 "공유 파일과 지도 페이지")                                                                   |
 | `yarn build:icons`   | `docs/branding/icon-a.svg`(앱 아이콘 원본)에서 `public/favicon.svg`와 홈 화면·manifest용 PNG 아이콘을 다시 만듭니다                                               |
-| `yarn build:motion` | README 소개 그림(`docs/readme/hero-*.svg`), 앱·문서 공용 도움말 그림(`public/help/img/*.svg`), 도움말 문서(`docs/help/*.md`), 앱 도움말 데이터(`src/sections/help/help-content.ts`)를 다시 만듭니다. 원본은 `scripts/motion/help-pages.mjs`이고 색은 파스텔 테마 토큰을 읽고, 글자·장면·움직임 CSS·SVG 틀 같은 기반 함수는 `@sch0718/motion-kit`에서 가져옵니다 |
+| `yarn build:motion` | README 소개 그림(`docs/readme/hero-*.svg`), 앱·문서 공용 도움말 그림(`public/help/img/*.svg`), 도움말 문서(`docs/help/*.md`), 앱 도움말 데이터(`src/sections/help/help-content.ts`)를 다시 만듭니다. 생성 파일을 직접 고치지 말고 `scripts/motion/help-pages.mjs`를 고친 뒤 다시 만듭니다. 생성기·앱·문서·그림의 차이는 `tests/unit/sections/help/help-generator.test.ts`가 확인합니다. 색은 파스텔 테마 토큰을 읽고, 글자·장면·움직임 CSS·SVG 틀 같은 기반 함수는 `@sch0718/motion-kit`에서 가져옵니다 |
 | `yarn build`         | 보기 화면 틀 + 타입 검사 + Vite 빌드 → `dist`                                                                                                                     |
 | `yarn size`          | 첫 화면 JS·전체 JS 크기(원본·gzip)를 재고 `perf-budget.json` 예산을 넘으면 실패(`docs/ui-performance.md`)                                                         |
 | `yarn build:ci`      | `validate → typecheck → test → build → size → build:map` (배포 빌드 명령)                                                                                         |
