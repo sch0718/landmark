@@ -93,7 +93,28 @@ export async function runBuild(opts: BuildOptions, deps: BuildDeps): Promise<Bui
     plan,
   );
   const days = summarize(built, routeOf, plan);
-  if (opts.out !== undefined)
-    await deps.writeFile(opts.out, JSON.stringify(doc.doc, null, 2) + '\n');
+  if (opts.out !== undefined) {
+    try {
+      await deps.writeFile(opts.out, JSON.stringify(doc.doc, null, 2) + '\n');
+    } catch (error) {
+      const cause =
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        typeof error.code === 'string'
+          ? error.code
+          : '알 수 없는 오류';
+      throw new TripFailure(
+        [
+          {
+            path: '--out',
+            code: 'schema',
+            message: `문서 파일을 쓰지 못했어요 (${opts.out}): ${cause}`,
+          },
+        ],
+        EXIT.input,
+      );
+    }
+  }
   return { plan, built, doc, days, stats, warnings };
 }

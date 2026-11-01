@@ -48,14 +48,30 @@ const text = (minimum: number, maximum: number) =>
     Schema.isMaxLength(maximum, { message: `${maximum}자까지 쓸 수 있어요` }),
   );
 
+// Effect 4의 공식 필터 annotation으로 JSON Schema 형식 규칙을 보강한다.
+const PlanDate = CalendarDate.annotate({
+  description: 'YYYY-MM-DD',
+  // 달력의 실제 날짜 검사는 정규식보다 엄격하므로 근사 표현임을 표시한다.
+  toJsonSchema: () => [{ pattern: '^\\d{4}-\\d{2}-\\d{2}$' }, true],
+});
+const PlanTime = HHmm.annotate({
+  description: 'HH:mm',
+  toJsonSchema: () => ({ pattern: '^([01]\\d|2[0-3]):[0-5]\\d$' }),
+});
+const keyPattern = /^[A-Za-z0-9_-]{1,40}$/;
+
 const PlanPlaceSchema = MutableStruct({
   key: Schema.String.check(
-    Schema.isPattern(/^[A-Za-z0-9_-]{1,40}$/, { message: 'key는 영숫자·_·-로 1~40자여야 해요' }),
+    Schema.isPattern(keyPattern, {
+      message: 'key는 영숫자·_·-로 1~40자여야 해요',
+      toJsonSchema: () => ({ pattern: keyPattern.source }),
+    }),
   ),
   naverSid: Schema.optionalKey(
     Schema.String.check(
       Schema.isPattern(AGENT_PLACE_LIMITS.numericIdPattern, {
         message: '네이버 sid는 숫자 1~20자여야 해요',
+        toJsonSchema: () => ({ pattern: AGENT_PLACE_LIMITS.numericIdPattern.source }),
       }),
     ),
   ),
@@ -86,12 +102,12 @@ const PlanStopSchema = MutableStruct({
       ),
     ),
   ),
-  fixedTime: Schema.optionalKey(Schema.NullOr(HHmm)),
+  fixedTime: Schema.optionalKey(Schema.NullOr(PlanTime)),
   note: Schema.optionalKey(text(0, LIBRARY_LIMITS.stopNoteChars)),
 });
 
 const PlanDaySchema = MutableStruct({
-  startTime: Schema.optionalKey(HHmm),
+  startTime: Schema.optionalKey(PlanTime),
   lodging: Schema.optionalKey(Schema.NullOr(Schema.String)),
   stops: MutableArray(PlanStopSchema),
 });
@@ -100,8 +116,8 @@ export const TripPlanSchema = MutableStruct({
   format: Schema.Literal('landmark-trip-plan'),
   version: Schema.Literal(1),
   title: text(1, LIBRARY_LIMITS.tripTitleChars),
-  startDate: CalendarDate,
-  endDate: CalendarDate,
+  startDate: PlanDate,
+  endDate: PlanDate,
   origin: Schema.optionalKey(Schema.NullOr(Schema.String)),
   places: MutableArray(PlanPlaceSchema).check(
     Schema.isMinLength(1, { message: '장소를 하나 이상 적어 주세요' }),
@@ -132,11 +148,26 @@ export function parsePlan(value: unknown): TripPlan {
       EXIT.input,
     );
   }
-  const plan = parsed.data;
+  const plan: TripPlan = {
+    ...parsed.data,
+    places: parsed.data.places.map((place) => {
+      const normalized = { ...place };
+      if (place.name !== undefined) normalized.name = place.name.trim();
+      if (place.memo !== undefined) normalized.memo = place.memo.trim();
+      if (place.search !== undefined)
+        normalized.search = { ...place.search, q: place.search.q.trim() };
+      return normalized;
+    }),
+  };
   const issues: TripIssue[] = [];
   const add = (path: string, code: TripIssue['code'], message: string) => {
     issues.push({ path, code, message });
   };
+
+  plan.places.forEach((place, i) => {
+    if (place.name === '') add(`places[${i}].name`, 'schema', '이름이 비었어요');
+    if (place.search?.q === '') add(`places[${i}].search.q`, 'schema', '검색어가 비었어요');
+  });
 
   const keys = new Set<string>();
   const sids = new Set<string>();

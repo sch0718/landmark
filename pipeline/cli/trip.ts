@@ -1,4 +1,5 @@
 import { readFile, writeFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import { setTimeout } from 'node:timers/promises';
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
@@ -82,13 +83,15 @@ export async function main(argv: string[], deps: CliDeps): Promise<ExitCode> {
     if (name !== 'build') inputFailure('다음 버전에서 쓸 수 있어요');
     if (positionals.length !== 2 || !positionals[1])
       inputFailure('build에 계획 파일 하나를 적어 주세요');
+    const initCwd = deps.env.INIT_CWD;
+    const resolveFile = (path: string) => (initCwd ? resolve(initCwd, path) : path);
     const r = await runBuild(
       {
-        file: positionals[1],
+        file: resolveFile(positionals[1]),
         includeMemo: values.memo ?? false,
         noRoutes: values['no-routes'] ?? false,
         app: pickApp(values.app, deps.env, false),
-        out: values.out,
+        out: values.out === undefined ? undefined : resolveFile(values.out),
       },
       deps,
     );

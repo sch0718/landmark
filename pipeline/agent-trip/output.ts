@@ -16,7 +16,7 @@ export function successJson(
       ? {}
       : {
           trip: {
-            title: r.plan.title,
+            title: r.doc.doc.trips[0]!.title,
             startDate: r.plan.startDate,
             endDate: r.plan.endDate,
             places: r.doc.doc.places.length,
@@ -42,7 +42,7 @@ export function successText(
 ): string {
   if (r === null) return `${command} 성공\n${JSON.stringify(extra, null, 2)}`;
   const lines = [
-    `${r.plan.title} · ${r.plan.startDate}~${r.plan.endDate} · 장소 ${r.doc.doc.places.length}곳`,
+    `${r.doc.doc.trips[0]!.title} · ${r.plan.startDate}~${r.plan.endDate} · 장소 ${r.doc.doc.places.length}곳`,
     ...r.days.map(
       (day, i) =>
         `Day ${i + 1} ${day.date} · ${day.stops

@@ -2,7 +2,13 @@ import type { ShareLegTime } from 'src/domain/share/build-trip-share';
 import { estimateLeg, SAME_POINT_M } from 'src/domain/trips/geo';
 import { dayLegs, type Leg } from 'src/domain/trips/query';
 import { ApiError } from 'src/server/http';
-import { resolveRoute, routeInputKey, type RouteQuery, type RouteResult } from 'src/server/route';
+import {
+  parseRouteInputKey,
+  resolveRoute,
+  routeInputKey,
+  type RouteQuery,
+  type RouteResult,
+} from 'src/server/route';
 import type { BuiltLibrary } from './build-library';
 import type { TripIssue } from './errors';
 
@@ -39,26 +45,26 @@ export async function prepareRoutes(
 ): Promise<{ routeOf(leg: Leg): ShareLegTime; stats: RouteStats }> {
   const trip = built.lib.trips[built.tripId]!;
   const legs = trip.days.flatMap((_, d) => dayLegs(built.lib, trip, d));
-  const pending = new Map<string, { query: RouteQuery; day: number }>();
+  const pending = new Map<string, { day: number }>();
   trip.days.forEach((_, d) => {
     for (const leg of dayLegs(built.lib, trip, d)) {
       if (isSamePoint(leg)) continue;
       const query = queryOf(leg);
       const key = routeInputKey(query);
-      if (!pending.has(key)) pending.set(key, { query, day: d });
+      if (!pending.has(key)) pending.set(key, { day: d });
     }
   });
 
   const answers = new Map<string, Answer>();
   if (!deps.skip) {
     let requested = false;
-    for (const [key, { query, day }] of pending) {
+    for (const [key, { day }] of pending) {
       if (requested) await deps.sleep(deps.gapMs ?? 300);
       requested = true;
       try {
         answers.set(key, {
           status: 'routed',
-          result: await resolveRoute(query, { fetch: deps.fetch }),
+          result: await resolveRoute(parseRouteInputKey(key), { fetch: deps.fetch }),
         });
       } catch (error) {
         const noRoute = error instanceof ApiError && error.code === 'NO_ROUTE';

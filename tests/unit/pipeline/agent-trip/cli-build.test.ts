@@ -57,6 +57,30 @@ const options = {
 };
 
 describe('여행 CLI build', () => {
+  it.each(['핀', '조회 실패 대체 값', '조회 결과의 빈 이름 대체 값'])(
+    '%s의 이름과 메모는 trim한 값으로 문서에 들어간다',
+    async (kind) => {
+      const p = plan();
+      Object.assign(p.places[1]!, { name: '  학사평  ', memo: '  메모  ' });
+      if (kind !== '핀') p.places[1]!.naverSid = '123';
+      const { deps } = setup(JSON.stringify(p));
+      if (kind === '조회 실패 대체 값') deps.fetch.mockRejectedValue(new Error('조회 실패'));
+      if (kind === '조회 결과의 빈 이름 대체 값')
+        deps.fetch.mockResolvedValue(
+          Response.json({
+            data: {
+              placeDetail: { name: '', coordinate: { longitude: 128.531, latitude: 38.204 } },
+            },
+          }),
+        );
+      const r = await runBuild({ ...options, includeMemo: true }, deps);
+      expect(r.doc.doc.places.find((place) => place.name.includes('학사평'))).toMatchObject({
+        name: '학사평',
+        memo: '메모',
+      });
+    },
+  );
+
   it('핀 계획을 네트워크 없이 만들고 JSON 하나와 앱이 읽는 링크를 출력한다', async () => {
     const { deps, stdout } = setup();
     expect(await main(['build', FILE, '--no-routes', '--json'], deps)).toBe(0);
@@ -241,6 +265,53 @@ describe('여행 CLI build', () => {
     expect(plain.deps.writeFile).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['plan.json', 'doc.json', '/tmp/x/plan.json', '/tmp/x/doc.json'],
+    ['/tmp/input.json', '/tmp/output.json', '/tmp/input.json', '/tmp/output.json'],
+  ])(
+    'INIT_CWD 기준으로 계획 %s와 출력 %s 경로를 푼다',
+    async (file, out, expectedFile, expectedOut) => {
+      const { deps } = setup();
+      deps.env = { INIT_CWD: '/tmp/x' };
+      expect(await main(['build', file, '--no-routes', '--out', out, '--json'], deps)).toBe(0);
+      expect(deps.readFile).toHaveBeenCalledExactlyOnceWith(expectedFile);
+      expect(deps.writeFile).toHaveBeenCalledExactlyOnceWith(expectedOut, expect.any(String));
+    },
+  );
+
+  it('INIT_CWD가 없으면 계획과 출력의 상대 경로를 유지한다', async () => {
+    const { deps } = setup();
+    expect(await main(['build', FILE, '--no-routes', '--out', 'doc.json', '--json'], deps)).toBe(0);
+    expect(deps.readFile).toHaveBeenCalledExactlyOnceWith(FILE);
+    expect(deps.writeFile).toHaveBeenCalledExactlyOnceWith('doc.json', expect.any(String));
+  });
+
+  it.each(['ENOENT', 'EACCES', undefined])(
+    '--out 쓰기 실패(%s)는 경로와 원인 코드가 있는 입력 오류다',
+    async (code) => {
+      const { deps, stdout, stderr } = setup();
+      deps.writeFile.mockRejectedValue(
+        Object.assign(new Error('노출하면 안 되는 내부 내용'), { code }),
+      );
+      expect(
+        await main(['build', FILE, '--no-routes', '--out', '/nonexistent/x.json', '--json'], deps),
+      ).toBe(2);
+      expect(JSON.parse(stdout())).toEqual({
+        ok: false,
+        command: 'build',
+        errors: [
+          {
+            path: '--out',
+            code: 'schema',
+            message: `문서 파일을 쓰지 못했어요 (/nonexistent/x.json): ${code ?? '알 수 없는 오류'}`,
+          },
+        ],
+      });
+      expect(stdout() + stderr()).not.toContain('노출하면 안 되는 내부 내용');
+      expect(stdout() + stderr()).not.toContain(' at ');
+    },
+  );
+
   it('공통 출력은 빌드 결과 없이도 추가 정보와 오류 후보를 보존한다', () => {
     const extra = { inbox: { id: '公開ID' } };
     expect(JSON.parse(successJson('whoami', null, extra))).toEqual({
@@ -265,6 +336,25 @@ describe('여행 CLI build', () => {
     expect(failureText(issues)).toContain('places[0]');
     expect(failureText(issues)).toContain('123');
   });
+
+  it.each(['json', 'text'])(
+    '앞뒤 공백이 있는 제목의 %s 출력은 문서의 여행 제목을 쓴다',
+    async (format) => {
+      const p = plan();
+      p.title = '  속초 1박 2일  ';
+      const { deps } = setup(JSON.stringify(p));
+      const r = await runBuild(options, deps);
+      const title = r.doc.doc.trips[0]!.title;
+      expect(title).toBe('속초 1박 2일');
+      if (format === 'json') {
+        expect(JSON.parse(successJson('build', r, {})).trip.title).toBe(title);
+      } else {
+        expect(successText('build', r, {}).split('\n')[0]).toBe(
+          `${title} · ${p.startDate}~${p.endDate} · 장소 5곳`,
+        );
+      }
+    },
+  );
 });
 
 describe('CLI 앱 출처 선택', () => {

@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { estimateLeg } from 'src/domain/trips/geo';
 import { dayLegs } from 'src/domain/trips/query';
+import * as route from 'src/server/route';
 import { buildLibrary } from '../../../../pipeline/agent-trip/build-library';
 import type { TripIssue } from '../../../../pipeline/agent-trip/errors';
 import type { TripPlan } from '../../../../pipeline/agent-trip/plan-schema';
@@ -67,6 +68,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.useRealTimers();
+  vi.restoreAllMocks();
 });
 
 const stats = (overrides = {}) => ({
@@ -80,6 +82,36 @@ const stats = (overrides = {}) => ({
 });
 
 describe('여행 구간 미리 조회', () => {
+  it.each([
+    ['car', [128.0200056, 37.0100056]],
+    ['walk', [128.0050056, 37.0000056]],
+  ] as const)('%s 조회는 소수 7자리 좌표를 앱처럼 5자리로 맞춘다', async (mode, to) => {
+    const from: [number, number] = [128.0000056, 37.0000056];
+    const { built, legs } = fixture([[from, [...to]]]);
+    const resolve = vi.spyOn(route, 'resolveRoute');
+    const fetch = vi.fn<typeof globalThis.fetch>(async () =>
+      Response.json(mode === 'car' ? carBody() : walkBody()),
+    );
+    const result = await prepareRoutes(built, { fetch, sleep: async () => {} }, []);
+    expect(legs[0]!.mode).toBe(mode);
+    expect(result.stats.routed).toBe(1);
+    const url = new URL(String(fetch.mock.calls[0]![0]));
+    if (mode === 'car') {
+      expect(url.searchParams.get('start')).toBe('128.00001,37.00001');
+      expect(url.searchParams.get('goal')).toBe('128.02001,37.01001');
+    } else {
+      expect(url.searchParams.get('l')).toBe('128.00001,37.00001;128.00501,37.00001');
+    }
+    expect(resolve).toHaveBeenCalledExactlyOnceWith(
+      {
+        mode,
+        from: [128.00001, 37.00001],
+        to: mode === 'car' ? [128.02001, 37.01001] : [128.00501, 37.00001],
+      },
+      { fetch },
+    );
+  });
+
   it('자동차 경로의 초·거리·통행료·경로선·조회 시각을 그대로 쓴다', async () => {
     const { built, legs } = fixture();
     const fetch = vi.fn<typeof globalThis.fetch>(async () => Response.json(carBody()));

@@ -42,6 +42,39 @@ const issue = (value: unknown, path: string, code: TripErrorCode = 'schema') => 
 };
 
 describe('계획 파일 스키마', () => {
+  it('공백뿐인 이름과 검색어는 필드 경로가 있는 스키마 오류다', () => {
+    const input = plan();
+    input.places[0]!.name = '  ';
+    input.places[1]!.search = { q: ' \t ' };
+    expect(failure(input).issues).toEqual([
+      { path: 'places[0].name', code: 'schema', message: '이름이 비었어요' },
+      { path: 'places[1].search.q', code: 'schema', message: '검색어가 비었어요' },
+    ]);
+  });
+
+  it('이름·메모·검색어를 원본을 바꾸지 않고 trim하며 빈 메모는 허용한다', () => {
+    const input = plan();
+    Object.assign(input.places[1]!, {
+      name: '  학사평  ',
+      memo: '  메모  ',
+      search: { q: '  학사평  ' },
+    });
+    input.places[2]!.memo = ' \t ';
+    const result = parsePlan(input);
+    expect(result.places[1]).toMatchObject({
+      name: '학사평',
+      memo: '메모',
+      search: { q: '학사평' },
+    });
+    expect(result.places[2]!.memo).toBe('');
+    expect(input.places[1]).toMatchObject({
+      name: '  학사평  ',
+      memo: '  메모  ',
+      search: { q: '  학사평  ' },
+    });
+    expect(input.places[2]!.memo).toBe(' \t ');
+  });
+
   it('모든 장소가 핀인 고정 계획을 그대로 읽는다', () => {
     expect(parsePlan(fixture)).toEqual(fixture);
     expect(fixture.places).toHaveLength(5);
@@ -317,6 +350,55 @@ describe('계획 파일 의미 검사', () => {
 });
 
 describe('계획 오류 경로와 JSON Schema', () => {
+  it.each([
+    [
+      'places.items.key',
+      ['a', 'Trip_1-2', 'a'.repeat(40)],
+      ['', '한글', 'a'.repeat(41)],
+      undefined,
+    ],
+    [
+      'places.items.naverSid',
+      ['1', '1234567890', '1'.repeat(20)],
+      ['', '12a', '1'.repeat(21)],
+      undefined,
+    ],
+    ['startDate', ['2026-11-01'], ['2026-1-01', '날짜 아님'], 'YYYY-MM-DD'],
+    ['endDate', ['2026-11-30'], ['2026/11/30', '2026-11-3'], 'YYYY-MM-DD'],
+    ['days.items.startTime', ['00:00', '09:30', '23:59'], ['9:00', '24:00', '12:60'], 'HH:mm'],
+    [
+      'days.items.stops.items.fixedTime',
+      ['00:00', '12:30', '23:59'],
+      ['9:00', '24:00', '12:60'],
+      'HH:mm',
+    ],
+  ] as const)('%s의 형식 규칙을 JSON Schema에 담는다', (path, valid, invalid, description) => {
+    const document = planJsonSchema();
+    const definitions = document.$defs as Record<string, unknown>;
+    const resolve = (value: unknown): Record<string, unknown> => {
+      const schema = value as Record<string, unknown>;
+      return typeof schema.$ref === 'string'
+        ? resolve(definitions[schema.$ref.split('/').at(-1)!])
+        : schema;
+    };
+    let schema = resolve(document);
+    for (const key of path.split('.')) {
+      schema = resolve(
+        key === 'items' ? schema.items : (schema.properties as Record<string, unknown>)[key],
+      );
+    }
+    if (schema.anyOf) {
+      const branches = (schema.anyOf as unknown[]).map(resolve);
+      expect(branches).toContainEqual(expect.objectContaining({ type: 'null' }));
+      schema = branches.find((branch) => branch.type === 'string')!;
+    }
+    expect(schema.pattern).toBeTypeOf('string');
+    const pattern = new RegExp(schema.pattern as string);
+    for (const value of valid) expect(pattern.test(value)).toBe(true);
+    for (const value of invalid) expect(pattern.test(value)).toBe(false);
+    if (description !== undefined) expect(schema.description).toBe(description);
+  });
+
   it.each([
     ['days.0.stops.2.place', 'days[0].stops[2].place'],
     ['', ''],
