@@ -461,8 +461,8 @@ yarn build:viewer && VITE_SYNC_DEV_FAKE=1 wrangler pages dev --d1 DB --port 8795
 | --- | --- | --- | --- |
 | `GET /api/agent/v1/whoami` | 추가 범위 없음 | 500 | `200 { name, scopes, expiresAt, provider }`(`expiresAt`은 epoch ms 숫자) |
 | `POST /api/agent/v1/inbox` | `inbox:write`, `{ v: 1, key, d }` | 50 | `201 { id, expiresAt, created: true }`(`expiresAt`은 epoch ms 숫자). 만료되지 않은 같은 사용자·같은 `key`는 `200 { id, expiresAt, created: false }` |
-| `POST /api/agent/v1/share` | `share:create`, `{ body, kind: 'trip', keepUntil?, deleteToken }` | 50 | `201 { id, expiresAt, created: true }`(`expiresAt`은 ISO 문자열). 같은 삭제 토큰 재시도는 `200 { id, expiresAt, created: false }` |
-| `DELETE /api/agent/v1/share/:id` | `share:create`, `X-Delete-Token` 머리글 | 200 | `204`, 없음·만료 `404 not-found`, 삭제 토큰 불일치 `403 delete-token` |
+| `POST /api/agent/v1/share` | `share:create`, `{ body, kind: 'trip', keepUntil?, deleteToken }` | 50 | `201 { id, expiresAt, created: true }`(`expiresAt`은 ISO 문자열). 같은 삭제 토큰 재시도는 같은 `delete_hash` 행이 남아 있으면 만료 여부와 상관없이 기존 id·`expiresAt`을 `200 { id, expiresAt, created: false }`로 반환 |
+| `DELETE /api/agent/v1/share/:id` | `share:create`, `X-Delete-Token` 머리글 | 200 | 행 존재 여부와 삭제 토큰 일치로 결정: 만료됐어도 정리 전 행이 남아 있으면 토큰 일치 `204`·불일치 `403 delete-token`, 행이 없으면 `404 not-found` |
 
 `send`의 `key`는 해석한 계획·메모 포함 여부·경로 생략 여부를 키 정렬 JSON으로 만든 SHA-256 base64url 43자입니다. 같은 키의 살아 있는 항목이 있으면 문서 재검사 전에 반환하며, 없으면 검사한 뒤 받은함 개수 조건을 건 INSERT로 넣습니다. 한도가 찼을 때 같은 키 재전송은 기존 항목을 반환하고, 새 키는 `409 inbox-full`입니다.
 
@@ -485,7 +485,7 @@ yarn build:viewer && VITE_SYNC_DEV_FAKE=1 wrangler pages dev --d1 DB --port 8795
 - 읽기 검사(`validateShareValue`): `ShareReadError`인 `too-big`, `not-share`, `corrupt`, `empty`, `too-many`, `newer`.
 - 이후 문서·구간·가져오기 검사: `not-trip`, `title`, `labels`, `place-too-long`, `leg-modes`, `import`, `item-too-large`.
 
-받은함은 사용자당 20개·30일 보관이며, 만료 후에는 읽을 수 없고 요청 때 만료 행을 정리합니다. 토큰은 살아 있는 것 10개·발급 후 90일 고정(사용해도 늘지 않음), 이름 1~40자입니다. 에이전트 POST 본문은 40,000바이트, 받은함 값은 32,000자, 풀린 JSON은 `AGENT_INBOX_LIMITS.decodedBytes` 393,216바이트(384KB), 장소는 200곳까지입니다. 받은함은 암호화하지 않고, 짧은 링크는 CLI에서 암호화한 사본을 브라우저 짧은 링크와 같은 기한으로 저장합니다.
+받은함은 사용자당 20개이며, 30일 뒤 API 조회에서 제외하고 새 항목 저장·목록 조회 뒤 최대 50개씩 비동기로 정리합니다. 삭제 완료 시점은 보장하지 않습니다. 토큰은 살아 있는 것 10개·발급 후 90일 고정(사용해도 늘지 않음), 이름 1~40자입니다. 에이전트 POST 본문은 40,000바이트, 받은함 값은 32,000자, 풀린 JSON은 `AGENT_INBOX_LIMITS.decodedBytes` 393,216바이트(384KB), 장소는 200곳까지입니다. 받은함은 암호화하지 않고, 짧은 링크는 CLI에서 암호화한 사본을 브라우저 짧은 링크와 같은 기한으로 저장합니다.
 
 앱의 받은함 확인은 동기화가 켜진 기기에서 동기화 실행이 `synced`·`conflict`로 끝날 때 하며 10분에 한 번까지입니다. 자체 타이머는 없고 숨겨진 탭에서는 건너뜁니다. 새 id가 있을 때만 알림을 냅니다. 401·403이면 그 세션에서 확인을 멈추고 엔진 실행을 한 번 예약하며, 다시 로그인해 세션이 바뀌면 재개합니다. 여행째 가져왔을 때만 항목을 자동으로 지우며, 장소만 가져오거나 창을 닫으면 남깁니다. 기기 키 `tripmap:agent-inbox:v1`은 백업·동기화에서 제외합니다. 설정의 AI 연결 구역은 토큰 목록 실패와 받은함 읽기 실패를 따로 표시합니다.
 
