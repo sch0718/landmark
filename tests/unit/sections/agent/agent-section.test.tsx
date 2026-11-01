@@ -4,6 +4,7 @@ import { createStore, Provider } from 'jotai';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMemoryStorage } from 'src/repositories/edit-layer-repo';
 import { AgentSection } from 'src/sections/agent/AgentSection';
+import { AgentTokenDialog } from 'src/sections/agent/AgentTokenDialog';
 import type { AgentApi, AgentTokenView } from 'src/services/agent-inbox/api';
 import {
   newDeviceMeta,
@@ -310,6 +311,67 @@ it('철회 확인을 닫는 중에도 이름과 설명을 유지해요', async (
 });
 
 describe('새 AI 연결 창', () => {
+  it.each(['닫기', 'Escape', '바깥 클릭'] as const)(
+    '발급 중 %s 동작으로 닫은 뒤 성공하면 원문 없이 목록을 다시 읽어요',
+    async (closeMethod) => {
+      const raw = 'lmk_' + crypto.randomUUID().replaceAll('-', '').padEnd(43, '_');
+      const reply = deferred<Awaited<ReturnType<AgentApi['issue']>>>();
+      vi.mocked(api.issue).mockReturnValue(reply.promise);
+      const { user } = mount();
+      const dialog = await openCreate(user);
+      await user.click(dialog.getByRole('button', { name: '만들기' }));
+      expect(api.issue).toHaveBeenCalledOnce();
+      if (closeMethod === '닫기') await user.click(dialog.getByRole('button', { name: '닫기' }));
+      else if (closeMethod === 'Escape') await user.keyboard('{Escape}');
+      else await user.click(screen.getByRole('dialog').parentElement!);
+      expect(screen.queryByRole('dialog') === null).toBe(true);
+      expect(api.tokens).toHaveBeenCalledOnce();
+      vi.mocked(api.tokens).mockResolvedValue(
+        list([token, { ...token, id: 'abcdef123457', name: '늦게 만든 연결' }]),
+      );
+      await act(async () => reply.resolve({ ok: true, data: { ...token, token: raw } }));
+      expect(document.body.textContent?.includes(raw)).toBe(false);
+      expect(screen.queryByRole('textbox', { name: '연결 토큰' }) === null).toBe(true);
+      for (const storage of [localStorage, sessionStorage, syncStorage]) {
+        const values = Array.from({ length: storage.length }, (_, i) =>
+          storage.getItem(storage.key(i)!),
+        );
+        expect(values.some((value) => value?.includes(raw))).toBe(false);
+      }
+      expect(api.tokens).toHaveBeenCalledTimes(2);
+      expect(screen.getByRole('button', { name: '「늦게 만든 연결」 철회' })).toBeEnabled();
+      const reopened = await openCreate(user);
+      expect(reopened.queryByRole('textbox', { name: '연결 토큰' }) === null).toBe(true);
+    },
+  );
+  it.each(['계정', '세션'] as const)(
+    '발급 중 닫고 응답 전에 %s이 바뀌면 onIssued를 부르지 않아요',
+    async (changed) => {
+      const raw = 'lmk_' + crypto.randomUUID().replaceAll('-', '').padEnd(43, '_');
+      const reply = deferred<Awaited<ReturnType<AgentApi['issue']>>>();
+      vi.mocked(api.issue).mockReturnValue(reply.promise);
+      const onIssued = vi.fn();
+      const onClose = vi.fn();
+      const view = render(
+        <AgentTokenDialog open api={api} onClose={onClose} onIssued={onIssued} />,
+      );
+      const user = userEvent.setup();
+      await user.click(screen.getByRole('button', { name: '만들기' }));
+      expect(api.issue).toHaveBeenCalledOnce();
+      await user.click(screen.getByRole('button', { name: '닫기' }));
+      expect(onClose).toHaveBeenCalledOnce();
+      view.rerender(
+        <AgentTokenDialog open={false} api={api} onClose={onClose} onIssued={onIssued} />,
+      );
+      if (changed === '계정') {
+        writeSyncMeta(syncStorage, { ...newDeviceMeta(), userId: 'owner-b', enabled: true });
+        mocks.sameOwner.mockReturnValue(false);
+      } else signIn();
+      await act(async () => reply.resolve({ ok: true, data: { ...token, token: raw } }));
+      expect(document.body.textContent?.includes(raw)).toBe(false);
+      expect(onIssued).not.toHaveBeenCalled();
+    },
+  );
   it('원문이 없을 때 Escape로 닫혀요', async () => {
     const { user } = mount();
     await openCreate(user);

@@ -81,7 +81,11 @@ function TokenDialogContent({ api, onClose, onIssued }: Omit<Props, 'open'>) {
     ];
     try {
       const result = await api.issue({ name: name.trim(), scopes });
-      if (!current()) return;
+      if (!current()) {
+        // 닫힌 창의 원문은 버리되 같은 계정·세션의 목록은 다시 읽어요.
+        if (result.ok && currentOwner()) onIssued();
+        return;
+      }
       if (result.ok) setToken(result.data.token);
       else setError(issueFailure(result.reason));
     } catch {
