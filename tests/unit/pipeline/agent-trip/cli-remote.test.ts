@@ -208,7 +208,7 @@ describe('원격 여행 CLI', () => {
       expect.objectContaining({ code: 'token-origin' }),
     );
   });
-  it.each(['timeout', 'offline'])(
+  it.each(['timeout', 'offline', 'server'])(
     'share의 %s 뒤 삭제 토큰으로 결과 모르는 링크를 복구해 지운다',
     async (kind) => {
       const now = new Date();
@@ -233,6 +233,8 @@ describe('원격 여행 CLI', () => {
         const response = await server.agentFetch(input, init);
         createdId = (await response.json()).id;
         received();
+        // 서버는 저장했지만 중간 관문이 JSON이 아닌 502를 준 경우(결과 모름).
+        if (kind === 'server') return new Response('<html>Bad Gateway</html>', { status: 502 });
         return await new Promise<Response>(() => {});
       });
       vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });

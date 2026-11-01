@@ -279,7 +279,9 @@ export async function main(argv: string[], deps: CliDeps): Promise<ExitCode> {
           keepUntil,
           deleteToken,
         });
-        if (!reply.ok && ['timeout', 'offline'].includes(reply.issue.code)) {
+        // 시간 초과·연결 끊김과 알 수 없는 응답(`server`: 관문 502·JSON 아닌 5xx 등)은 서버가 이미
+        // 저장했을 수 있어 삭제 토큰이 든 예약을 남긴다. 서버가 알려진 오류 코드로 거절했을 때만 푼다.
+        if (!reply.ok && ['timeout', 'offline', 'server'].includes(reply.issue.code)) {
           preserveReservation = true;
           throw new TripFailure(
             [
