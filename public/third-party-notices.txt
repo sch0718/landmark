@@ -2274,7 +2274,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ========================================================================
-@sch0718/firebase-session@0.2.1
+@sch0718/firebase-session@0.3.0
 License: PolyForm-Noncommercial-1.0.0
 Source: https://github.com/sch0718/sch0718-toolkit-web
 ------------------------------------------------------------------------

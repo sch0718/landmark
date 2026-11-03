@@ -2,7 +2,9 @@ import type { MeetDb } from '../meet/db';
 import { hashIp } from '../meet/tokens';
 import type { SyncContext } from './env';
 import { isLocalRequest, SyncHttpError } from './http';
-export const SYNC_LIMITS = { login: 60, pull: 5000, push: 2000, items: 30000 } as const;
+// 2026-11-03 운영자 실측 하루 최대 push 35·pull 9회. 상한 검사가 push마다 사용자 행을 세므로
+// 한 사람이 D1 무료 읽기(하루 500만 행)를 다 쓰지 못하게 낮췄다(최대 약 500×5,000 + 2,000×501행).
+export const SYNC_LIMITS = { login: 60, pull: 2000, push: 500, items: 5000 } as const;
 export function counterKey(action: string, subject: string, now: number): string {
   return `${action}:${subject}:${new Date(now).toISOString().slice(0, 10)}`;
 }

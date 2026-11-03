@@ -7,7 +7,8 @@ export const SYNC_DESCRIPTION = [
 ];
 export const REJECTED_COPY = {
   invalid: '형식이 맞지 않아 올리지 못했어요',
-  'too-large': '너무 커서 올리지 못했어요',
+  'too-large':
+    '너무 커서 올리지 못했어요. 항목 하나는 20만 자, 서버 보관함은 5,000개·5MB까지예요. 지운 항목은 90일 뒤 빠지고, 자리가 난 뒤 이 항목을 고치면 다시 올라가요',
   clock: '기기 시계를 확인해 주세요',
 };
 export function conflictPath(path: string): string {

@@ -40,6 +40,10 @@ export function redirectUrisFor(ctx: SyncContext): string[] {
       }
     });
 }
+/** 허용 목록 변수가 둘 다 없으면(정의되지 않음) 누구나 쓴다. 하나라도 있으면 목록 안만(빈 값은 모두 거절). */
+export function allowListOpen(env: SyncContext['env']): boolean {
+  return env.ALLOWED_EMAILS === undefined && env.ALLOWED_ACCOUNTS === undefined;
+}
 export function providerStatus(ctx: SyncContext) {
   const devFake = devFakeEnabled(ctx);
   return {
@@ -58,7 +62,7 @@ export function sessionAuthFor(ctx: SyncContext, deps: SyncDeps): SessionAuth {
   const social: SocialLoginOptions | undefined =
     status.kakao || status.naver
       ? {
-          allowedAccounts: env.ALLOWED_ACCOUNTS ?? (fake ? 'kakao:dev-me,naver:dev-me' : undefined),
+          allowedAccounts: env.ALLOWED_ACCOUNTS,
           keys: fake?.keys ?? deps.socialKeys,
           fetch: fake?.fetch ?? deps.fetch,
           ...(status.kakao
@@ -92,6 +96,7 @@ export function sessionAuthFor(ctx: SyncContext, deps: SyncDeps): SessionAuth {
     random: deps.random,
     uuid: deps.uuid,
     social,
+    ...(allowListOpen(env) ? { isAllowed: () => true } : {}),
   });
 }
 export async function requireSyncUser(ctx: SyncContext, deps: SyncDeps): Promise<SyncUser> {

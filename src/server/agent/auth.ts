@@ -1,5 +1,5 @@
 import { parseAccountList, parseAllowList } from '@sch0718/firebase-session/worker';
-import { devFakeEnabled } from '../library-sync/auth';
+import { allowListOpen } from '../library-sync/auth';
 import type { SyncContext, SyncDeps } from '../library-sync/env';
 import { isLocalRequest, SyncHttpError } from '../library-sync/http';
 import { consumeCounter, counterKey } from '../library-sync/limits';
@@ -75,11 +75,11 @@ export async function requireAgentToken(
   if (row.expires_at <= now) throw new SyncHttpError(401, 'token-expired');
 
   const social = /^(kakao|naver):/i.exec(row.firebase_sub);
-  const allowed = social
-    ? parseAccountList(
-        env.ALLOWED_ACCOUNTS ?? (devFakeEnabled(ctx) ? 'kakao:dev-me,naver:dev-me' : undefined),
-      ).has(row.firebase_sub)
-    : !!row.email && parseAllowList(env.ALLOWED_EMAILS).has(row.email.toLowerCase());
+  const allowed =
+    allowListOpen(env) ||
+    (social
+      ? parseAccountList(env.ALLOWED_ACCOUNTS).has(row.firebase_sub)
+      : !!row.email && parseAllowList(env.ALLOWED_EMAILS).has(row.email.toLowerCase()));
   if (!allowed) throw new SyncHttpError(403, 'not-allowed');
   const scopes = AGENT_SCOPES.filter((value) => row.scopes.split(' ').includes(value));
   if (scope && !scopes.includes(scope)) throw new SyncHttpError(403, 'scope');

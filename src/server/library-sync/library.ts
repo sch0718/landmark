@@ -21,6 +21,11 @@ export const PUSH_MAX_ITEMS = 100;
 export const PUSH_MAX_BYTES = 1_000_000;
 export const CLOCK_SKEW_MS = 10 * 60 * 1000;
 export const DEVICE_TOUCH_MS = 60 * 60 * 1000;
+// 공개 뒤 한 사람이 무료 D1(500MB)을 독차지하지 못하게 하는 사용자별 상한(묘비 포함, doc UTF-8 바이트).
+// 2026-11-03 운영자 실측 3,420항목·1.95MB의 약 1.5배·2.6배.
+export const LIBRARY_QUOTA = { items: 5000, bytes: 5_000_000 } as const;
+export const DEVICE_MAX = 20;
+export const TOMBSTONE_GROWTH_BYTES = 64;
 export const ACCOUNT_DATA_TABLES: string[] = [
   'library_items',
   'library_devices',
@@ -126,7 +131,7 @@ export async function pullChanges(
   if (state && !more && q.deviceId)
     await db
       .prepare(
-        `INSERT INTO library_devices (user_id, device_id, session_id, last_rev, last_sync_at, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?5) ON CONFLICT(user_id, device_id) DO UPDATE SET session_id = excluded.session_id, last_rev = excluded.last_rev, last_sync_at = excluded.last_sync_at WHERE library_devices.session_id <> excluded.session_id OR library_devices.last_sync_at <= excluded.last_sync_at - ${DEVICE_TOUCH_MS}`,
+        `INSERT INTO library_devices (user_id, device_id, session_id, last_rev, last_sync_at, created_at) SELECT ?1, ?2, ?3, ?4, ?5, ?5 WHERE (SELECT count(*) FROM library_devices WHERE user_id = ?1) < ${DEVICE_MAX} OR EXISTS (SELECT 1 FROM library_devices WHERE user_id = ?1 AND device_id = ?2) ON CONFLICT(user_id, device_id) DO UPDATE SET session_id = excluded.session_id, last_rev = excluded.last_rev, last_sync_at = excluded.last_sync_at WHERE library_devices.session_id <> excluded.session_id OR library_devices.last_sync_at <= excluded.last_sync_at - ${DEVICE_TOUCH_MS}`,
       )
       .bind(user.userId, q.deviceId, user.sessionId, next.rev, now)
       .run();
@@ -201,11 +206,13 @@ export type PushReply = {
   results: { kind: ItemKind; id: string; rev: number; doc?: unknown }[];
   rejected: { kind: ItemKind; id: string; reason: 'invalid' | 'too-large' | 'clock' }[];
 };
+const utf8Bytes = (text: string) => new TextEncoder().encode(text).byteLength;
 export async function pushItems(
   db: MeetDb,
   user: SyncUser,
   body: PushBody,
   now: number,
+  quota: { items: number; bytes: number } = LIBRARY_QUOTA,
 ): Promise<PushReply> {
   const accepted: { item: PushItem; doc: AnyItem; text: string }[] = [];
   const rejected: PushReply['rejected'] = [];
@@ -233,9 +240,10 @@ export async function pushItems(
       ? (
           await db
             .prepare(
-              "SELECT kind, item_id AS id, rev, deleted, doc FROM library_items WHERE user_id = ?1 AND (kind || ':' || item_id) IN (SELECT value FROM json_each(?2))",
+              // 행 값 IN이라 기본 키(user_id, kind, item_id)로 찾는다(사용자 행 전체를 훑지 않음).
+              "SELECT kind, item_id AS id, rev, deleted, doc FROM library_items WHERE user_id = ?1 AND (kind, item_id) IN (SELECT json_extract(value, '$[0]'), json_extract(value, '$[1]') FROM json_each(?2))",
             )
-            .bind(user.userId, JSON.stringify(accepted.map((a) => itemKey(a.item.kind, a.item.id))))
+            .bind(user.userId, JSON.stringify(accepted.map((a) => [a.item.kind, a.item.id])))
             .all<ItemRow>()
         ).results
       : [];
@@ -257,7 +265,48 @@ export async function pushItems(
         changed: !stored || text !== stored.doc,
       };
     });
-    const changed = evaluated.filter((e) => e.changed);
+    const overQuota = new Set<(typeof evaluated)[number]>();
+    const deltas = evaluated
+      .filter((e) => e.changed)
+      .map((e) => {
+        const bytes = utf8Bytes(e.resultText) - (e.stored ? utf8Bytes(e.stored.doc) : 0);
+        // 있던 항목을 막 지우면 deletedAt 시각만큼 커지므로 그만큼은 상한과 상관없이 받는다.
+        const deleting = e.stored?.deleted === 0 && isDeleted(e.result);
+        return {
+          e,
+          items: e.stored ? 0 : 1,
+          bytes,
+          growth: bytes - (deleting ? TOMBSTONE_GROWTH_BYTES : 0),
+        };
+      });
+    const grows = deltas.filter((g) => g.items > 0 || g.growth > 0);
+    if (grows.length) {
+      const used = await db
+        .prepare(
+          'SELECT count(*) AS items, coalesce(sum(length(CAST(doc AS BLOB))), 0) AS bytes FROM library_items WHERE user_id = ?',
+        )
+        .bind(user.userId)
+        .first<{ items: number; bytes: number }>();
+      let items = used?.items ?? 0;
+      // 늘 받는 쪽(줄어드는 수정·막 지운 묘비)의 실제 증감을 먼저 반영하고, 늘어나는 항목은 상한 안에 드는 것까지만 받는다.
+      // 개수 상한은 행을 더할 때만 본다.
+      let bytes =
+        (used?.bytes ?? 0) +
+        deltas.filter((g) => !grows.includes(g)).reduce((sum, g) => sum + g.bytes, 0);
+      for (const g of grows) {
+        if (
+          (g.items > 0 && items + g.items > quota.items) ||
+          (g.growth > 0 && bytes + g.bytes > quota.bytes)
+        )
+          overQuota.add(g.e);
+        else {
+          items += g.items;
+          bytes += g.bytes;
+        }
+      }
+    }
+    const kept = evaluated.filter((e) => !overQuota.has(e));
+    const changed = kept.filter((e) => e.changed);
     let rev = r0;
     if (changed.length) {
       const data = changed.map((e) => ({
@@ -286,8 +335,15 @@ export async function pushItems(
     }
     return {
       rev,
-      rejected,
-      results: evaluated.map((e) => ({
+      rejected: [
+        ...rejected,
+        ...[...overQuota].map((e) => ({
+          kind: e.item.kind,
+          id: e.item.id,
+          reason: 'too-large' as const,
+        })),
+      ],
+      results: kept.map((e) => ({
         kind: e.item.kind,
         id: e.item.id,
         rev: e.changed ? rev : e.stored!.rev,

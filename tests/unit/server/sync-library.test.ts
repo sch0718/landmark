@@ -10,6 +10,7 @@ import {
   readMe,
   deleteAccountData,
   TOMBSTONE_KEEP_MS,
+  DEVICE_MAX,
 } from 'src/server/library-sync/library';
 import type { SyncUser } from 'src/server/library-sync/auth';
 import { createSqliteD1 } from '../../helpers/sqlite-d1';
@@ -301,4 +302,98 @@ it('묘비 목록을 읽은 뒤 되살아난 행은 정리하지 않는다', asy
   });
   expect(await purgeTombstones(db, user.userId, now)).toBe(0);
   expect((await readMe(db, user)).library.live).toBe(1);
+});
+it('상한을 넘기는 새 항목·커지는 수정만 too-large로 거절하고 줄이는 수정·삭제는 받는다', async () => {
+  const quota = { items: 2, bytes: 1_000_000 };
+  const a = place('place00001');
+  const b = place('place00002');
+  const c = place('place00003');
+  const first = await pushItems(db, user, body([a, b, c]), now, quota);
+  expect(first.results.map((r) => r.id)).toEqual(['place00001', 'place00002']);
+  expect(first.rejected).toEqual([{ kind: 'place', id: 'place00003', reason: 'too-large' }]);
+  // 다른 사용자는 따로 센다.
+  expect((await pushItems(db, other, body([c]), now, quota)).rejected).toEqual([]);
+  const stored = await db
+    .prepare('SELECT sum(length(CAST(doc AS BLOB))) AS bytes FROM library_items WHERE user_id = ?')
+    .bind(user.userId)
+    .first<{ bytes: number }>();
+  const tight = { items: 10, bytes: stored!.bytes };
+  const longer = { ...a, memo: f('처음보다 긴 메모', '2026-10-04T00:00:00.000Z') };
+  expect((await pushItems(db, user, body([longer], 1), now, tight)).rejected).toHaveLength(1);
+  const shorter = { ...a, memo: f('', '2026-10-04T00:00:00.000Z') };
+  const deleted = { ...b, deletedAt: '2026-10-04T00:00:00.000Z' };
+  const ok = await pushItems(db, user, body([shorter, deleted], 1), now, tight);
+  expect(ok.rejected).toEqual([]);
+  expect(ok.results).toHaveLength(2);
+  // 묘비라도 시각 몇 개보다 크게 커지면 상한을 적용한다.
+  const bigTombstone = { ...deleted, memo: f('긴'.repeat(100), '2026-10-05T00:00:00.000Z') };
+  expect((await pushItems(db, user, body([bigTombstone], 2), now, tight)).rejected).toHaveLength(1);
+  // 이미 묘비인 항목을 조금씩 키우는 수정은 면제하지 않는다.
+  const grownTombstone = { ...deleted, memo: f('조금'.repeat(10), '2026-10-05T00:00:00.000Z') };
+  expect((await pushItems(db, user, body([grownTombstone], 2), now, tight)).rejected).toHaveLength(
+    1,
+  );
+});
+it('같은 묶음에서 줄어드는 수정의 절약분을 늘어나는 항목에 쓸 수 있다', async () => {
+  const a = { ...place('place00001'), memo: f('아주 긴 처음 메모입니다') };
+  const b = place('place00002');
+  await pushItems(db, user, body([a, b]), now);
+  const stored = await db
+    .prepare('SELECT sum(length(CAST(doc AS BLOB))) AS bytes FROM library_items WHERE user_id = ?')
+    .bind(user.userId)
+    .first<{ bytes: number }>();
+  const later = '2026-10-04T00:00:00.000Z';
+  const reply = await pushItems(
+    db,
+    user,
+    body(
+      [
+        { ...a, memo: f('', later) },
+        { ...b, memo: f('처음보다 긴', later) },
+      ],
+      1,
+    ),
+    now,
+    { items: 10, bytes: stored!.bytes },
+  );
+  expect(reply.rejected).toEqual([]);
+});
+it('기기 행은 사용자당 DEVICE_MAX개까지만 새로 만들고 있던 기기는 계속 갱신한다', async () => {
+  await pushItems(db, user, body([place()]), now);
+  const pullAs = (deviceId: string, at = now) =>
+    pullChanges(db, user, { since: 0, after: '', limit: 500, deviceId }, at);
+  for (let i = 0; i < DEVICE_MAX + 2; i++) await pullAs(i.toString(16).padStart(16, '0'));
+  const count = () =>
+    db.prepare('SELECT count(*) AS n FROM library_devices').first<{ n: number }>();
+  expect((await count())?.n).toBe(DEVICE_MAX);
+  await pullAs('0'.repeat(16), now + 2 * 60 * 60 * 1000);
+  expect(
+    await db
+      .prepare('SELECT last_sync_at AS at FROM library_devices WHERE device_id = ?')
+      .bind('0'.repeat(16))
+      .first(),
+  ).toEqual({ at: now + 2 * 60 * 60 * 1000 });
+});
+it('개수 상한은 행을 더할 때만 보고, 묘비 면제분은 다른 항목의 여유로 쓰지 않는다', async () => {
+  const a = place('place00001');
+  const b = place('place00002');
+  await pushItems(db, user, body([a, b]), now);
+  const later = '2026-10-04T00:00:00.000Z';
+  const longer = { ...a, memo: f('처음보다 긴 메모', later) };
+  // 이미 개수 상한을 넘은 계정도 있던 항목 수정은 바이트 여유 안에서 받는다.
+  expect(
+    (await pushItems(db, user, body([longer], 1), now, { items: 1, bytes: 1_000_000 })).rejected,
+  ).toEqual([]);
+  const stored = await db
+    .prepare('SELECT sum(length(CAST(doc AS BLOB))) AS bytes FROM library_items WHERE user_id = ?')
+    .bind(user.userId)
+    .first<{ bytes: number }>();
+  const deleted = { ...b, deletedAt: later };
+  const grown = { ...longer, memo: f('처음보다 긴 메모에 몇 글자', '2026-10-05T00:00:00.000Z') };
+  const reply = await pushItems(db, user, body([deleted, grown], 2), now, {
+    items: 10,
+    bytes: stored!.bytes,
+  });
+  expect(reply.rejected).toEqual([{ kind: 'place', id: 'place00001', reason: 'too-large' }]);
+  expect(reply.results.map((r) => r.id)).toEqual(['place00002']);
 });
