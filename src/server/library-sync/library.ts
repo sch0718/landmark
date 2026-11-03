@@ -275,10 +275,11 @@ export async function pushItems(
         return {
           e,
           items: e.stored ? 0 : 1,
-          bytes: bytes - (deleting ? TOMBSTONE_GROWTH_BYTES : 0),
+          bytes,
+          growth: bytes - (deleting ? TOMBSTONE_GROWTH_BYTES : 0),
         };
       });
-    const grows = deltas.filter((g) => g.items > 0 || g.bytes > 0);
+    const grows = deltas.filter((g) => g.items > 0 || g.growth > 0);
     if (grows.length) {
       const used = await db
         .prepare(
@@ -287,10 +288,17 @@ export async function pushItems(
         .bind(user.userId)
         .first<{ items: number; bytes: number }>();
       let items = used?.items ?? 0;
-      // 줄어드는 수정·막 지운 묘비는 늘 받으므로 그 절약분을 먼저 빼고, 늘어나는 항목은 상한 안에 드는 것까지만 받는다.
-      let bytes = (used?.bytes ?? 0) + deltas.reduce((sum, g) => sum + Math.min(0, g.bytes), 0);
+      // 늘 받는 쪽(줄어드는 수정·막 지운 묘비)의 실제 증감을 먼저 반영하고, 늘어나는 항목은 상한 안에 드는 것까지만 받는다.
+      // 개수 상한은 행을 더할 때만 본다.
+      let bytes =
+        (used?.bytes ?? 0) +
+        deltas.filter((g) => !grows.includes(g)).reduce((sum, g) => sum + g.bytes, 0);
       for (const g of grows) {
-        if (items + g.items > quota.items || bytes + g.bytes > quota.bytes) overQuota.add(g.e);
+        if (
+          (g.items > 0 && items + g.items > quota.items) ||
+          (g.growth > 0 && bytes + g.bytes > quota.bytes)
+        )
+          overQuota.add(g.e);
         else {
           items += g.items;
           bytes += g.bytes;

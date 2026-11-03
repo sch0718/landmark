@@ -374,3 +374,26 @@ it('기기 행은 사용자당 DEVICE_MAX개까지만 새로 만들고 있던 �
       .first(),
   ).toEqual({ at: now + 2 * 60 * 60 * 1000 });
 });
+it('개수 상한은 행을 더할 때만 보고, 묘비 면제분은 다른 항목의 여유로 쓰지 않는다', async () => {
+  const a = place('place00001');
+  const b = place('place00002');
+  await pushItems(db, user, body([a, b]), now);
+  const later = '2026-10-04T00:00:00.000Z';
+  const longer = { ...a, memo: f('처음보다 긴 메모', later) };
+  // 이미 개수 상한을 넘은 계정도 있던 항목 수정은 바이트 여유 안에서 받는다.
+  expect(
+    (await pushItems(db, user, body([longer], 1), now, { items: 1, bytes: 1_000_000 })).rejected,
+  ).toEqual([]);
+  const stored = await db
+    .prepare('SELECT sum(length(CAST(doc AS BLOB))) AS bytes FROM library_items WHERE user_id = ?')
+    .bind(user.userId)
+    .first<{ bytes: number }>();
+  const deleted = { ...b, deletedAt: later };
+  const grown = { ...longer, memo: f('처음보다 긴 메모에 몇 글자', '2026-10-05T00:00:00.000Z') };
+  const reply = await pushItems(db, user, body([deleted, grown], 2), now, {
+    items: 10,
+    bytes: stored!.bytes,
+  });
+  expect(reply.rejected).toEqual([{ kind: 'place', id: 'place00001', reason: 'too-large' }]);
+  expect(reply.results.map((r) => r.id)).toEqual(['place00002']);
+});
