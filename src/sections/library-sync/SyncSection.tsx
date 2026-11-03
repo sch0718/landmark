@@ -1,6 +1,8 @@
 import { Alert, Box, Button, Typography } from '@mui/material';
 import { useAtomValue } from 'jotai';
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router';
+import { paths } from 'src/routes/paths';
 import { useBackupFile } from 'src/sections/backup/use-backup-file';
 import { loadSyncEngine } from 'src/services/library-sync/boot';
 import {
@@ -289,6 +291,9 @@ export default function SyncSection() {
         </Alert>
       )}
       {error && <Alert severity="error">{error}</Alert>}
+      <Button component={Link} to={paths.privacy} sx={{ minHeight: 44, justifySelf: 'start' }}>
+        개인정보 처리방침
+      </Button>
       <SyncConnectDialog
         open={connectOpen}
         onClose={() => {

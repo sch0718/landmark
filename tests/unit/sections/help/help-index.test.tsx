@@ -20,5 +20,9 @@ describe('도움말 목록', () => {
     }
     expect(container.textContent).not.toContain('`');
     expect(screen.getByRole('button', { name: '처음 안내 다시 보기' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '개인정보 처리방침' })).toHaveAttribute(
+      'href',
+      '/privacy',
+    );
   });
 });
