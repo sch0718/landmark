@@ -1,4 +1,5 @@
 import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import { Link } from 'react-router';
 import { useDocumentTitle } from 'src/lib/use-document-title';
@@ -51,7 +52,12 @@ export function HelpIndexPage() {
           </Box>
         ))}
       </Box>
-      <ResetHelpButton />
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+        <ResetHelpButton />
+        <Button component={Link} to={paths.privacy} variant="outlined" sx={{ minHeight: 44 }}>
+          개인정보 처리방침
+        </Button>
+      </Box>
     </Box>
   );
 }
