@@ -1,10 +1,10 @@
 // 개인정보 처리방침 본문. 코드에서 확인한 사실만 적는다.
 // 저장 항목·보관 기간이 바뀌면(src/server/**, src/domain/**의 기한 상수) 이 파일도 함께 고친다.
 
-/** 운영자가 정해야 하는 값. 코드로 알 수 없어 운영자에게 받은 값을 적는다. */
+/** 운영자가 정한 값(코드로 알 수 없어 운영자에게 받았다). 시행일은 병합일이다. */
 export const PRIVACY_OPERATOR = '신춘호';
 export const PRIVACY_CONTACT = 'sch0718@naver.com';
-export const PRIVACY_EFFECTIVE_DATE = '확인 필요';
+export const PRIVACY_EFFECTIVE_DATE = '2026년 11월 4일';
 
 export type PrivacySection = {
   readonly title: string;
