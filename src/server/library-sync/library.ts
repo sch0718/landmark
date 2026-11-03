@@ -240,9 +240,10 @@ export async function pushItems(
       ? (
           await db
             .prepare(
-              "SELECT kind, item_id AS id, rev, deleted, doc FROM library_items WHERE user_id = ?1 AND (kind || ':' || item_id) IN (SELECT value FROM json_each(?2))",
+              // 행 값 IN이라 기본 키(user_id, kind, item_id)로 찾는다(사용자 행 전체를 훑지 않음).
+              "SELECT kind, item_id AS id, rev, deleted, doc FROM library_items WHERE user_id = ?1 AND (kind, item_id) IN (SELECT json_extract(value, '$[0]'), json_extract(value, '$[1]') FROM json_each(?2))",
             )
-            .bind(user.userId, JSON.stringify(accepted.map((a) => itemKey(a.item.kind, a.item.id))))
+            .bind(user.userId, JSON.stringify(accepted.map((a) => [a.item.kind, a.item.id])))
             .all<ItemRow>()
         ).results
       : [];
