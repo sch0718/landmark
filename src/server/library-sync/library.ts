@@ -265,15 +265,19 @@ export async function pushItems(
       };
     });
     const overQuota = new Set<(typeof evaluated)[number]>();
-    const grows = evaluated
+    const deltas = evaluated
       .filter((e) => e.changed)
       .map((e) => {
         const bytes = utf8Bytes(e.resultText) - (e.stored ? utf8Bytes(e.stored.doc) : 0);
-        // 있던 항목을 지우면 deletedAt 시각만큼 커지므로 그만큼은 상한과 상관없이 받는다.
-        const allowance = e.stored && isDeleted(e.result) ? TOMBSTONE_GROWTH_BYTES : 0;
-        return { e, items: e.stored ? 0 : 1, bytes: bytes - allowance };
-      })
-      .filter((g) => g.items > 0 || g.bytes > 0);
+        // 있던 항목을 막 지우면 deletedAt 시각만큼 커지므로 그만큼은 상한과 상관없이 받는다.
+        const deleting = e.stored?.deleted === 0 && isDeleted(e.result);
+        return {
+          e,
+          items: e.stored ? 0 : 1,
+          bytes: bytes - (deleting ? TOMBSTONE_GROWTH_BYTES : 0),
+        };
+      });
+    const grows = deltas.filter((g) => g.items > 0 || g.bytes > 0);
     if (grows.length) {
       const used = await db
         .prepare(
@@ -282,8 +286,8 @@ export async function pushItems(
         .bind(user.userId)
         .first<{ items: number; bytes: number }>();
       let items = used?.items ?? 0;
-      let bytes = used?.bytes ?? 0;
-      // 있던 항목의 삭제(묘비, 64바이트까지)와 줄어드는 수정은 늘 받고, 늘어나는 항목은 상한 안에 드는 것까지만 받는다.
+      // 줄어드는 수정·막 지운 묘비는 늘 받으므로 그 절약분을 먼저 빼고, 늘어나는 항목은 상한 안에 드는 것까지만 받는다.
+      let bytes = (used?.bytes ?? 0) + deltas.reduce((sum, g) => sum + Math.min(0, g.bytes), 0);
       for (const g of grows) {
         if (items + g.items > quota.items || bytes + g.bytes > quota.bytes) overQuota.add(g.e);
         else {
