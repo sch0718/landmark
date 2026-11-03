@@ -157,6 +157,10 @@ export const HelpIntroDialog = lazy(() =>
   loadHelpIntroDialog().then((m) => ({ default: m.HelpIntroDialog })),
 );
 
+// 처리방침도 미리 받지 않는다. 링크를 눌렀을 때만 받는다.
+export const loadPrivacyPage = lazyChunk(() => import('src/sections/privacy/PrivacyPage'));
+export const PrivacyPage = lazy(() => loadPrivacyPage().then((m) => ({ default: m.PrivacyPage })));
+
 export const loadAuthCallbackPage = lazyChunk(
   () => import('src/sections/library-sync/AuthCallbackPage'),
 );

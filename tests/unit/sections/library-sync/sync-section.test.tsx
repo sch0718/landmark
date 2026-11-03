@@ -1,6 +1,7 @@
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Provider, createStore } from 'jotai';
+import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import SyncSection from 'src/sections/library-sync/SyncSection';
 import { SyncConnectDialog } from 'src/sections/library-sync/SyncConnectDialog';
@@ -83,13 +84,24 @@ afterEach(() => {
 const show = (ui: React.ReactNode, withPlace = false) => {
   const store = createStore();
   if (withPlace) store.set(libraryAtom, { ...emptyLibrary(), places: { [place(1).id]: place(1) } });
-  return { ...render(<Provider store={store}>{ui}</Provider>), store };
+  return {
+    ...render(
+      <MemoryRouter>
+        <Provider store={store}>{ui}</Provider>
+      </MemoryRouter>,
+    ),
+    store,
+  };
 };
 it('설정과 서버 양쪽이 켠 공급자만 보이고 저장 안내를 보인다', async () => {
   show(<SyncSection />);
   expect(await screen.findByRole('button', { name: '카카오로 로그인' })).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Google로 로그인' })).toBeNull();
   expect(screen.getByText(/암호화하지 않고/)).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: '개인정보 처리방침' })).toHaveAttribute(
+    'href',
+    '/privacy',
+  );
 });
 it('서버가 공급자를 끄면 버튼을 숨긴다', async () => {
   mock.providers.kakao = false;

@@ -12,6 +12,7 @@ import {
   MeetingEditorPage,
   MeetLinkPage,
   LegacyImportPage,
+  PrivacyPage,
   SettingsPage,
   TripPlannerPage,
   TripLiveLinkPage,
@@ -49,6 +50,7 @@ export const routes: RouteObject[] = [
       { path: paths.importShare, element: null },
       { path: paths.help, element: lazyElement(<HelpIndexPage />, 'help') },
       { path: paths.helpPage(':id'), element: lazyElement(<HelpPage />, 'help-page') },
+      { path: paths.privacy, element: lazyElement(<PrivacyPage />, 'privacy') },
       { path: paths.labels, element: lazyElement(<LabelsPage />, 'labels') },
       { path: paths.settings, element: lazyElement(<SettingsPage />, 'settings') },
       {
