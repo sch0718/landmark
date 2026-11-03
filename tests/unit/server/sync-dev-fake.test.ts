@@ -5,9 +5,13 @@ import { base64url } from '@sch0718/firebase-session/worker';
 import { handleSync } from 'src/server/library-sync/router';
 import { productionDeps } from 'src/server/library-sync/env';
 import { createSqliteD1 } from '../../helpers/sqlite-d1';
-it.each(['kakao', 'naver'] as const)(
-  '가짜 %s도 PKCE·nonce·토큰 검증과 허용 목록을 거친다',
-  async (provider) => {
+it.each([
+  ['kakao', 'kakao:dev-me,naver:dev-me'],
+  ['naver', 'kakao:dev-me,naver:dev-me'],
+  ['kakao', undefined],
+] as const)(
+  '가짜 %s도 PKCE·nonce·토큰 검증과 허용 목록(%s, 없으면 열림)을 거친다',
+  async (provider, allowed) => {
     const db = createSqliteD1();
     const deps = productionDeps();
     deps.log = () => {};
@@ -18,7 +22,7 @@ it.each(['kakao', 'naver'] as const)(
             ...init,
             headers: { Origin: 'http://localhost:8795', ...init?.headers },
           }),
-          env: { DB: db, SYNC_DEV_FAKE_SOCIAL: '1' },
+          env: { DB: db, SYNC_DEV_FAKE_SOCIAL: '1', ALLOWED_ACCOUNTS: allowed },
           params: {},
           waitUntil: () => {},
         },
@@ -47,7 +51,7 @@ it.each(['kakao', 'naver'] as const)(
       expect(await authorize.text()).toContain('계정 ID');
       for (const [sub, result, status] of [
         ['me', 'ok', 200],
-        ['stranger', 'ok', 403],
+        ['stranger', 'ok', allowed ? 403 : 200],
         ['me', 'down', 503],
         ['me', 'bad-code', 401],
       ] as const) {
@@ -70,12 +74,13 @@ it.each(['kakao', 'naver'] as const)(
         if (status === 200) {
           const body = await response.json();
           expect(body.sessionId).toHaveLength(43);
-          expect(body.user.sub).toBe(`${provider}:dev-me`);
+          expect(body.user.sub).toBe(`${provider}:dev-${sub}`);
           const row = await db
-            .prepare('SELECT id_hash, identity FROM sessions')
+            .prepare('SELECT id_hash, identity FROM sessions WHERE identity = ?')
+            .bind(`${provider}:dev-${sub}`)
             .first<{ id_hash: string; identity: string }>();
           expect(row?.id_hash).not.toBe(body.sessionId);
-          expect(row?.identity).toBe(`${provider}:dev-me`);
+          expect(row?.identity).toBe(`${provider}:dev-${sub}`);
           expect(
             (
               await call('/api/sync/v1/sessions', {
@@ -90,7 +95,7 @@ it.each(['kakao', 'naver'] as const)(
       const production = await handleSync(
         {
           request: new Request('https://landmark.sch0718.dev/api/sync/dev/fake-social/authorize'),
-          env: { DB: db, SYNC_DEV_FAKE_SOCIAL: '1' },
+          env: { DB: db, SYNC_DEV_FAKE_SOCIAL: '1', ALLOWED_ACCOUNTS: allowed },
           params: {},
           waitUntil: () => {},
         },

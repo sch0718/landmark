@@ -328,7 +328,7 @@ describe('인증', () => {
     expect(await authCount()).toBe(0);
   });
 
-  it('카카오 허용 목록은 매 요청 다시 읽고 빈 설정도 거절한다', async () => {
+  it('카카오 허용 목록은 매 요청 다시 읽고 빈 설정도 거절하며, 두 변수가 모두 없으면 연다', async () => {
     authorize((await issue()).token);
     await requireAgentToken(ctx, deps, null);
     ctx.env.ALLOWED_ACCOUNTS = '';
@@ -336,8 +336,11 @@ describe('인증', () => {
     ctx.env.ALLOWED_ACCOUNTS = 'kakao:dev-me';
     await requireAgentToken(ctx, deps, null);
     delete ctx.env.ALLOWED_ACCOUNTS;
-    ctx.env.SYNC_DEV_FAKE_SOCIAL = '0';
+    ctx.env.ALLOWED_EMAILS = 'test@example.com';
     await failure(requireAgentToken(ctx, deps, null), 403, 'not-allowed');
+    delete ctx.env.ALLOWED_EMAILS;
+    ctx.env.SYNC_DEV_FAKE_SOCIAL = '0';
+    await requireAgentToken(ctx, deps, null);
     expect(await authCount()).toBe(0);
   });
 
@@ -380,7 +383,7 @@ describe('인증', () => {
       .run();
     ctx.env.ALLOWED_ACCOUNTS = '';
     await failure(requireAgentToken(ctx, deps, 'share:create'), 403, 'not-allowed');
-    delete ctx.env.ALLOWED_ACCOUNTS;
+    ctx.env.ALLOWED_ACCOUNTS = 'kakao:dev-me';
     await failure(requireAgentToken(ctx, deps, 'share:create'), 403, 'scope');
     expect((await listAgentTokens(server.db, userId, now))[0]!.lastUsedAt).toBeNull();
     expect(await authCount()).toBe(0);
