@@ -37,10 +37,10 @@ describe('화면별 도움말', () => {
     expect(introIdForPath('/', new Set(['library']), false)).toBeNull();
     expect(introIdForPath('/', new Set(), true)).toBeNull();
   });
-  it('도움말은 설정 탭에 속한다', () => {
+  it.each(['/help/map', '/privacy'])('%s는 설정 탭에 속한다', (path) => {
     for (const item of NAV_ITEMS) {
       if (item === 'add') continue;
-      expect(isNavActive(item, '/help/map')).toBe(item.key === 'settings');
+      expect(isNavActive(item, path)).toBe(item.key === 'settings');
     }
   });
 });

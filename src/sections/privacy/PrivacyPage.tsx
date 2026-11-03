@@ -1,7 +1,9 @@
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
+import { useLayoutEffect, useRef } from 'react';
 import { Link } from 'react-router';
+import { scrollParent } from 'src/lib/scroll-parent';
 import { useDocumentTitle } from 'src/lib/use-document-title';
 import { paths } from 'src/routes/paths';
 import { helpText } from 'src/sections/help/help-text';
@@ -10,8 +12,15 @@ import { PRIVACY_LEAD, PRIVACY_SECTIONS } from './privacy-content';
 /** 개인정보 처리방침. 도움말 화면과 같은 틀로 그린다. */
 export function PrivacyPage() {
   useDocumentTitle('개인정보 처리방침');
+  const rootRef = useRef<HTMLDivElement>(null);
+  // 셸이 스크롤 칸을 재사용하므로, 앞 화면에서 내려 둔 위치가 아니라 맨 위부터 보인다.
+  useLayoutEffect(() => {
+    if (rootRef.current === null) return;
+    const pane = scrollParent(rootRef.current);
+    if (pane !== null) pane.scrollTop = 0;
+  }, []);
   return (
-    <Box sx={{ maxWidth: 960, mx: 'auto', p: 2, color: 'var(--tm-text-primary)' }}>
+    <Box ref={rootRef} sx={{ maxWidth: 960, mx: 'auto', p: 2, color: 'var(--tm-text-primary)' }}>
       <Button component={Link} to={paths.help} sx={{ minHeight: 44 }}>
         ← 도움말
       </Button>
