@@ -325,6 +325,9 @@ it('상한을 넘기는 새 항목·커지는 수정만 too-large로 거절하�
   const ok = await pushItems(db, user, body([shorter, deleted], 1), now, tight);
   expect(ok.rejected).toEqual([]);
   expect(ok.results).toHaveLength(2);
+  // 묘비라도 시각 몇 개보다 크게 커지면 상한을 적용한다.
+  const bigTombstone = { ...deleted, memo: f('긴'.repeat(100), '2026-10-05T00:00:00.000Z') };
+  expect((await pushItems(db, user, body([bigTombstone], 2), now, tight)).rejected).toHaveLength(1);
 });
 it('기기 행은 사용자당 DEVICE_MAX개까지만 새로 만들고 있던 기기는 계속 갱신한다', async () => {
   await pushItems(db, user, body([place()]), now);

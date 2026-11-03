@@ -25,6 +25,7 @@ export const DEVICE_TOUCH_MS = 60 * 60 * 1000;
 // 2026-11-03 운영자 실측 3,420항목·1.95MB의 약 1.5배·2.6배.
 export const LIBRARY_QUOTA = { items: 5000, bytes: 5_000_000 } as const;
 export const DEVICE_MAX = 20;
+export const TOMBSTONE_GROWTH_BYTES = 64;
 export const ACCOUNT_DATA_TABLES: string[] = [
   'library_items',
   'library_devices',
@@ -265,12 +266,13 @@ export async function pushItems(
     });
     const overQuota = new Set<(typeof evaluated)[number]>();
     const grows = evaluated
-      .filter((e) => e.changed && !(e.stored && isDeleted(e.result)))
-      .map((e) => ({
-        e,
-        items: e.stored ? 0 : 1,
-        bytes: utf8Bytes(e.resultText) - (e.stored ? utf8Bytes(e.stored.doc) : 0),
-      }))
+      .filter((e) => e.changed)
+      .map((e) => {
+        const bytes = utf8Bytes(e.resultText) - (e.stored ? utf8Bytes(e.stored.doc) : 0);
+        // 있던 항목을 지우면 deletedAt 시각만큼 커지므로 그만큼은 상한과 상관없이 받는다.
+        const allowance = e.stored && isDeleted(e.result) ? TOMBSTONE_GROWTH_BYTES : 0;
+        return { e, items: e.stored ? 0 : 1, bytes: bytes - allowance };
+      })
       .filter((g) => g.items > 0 || g.bytes > 0);
     if (grows.length) {
       const used = await db
@@ -281,7 +283,7 @@ export async function pushItems(
         .first<{ items: number; bytes: number }>();
       let items = used?.items ?? 0;
       let bytes = used?.bytes ?? 0;
-      // 있던 항목의 삭제(묘비)와 줄어드는 수정은 늘 받고, 늘어나는 항목은 상한 안에 드는 것까지만 받는다.
+      // 있던 항목의 삭제(묘비, 64바이트까지)와 줄어드는 수정은 늘 받고, 늘어나는 항목은 상한 안에 드는 것까지만 받는다.
       for (const g of grows) {
         if (items + g.items > quota.items || bytes + g.bytes > quota.bytes) overQuota.add(g.e);
         else {
