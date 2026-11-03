@@ -1821,10 +1821,10 @@
   resolved "https://registry.yarnpkg.com/@rolldown/pluginutils/-/pluginutils-1.0.1.tgz#e3fcee093fbb5ce765e1ad088ff4de2889f6f9be"
   integrity sha512-2j9bGt5Jh8hj+vPtgzPtl72j0yRxHAyumoo6TNfAjsLB04UtpSvPbPcDcBMxz7n+9CYB0c1GxQFxYRg2jimqGw==
 
-"@sch0718/firebase-session@0.2.1":
-  version "0.2.1"
-  resolved "https://npm.pkg.github.com/download/@sch0718/firebase-session/0.2.1/63707315358cf2f5766ce98b6ab419e8557034dc#63707315358cf2f5766ce98b6ab419e8557034dc"
-  integrity sha512-i/21W6u2FC+nWssIPQPmiKryrdDWWoYcR99nimkWz/xzlGyxBwY9lbvqCGUMJmuUJ7qz/iSh+T3xMXpdAZocwg==
+"@sch0718/firebase-session@0.3.0":
+  version "0.3.0"
+  resolved "https://npm.pkg.github.com/download/@sch0718/firebase-session/0.3.0/8f438e466f42dab44e339920c216b1347de426ea#8f438e466f42dab44e339920c216b1347de426ea"
+  integrity sha512-eNY36l9D9Bys55wOLZV3HMpb6oYpHpfQN3DSwVhDNwoCxyjXXtIB7btJr3nKxb4kJIF+DdTRxPi4R6NGeWf2DQ==
   dependencies:
     jose "^6.2.13"
 

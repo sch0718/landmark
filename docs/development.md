@@ -49,7 +49,7 @@ yarn install --frozen-lockfile  # .yarnrc의 ignore-engines가 적용된다
 | --- | --- | --- |
 | `@sch0718/kakao-share` | `0.1.1` | 카카오톡 공유(`src/sections/share-export/kakao.ts`) |
 | `@sch0718/seen-store` | `0.1.0` | 처음 안내 기록(`src/services/help-seen.ts`). 기기 키 `tripmap:help-seen:v1`을 그대로 넘겨 기존 기록을 이어 씁니다 |
-| `@sch0718/firebase-session` | `0.2.1` | 보관함 동기화 로그인·기기 세션(`src/server/library-sync/`, `src/services/library-sync/`) |
+| `@sch0718/firebase-session` | `0.3.0` | 보관함 동기화 로그인·기기 세션(`src/server/library-sync/`, `src/services/library-sync/`) |
 | `@sch0718/motion-kit` | `0.1.0`(devDependency) | 움직이는 그림 생성기(`scripts/motion/`, 아래) |
 
 `.npmrc`는 `@sch0718/*`만 GitHub Packages에서 받도록 합니다.
