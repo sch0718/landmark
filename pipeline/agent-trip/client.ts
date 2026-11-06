@@ -163,7 +163,11 @@ export function createAgentClient(app: string, token: string, deps: AgentClientD
       ops: { op: 'put' | 'delete'; kind: string; id: string; baseRev: number; doc?: unknown }[];
     }) => request<{ rev: number; results: EditResult[] }>('/library/edit', 'POST', body),
     libraryUndo: (body: { ids: string[] } | { requestId: string }) =>
-      request<{ results: { id: string; status: string }[] }>('/library/undo', 'POST', body),
+      request<{ results: { id: string; status: string }[]; more?: boolean }>(
+        '/library/undo',
+        'POST',
+        body,
+      ),
     deleteShare: (id: string, deleteToken: string) =>
       request<null>('/share/' + encodeURIComponent(id), 'DELETE', undefined, {
         'X-Delete-Token': deleteToken,

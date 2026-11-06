@@ -267,7 +267,10 @@ describe('세션 AI 연결 경로', () => {
       const undone = await request('/agent/changes/undo', 'POST', { ids: [changes[0]!.id] });
       expect(await undone.json()).toEqual({ results: [{ id: changes[0]!.id, status: 'undone' }] });
       const again = await request('/agent/changes/undo', 'POST', { requestId });
-      expect(await again.json()).toEqual({ results: [{ id: changes[0]!.id, status: 'already' }] });
+      expect(await again.json()).toEqual({
+        results: [{ id: changes[0]!.id, status: 'already' }],
+        more: false,
+      });
     });
     it('세션과 본문을 검사하고 다른 사용자의 기록은 보이지 않는다', async () => {
       await seedChange();
@@ -290,6 +293,7 @@ describe('세션 AI 연결 경로', () => {
       expect(await (await request('/agent/changes')).json()).toEqual({ changes: [] });
       expect(await (await request('/agent/changes/undo', 'POST', { requestId })).json()).toEqual({
         results: [],
+        more: false,
       });
     });
   });

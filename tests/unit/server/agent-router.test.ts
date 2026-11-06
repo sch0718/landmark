@@ -408,6 +408,7 @@ describe('에이전트 토큰 경로', () => {
       const undone = await request('/v1/library/undo', 'POST', { requestId });
       expect(await undone.json()).toEqual({
         results: [{ id: edits.changes[0]!.id, status: 'undone' }],
+        more: false,
       });
     });
     it('changes는 deviceId가 없는 pullChanges와 같은 본문·커서·410 resync를 준다', async () => {

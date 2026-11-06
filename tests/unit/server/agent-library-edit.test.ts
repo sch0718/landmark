@@ -1,6 +1,11 @@
 // @vitest-environment node
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { editItems, undoChanges } from 'src/server/agent/library-edit';
+import {
+  editItems,
+  parseUndoBody,
+  undoChanges,
+  UNDO_MAX_PER_CALL,
+} from 'src/server/agent/library-edit';
 import { pushItems } from 'src/server/library-sync/library';
 import { ensureSchema, type MeetStatement } from 'src/server/meet/db';
 import { SyncHttpError } from 'src/server/library-sync/http';
@@ -398,6 +403,38 @@ it('쓰기 직전 다른 기기의 수정·같은 id 생성은 재시도에서�
   ]);
 });
 
+it('배치 뒤 다른 기기가 성공한 항목을 고쳐도 그 항목은 ok로 기록한다', async () => {
+  await seed([
+    ['place', place()],
+    ['place', place('place00002')],
+  ]);
+  const batch = db.batch.bind(db);
+  let armed = true;
+  vi.spyOn(db, 'batch').mockImplementation(async (stmts) => {
+    if (!armed) return batch(stmts);
+    armed = false;
+    // 배치 직전에 1번을, 배치 직후(후속 읽기 전)에 2번을 다른 기기가 고친다.
+    await otherDevice({ ...place(), name: f('다른 기기', '2026-10-20T00:00:00.000Z') }, 1);
+    const out = await batch(stmts);
+    await otherDevice(
+      { ...place('place00002'), name: f('다른 기기', '2026-10-20T00:00:00.000Z') },
+      3,
+    );
+    return out;
+  });
+  const reply = await edit([
+    put('place', { ...place(), memo: f('AI') }, 1),
+    put('place', { ...place('place00002'), memo: f('AI') }, 1),
+  ]);
+  expect(reply.results).toEqual([
+    expect.objectContaining({ id: 'place00001', status: 'conflict', rev: 2 }),
+    { kind: 'place', id: 'place00002', status: 'ok', rev: 3 },
+  ]);
+  expect((await records()).map((r) => [r.item_id, r.before_rev, r.after_rev])).toEqual([
+    ['place00002', 1, 3],
+  ]);
+});
+
 const undo = (target: { ids: string[] } | { requestId: string }, at = now) =>
   undoChanges(db, { userId: who.userId }, target, at);
 const changeIds = async () =>
@@ -473,6 +510,7 @@ it('되돌리기: requestId 묶음은 같은 at이면 나중 기록부터 처리
       { id: b, status: 'undone' },
       { id: a, status: 'undone' },
     ],
+    more: false,
   });
 });
 
@@ -514,4 +552,78 @@ it('되돌리기: 검사와 쓰기 사이 다른 기기 변경은 changed로 보
     (await db.prepare('SELECT undone_at FROM agent_changes').first<{ undone_at: number | null }>())!
       .undone_at,
   ).toBeNull();
+});
+
+const manyPlaces = (n: number, from = 0) =>
+  Array.from({ length: n }, (_, i) => place('place' + String(from + i).padStart(5, '0')));
+/** D1 호출 수를 센다. 배치 안 문장도 prepare로 세므로 prepare 수가 실행한 SQL 문 수다. */
+const countQueries = () => {
+  const counts = { prepare: 0, batch: 0 };
+  const prepare = db.prepare.bind(db);
+  const batch = db.batch.bind(db);
+  vi.spyOn(db, 'prepare').mockImplementation((sql: string) => (counts.prepare++, prepare(sql)));
+  vi.spyOn(db, 'batch').mockImplementation(async (stmts) => (counts.batch++, batch(stmts)));
+  return counts;
+};
+
+it('되돌리기: ids가 상한을 넘으면 요청 전체를 422 invalid(ids)로 거절한다', () => {
+  const ids = Array.from({ length: UNDO_MAX_PER_CALL + 1 }, () => crypto.randomUUID());
+  const error = (() => {
+    try {
+      return parseUndoBody({ ids });
+    } catch (e) {
+      return e;
+    }
+  })();
+  expect(error).toBeInstanceOf(SyncHttpError);
+  expect(error).toMatchObject({ status: 422, code: 'invalid', extra: { path: 'ids' } });
+  expect(parseUndoBody({ ids: ids.slice(1) })).toEqual({ ids: ids.slice(1) });
+});
+
+it('되돌리기: requestId 묶음이 상한보다 크면 최근부터 상한만큼 처리하고 more로 남은 것을 알린다', async () => {
+  await edit(manyPlaces(UNDO_MAX_PER_CALL).map((p) => put('place', p)));
+  await edit([put('place', place('place99999'))]);
+  const ids = await changeIds();
+  expect(ids).toHaveLength(UNDO_MAX_PER_CALL + 1);
+  const first = await undo({ requestId });
+  expect(first.more).toBe(true);
+  expect(first.results).toHaveLength(UNDO_MAX_PER_CALL);
+  expect(first.results.every((r) => r.status === 'undone')).toBe(true);
+  // 가장 오래된 기록(첫 요청의 첫 항목)이 남는다.
+  expect(first.results.map((r) => r.id)).not.toContain(ids[0]);
+  const second = await undo({ requestId });
+  expect(second.more).toBe(false);
+  expect(second.results.find((r) => r.id === ids[0])).toEqual({ id: ids[0], status: 'undone' });
+  const rows = (await db.prepare('SELECT deleted FROM library_items').all<{ deleted: number }>())
+    .results;
+  expect(rows.every((r) => r.deleted === 1)).toBe(true);
+  expect((await undo({ requestId })).more).toBe(false);
+});
+
+it('되돌리기: 상한만큼을 한 번에 되돌려도 D1 쿼리는 호출당 40개 이하다', async () => {
+  await edit(manyPlaces(UNDO_MAX_PER_CALL).map((p) => put('place', p)));
+  const created = countQueries();
+  const reply = await undo({ requestId });
+  expect(reply.results.filter((r) => r.status === 'undone')).toHaveLength(UNDO_MAX_PER_CALL);
+  expect(created.prepare).toBeLessThanOrEqual(40);
+  vi.restoreAllMocks();
+
+  // 지운 항목 복원도 ids로 같은 한도 안이다(측정: 둘 다 prepare 7·batch 1).
+  const other = '11111111-2222-4333-8444-555555555556';
+  await seed(manyPlaces(UNDO_MAX_PER_CALL, 100).map((p) => ['place', p] as [ItemKind, Place]));
+  const base = (await row('place', 'place00100'))!.rev;
+  await edit(
+    manyPlaces(UNDO_MAX_PER_CALL, 100).map((p) => del('place', p.id, base)),
+    other,
+  );
+  const ids = (
+    await db
+      .prepare('SELECT id FROM agent_changes WHERE request_id = ?')
+      .bind(other)
+      .all<{ id: string }>()
+  ).results.map((r) => r.id);
+  const restored = countQueries();
+  const again = await undo({ ids });
+  expect(again.results.filter((r) => r.status === 'undone')).toHaveLength(UNDO_MAX_PER_CALL);
+  expect(restored.prepare).toBeLessThanOrEqual(40);
 });

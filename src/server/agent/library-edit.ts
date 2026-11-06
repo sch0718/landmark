@@ -12,15 +12,11 @@ import type { Trip } from '../../schema/trip';
 import { idPattern, LIBRARY_QUOTA, pushItems, type PushItem } from '../library-sync/library';
 import { SyncHttpError } from '../library-sync/http';
 import type { MeetDb } from '../meet/db';
-import {
-  CHANGES_KEEP_MS,
-  CHANGES_MAX,
-  listRequestChanges,
-  recordChanges,
-  type ChangeRow,
-} from './changes';
+import { CHANGES_KEEP_MS, listRequestChanges, recordChanges, type ChangeRow } from './changes';
 
 export const EDIT_MAX_OPS = 50;
+/** 되돌리기 한 번에 처리하는 변경 수. 한 번의 pushItems로 묶어 50건이어도 D1 쿼리가 10개 안팎이다(Workers Free 호출당 50). */
+export const UNDO_MAX_PER_CALL = 50;
 const LABEL_MAX_CHARS = 80;
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -91,7 +87,7 @@ export function parseUndoBody(value: unknown): { ids: string[] } | { requestId: 
   if (
     !Array.isArray(ids) ||
     ids.length < 1 ||
-    ids.length > CHANGES_MAX ||
+    ids.length > UNDO_MAX_PER_CALL ||
     !ids.every((id) => typeof id === 'string' && uuidPattern.test(id))
   )
     invalid('ids');
@@ -257,7 +253,8 @@ export async function editItems(
 }
 
 export type UndoStatus = 'undone' | 'changed' | 'already' | 'gone';
-export type UndoReply = { results: { id: string; status: UndoStatus }[] };
+/** `more`는 `{ requestId }`일 때만 싣는다. true면 아직 되돌리지 않은 변경이 남아 다시 부르면 이어서 처리한다. */
+export type UndoReply = { results: { id: string; status: UndoStatus }[]; more?: boolean };
 type UndoRow = {
   id: string;
   token_id: string;
@@ -266,9 +263,15 @@ type UndoRow = {
   before_doc: string | null;
   after_rev: number;
   undone_at: number | null;
+  /** 지금 행의 rev와, rev가 after_rev와 같을 때만 문서. */
+  cur_rev: number | null;
+  cur_doc: string | null;
 };
 
-/** 설계서 「되돌리기」. 새 변경 기록은 만들지 않는다. 라우트·토큰·스위치 검사는 호출자가 한다. */
+/**
+ * 설계서 「되돌리기」. 새 변경 기록은 만들지 않는다. 라우트·토큰·스위치 검사는 호출자가 한다.
+ * 되돌릴 수 있는 변경을 최근부터 `UNDO_MAX_PER_CALL`건까지 한 번의 pushItems로 쓴다.
+ */
 export async function undoChanges(
   db: MeetDb,
   who: { userId: string },
@@ -276,77 +279,78 @@ export async function undoChanges(
   now: number,
 ): Promise<UndoReply> {
   const at = new Date(now).toISOString();
-  const cols = 'id, token_id, kind, item_id, before_doc, after_rev, undone_at';
-  const live = now - CHANGES_KEEP_MS;
+  const byIds = 'ids' in target;
   const found = (
-    'ids' in target
-      ? await db
-          .prepare(
-            `SELECT ${cols} FROM agent_changes WHERE user_id = ?1 AND at > ?2 AND id IN (SELECT value FROM json_each(?3)) ORDER BY at DESC, rowid DESC`,
-          )
-          .bind(who.userId, live, JSON.stringify(target.ids))
-          .all<UndoRow>()
-      : await db
-          .prepare(
-            `SELECT ${cols} FROM agent_changes WHERE user_id = ?1 AND at > ?2 AND request_id = ?3 ORDER BY at DESC, rowid DESC`,
-          )
-          .bind(who.userId, live, target.requestId)
-          .all<UndoRow>()
+    await db
+      .prepare(
+        `SELECT c.id, c.token_id, c.kind, c.item_id, c.before_doc, c.after_rev, c.undone_at, i.rev AS cur_rev, CASE WHEN i.rev = c.after_rev THEN i.doc END AS cur_doc FROM agent_changes c LEFT JOIN library_items i ON i.user_id = c.user_id AND i.kind = c.kind AND i.item_id = c.item_id WHERE c.user_id = ?1 AND c.at > ?2 AND ${
+          byIds ? 'c.id IN (SELECT value FROM json_each(?3))' : 'c.request_id = ?3'
+        } ORDER BY c.at DESC, c.rowid DESC`,
+      )
+      .bind(
+        who.userId,
+        now - CHANGES_KEEP_MS,
+        byIds ? JSON.stringify(target.ids) : target.requestId,
+      )
+      .all<UndoRow>()
   ).results;
 
-  const results: UndoReply['results'] = [];
+  const status = new Map<string, UndoStatus>();
+  const ready: UndoRow[] = [];
+  const keys = new Set<string>();
   for (const change of found) {
-    const done = (status: UndoStatus) => results.push({ id: change.id, status });
-    if (change.undone_at !== null) {
-      done('already');
-      continue;
+    const key = itemKey(change.kind, change.item_id);
+    if (change.undone_at !== null) status.set(change.id, 'already');
+    else if (change.cur_rev !== change.after_rev || keys.has(key)) status.set(change.id, 'changed');
+    else {
+      keys.add(key);
+      ready.push(change);
     }
-    const current = await db
-      .prepare('SELECT rev, doc FROM library_items WHERE user_id = ? AND kind = ? AND item_id = ?')
-      .bind(who.userId, change.kind, change.item_id)
-      .first<{ rev: number; doc: string }>();
-    if (!current || current.rev !== change.after_rev) {
-      done('changed');
-      continue;
-    }
-    const now0 = JSON.parse(current.doc) as AnyItem;
-    const doc =
-      change.before_doc === null
-        ? { ...now0, deletedAt: at }
-        : stampChangedFields(now0, JSON.parse(change.before_doc), at);
+  }
+  const batch = ready.slice(0, UNDO_MAX_PER_CALL);
+  if (batch.length) {
+    const items: PushItem[] = batch.map((change) => {
+      const now0 = JSON.parse(change.cur_doc!) as AnyItem;
+      const doc =
+        change.before_doc === null
+          ? { ...now0, deletedAt: at }
+          : stampChangedFields(now0, JSON.parse(change.before_doc) as AnyItem, at);
+      return {
+        kind: change.kind,
+        id: change.item_id,
+        baseRev: change.after_rev,
+        baseDeleted: null,
+        doc,
+      };
+    });
+    // 한 번에 쓰므로 기기 id는 가장 최근 변경의 토큰으로 남긴다(library_items.device_id는 읽지 않는 정보).
     const reply = await pushItems(
       db,
       { userId: who.userId },
-      {
-        v: 1,
-        deviceId: 'agnt' + change.token_id,
-        items: [
-          {
-            kind: change.kind,
-            id: change.item_id,
-            baseRev: change.after_rev,
-            baseDeleted: null,
-            doc: doc as AnyItem,
-          },
-        ],
-      },
+      { v: 1, deviceId: 'agnt' + batch[0]!.token_id, items },
       now,
       LIBRARY_QUOTA,
       { noMerge: true },
     );
-    if (!reply.results.length) {
-      done('changed');
-      continue;
-    }
-    await db
-      .prepare('UPDATE agent_changes SET undone_at = ? WHERE user_id = ? AND id = ?')
-      .bind(now, who.userId, change.id)
-      .run();
-    done('undone');
+    const written = new Set(reply.results.map((r) => itemKey(r.kind, r.id)));
+    const undone = batch.filter((c) => written.has(itemKey(c.kind, c.item_id)));
+    if (undone.length)
+      await db
+        .prepare(
+          'UPDATE agent_changes SET undone_at = ?1 WHERE user_id = ?2 AND id IN (SELECT value FROM json_each(?3))',
+        )
+        .bind(now, who.userId, JSON.stringify(undone.map((c) => c.id)))
+        .run();
+    const done = new Set(undone);
+    for (const c of batch) status.set(c.id, done.has(c) ? 'undone' : 'changed');
   }
-  if ('ids' in target) {
+  const results: UndoReply['results'] = found
+    .filter((c) => status.has(c.id))
+    .map((c) => ({ id: c.id, status: status.get(c.id)! }));
+  if (byIds) {
     const seen = new Set(found.map((c) => c.id));
     for (const id of target.ids) if (!seen.has(id)) results.push({ id, status: 'gone' });
+    return { results };
   }
-  return { results };
+  return { results, more: ready.length > batch.length };
 }

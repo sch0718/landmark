@@ -176,11 +176,21 @@ export async function runLibrary(
       noExtra('request');
       if ((args.request === undefined) === (a === undefined) || count > 3)
         bad('사용법: yarn trip library undo <변경 id> 또는 --request <requestId>');
-      const { results } = unwrap(
-        await deps.client.libraryUndo(
-          args.request === undefined ? { ids: [a!] } : { requestId: args.request },
-        ),
-      );
+      // --request는 서버가 한 번에 상한만큼만 처리하므로 more가 false가 될 때까지 다시 부른다.
+      // 같은 id는 나중 응답이 이기되, 앞에서 되돌린 것을 뒤의 already로 덮지 않는다.
+      const merged = new Map<string, string>();
+      for (;;) {
+        const page = unwrap(
+          await deps.client.libraryUndo(
+            args.request === undefined ? { ids: [a!] } : { requestId: args.request },
+          ),
+        );
+        for (const x of page.results)
+          if (!merged.has(x.id) || x.status !== 'already') merged.set(x.id, x.status);
+        // 한 건도 되돌리지 못했는데 more면 같은 것을 다시 받으니 멈춘다.
+        if (!page.more || !page.results.some((x) => x.status === 'undone')) break;
+      }
+      const results = [...merged].map(([id, status]) => ({ id, status }));
       const failed = results.filter((x) => x.status !== 'undone');
       if (failed.length) {
         const done = results.length - failed.length;

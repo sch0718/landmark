@@ -5,12 +5,9 @@ type Field = { value: unknown; updatedAt: string };
 const isRecord = (node: unknown): node is Record<string, unknown> =>
   node !== null && typeof node === 'object' && !Array.isArray(node);
 
-// `{ value, updatedAt }`만 가진 객체를 필드로 본다.
-const isField = (node: unknown): node is Field => {
-  if (!isRecord(node)) return false;
-  const keys = Object.keys(node);
-  return keys.length === 2 && keys.includes('value') && keys.includes('updatedAt');
-};
+// `value`와 문자열 `updatedAt`을 가진 객체를 필드로 본다. 다른 속성이 있어도 필드다(결과에서 버린다).
+const isField = (node: unknown): node is Field =>
+  isRecord(node) && Object.hasOwn(node, 'value') && typeof node.updatedAt === 'string';
 
 function walk(before: unknown, after: unknown, now: string): unknown {
   if (isField(after)) {

@@ -277,6 +277,32 @@ describe('undo', () => {
     expect(await run(['undo', '--request', 'r1'])).toBe(EXIT.ok);
     expect(calls[0]!.body).toEqual({ requestId: 'r1' });
   });
+  it('--request는 more가 false가 될 때까지 다시 부르고 결과를 합친다', async () => {
+    const pages = [
+      { results: [{ id: 'c2', status: 'undone' }], more: true },
+      {
+        results: [
+          { id: 'c2', status: 'already' },
+          { id: 'c1', status: 'undone' },
+        ],
+        more: false,
+      },
+    ];
+    handler = () => json(200, pages[calls.length - 1]);
+    expect(await run(['undo', '--request', 'r1'])).toBe(EXIT.ok);
+    expect(calls).toHaveLength(2);
+    expect(calls.every((c) => JSON.stringify(c.body) === '{"requestId":"r1"}')).toBe(true);
+    expect(data().undo).toEqual([
+      { id: 'c2', status: 'undone' },
+      { id: 'c1', status: 'undone' },
+    ]);
+  });
+  it('--request에서 more인데 한 건도 되돌리지 못하면 멈추고 사유를 낸다', async () => {
+    handler = () => json(200, { results: [{ id: 'c1', status: 'changed' }], more: true });
+    expect(await run(['undo', '--request', 'r1'])).toBe(EXIT.server);
+    expect(calls).toHaveLength(1);
+    expect(data().errors[0]).toMatchObject({ code: 'rejected', reason: 'changed' });
+  });
   it.each(['changed', 'already', 'gone'])('%s는 끝 코드 5와 사유다', async (status) => {
     handler = () => json(200, { results: [{ id: 'c1', status }] });
     expect(await run(['undo', 'c1'])).toBe(EXIT.server);

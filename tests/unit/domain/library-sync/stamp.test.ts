@@ -87,6 +87,18 @@ describe('stampChangedFields', () => {
     expect(result.days[0]!.startTime.updatedAt).toBe(T0);
   });
 
+  it('필드에 모르는 속성이 있어도 필드로 보고 시각을 찍으며 추가 속성은 버린다', () => {
+    const before = place();
+    const after = {
+      ...before,
+      memo: { value: '새 메모', updatedAt: T1, extra: 1 },
+      name: { value: '장소', updatedAt: T1, extra: 1 },
+    };
+    const result = stampChangedFields(before, after as unknown as Place, NOW);
+    expect(result.memo).toEqual({ value: '새 메모', updatedAt: NOW });
+    expect(result.name).toEqual({ value: '장소', updatedAt: T0 });
+  });
+
   it('입력을 바꾸지 않는다', () => {
     const before = place();
     const after = { ...before, memo: f('새 메모', T1) };

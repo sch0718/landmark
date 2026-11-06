@@ -351,27 +351,26 @@ export async function pushItems(
           .bind(user.userId, now),
         db
           .prepare(
-            `INSERT INTO library_items (user_id, kind, item_id, rev, doc, deleted, deleted_at, refs, device_id, updated_at) SELECT ?1, json_extract(value, '$.kind'), json_extract(value, '$.id'), (SELECT rev FROM library_state WHERE user_id = ?1), json_extract(value, '$.doc'), json_extract(value, '$.deleted'), json_extract(value, '$.deletedAt'), json_extract(value, '$.refs'), ?2, ?3 FROM json_each(?4) WHERE true ON CONFLICT(user_id, kind, item_id) DO UPDATE SET rev = excluded.rev, doc = excluded.doc, deleted = excluded.deleted, deleted_at = CASE WHEN excluded.deleted = 0 THEN NULL WHEN library_items.deleted = 1 THEN library_items.deleted_at ELSE excluded.deleted_at END, refs = excluded.refs, device_id = excluded.device_id, updated_at = excluded.updated_at WHERE library_items.rev <= ?5`,
+            `INSERT INTO library_items (user_id, kind, item_id, rev, doc, deleted, deleted_at, refs, device_id, updated_at) SELECT ?1, json_extract(value, '$.kind'), json_extract(value, '$.id'), (SELECT rev FROM library_state WHERE user_id = ?1), json_extract(value, '$.doc'), json_extract(value, '$.deleted'), json_extract(value, '$.deletedAt'), json_extract(value, '$.refs'), ?2, ?3 FROM json_each(?4) WHERE true ON CONFLICT(user_id, kind, item_id) DO UPDATE SET rev = excluded.rev, doc = excluded.doc, deleted = excluded.deleted, deleted_at = CASE WHEN excluded.deleted = 0 THEN NULL WHEN library_items.deleted = 1 THEN library_items.deleted_at ELSE excluded.deleted_at END, refs = excluded.refs, device_id = excluded.device_id, updated_at = excluded.updated_at WHERE library_items.rev <= ?5${
+              // noMerge는 쓴 행의 키를 같은 문장에서 받는다(배치 뒤 다시 읽으면 다른 기기 변경과 섞인다).
+              opts.noMerge ? ' RETURNING kind, item_id AS id' : ''
+            }`,
           )
           .bind(user.userId, body.deviceId, now, JSON.stringify(data), r0),
         db.prepare('SELECT rev FROM library_state WHERE user_id = ?').bind(user.userId),
-      ])) as { meta: { changes: number }; results: { rev: number }[] }[];
-      if (batch[1]!.meta.changes < changed.length) {
-        if (!opts.noMerge) continue;
-        // 이 배치의 rev로 올라간 행만 이번에 쓴 것이다. 나머지는 읽은 뒤 다른 기기가 바꿨으니
+      ])) as {
+        meta: { changes: number };
+        results: { rev?: number; kind?: ItemKind; id?: string }[];
+      }[];
+      const writtenRows = opts.noMerge
+        ? (batch[1]!.results as { kind: ItemKind; id: string }[])
+        : null;
+      if ((writtenRows?.length ?? batch[1]!.meta.changes) < changed.length) {
+        if (!writtenRows) continue;
+        // RETURNING으로 받은 행만 이번에 쓴 것이다. 나머지는 읽은 뒤 다른 기기가 바꿨으니
         // 다음 시도에서 원래 baseRev로 다시 검사한다(병합하지 않는다).
-        const wrote = batch[2]!.results[0]!.rev;
-        const after = (
-          await db
-            .prepare(
-              "SELECT kind, item_id AS id, rev FROM library_items WHERE user_id = ?1 AND (kind, item_id) IN (SELECT json_extract(value, '$[0]'), json_extract(value, '$[1]') FROM json_each(?2))",
-            )
-            .bind(user.userId, JSON.stringify(changed.map((e) => [e.item.kind, e.item.id])))
-            .all<{ kind: ItemKind; id: string; rev: number }>()
-        ).results;
-        const written = new Set(
-          after.filter((r) => r.rev === wrote).map((r) => itemKey(r.kind, r.id)),
-        );
+        const wrote = batch[2]!.results[0]!.rev!;
+        const written = new Set(writtenRows.map((r) => itemKey(r.kind, r.id)));
         const lost = changed.filter((e) => !written.has(itemKey(e.item.kind, e.item.id)));
         settled.results.push(
           ...kept
@@ -392,7 +391,7 @@ export async function pushItems(
         pending = lost.map(({ item, doc, text }) => ({ item, doc, text }));
         continue;
       }
-      rev = batch[2]!.results[0]!.rev;
+      rev = batch[2]!.results[0]!.rev!;
     }
     return {
       rev,
