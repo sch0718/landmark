@@ -33,6 +33,7 @@ import {
   reserveShare,
   settleShare,
 } from '../agent-trip/share-store';
+import { runLibrary } from '../agent-trip/run-library';
 import { findToken, type TokenDeps } from '../agent-trip/token';
 import { commandOptions, helpText } from '../agent-trip/help';
 
@@ -52,11 +53,14 @@ function commandName(value: string | undefined): CommandName | undefined {
     case 'share':
     case 'whoami':
     case 'unshare':
+    case 'library':
       return value;
     default:
       return undefined;
   }
 }
+
+const VALUE_OPTIONS = ['--app', '--out', '--kind', '--file', '--base-rev', '--request'];
 
 function inputFailure(message: string): never {
   throw new TripFailure([{ path: '', code: 'schema', message }], EXIT.input);
@@ -77,6 +81,10 @@ function parseCliArgs(argv: string[]) {
         app: { type: 'string' },
         json: { type: 'boolean' },
         schema: { type: 'boolean' },
+        kind: { type: 'string' },
+        file: { type: 'string' },
+        'base-rev': { type: 'string' },
+        request: { type: 'string' },
       },
     });
   } catch {
@@ -108,7 +116,7 @@ export async function main(argv: string[], deps: CliDeps): Promise<ExitCode> {
     let firstPositional: string | undefined;
     for (let i = 0; i < argv.length; i++) {
       const arg = argv[i]!;
-      if (arg === '--app' || arg === '--out') {
+      if (VALUE_OPTIONS.includes(arg)) {
         i++;
         continue;
       }
@@ -126,8 +134,7 @@ export async function main(argv: string[], deps: CliDeps): Promise<ExitCode> {
           (arg, i) =>
             arg.startsWith('-') &&
             SHORT_ID_PATTERN.test(arg) &&
-            argv[i - 1] !== '--app' &&
-            argv[i - 1] !== '--out',
+            !VALUE_OPTIONS.includes(argv[i - 1] ?? ''),
         )
       : -1;
     const dashId = dashAt >= 0 ? argv[dashAt] : undefined;
@@ -152,13 +159,17 @@ export async function main(argv: string[], deps: CliDeps): Promise<ExitCode> {
     if (name === undefined) {
       usageFailure = true;
       inputFailure(
-        '사용법: yarn trip build|send|share <plan.json>, whoami, unshare <id>|--list [--app <주소>] [--json] 또는 yarn --silent trip --schema (자세한 사용법: yarn trip --help)',
+        '사용법: yarn trip build|send|share <plan.json>, whoami, unshare <id>|--list, library <하위 명령> [--app <주소>] [--json] 또는 yarn --silent trip --schema (자세한 사용법: yarn trip --help)',
       );
     }
     if (Object.keys(values).some((key) => !['app', 'json', ...commandOptions[name]].includes(key)))
       inputFailure('이 명령에서 받지 않는 옵션이에요');
+    const isLibrary = name === 'library';
     const withoutArgument = name === 'whoami' || (name === 'unshare' && values.list);
-    if (positionals.length !== (withoutArgument ? 1 : 2) || (!withoutArgument && !positionals[1]))
+    if (
+      !isLibrary &&
+      (positionals.length !== (withoutArgument ? 1 : 2) || (!withoutArgument && !positionals[1]))
+    )
       inputFailure('명령에 필요한 인자를 확인해 주세요');
     if (
       name === 'unshare' &&
@@ -188,6 +199,8 @@ export async function main(argv: string[], deps: CliDeps): Promise<ExitCode> {
       print(null, { shares });
       return EXIT.ok;
     }
+    const initCwd = deps.env.INIT_CWD;
+    const resolveInput = (path: string) => (initCwd ? resolve(initCwd, path) : path);
     const tokenWarnings: TripIssue[] = [];
     let client: ReturnType<typeof createAgentClient> | undefined;
     if (name !== 'build') {
@@ -215,6 +228,20 @@ export async function main(argv: string[], deps: CliDeps): Promise<ExitCode> {
         else deps.stderr(`경고: ${warning.message}\n`);
       }
       client = createAgentClient(app, token.token, { fetch: deps.fetch });
+    }
+    if (name === 'library') {
+      const extra = await runLibrary(
+        {
+          positionals,
+          kind: values.kind,
+          file: values.file === undefined ? undefined : resolveInput(values.file),
+          baseRev: values['base-rev'],
+          request: values.request,
+        },
+        { client: client!, readFile: deps.readFile },
+      );
+      print(null, { ...extra, warnings: tokenWarnings });
+      return EXIT.ok;
     }
     if (name === 'whoami') {
       const info = unwrap(await client!.whoami());
@@ -249,8 +276,7 @@ export async function main(argv: string[], deps: CliDeps): Promise<ExitCode> {
       print(null, { removed: { id: item.id }, warnings: tokenWarnings });
       return EXIT.ok;
     }
-    const initCwd = deps.env.INIT_CWD;
-    const resolveFile = (path: string) => (initCwd ? resolve(initCwd, path) : path);
+    const resolveFile = resolveInput;
     const r = await runBuild(
       {
         file: resolveFile(positionals[1]!),

@@ -1,7 +1,7 @@
 import type { TripIssue } from './errors';
 import type { BuildResult } from './run-build';
 
-export type CommandName = 'build' | 'send' | 'share' | 'whoami' | 'unshare';
+export type CommandName = 'build' | 'send' | 'share' | 'whoami' | 'unshare' | 'library';
 
 /** 추가 정보에는 비밀 값을 넣지 말 것. */
 export function successJson(
@@ -61,6 +61,46 @@ export function successText(
       if (shares.length === 0) lines.push('저장한 공유 링크가 없어요');
     } else if (extra.removed) {
       lines.push(`공유 링크를 지웠어요: ${(extra.removed as { id: string }).id}`);
+    } else if (extra.items) {
+      const items = extra.items as { kind: string; id: string; rev: number; label: string }[];
+      lines.push(...items.map((x) => `${x.kind} ${x.id} · rev ${x.rev} · ${x.label}`));
+      if (items.length === 0) lines.push('항목이 없어요');
+    } else if (extra.item) {
+      const item = extra.item as { kind: string; id: string; rev: number; doc: unknown };
+      lines.push(`${item.kind} ${item.id} · rev ${item.rev}`, JSON.stringify(item.doc, null, 2));
+    } else if (extra.edit) {
+      const e = extra.edit as {
+        op: string;
+        kind: string;
+        id: string;
+        rev: number | null;
+        requestId: string;
+      };
+      lines.push(
+        `${e.op === 'put' ? '저장' : '삭제'}했어요: ${e.kind} ${e.id} · rev ${e.rev ?? '변화 없음'}`,
+        `요청 id: ${e.requestId}`,
+      );
+    } else if (extra.changes) {
+      const changes = extra.changes as {
+        id: string;
+        requestId: string;
+        kind: string;
+        itemId: string;
+        beforeRev: number;
+        afterRev: number;
+        label: string;
+        at: number;
+        undoneAt: number | null;
+      }[];
+      lines.push(
+        ...changes.map(
+          (c) =>
+            `${c.id} · ${c.kind} ${c.itemId} · ${c.label} · rev ${c.beforeRev}→${c.afterRev} · ${new Date(c.at).toISOString()} · 요청 ${c.requestId}${c.undoneAt === null ? '' : ' · 되돌림'}`,
+        ),
+      );
+      if (changes.length === 0) lines.push('AI 변경 기록이 없어요');
+    } else if (extra.undo) {
+      lines.push(...(extra.undo as { id: string }[]).map((x) => `되돌렸어요: ${x.id}`));
     } else lines.push(`${command} 성공`, JSON.stringify(extra, null, 2));
     lines.push(...((extra.warnings ?? []) as TripIssue[]).map((x) => `경고: ${x.message}`));
     return lines.join('\n');
