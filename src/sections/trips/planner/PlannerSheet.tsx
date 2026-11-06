@@ -170,7 +170,9 @@ export function PlannerSheet({ trip, library, dayIndex, plan, onSelectDay }: Pro
             if (snap === 'collapsed') setSnap('half');
           }}
           variant="scrollable"
-          scrollButtons={false}
+          // Day가 많아 탭이 넘치면 양옆 화살표로 보이지 않는 Day가 있다는 걸 알린다.
+          scrollButtons="auto"
+          allowScrollButtonsMobile
           aria-label="일정 시트 탭"
           sx={{ flex: 1, minWidth: 0, minHeight: 48 }}
         >
