@@ -13,6 +13,8 @@ import {
   type UndoInput,
 } from 'src/services/agent-inbox/api';
 import { loadSyncEngine } from 'src/services/library-sync/boot';
+import { toast } from 'sonner';
+import { SYNC_META_KEY, SYNC_SESSION_KEY } from 'src/services/library-sync/storage';
 import { changeLine, changeTitle } from './agent-copy';
 
 const NOTES: Record<string, string> = {
@@ -22,7 +24,7 @@ const NOTES: Record<string, string> = {
 };
 
 /** 열린 동안만 API와 기록을 보관하고, 닫은 뒤 도착한 응답은 버려요. */
-function ChangesContent() {
+function ChangesContent({ onClose }: { onClose(): void }) {
   const [api] = useState(() => createAgentApi());
   const [now] = useState(() => new Date(Date.now()));
   const [changes, setChanges] = useState<AgentChangeView[]>([]);
@@ -33,32 +35,59 @@ function ChangesContent() {
   const [busy, setBusy] = useState(false);
   const active = useRef(true);
   const running = useRef(false);
+  const closeRef = useRef(onClose);
+  useEffect(() => {
+    closeRef.current = onClose;
+  }, [onClose]);
+
+  // 계정이 달라졌으면 보이던 기록을 비우고 창을 닫아요.
+  const current = useCallback(() => {
+    if (!active.current || !api) return false;
+    if (sameOwner(api.owner)) return true;
+    active.current = false;
+    setChanges([]);
+    setNotes({});
+    closeRef.current();
+    toast('로그인한 계정이 바뀌어 변경 기록을 닫았어요');
+    return false;
+  }, [api]);
 
   const refresh = useCallback(async () => {
-    if (!api || !active.current || !sameOwner(api.owner)) return;
+    if (!api || !current()) return;
     setLoading(true);
     setFailed(false);
     try {
       const result = await api.changes();
-      if (!active.current) return;
+      if (!current()) return;
       if (result.ok) setChanges(result.data.changes);
       else setFailed(true);
     } catch {
-      if (active.current) setFailed(true);
+      if (current()) setFailed(true);
     } finally {
       if (active.current) setLoading(false);
     }
-  }, [api]);
+  }, [api, current]);
 
   useEffect(() => {
     active.current = true;
     queueMicrotask(() => {
       if (active.current) void refresh();
     });
+    const changed = (event: StorageEvent) => {
+      if (event.key === null || event.key === SYNC_META_KEY || event.key === SYNC_SESSION_KEY)
+        current();
+    };
+    window.addEventListener('storage', changed);
     return () => {
       active.current = false;
+      window.removeEventListener('storage', changed);
     };
-  }, [refresh]);
+  }, [refresh, current]);
+
+  const scheduleSync = () =>
+    void loadSyncEngine()
+      .then((module) => module.ensureLibrarySyncEngine().schedule('manual'))
+      .catch(() => {});
 
   async function undo(input: UndoInput) {
     if (!api || running.current || !sameOwner(api.owner)) return;
@@ -67,7 +96,11 @@ function ChangesContent() {
     setError(null);
     try {
       const result = await api.undo(input);
-      if (!active.current) return;
+      if (!active.current) {
+        // 창이 닫혀도 서버에서 성공한 되돌리기는 같은 계정이면 한 번 동기화해요.
+        if (result.ok && sameOwner(api.owner)) scheduleSync();
+        return;
+      }
       if (!result.ok) {
         setError('되돌리지 못했어요. 다시 시도해 주세요');
         return;
@@ -79,9 +112,7 @@ function ChangesContent() {
       }
       setNotes((previous) => ({ ...previous, ...next }));
       await refresh();
-      void loadSyncEngine()
-        .then((module) => module.ensureLibrarySyncEngine().schedule('manual'))
-        .catch(() => {});
+      if (sameOwner(api.owner)) scheduleSync();
     } catch {
       if (active.current) setError('되돌리지 못했어요. 다시 시도해 주세요');
     } finally {
@@ -126,6 +157,10 @@ function ChangesContent() {
                 <Box component="li">
                   <Button
                     disabled={busy}
+                    aria-label={`모두 되돌리기 — ${changeLine(
+                      rows.find((row) => row.undoneAt === null)!,
+                      now,
+                    )} · ${rows.filter((row) => row.undoneAt === null).length}건`}
                     sx={{ minHeight: 44 }}
                     onClick={() => void undo({ requestId })}
                   >
@@ -171,7 +206,7 @@ export function AgentChangesDialog({ open, onClose }: { open: boolean; onClose()
       <DialogTitle id={titleId} tabIndex={-1}>
         AI 변경 기록
       </DialogTitle>
-      {open && <ChangesContent />}
+      {open && <ChangesContent onClose={onClose} />}
       <DialogActions>
         <Button onClick={onClose} sx={{ minHeight: 44 }}>
           닫기

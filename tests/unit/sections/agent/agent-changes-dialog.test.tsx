@@ -1,7 +1,8 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AgentChangesDialog } from 'src/sections/agent/AgentChangesDialog';
+import { SYNC_META_KEY } from 'src/services/library-sync/storage';
 import type { AgentApi, AgentChangeView } from 'src/services/agent-inbox/api';
 
 const mocks = vi.hoisted(() => ({
@@ -90,7 +91,10 @@ describe('AI 변경 기록 창', () => {
   it('항목을 되돌린 뒤 기록을 다시 읽고 동기화를 한 번 불러요', async () => {
     vi.mocked(api.undo).mockImplementation(() => {
       rows = [change('c1', { undoneAt: 9 }), rows[1]!];
-      return Promise.resolve({ ok: true, data: { results: [{ id: 'c1', status: 'undone' }] } });
+      return Promise.resolve({
+        ok: true,
+        data: { results: [{ id: 'c1', status: 'undone' }] },
+      } as never);
     });
     const { user } = mount();
     await user.click(await screen.findByRole('button', { name: '「안목 카페」 되돌리기' }));
@@ -121,7 +125,7 @@ describe('AI 변경 기록 창', () => {
     });
     rows = [change('c1'), change('c2')];
     const { user } = mount();
-    await user.click(await screen.findByRole('button', { name: '모두 되돌리기' }));
+    await user.click(await screen.findByRole('button', { name: /^모두 되돌리기/ }));
     const note = await screen.findByText('그 사이 바뀌어서 그대로 뒀어요');
     expect(note.closest('li')).toHaveTextContent('안목 카페');
     expect(screen.getByText('기록이 만료돼 되돌릴 수 없어요')).toBeInTheDocument();
@@ -145,5 +149,67 @@ describe('AI 변경 기록 창', () => {
     await screen.findByText('장소 · 안목 카페');
     await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: '닫기' }));
     expect(close).toHaveBeenCalledOnce();
+  });
+  it('응답이 돌아온 뒤 계정이 달라졌으면 기록을 버리고 창을 닫아요', async () => {
+    let resolve!: (value: never) => void;
+    vi.mocked(api.changes).mockImplementation(
+      () => new Promise((r) => (resolve = r as never)) as ReturnType<AgentApi['changes']>,
+    );
+    const { close } = mount();
+    await waitFor(() => expect(api.changes).toHaveBeenCalled());
+    mocks.sameOwner.mockReturnValue(false);
+    resolve({ ok: true, data: { changes: rows } } as never);
+    await waitFor(() => expect(close).toHaveBeenCalledOnce());
+    expect(screen.queryByText('장소 · 안목 카페')).toBeNull();
+  });
+  it('인증 저장소가 바뀌어 계정이 달라지면 기록을 비우고 창을 닫아요', async () => {
+    const { close } = mount();
+    await screen.findByText('장소 · 안목 카페');
+    mocks.sameOwner.mockReturnValue(false);
+    fireEvent(window, new StorageEvent('storage', { key: SYNC_META_KEY }));
+    expect(close).toHaveBeenCalledOnce();
+    expect(screen.queryByText('장소 · 안목 카페')).toBeNull();
+  });
+  it('되돌리는 중에 창이 닫혀도 성공하면 동기화를 한 번 예약해요', async () => {
+    let resolve!: (value: never) => void;
+    vi.mocked(api.undo).mockImplementation(
+      () => new Promise((r) => (resolve = r as never)) as ReturnType<AgentApi['undo']>,
+    );
+    const { user } = mount();
+    await user.click(await screen.findByRole('button', { name: '「안목 카페」 되돌리기' }));
+    cleanup();
+    resolve({ ok: true, data: { results: [{ id: 'c1', status: 'undone' }] } } as never);
+    await waitFor(() => expect(mocks.schedule).toHaveBeenCalledExactlyOnceWith('manual'));
+  });
+  it('되돌리는 중에 창이 닫히고 계정도 달라지면 동기화하지 않아요', async () => {
+    let resolve!: (value: never) => void;
+    vi.mocked(api.undo).mockImplementation(
+      () => new Promise((r) => (resolve = r as never)) as ReturnType<AgentApi['undo']>,
+    );
+    const { user } = mount();
+    await user.click(await screen.findByRole('button', { name: '「안목 카페」 되돌리기' }));
+    cleanup();
+    mocks.sameOwner.mockReturnValue(false);
+    resolve({ ok: true, data: { results: [] } } as never);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(mocks.schedule).not.toHaveBeenCalled();
+  });
+  it('모두 되돌리기 단추는 묶음마다 시각과 건수로 구분돼요', async () => {
+    rows = [
+      change('c1'),
+      change('c2'),
+      change('c3', { requestId: 'req-2', at: new Date(2026, 10, 20, 14, 5).getTime() }),
+      change('c4', { requestId: 'req-2', at: new Date(2026, 10, 20, 14, 5).getTime() }),
+      change('c5', { requestId: 'req-2', at: new Date(2026, 10, 20, 14, 5).getTime() }),
+    ];
+    mount();
+    expect(
+      await screen.findByRole('button', {
+        name: '모두 되돌리기 — 여행 도우미 · 오늘 오후 3:12 · 2건',
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: '모두 되돌리기 — 여행 도우미 · 오늘 오후 2:05 · 3건' }),
+    ).toBeInTheDocument();
   });
 });

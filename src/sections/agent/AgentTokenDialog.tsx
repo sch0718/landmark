@@ -69,7 +69,7 @@ function TokenDialogContent({ api, onClose, onIssued }: Omit<Props, 'open'>) {
   };
   const validName = name.trim().length >= 1 && name.trim().length <= 40;
   const issue = async () => {
-    if (!validName || (!inbox && !share) || busyRef.current || !currentOwner()) return;
+    if (!validName || (!inbox && !share && !library) || busyRef.current || !currentOwner()) return;
     const request = ++run.current;
     const current = () => request === run.current && currentOwner();
     busyRef.current = true;
@@ -214,7 +214,7 @@ function TokenDialogContent({ api, onClose, onIssued }: Omit<Props, 'open'>) {
         {token === null && (
           <Button
             onClick={() => void issue()}
-            disabled={!validName || (!inbox && !share) || busy}
+            disabled={!validName || (!inbox && !share && !library) || busy}
             sx={{ minHeight: 44 }}
           >
             만들기

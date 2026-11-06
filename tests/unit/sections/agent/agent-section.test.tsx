@@ -406,6 +406,21 @@ describe('새 AI 연결 창', () => {
     await user.click(dialog.getByRole('button', { name: '만들기' }));
     expect(api.issue).toHaveBeenCalledExactlyOnceWith({ name: '도우미', scopes: ['inbox:write'] });
   });
+  it('받은함·짧은 링크를 끄고 보관함만 켜도 만들 수 있어요', async () => {
+    vi.mocked(api.issue).mockResolvedValue({ ok: false, reason: 'server' });
+    const { user } = mount();
+    const dialog = await openCreate(user);
+    await user.click(dialog.getByRole('checkbox', { name: '받은함으로 일정 보내기' }));
+    await user.click(dialog.getByRole('checkbox', { name: '공유 짧은 링크 만들기' }));
+    expect(dialog.getByRole('button', { name: '만들기' })).toBeDisabled();
+    await user.click(dialog.getByRole('checkbox', { name: /^보관함 읽기·쓰기/ }));
+    expect(dialog.getByRole('button', { name: '만들기' })).toBeEnabled();
+    await user.click(dialog.getByRole('button', { name: '만들기' }));
+    expect(api.issue).toHaveBeenCalledExactlyOnceWith({
+      name: 'Claude Code',
+      scopes: ['library:read', 'library:write'],
+    });
+  });
   it('보관함 스위치는 기본 꺼짐이고 켜면 읽기·쓰기 범위와 되돌리기 안내를 더해요', async () => {
     vi.mocked(api.issue).mockResolvedValue({
       ok: true,
