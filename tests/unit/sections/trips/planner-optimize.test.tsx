@@ -355,7 +355,8 @@ describe('Day 자동 나누기', () => {
 describe('여행 설정', () => {
   const settings = async () => {
     const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: '여행 설정' }));
+    // 제목 밑 단추로 연다(Day 머리의 `여행 메뉴`에도 같은 항목이 있다).
+    await user.click(screen.getByRole('button', { name: '이름·기간 바꾸기' }));
     return { user, dialog: screen.getByRole('dialog', { name: '여행 고치기' }) };
   };
   const setEnd = (dialog: HTMLElement, value: string) =>

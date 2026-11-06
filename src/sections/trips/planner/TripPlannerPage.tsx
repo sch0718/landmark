@@ -22,7 +22,7 @@ import { DETAIL_WIDTH, LIST_WIDTH } from 'src/sections/shell/pane-widths';
 import { useLayout } from 'src/sections/shell/use-layout';
 import { useCloseStaleSplit, useSplitPlan } from 'src/sections/trips/planner/AutoSplitPreview';
 import { CandidatePanel } from 'src/sections/trips/planner/CandidatePanel';
-import { DayTabs, DayTimeline } from 'src/sections/trips/planner/DayTimeline';
+import { DAY_RAIL_WIDTH, DayTabs, DayTimeline } from 'src/sections/trips/planner/DayTimeline';
 import { MapCard } from 'src/sections/trips/planner/MapCard';
 import { PlannerDnd } from 'src/sections/trips/planner/PlannerDnd';
 import { COLLAPSED_PX, PlannerSheet } from 'src/sections/trips/planner/PlannerSheet';
@@ -215,7 +215,8 @@ function TimelinePane({
       component="section"
       aria-label={detailId === null ? 'Day 시간표' : '장소 상세'}
       sx={{
-        width: DETAIL_WIDTH,
+        // 넓은 화면은 시간표 왼쪽에 Day 세로 목록을 두는 만큼 넓다.
+        width: overlay ? DETAIL_WIDTH : DETAIL_WIDTH + DAY_RAIL_WIDTH,
         maxWidth: '100%',
         minHeight: 0,
         display: 'flex',
@@ -236,12 +237,24 @@ function TimelinePane({
     >
       {detailId !== null ? (
         <DetailPane placeId={detailId} onBack={onCloseDetail} />
-      ) : (
+      ) : overlay ? (
         <>
           <TripCollabSync tripId={trip.id} />
           <DayTabs trip={trip} dayIndex={dayIndex} onSelect={onSelectDay} />
           <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
             <DayTimeline trip={trip} dayIndex={dayIndex} plan={plan} />
+          </Box>
+        </>
+      ) : (
+        // 넓은 화면: Day가 많아도 한눈에 고르도록 세로 목록을 시간표 왼쪽에 둔다.
+        // 함께 편집 상태 줄은 그 위에 칸 너비 그대로 둔다.
+        <>
+          <TripCollabSync tripId={trip.id} />
+          <Box sx={{ flex: 1, minHeight: 0, display: 'flex' }}>
+            <DayTabs trip={trip} dayIndex={dayIndex} onSelect={onSelectDay} vertical />
+            <Box sx={{ flex: 1, minWidth: 0, minHeight: 0, overflow: 'auto' }}>
+              <DayTimeline trip={trip} dayIndex={dayIndex} plan={plan} />
+            </Box>
           </Box>
         </>
       )}

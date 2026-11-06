@@ -36,43 +36,78 @@ import { shortDate } from 'src/sections/trips/trip-dates';
 import { libraryAtom, useLibraryAction } from 'src/stores/library-state';
 import { mapCardAtom } from 'src/stores/trip-planner';
 
-/** Day 탭: `Day 1 10.24(금)` …. 행을 끌어 탭에 놓으면 그 Day 끝으로 옮긴다. */
+/** 넓은 화면 Day 세로 목록의 너비(px). */
+export const DAY_RAIL_WIDTH = 104;
+
+/**
+ * Day 탭: `Day 1 10.24(금)` …. 행을 끌어 탭에 놓으면 그 Day 끝으로 옮긴다.
+ * `vertical`(넓은 화면)이면 시간표 왼쪽의 세로 목록이 되고, 탭마다 그 Day의 장소 수도 보인다.
+ */
 export function DayTabs({
   trip,
   dayIndex,
   onSelect,
+  vertical = false,
 }: {
   trip: Trip;
   dayIndex: number;
   onSelect(dayIndex: number): void;
+  vertical?: boolean;
 }) {
+  const library = useAtomValue(libraryAtom);
   const dates = tripDates(trip);
+  const date = (i: number) => (dates[i] === undefined ? '' : shortDate(dates[i]));
   return (
     <Tabs
       value={dayIndex}
       onChange={(_event, value: number) => onSelect(value)}
+      orientation={vertical ? 'vertical' : 'horizontal'}
       variant="scrollable"
-      // Day가 많아 탭이 넘치면 양옆 화살표로 보이지 않는 Day가 있다는 걸 알린다.
-      scrollButtons="auto"
+      // Day가 많아 탭이 넘치면 양옆 화살표로 보이지 않는 Day가 있다는 걸 알린다. 세로 목록은 굴려서 넘긴다.
+      scrollButtons={vertical ? false : 'auto'}
       allowScrollButtonsMobile
       aria-label="Day 고르기"
-      sx={{ flex: 'none', borderBottom: '1px solid var(--tm-border)' }}
+      sx={
+        vertical
+          ? { flex: 'none', width: DAY_RAIL_WIDTH, borderRight: '1px solid var(--tm-border)' }
+          : { flex: 'none', borderBottom: '1px solid var(--tm-border)' }
+      }
     >
-      {trip.days.map((_, i) => (
+      {trip.days.map((day, i) => (
         <DropTab
           key={i}
           dropId={`tab:${i}`}
           target={{ kind: 'day', dayIndex: i }}
           value={i}
           label={
-            <span>
-              <Box component="span" sx={{ fontWeight: 800 }}>{`Day ${i + 1}`}</Box>{' '}
-              <Box component="span" sx={{ fontSize: 12 }}>
-                {dates[i] === undefined ? '' : shortDate(dates[i])}
+            vertical ? (
+              <Box component="span" sx={{ display: 'grid', gap: 0.25, textAlign: 'left' }}>
+                <Box component="span" sx={{ fontWeight: 800 }}>{`Day ${i + 1}`}</Box>{' '}
+                <Box component="span" sx={{ fontSize: 12 }}>
+                  {date(i)}
+                </Box>
+                {/* 탭 이름은 가로 탭과 같게(`Day 1 10.24(금)`) 두고, 장소 수는 눈으로만 본다. */}
+                <Box
+                  component="span"
+                  aria-hidden="true"
+                  sx={{ fontSize: 12, color: 'var(--tm-text-secondary)' }}
+                >
+                  {`${visibleStops(library, day).length}곳`}
+                </Box>
               </Box>
-            </span>
+            ) : (
+              <span>
+                <Box component="span" sx={{ fontWeight: 800 }}>{`Day ${i + 1}`}</Box>{' '}
+                <Box component="span" sx={{ fontSize: 12 }}>
+                  {date(i)}
+                </Box>
+              </span>
+            )
           }
-          sx={{ minHeight: 48, textTransform: 'none' }}
+          sx={[
+            { minHeight: 48, textTransform: 'none' },
+            vertical && { alignItems: 'flex-start', minWidth: 0, px: 1.5, py: 1 },
+          ]}
         />
       ))}
     </Tabs>

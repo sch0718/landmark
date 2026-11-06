@@ -1,4 +1,12 @@
-import { act, fireEvent, renderHook, screen, waitFor, within } from '@testing-library/react';
+import {
+  act,
+  cleanup,
+  fireEvent,
+  renderHook,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Effect, Layer } from 'effect';
 import { Provider } from 'jotai';
@@ -667,7 +675,7 @@ describe('Day 머리와 꼬리', () => {
     expect(within(timeline()).getByText('첫 장소에서 출발')).toBeInTheDocument();
   });
 
-  it('`일정 공유`는 여행 설정 옆에 있고, 이미 받은 구간은 다시 묻지 않는 일정 공유 창을 연다', async () => {
+  it('Day 머리의 `여행 메뉴`에서 `일정 공유`를 열고, 이미 받은 구간은 다시 묻지 않는다', async () => {
     const routes = fakeRoutes((call) =>
       route(12, 1100, {
         queriedAt:
@@ -686,12 +694,12 @@ describe('Day 머리와 꼬리', () => {
     await open(lib, { routes });
     await waitFor(() => expect(routes.calls).toHaveLength(2));
     const user = userEvent.setup();
-    const buttons = within(timeline())
-      .getAllByRole('button')
-      .map((b) => b.textContent);
-    expect(buttons.indexOf('일정 공유')).toBe(buttons.indexOf('여행 설정') + 1);
-
-    await user.click(within(timeline()).getByRole('button', { name: '일정 공유' }));
+    await user.click(within(timeline()).getByRole('button', { name: '여행 메뉴' }));
+    expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
+      '이름·기간 바꾸기',
+      '일정 공유',
+    ]);
+    await user.click(screen.getByRole('menuitem', { name: '일정 공유' }));
     // 창은 처음 열 때 받으므로 한 박자 동안은 기다림 틀이 뜨고, 실제 창이 그것을 바꿔 놓는다.
     await screen.findByRole('textbox', { name: '제목' });
     const dialog = screen.getByRole('dialog', { name: '일정 공유' });
@@ -870,8 +878,9 @@ describe('화면 열기', () => {
     expect(screen.getByRole('region', { name: '지도' })).toBeInTheDocument();
     const sheet = screen.getByRole('region', { name: '일정 시트' });
     expect(within(sheet).getByRole('tab', { name: '후보 2' })).toBeInTheDocument();
+    // Day 탭은 지금 고른 Day 하나이고, 다른 Day는 `Day 목록`에서 고른다.
     expect(within(sheet).getByRole('tab', { name: 'Day 1' })).toBeInTheDocument();
-    expect(within(sheet).getByRole('tab', { name: 'Day 2' })).toBeInTheDocument();
+    expect(within(sheet).queryByRole('tab', { name: 'Day 2' })).not.toBeInTheDocument();
 
     // 후보 탭이 기본이고 ＋는 Day 1에 넣는다.
     expect(
@@ -888,9 +897,43 @@ describe('화면 열기', () => {
     expect(sheet).toHaveAttribute('data-snap', 'full');
     await user.click(handle);
     expect(sheet).toHaveAttribute('data-snap', 'collapsed');
-    // 접힌 상태에서 탭을 누르면 반쯤 연다.
-    await user.click(within(sheet).getByRole('tab', { name: 'Day 2' }));
+    // 접힌 상태에서 `Day 목록`으로 다른 Day를 고르면 반쯤 열고 그 Day를 보인다.
+    await user.click(within(sheet).getByRole('button', { name: 'Day 목록' }));
+    const items = screen.getAllByRole('menuitem');
+    expect(items.map((item) => item.textContent)).toEqual([
+      expect.stringMatching(/^Day 1.*1곳$/),
+      expect.stringMatching(/^Day 2.*0곳$/),
+    ]);
+    await user.click(items[1]!);
     expect(sheet).toHaveAttribute('data-snap', 'half');
+    expect(within(sheet).getByRole('tab', { name: 'Day 2' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+  });
+});
+
+describe('Day 고르기와 제목 동작', () => {
+  it('넓은 화면은 Day를 세로 목록으로, 중간 폭은 가로 탭으로 고른다', async () => {
+    await open(withTrip(plannerLibrary(), makeTrip({ stops: [[P5], []] })), { width: 1280 });
+    expect(screen.getByRole('tablist', { name: 'Day 고르기' })).toHaveAttribute(
+      'aria-orientation',
+      'vertical',
+    );
+    cleanup();
+    await open(withTrip(plannerLibrary(), makeTrip({ stops: [[P5], []] })), { width: 1100 });
+    expect(screen.getByRole('tablist', { name: 'Day 고르기' })).not.toHaveAttribute(
+      'aria-orientation',
+      'vertical',
+    );
+  });
+
+  it('제목 밑 `일정 공유`로 공유 창을 연다', async () => {
+    await open(withTrip(plannerLibrary(), makeTrip({ stops: [[P5], []] })));
+    const user = userEvent.setup();
+    const panel = screen.getByRole('region', { name: '후보 칸' });
+    await user.click(within(panel).getByRole('button', { name: '일정 공유' }));
+    expect(await screen.findByRole('dialog', { name: '일정 공유' })).toBeInTheDocument();
   });
 });
 

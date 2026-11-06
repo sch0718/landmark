@@ -5,7 +5,7 @@ import IconButton from '@mui/material/IconButton';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { useMemo, useState, type Ref } from 'react';
 import { HelpButton } from 'src/components/HelpButton';
-import { PanelLeftCloseIcon, PlusIcon } from 'src/components/icons';
+import { PanelLeftCloseIcon, PencilIcon, PlusIcon, ShareIcon } from 'src/components/icons';
 import { TruncatedText } from 'src/components/TruncatedText';
 import { liveLabels } from 'src/domain/library/query';
 import { regionsByPlace } from 'src/domain/library/region';
@@ -20,10 +20,12 @@ import {
 import { labelColors } from 'src/sections/library/label-style';
 import { placeLabels } from 'src/sections/library/place-labels';
 import { objectParticle } from 'src/sections/trips/planner/format';
+import { TripShareDialogHost } from 'src/sections/share-export/TripShareDialogHost';
 import { LibraryPickerDialog } from 'src/sections/trips/planner/LibraryPickerDialog';
 import { DragHandle, useCandidateDrag, useDropTarget } from 'src/sections/trips/planner/PlannerDnd';
 import { CandidateMenu } from 'src/sections/trips/planner/StopMenu';
 import { insertAtEnd, insertedMessage } from 'src/sections/trips/planner/stop-ops';
+import { TripSettingsDialog } from 'src/sections/trips/planner/TripSettingsDialog';
 import { useTripUndo } from 'src/sections/trips/planner/use-trip-undo';
 import { periodLabel } from 'src/sections/trips/trip-dates';
 import { openAddSheetAtom } from 'src/stores/add-place';
@@ -152,6 +154,8 @@ export function CandidatePanel({ trip, dayIndex, onCollapse, collapseRef, fill =
   const openCard = useSetAtom(mapCardAtom);
   const openAddSheet = useSetAtom(openAddSheetAtom);
   const [picking, setPicking] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const {
     setNodeRef: setDropRef,
     isOver,
@@ -200,6 +204,27 @@ export function CandidatePanel({ trip, dayIndex, onCollapse, collapseRef, fill =
           <Box sx={{ mt: 0.25, fontSize: 13, color: 'var(--tm-text-secondary)' }}>
             {periodLabel(trip.startDate.value, trip.endDate.value)}
           </Box>
+          {/* 제목 바로 밑에서 이름·기간을 고치고 일정을 공유한다(여행 목록으로 돌아가지 않아도). */}
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5, ml: -1 }}>
+            <Button
+              size="small"
+              startIcon={<PencilIcon aria-hidden="true" width={16} height={16} />}
+              onClick={() => setEditing(true)}
+              sx={{ minHeight: 44 }}
+            >
+              이름·기간 바꾸기
+            </Button>
+            <Button
+              size="small"
+              startIcon={<ShareIcon aria-hidden="true" width={16} height={16} />}
+              onClick={() => setSharing(true)}
+              sx={{ minHeight: 44 }}
+            >
+              일정 공유
+            </Button>
+          </Box>
+          <TripSettingsDialog trip={trip} open={editing} onClose={() => setEditing(false)} />
+          <TripShareDialogHost open={sharing} onClose={() => setSharing(false)} tripId={trip.id} />
         </Box>
         <HelpButton page="trips" />
         {onCollapse !== undefined && (

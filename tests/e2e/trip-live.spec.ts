@@ -8,6 +8,7 @@ import {
   openSheetTab,
   seedStorage,
   timeline,
+  openTripShare,
 } from './fixtures';
 import { createTripLiveServer } from './trip-live-server';
 const TITLE = '강릉 여행',
@@ -31,7 +32,7 @@ async function prepare(page: Page) {
   await createGangneungTrip(page);
   for (const name of STOPS) await addButton(page, name).click();
   await openSheetTab(page, 'Day 1');
-  await timeline(page).getByRole('button', { name: '일정 공유', exact: true }).click();
+  await openTripShare(page);
   await page.getByRole('button', { name: '갱신 링크…' }).click();
   const dialog = page.getByRole('dialog', { name: /^갱신 링크/ });
   await dialog.getByRole('button', { name: '갱신 링크 만들기' }).click();

@@ -15,6 +15,7 @@ import {
   SHARE_VIEWER_FILE,
   TEMPLATE_LIMIT,
   timeline,
+  openTripShare,
 } from './fixtures';
 
 /**
@@ -45,7 +46,7 @@ async function exportTrip(page: Page, testInfo: TestInfo): Promise<string> {
   await expect(picker).toBeHidden();
   await expect(timeline(page).getByRole('button', { name: '숙소 바꾸기' })).toBeVisible();
 
-  await timeline(page).getByRole('button', { name: '일정 공유', exact: true }).click();
+  await openTripShare(page);
   const dialog = page.getByRole('dialog', { name: '일정 공유' });
   await expect(dialog).toContainText(`‘${TRIP_TITLE}’ 일정을 HTML 파일 하나로 만들어요`);
   await expect(dialog).toContainText(`일정 ${STOPS.length}곳`);

@@ -27,7 +27,7 @@ text{font-family:'Pretendard Variable', Pretendard, 'Apple SD Gothic Neo', 'Noto
 <rect x="1" y="1" width="958" height="518" rx="28" fill="#111113" stroke="#34343A"/>
 <text x="40" y="66" font-size="14" font-weight="700" fill="#8E8E98" text-anchor="start">랜드마크 도움말</text>
 <text x="40" y="110" font-size="30" font-weight="800" fill="#F4F4F5" text-anchor="start">라벨 관리</text>
-<text x="40" y="150" font-size="15" font-weight="600" fill="#B4B4BC" text-anchor="start">보관함 칩 줄의 ‘라벨 관리’에서 라벨 색·이모지,</text><text x="40" y="173" font-size="15" font-weight="600" fill="#B4B4BC" text-anchor="start">순서, 합치기, 네이버 폴더 연결을 다뤄요.</text>
+<text x="40" y="150" font-size="15" font-weight="600" fill="#B4B4BC" text-anchor="start">보관함 칩 줄 맨 앞 태그 아이콘(‘라벨 관리’)에서 라벨 색·이모지,</text><text x="40" y="173" font-size="15" font-weight="600" fill="#B4B4BC" text-anchor="start">순서, 합치기, 네이버 폴더 연결을 다뤄요.</text>
 <g>
 <rect class="sc s0" style="animation-delay:0.00s" x="32" y="213" width="510" height="48" rx="14" fill="#2A3E18"/>
 <circle cx="58" cy="236" r="13" fill="none" stroke="#71717D" stroke-width="1.5"/>

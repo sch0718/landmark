@@ -9,7 +9,7 @@ import {
   rowsOf,
   SEA_COUNT,
   seedStorage,
-  timeline,
+  openTripShare,
 } from './fixtures';
 
 /**
@@ -104,7 +104,7 @@ test('일정 링크 복사 → Day·지도 → 여행 가져오기', async ({ pa
   await addButton(page, '초당순두부 본점').click();
   await addButton(page, '경포대').click();
   await openSheetTab(page, 'Day 1');
-  await timeline(page).getByRole('button', { name: '일정 공유', exact: true }).click();
+  await openTripShare(page);
   const short = await copiedLink(
     page,
     page.getByRole('dialog', { name: '일정 공유' }),
