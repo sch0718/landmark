@@ -52,7 +52,9 @@ export function DayTabs({
       value={dayIndex}
       onChange={(_event, value: number) => onSelect(value)}
       variant="scrollable"
-      scrollButtons={false}
+      // Day가 많아 탭이 넘치면 양옆 화살표로 보이지 않는 Day가 있다는 걸 알린다.
+      scrollButtons="auto"
+      allowScrollButtonsMobile
       aria-label="Day 고르기"
       sx={{ flex: 'none', borderBottom: '1px solid var(--tm-border)' }}
     >
