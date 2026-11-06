@@ -1,8 +1,11 @@
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import IconButton from '@mui/material/IconButton';
+import Menu from '@mui/material/Menu';
+import MenuItem from '@mui/material/MenuItem';
 import { useState } from 'react';
 import { fieldSx } from 'src/components/field-style';
-import { BedIcon, HomeIcon } from 'src/components/icons';
+import { BedIcon, EllipsisIcon, HomeIcon } from 'src/components/icons';
 import { TruncatedText } from 'src/components/TruncatedText';
 import type { Place } from 'src/schema/library';
 
@@ -24,7 +27,8 @@ type Props = {
 };
 
 /**
- * Day 머리: 출발 시각 입력, 출발점 이름, `순서 정리`, `여행 설정`, `일정 공유`.
+ * Day 머리: 출발 시각 입력, 출발점 이름, `순서 정리`, `여행 메뉴`(`이름·기간 바꾸기`·`일정 공유`).
+ * 두 동작은 제목 옆 단추에도 있다. 여기 메뉴는 후보 칸(제목)이 안 보일 때(접힌 칸·Day 탭) 쓴다.
  * 출발 시각은 형식이 맞는 값('HH:mm')만 저장하고, 비우거나 틀린 채로 나가면 저장된 값으로 되돌린다.
  * Day가 바뀌면 부른 쪽이 `key`로 새로 만든다.
  */
@@ -40,6 +44,11 @@ export function DayHeader({
 }: Props) {
   // 입력 중인 값. 저장된 값이 바뀌면(저장 성공·다른 탭) 그 값으로 맞춘다.
   const [draft, setDraft] = useState({ base: startTime, value: startTime });
+  const [menu, setMenu] = useState<HTMLElement | null>(null);
+  const pick = (action: () => void) => {
+    setMenu(null);
+    action();
+  };
   let value = draft.value;
   if (draft.base !== startTime) {
     setDraft({ base: startTime, value: startTime }); // 렌더 중 상태 갱신
@@ -96,12 +105,23 @@ export function DayHeader({
       <Button size="small" disabled={!canOptimize} onClick={onOptimize} sx={{ minHeight: 44 }}>
         순서 정리
       </Button>
-      <Button size="small" onClick={onSettings} sx={{ minHeight: 44 }}>
-        여행 설정
-      </Button>
-      <Button size="small" onClick={onShare} sx={{ minHeight: 44 }}>
-        일정 공유
-      </Button>
+      <IconButton
+        aria-label="여행 메뉴"
+        aria-haspopup="menu"
+        aria-expanded={menu !== null}
+        onClick={(event) => setMenu(event.currentTarget)}
+        sx={{ width: 44, height: 44 }}
+      >
+        <EllipsisIcon aria-hidden="true" width={20} height={20} />
+      </IconButton>
+      <Menu anchorEl={menu} open={menu !== null} onClose={() => setMenu(null)}>
+        <MenuItem onClick={() => pick(onSettings)} sx={{ minHeight: 44 }}>
+          이름·기간 바꾸기
+        </MenuItem>
+        <MenuItem onClick={() => pick(onShare)} sx={{ minHeight: 44 }}>
+          일정 공유
+        </MenuItem>
+      </Menu>
     </Box>
   );
 }

@@ -22,55 +22,38 @@ type Props = {
   manageLink?: boolean;
   /** 라벨 묶음 앞에 둘 칩 묶음(방문 칩). 있으면 구분선을 사이에 둔다. */
   leading?: ReactNode;
-  /** 고정된 링크의 바탕색(칩 줄이 놓인 바탕과 같게). 기본 `var(--tm-bg-base)`. */
-  background?: string;
 };
 
-/** `라벨 관리` 링크. 칩 줄 맨 앞에 붙어(가로 스크롤해도) 늘 보인다(스펙 A1 §6). */
-function ManageLink({ background }: { background: string }) {
+/**
+ * `라벨 관리` 링크. 칩 줄의 스크롤 영역 왼쪽 밖에 있어 가로로 넘겨도 늘 보이고 칩을 가리지 않는다(스펙 A1 §6).
+ * 좁은 칸에서도 칩이 보일 자리를 남기려고 아이콘만 보인다(이름은 `aria-label`·`title`).
+ */
+function ManageLink() {
   return (
     <Box
       component={Link}
       to={paths.labels}
+      aria-label="라벨 관리"
+      title="라벨 관리"
       sx={{
-        position: 'sticky',
-        left: 0,
-        zIndex: 1,
         flex: 'none',
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 0.5,
+        display: 'inline-grid',
+        placeItems: 'center',
+        width: 44,
         minHeight: 44,
-        // 줄의 왼쪽 여백(px 2)까지 덮어, 스크롤된 칩이 링크 왼쪽으로 비치지 않게 한다.
-        ml: -2,
-        pl: 2,
-        pr: 1.5,
-        bgcolor: background,
+        ml: 1,
         borderRight: '1px solid var(--tm-border)',
         color: 'var(--tm-text-secondary)',
-        fontSize: 14,
-        fontWeight: 700,
-        textDecoration: 'none',
-        whiteSpace: 'nowrap',
         '&:focus-visible': { outlineOffset: -2 },
       }}
     >
-      <TagsIcon aria-hidden="true" width={14} height={14} />
-      라벨 관리
+      <TagsIcon aria-hidden="true" width={18} height={18} />
     </Box>
   );
 }
 
 /** 한 줄로 가로 스크롤되는 라벨 필터 칩 줄(라벨 관리 · 모두 포함 · 미분류 · 라벨들). */
-export function LabelChips({
-  query,
-  onChange,
-  labels,
-  counts,
-  manageLink = true,
-  leading,
-  background = 'var(--tm-bg-base)',
-}: Props) {
+export function LabelChips({ query, onChange, labels, counts, manageLink = true, leading }: Props) {
   const [finding, setFinding] = useState(false);
   const ordered = [
     ...labels.filter((l) => query.labelIds.includes(l.id)),
@@ -89,31 +72,36 @@ export function LabelChips({
 
   return (
     <>
-      <ChipScrollRow label="라벨 스크롤">
-        {manageLink && <ManageLink background={background} />}
-        {labels.length > 12 && (
-          <Box
-            component="button"
-            type="button"
-            aria-haspopup="dialog"
-            onClick={() => setFinding(true)}
-            sx={{
-              flex: 'none',
-              minHeight: 44,
-              px: 1.5,
-              border: 0,
-              background: 'transparent',
-              color: 'var(--tm-accent-text)',
-              font: 'inherit',
-              fontSize: 14,
-              fontWeight: 700,
-              whiteSpace: 'nowrap',
-              cursor: 'pointer',
-            }}
-          >
-            라벨 찾기
-          </Box>
-        )}
+      <ChipScrollRow
+        label="라벨 스크롤"
+        start={manageLink ? <ManageLink /> : undefined}
+        end={
+          labels.length > 12 && (
+            <Box
+              component="button"
+              type="button"
+              aria-haspopup="dialog"
+              onClick={() => setFinding(true)}
+              sx={{
+                flex: 'none',
+                minHeight: 44,
+                px: 1.5,
+                border: 0,
+                borderLeft: '1px solid var(--tm-border)',
+                background: 'transparent',
+                color: 'var(--tm-accent-text)',
+                font: 'inherit',
+                fontSize: 14,
+                fontWeight: 700,
+                whiteSpace: 'nowrap',
+                cursor: 'pointer',
+              }}
+            >
+              라벨 찾기
+            </Box>
+          )
+        }
+      >
         {leading}
         {leading !== undefined && (
           <Box
