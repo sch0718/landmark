@@ -116,3 +116,18 @@ export async function pruneChanges(db: MeetDb, userId: string, now: number): Pro
     ),
   );
 }
+
+/** 한 요청(`requestId`)으로 이미 적용된 항목. 재전송을 건너뛸 때 쓴다. */
+export async function listRequestChanges(
+  db: MeetDb,
+  userId: string,
+  requestId: string,
+): Promise<{ kind: string; itemId: string; afterRev: number }[]> {
+  const { results } = await db
+    .prepare(
+      'SELECT kind, item_id AS itemId, after_rev AS afterRev FROM agent_changes WHERE user_id = ? AND request_id = ?',
+    )
+    .bind(userId, requestId)
+    .all<{ kind: string; itemId: string; afterRev: number }>();
+  return results;
+}

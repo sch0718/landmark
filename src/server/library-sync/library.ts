@@ -76,7 +76,7 @@ const isRecord = (v: unknown): v is Record<string, unknown> =>
   !!v && typeof v === 'object' && !Array.isArray(v);
 const integer = (v: unknown): v is number =>
   typeof v === 'number' && Number.isSafeInteger(v) && v >= 0;
-const idPattern = /^[A-Za-z0-9]{1,64}$/;
+export const idPattern = /^[A-Za-z0-9]{1,64}$/;
 const devicePattern = /^[a-z0-9]{16}$/;
 export function parsePullQuery(url: URL): PullQuery {
   const q = url.searchParams;
@@ -206,14 +206,18 @@ export type PushReply = {
   rev: number;
   results: { kind: ItemKind; id: string; rev: number; doc?: unknown }[];
   rejected: { kind: ItemKind; id: string; reason: 'invalid' | 'too-large' | 'clock' }[];
+  /** `noMerge`일 때만 싣는다. 저장된 rev가 `baseRev`와 달라 쓰지 않은 항목과 현재 문서(행이 없으면 `null`). */
+  conflicts?: { kind: ItemKind; id: string; rev: number; doc: unknown }[];
 };
 const utf8Bytes = (text: string) => new TextEncoder().encode(text).byteLength;
 export async function pushItems(
   db: MeetDb,
-  user: SyncUser,
+  user: Pick<SyncUser, 'userId'>,
   body: PushBody,
   now: number,
   quota: { items: number; bytes: number } = LIBRARY_QUOTA,
+  // noMerge: 저장된 rev가 baseRev(없는 행은 0)와 다르면 병합하지 않고 conflict로 돌려준다(AI 편집).
+  opts: { noMerge?: boolean } = {},
 ): Promise<PushReply> {
   const accepted: { item: PushItem; doc: AnyItem; text: string }[] = [];
   const rejected: PushReply['rejected'] = [];
@@ -231,25 +235,44 @@ export async function pushItems(
     const doc = (decoded as { ok: true; doc: AnyItem }).doc;
     accepted.push({ item, doc, text: stableStringify(doc) });
   }
+  // noMerge에서 앞 시도에 이미 끝난 항목. 기본 병합 방식에서는 늘 비어 있다.
+  const settled = {
+    results: [] as PushReply['results'],
+    tooLarge: [] as PushReply['rejected'],
+    conflicts: [] as NonNullable<PushReply['conflicts']>,
+  };
+  let pending = accepted;
   for (let attempt = 0; attempt < 3; attempt++) {
     const state = await db
       .prepare('SELECT rev FROM library_state WHERE user_id = ?')
       .bind(user.userId)
       .first<{ rev: number }>();
     const r0 = state?.rev ?? 0;
-    const rows = accepted.length
+    const rows = pending.length
       ? (
           await db
             .prepare(
               // 행 값 IN이라 기본 키(user_id, kind, item_id)로 찾는다(사용자 행 전체를 훑지 않음).
               "SELECT kind, item_id AS id, rev, deleted, doc FROM library_items WHERE user_id = ?1 AND (kind, item_id) IN (SELECT json_extract(value, '$[0]'), json_extract(value, '$[1]') FROM json_each(?2))",
             )
-            .bind(user.userId, JSON.stringify(accepted.map((a) => [a.item.kind, a.item.id])))
+            .bind(user.userId, JSON.stringify(pending.map((a) => [a.item.kind, a.item.id])))
             .all<ItemRow>()
         ).results
       : [];
     const byKey = new Map(rows.map((r) => [itemKey(r.kind, r.id), r]));
-    const evaluated = accepted.map((a) => {
+    if (opts.noMerge)
+      pending = pending.filter((a) => {
+        const stored = byKey.get(itemKey(a.item.kind, a.item.id));
+        if ((stored?.rev ?? 0) === a.item.baseRev) return true;
+        settled.conflicts.push({
+          kind: a.item.kind,
+          id: a.item.id,
+          rev: stored?.rev ?? 0,
+          doc: stored ? JSON.parse(stored.doc) : null,
+        });
+        return false;
+      });
+    const evaluated = pending.map((a) => {
       const stored = byKey.get(itemKey(a.item.kind, a.item.id));
       const doc =
         !stored || stored.rev === a.item.baseRev
@@ -331,25 +354,65 @@ export async function pushItems(
           .bind(user.userId, body.deviceId, now, JSON.stringify(data), r0),
         db.prepare('SELECT rev FROM library_state WHERE user_id = ?').bind(user.userId),
       ])) as { meta: { changes: number }; results: { rev: number }[] }[];
-      if (batch[1]!.meta.changes < changed.length) continue;
+      if (batch[1]!.meta.changes < changed.length) {
+        if (!opts.noMerge) continue;
+        // 이 배치의 rev로 올라간 행만 이번에 쓴 것이다. 나머지는 읽은 뒤 다른 기기가 바꿨으니
+        // 다음 시도에서 원래 baseRev로 다시 검사한다(병합하지 않는다).
+        const wrote = batch[2]!.results[0]!.rev;
+        const after = (
+          await db
+            .prepare(
+              "SELECT kind, item_id AS id, rev FROM library_items WHERE user_id = ?1 AND (kind, item_id) IN (SELECT json_extract(value, '$[0]'), json_extract(value, '$[1]') FROM json_each(?2))",
+            )
+            .bind(user.userId, JSON.stringify(changed.map((e) => [e.item.kind, e.item.id])))
+            .all<{ kind: ItemKind; id: string; rev: number }>()
+        ).results;
+        const written = new Set(
+          after.filter((r) => r.rev === wrote).map((r) => itemKey(r.kind, r.id)),
+        );
+        const lost = changed.filter((e) => !written.has(itemKey(e.item.kind, e.item.id)));
+        settled.results.push(
+          ...kept
+            .filter((e) => !lost.includes(e))
+            .map((e) => ({
+              kind: e.item.kind,
+              id: e.item.id,
+              rev: e.changed ? wrote : e.stored!.rev,
+            })),
+        );
+        settled.tooLarge.push(
+          ...[...overQuota].map((e) => ({
+            kind: e.item.kind,
+            id: e.item.id,
+            reason: 'too-large' as const,
+          })),
+        );
+        pending = lost.map(({ item, doc, text }) => ({ item, doc, text }));
+        continue;
+      }
       rev = batch[2]!.results[0]!.rev;
     }
     return {
       rev,
+      ...(opts.noMerge ? { conflicts: settled.conflicts } : {}),
       rejected: [
         ...rejected,
+        ...settled.tooLarge,
         ...[...overQuota].map((e) => ({
           kind: e.item.kind,
           id: e.item.id,
           reason: 'too-large' as const,
         })),
       ],
-      results: kept.map((e) => ({
-        kind: e.item.kind,
-        id: e.item.id,
-        rev: e.changed ? rev : e.stored!.rev,
-        ...(e.resultText !== e.text ? { doc: e.result } : {}),
-      })),
+      results: [
+        ...settled.results,
+        ...kept.map((e) => ({
+          kind: e.item.kind,
+          id: e.item.id,
+          rev: e.changed ? rev : e.stored!.rev,
+          ...(e.resultText !== e.text ? { doc: e.result } : {}),
+        })),
+      ],
     };
   }
   throw new SyncHttpError(409, 'busy');
