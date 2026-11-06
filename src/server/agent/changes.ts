@@ -27,29 +27,32 @@ export type ChangeMeta = Omit<ChangeRow, 'userId' | 'beforeDoc'> & {
 
 export async function recordChanges(db: MeetDb, rows: ChangeRow[]): Promise<void> {
   if (!rows.length) return;
-  await db.batch(
-    rows.map((row) =>
-      db
-        .prepare(
-          `INSERT INTO agent_changes
-            (id, user_id, token_id, request_id, kind, item_id, before_doc, before_rev, after_rev, label, at, undone_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
-        )
-        .bind(
-          row.id,
-          row.userId,
-          row.tokenId,
-          row.requestId,
-          row.kind,
-          row.itemId,
-          row.beforeDoc,
-          row.beforeRev,
-          row.afterRev,
-          row.label,
-          row.at,
-        ),
-    ),
-  );
+  // 행 수와 무관하게 SQL 한 문장(json_each)으로 넣는다(Workers Free 호출당 D1 쿼리 한도).
+  const data = rows.map((row) => [
+    row.id,
+    row.userId,
+    row.tokenId,
+    row.requestId,
+    row.kind,
+    row.itemId,
+    row.beforeDoc,
+    row.beforeRev,
+    row.afterRev,
+    row.label,
+    row.at,
+  ]);
+  await db
+    .prepare(
+      `INSERT INTO agent_changes
+        (id, user_id, token_id, request_id, kind, item_id, before_doc, before_rev, after_rev, label, at, undone_at)
+       SELECT json_extract(value, '$[0]'), json_extract(value, '$[1]'), json_extract(value, '$[2]'),
+         json_extract(value, '$[3]'), json_extract(value, '$[4]'), json_extract(value, '$[5]'),
+         json_extract(value, '$[6]'), json_extract(value, '$[7]'), json_extract(value, '$[8]'),
+         json_extract(value, '$[9]'), json_extract(value, '$[10]'), NULL
+       FROM json_each(?)`,
+    )
+    .bind(JSON.stringify(data))
+    .run();
 }
 
 /** 최근 순(같은 시각이면 나중에 넣은 것 먼저). before_doc은 싣지 않는다. */
