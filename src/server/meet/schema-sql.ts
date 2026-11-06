@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 7;
+export const SCHEMA_VERSION = 8;
 
 export const SCHEMA_STATEMENTS: string[] = [
   `CREATE TABLE IF NOT EXISTS meetings (
@@ -184,4 +184,20 @@ CREATE TABLE IF NOT EXISTS agent_tokens (
   'CREATE UNIQUE INDEX IF NOT EXISTS agent_inbox_key ON agent_inbox(user_id, request_key)',
   'CREATE INDEX IF NOT EXISTS agent_inbox_user ON agent_inbox(user_id, created_at)',
   'CREATE INDEX IF NOT EXISTS agent_inbox_expires ON agent_inbox(expires_at)',
+  // 8: AI 보관함 편집 기록. 고치기 전 문서를 30일 두고 되돌리기에 쓴다.
+  `CREATE TABLE IF NOT EXISTS agent_changes (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  token_id TEXT NOT NULL,
+  request_id TEXT NOT NULL,              -- 같은 요청의 변경을 묶는 UUID
+  kind TEXT NOT NULL,
+  item_id TEXT NOT NULL,
+  before_doc TEXT,                       -- 새 항목이면 NULL
+  before_rev INTEGER NOT NULL,
+  after_rev INTEGER NOT NULL,
+  label TEXT NOT NULL,                   -- 표시 이름(항목 이름을 잘라 저장)
+  at INTEGER NOT NULL,
+  undone_at INTEGER
+)`,
+  'CREATE INDEX IF NOT EXISTS agent_changes_user ON agent_changes(user_id, at)',
 ];

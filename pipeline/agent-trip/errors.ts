@@ -37,6 +37,12 @@ export type TripErrorCode =
   | 'offline'
   | 'timeout'
   | 'server'
+  | 'resync'
+  | 'conflict'
+  | 'missing'
+  | 'referenced'
+  | 'invalid-ref'
+  | 'rejected'
   | 'internal';
 
 export type TripIssue = {
@@ -90,6 +96,12 @@ const EXIT_BY_CODE = {
   offline: EXIT.server,
   timeout: EXIT.server,
   server: EXIT.server,
+  resync: EXIT.server,
+  conflict: EXIT.server,
+  missing: EXIT.server,
+  referenced: EXIT.server,
+  'invalid-ref': EXIT.server,
+  rejected: EXIT.server,
   internal: EXIT.internal,
 } as const satisfies Record<TripErrorCode, ExitCode>;
 

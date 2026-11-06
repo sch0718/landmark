@@ -3,12 +3,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { requireAgentToken } from 'src/server/agent/auth';
 import {
   AGENT_LIMITS,
-  AGENT_SCOPES,
   AGENT_TOKEN_MAX_ACTIVE,
   AGENT_TOKEN_PATTERN,
   AGENT_TOKEN_TOUCH_MS,
   AGENT_TOKEN_TTL_MS,
   issueAgentToken,
+  type AgentScope,
   listAgentTokens,
   newAgentToken,
   newAgentTokenId,
@@ -23,7 +23,7 @@ import { hashIp, hashToken } from 'src/server/meet/tokens';
 import { createSyncMemoryServer } from '../../helpers/sync-memory-server';
 
 const DAY = 24 * 60 * 60 * 1000;
-const input = { name: '시험 연결', scopes: [...AGENT_SCOPES] };
+const input = { name: '시험 연결', scopes: ['inbox:write', 'share:create'] as AgentScope[] };
 let server: ReturnType<typeof createSyncMemoryServer>;
 let deps: SyncDeps;
 let ctx: SyncContext;
@@ -143,6 +143,7 @@ describe('입력과 무작위 값', () => {
     { ...input, scopes: 'inbox:write' },
     { ...input, scopes: [1] },
     { ...input, scopes: ['library:read'] },
+    { ...input, scopes: ['inbox:write', 'library:write'] },
   ])('잘못된 발급 입력 %#를 422로 거절한다', async (value) => {
     await failure(
       Promise.resolve().then(() => parseIssueBody(value)),
@@ -303,12 +304,16 @@ describe('인증', () => {
       userId,
       tokenId: row.id,
       tokenName: input.name,
-      scopes: [...AGENT_SCOPES],
+      scopes: ['inbox:write', 'share:create', 'library:read'],
       expiresAt: row.expiresAt,
       provider: 'kakao',
     });
     expect(JSON.stringify(principal).includes(token)).toBe(false);
-    expect((await listAgentTokens(server.db, userId, now))[0]!.scopes).toEqual([...AGENT_SCOPES]);
+    expect((await listAgentTokens(server.db, userId, now))[0]!.scopes).toEqual([
+      'inbox:write',
+      'share:create',
+      'library:read',
+    ]);
     expect(await authCount()).toBe(0);
   });
 

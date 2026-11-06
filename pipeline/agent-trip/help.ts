@@ -9,6 +9,7 @@ export const commandOptions: Record<CommandName, readonly string[]> = {
   share: ['memo', 'no-routes'],
   whoami: [],
   unshare: ['list'],
+  library: ['kind', 'file', 'base-rev', 'request'],
 };
 
 const commands: Record<CommandName, { usage: string; description: string }> = {
@@ -26,13 +27,29 @@ const commands: Record<CommandName, { usage: string; description: string }> = {
     usage: 'unshare <id>',
     description: '이 컴퓨터에 삭제 토큰을 보관한 짧은 링크를 지웁니다.',
   },
+  library: {
+    usage: 'library <하위 명령>',
+    description: '보관함·여행을 읽고 고칩니다(쓰기 범위 토큰 필요).',
+  },
 };
+const libraryUsage = [
+  'list [--kind <종류>]',
+  'get <종류> <id>',
+  'put <종류> <id> --file <문서.json> --base-rev <N>',
+  'delete <종류> <id> --base-rev <N>',
+  'changes',
+  'undo <변경 id> | undo --request <요청 id>',
+];
 const listDescription = '고른 앱의 저장된 링크와 결과 모름 예약을 봅니다.';
 const optionHelp: Record<string, [string, string]> = {
   memo: ['--memo', '장소 메모를 넣습니다(Day 메모는 늘 들어감).'],
   'no-memo': ['--no-memo', '장소 메모를 뺍니다(Day 메모는 늘 들어감).'],
   'no-routes': ['--no-routes', '길찾기 조회를 생략하고 직선 추정을 씁니다.'],
   out: ['--out <doc.json>', '만든 공유 문서를 파일로 저장합니다.'],
+  kind: ['--kind <종류>', 'label|place|folder|trip|meeting 중 하나.'],
+  file: ['--file <문서.json>', '저장할 항목 문서(앱 스키마)입니다.'],
+  'base-rev': ['--base-rev <N>', '읽을 때 본 rev입니다. 새 항목은 0.'],
+  request: ['--request <id>', '같은 요청으로 바뀐 항목을 한꺼번에 되돌립니다.'],
   list: ['--list', '저장된 링크와 결과 모름 예약을 봅니다.'],
 };
 const commonOptions: [string, string][] = [
@@ -50,9 +67,18 @@ function row(label: string, description: string): string {
 export function helpText(command?: CommandName): string {
   const lines: string[] = [];
   if (command) {
-    lines.push(`사용법: yarn trip ${commands[command].usage} [옵션]`);
+    lines.push(
+      `사용법: yarn trip ${command === 'library' ? 'library ' + libraryUsage[0] : commands[command].usage} [옵션]`,
+    );
     if (command === 'unshare') lines.push('        yarn trip unshare --list [옵션]');
+    if (command === 'library')
+      lines.push(...libraryUsage.slice(1).map((u) => `        yarn trip library ${u} [옵션]`));
     lines.push('', commands[command].description);
+    if (command === 'library')
+      lines.push(
+        '쓰기 전에 get으로 rev를 읽고, 충돌(conflict)이면 다시 읽어 고칩니다.',
+        'changes로 변경 id를 보고 undo로 되돌립니다.',
+      );
     if (command === 'unshare') lines.push(listDescription + ' (서버·토큰 불필요)');
     lines.push('', '명령별 옵션:');
     const options = commandOptions[command];
@@ -70,7 +96,9 @@ export function helpText(command?: CommandName): string {
       '',
       '명령별 옵션:',
       ...(Object.keys(commandOptions) as CommandName[]).map((name) => {
-        const options = commandOptions[name].map((key) => optionHelp[key]![0]);
+        const options = commandOptions[name].map((key) =>
+          name === 'library' ? `--${key}` : optionHelp[key]![0],
+        );
         return row(name, options.length ? options.join(', ') : '없음');
       }),
       '',

@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { listChanges, recordChanges } from 'src/server/agent/changes';
 import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 import { ensureSchema } from 'src/server/meet/db';
 import {
@@ -200,7 +201,26 @@ it('90일 정리는 여행 참조 장소를 남기고 계정 지우기는 다른
   expect(await purgeTombstones(db, user.userId, now)).toBe(1);
   expect((await db.prepare('SELECT purged_rev FROM library_state').first())?.purged_rev).toBe(1);
   await pushItems(db, other, body([p]), now);
+  for (const userId of [user.userId, other.userId]) {
+    await recordChanges(db, [
+      {
+        id: `change-${userId}`,
+        userId,
+        tokenId: 'token000001',
+        requestId: 'req-1',
+        kind: 'place',
+        itemId: 'place00001',
+        beforeDoc: null,
+        beforeRev: 0,
+        afterRev: 1,
+        label: '장소',
+        at: now,
+      },
+    ]);
+  }
   await deleteAccountData(db, user.userId);
+  expect((await listChanges(db, user.userId, now)).length).toBe(0);
+  expect((await listChanges(db, other.userId, now)).length).toBe(1);
   expect((await readMe(db, user)).library.items).toBe(0);
   expect((await readMe(db, other)).library.live).toBe(1);
 });
@@ -396,4 +416,19 @@ it('개수 상한은 행을 더할 때만 보고, 묘비 면제분은 다른 항
   });
   expect(reply.rejected).toEqual([{ kind: 'place', id: 'place00001', reason: 'too-large' }]);
   expect(reply.results.map((r) => r.id)).toEqual(['place00002']);
+});
+it('세션 없는 사용자는 deviceId null로 읽고 기기 행을 만들지 않는다', async () => {
+  await pushItems(db, user, body([place()]), now);
+  const bare = { userId: user.userId };
+  const read = await pullChanges(
+    db,
+    bare,
+    { since: 0, after: '', limit: 500, deviceId: null },
+    now,
+  );
+  expect('body' in read && JSON.parse(read.body).items).toHaveLength(1);
+  await expect(
+    pullChanges(db, bare, { since: 0, after: '', limit: 500, deviceId: device }, now),
+  ).rejects.toMatchObject({ status: 422, code: 'invalid', extra: { path: 'device' } });
+  expect(await db.prepare('SELECT count(*) AS n FROM library_devices').first()).toEqual({ n: 0 });
 });

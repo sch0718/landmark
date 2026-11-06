@@ -5,7 +5,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as inboxModule from 'src/server/agent/inbox';
 import { encodeShareHash, hashDoc } from 'src/share-viewer/encode';
 import type { ShareDocV2 } from 'src/schema/share';
-import { AGENT_LIMITS } from 'src/server/agent/tokens';
+import { AGENT_LIMITS, issueAgentToken, type AgentScope } from 'src/server/agent/tokens';
+import { pullChanges, parsePullQuery } from 'src/server/library-sync/library';
+import { productionDeps } from 'src/server/library-sync/env';
 import { counterKey } from 'src/server/library-sync/limits';
 import { hashToken } from 'src/server/meet/tokens';
 import { handleShareOpen } from 'src/server/share/handlers';
@@ -31,6 +33,43 @@ async function issue(scopes = ['inbox:write', 'share:create']) {
   secrets.push(body.token);
   return body.token as string;
 }
+/** 발급 경로는 library 범위를 받지 않으므로(PR ①) 발급 함수를 직접 부른다. */
+async function issueLibrary(scopes: AgentScope[]) {
+  const row = await server.db
+    .prepare('SELECT user_id FROM agent_tokens WHERE token_hash = ?')
+    .bind(await hashToken(token))
+    .first<{ user_id: string }>();
+  const issued = await issueAgentToken(
+    server.db,
+    row!.user_id,
+    { name: '보관함 도우미', scopes },
+    productionDeps(),
+  );
+  secrets.push(issued.token);
+  return issued.token;
+}
+const t = '2026-10-01T00:00:00.000Z';
+const f = <T>(value: T) => ({ value, updatedAt: t });
+const place = (id: string) => ({
+  id,
+  source: { kind: 'pin' },
+  name: f('장소'),
+  address: '',
+  lng: 127,
+  lat: 37,
+  category: f(null),
+  memo: f('처음'),
+  labelIds: f([]),
+  saved: f(true),
+  createdAt: t,
+  deletedAt: null,
+});
+const requestId = '11111111-2222-4333-8444-555555555555';
+const editBody = (ids: string[], id = requestId) => ({
+  v: 1,
+  requestId: id,
+  ops: ids.map((i) => ({ op: 'put', kind: 'place', id: i, baseRev: 0, doc: place(i) })),
+});
 function request(
   path: string,
   method = 'GET',
@@ -321,6 +360,140 @@ describe('에이전트 토큰 경로', () => {
       path: '/v1/share/:id',
       status: 204,
       ms: expect.any(Number),
+    });
+  });
+
+  describe('보관함 경로', () => {
+    beforeEach(async () => {
+      token = await issueLibrary(['library:read', 'library:write']);
+    });
+    it('범위가 없는 토큰은 보관함 경로 모두 403 scope', async () => {
+      token = await issue();
+      await error(await request('/v1/library/changes'), 403, 'scope');
+      await error(await request('/v1/library/edits'), 403, 'scope');
+      await error(
+        await request('/v1/library/edit', 'POST', editBody(['place00001'])),
+        403,
+        'scope',
+      );
+      await error(await request('/v1/library/undo', 'POST', { requestId }), 403, 'scope');
+      token = await issueLibrary(['library:read']);
+      await error(
+        await request('/v1/library/edit', 'POST', editBody(['place00001'])),
+        403,
+        'scope',
+      );
+    });
+    it('Origin 헤더가 있으면 403', async () => {
+      await error(
+        await request('/v1/library/changes', 'GET', undefined, { Origin: origin }),
+        403,
+        'origin',
+      );
+    });
+    it('edit으로 쓰고 changes·edits로 읽고 undo로 되돌린다', async () => {
+      const edited = await request('/v1/library/edit', 'POST', editBody(['place00001']));
+      expect(edited.status).toBe(200);
+      expect(await edited.json()).toMatchObject({
+        rev: 1,
+        results: [{ kind: 'place', id: 'place00001', status: 'ok', rev: 1 }],
+      });
+      const changes = await request('/v1/library/changes');
+      expect(changes.status).toBe(200);
+      expect(await changes.json()).toMatchObject({ rev: 1, items: [{ id: 'place00001' }] });
+      const edits = (await (await request('/v1/library/edits')).json()) as {
+        changes: { id: string; itemId: string }[];
+      };
+      expect(edits.changes).toMatchObject([{ itemId: 'place00001' }]);
+      const undone = await request('/v1/library/undo', 'POST', { requestId });
+      expect(await undone.json()).toEqual({
+        results: [{ id: edits.changes[0]!.id, status: 'undone' }],
+        more: false,
+      });
+    });
+    it('changes는 deviceId가 없는 pullChanges와 같은 본문·커서·410 resync를 준다', async () => {
+      await request(
+        '/v1/library/edit',
+        'POST',
+        editBody(['place00001', 'place00002', 'place00003']),
+      );
+      const user = (await server.db.prepare('SELECT id FROM users').first<{ id: string }>())!.id;
+      for (const query of ['', '?limit=2', '?since=1&limit=1']) {
+        const expected = await pullChanges(
+          server.db,
+          { userId: user },
+          { ...parsePullQuery(new URL('http://x/' + query)), deviceId: null },
+          Date.now(),
+        );
+        const response = await request('/v1/library/changes' + query);
+        expect(await response.text()).toBe((expected as { body: string }).body);
+      }
+      const page = (await (await request('/v1/library/changes?limit=2')).json()) as {
+        more: boolean;
+        next: { rev: number; key: string };
+      };
+      expect(page.more).toBe(true);
+      await server.db.prepare('UPDATE library_state SET purged_rev = 5').run();
+      const gone = await request('/v1/library/changes?since=1');
+      expect(gone.status).toBe(410);
+      expect(await gone.json()).toEqual({ error: 'resync', purgedRev: 5 });
+    });
+    it('device 질의는 값이 있든 비었든 422이고 기기 행을 만들지 않는다', async () => {
+      await request('/v1/library/edit', 'POST', editBody(['place00001']));
+      for (const query of ['device=aaaaaaaaaaaaaaaa', 'device=', 'device=BAD']) {
+        const response = await request('/v1/library/changes?' + query);
+        expect(response.status).toBe(422);
+        expect(await response.json()).toEqual({ error: 'invalid', path: 'device' });
+      }
+      await request('/v1/library/changes');
+      expect(
+        (await server.db
+          .prepare('SELECT count(*) AS n FROM library_devices')
+          .first<{ n: number }>())!.n,
+      ).toBe(0);
+    });
+    it('AGENT_EDIT=off는 edit·undo를 토큰 검사 전에 503, 읽기는 된다', async () => {
+      server.env.AGENT_EDIT = 'off';
+      for (const authorization of ['', 'Bearer lmk_bad', `Bearer ${token}`]) {
+        for (const path of ['/v1/library/edit', '/v1/library/undo'])
+          await error(
+            await request(path, 'POST', {}, { Authorization: authorization }),
+            503,
+            'off',
+          );
+      }
+      expect((await request('/v1/library/changes')).status).toBe(200);
+      expect((await request('/v1/library/edits')).status).toBe(200);
+    });
+    it('AGENT_API=off는 보관함 경로 전부 503', async () => {
+      server.env.AGENT_API = 'off';
+      for (const [path, method] of [
+        ['/v1/library/changes', 'GET'],
+        ['/v1/library/edits', 'GET'],
+        ['/v1/library/edit', 'POST'],
+        ['/v1/library/undo', 'POST'],
+      ] as const)
+        await error(await request(path, method, method === 'POST' ? {} : undefined), 503, 'off');
+    });
+    it('edit은 항목 수만큼 하루 한도를 쓰고 넘으면 429', async () => {
+      await fillCounter('agent-edit', AGENT_LIMITS.edit - 2);
+      expect(
+        (await request('/v1/library/edit', 'POST', editBody(['place00001', 'place00002']))).status,
+      ).toBe(200);
+      await error(
+        await request('/v1/library/edit', 'POST', editBody(['place00003'])),
+        429,
+        'rate-limited',
+      );
+    });
+    it('큰 본문은 413, 잘못된 본문은 422', async () => {
+      await error(
+        await request('/v1/library/edit', 'POST', 'x'.repeat(1_000_001)),
+        413,
+        'too-large',
+      );
+      expect((await request('/v1/library/edit', 'POST', { v: 1 })).status).toBe(422);
+      expect((await request('/v1/library/undo', 'POST', {})).status).toBe(422);
     });
   });
 });

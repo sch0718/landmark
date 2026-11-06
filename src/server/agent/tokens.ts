@@ -4,7 +4,14 @@ import { hashToken } from '../meet/tokens';
 import type { SyncDeps } from '../library-sync/env';
 import { SyncHttpError } from '../library-sync/http';
 
-export const AGENT_SCOPES = ['inbox:write', 'share:create'] as const;
+export const AGENT_SCOPES = [
+  'inbox:write',
+  'share:create',
+  'library:read',
+  'library:write',
+] as const;
+/** 새 연결에 고를 수 있는 범위. library 범위는 PR ②에서 연다. */
+export const ISSUABLE_SCOPES = ['inbox:write', 'share:create'] as const;
 export const AGENT_TOKEN_PATTERN = /^lmk_[A-Za-z0-9_-]{43}$/;
 export const AGENT_TOKEN_TTL_MS = 90 * 24 * 60 * 60 * 1000;
 export const AGENT_TOKEN_MAX_ACTIVE = 10;
@@ -16,6 +23,9 @@ export const AGENT_LIMITS = {
   shareDelete: 200,
   whoami: 500,
   inboxRead: 2000,
+  /** 하루 AI 쓰기 항목 수(사용자별, 모든 토큰 합산) */
+  edit: 500,
+  libraryRead: 2000,
   authFail: 300,
 } as const;
 export type AgentScope = (typeof AGENT_SCOPES)[number];
@@ -60,14 +70,14 @@ export function parseIssueBody(value: unknown): { name: string; scopes: AgentSco
     !Array.isArray(body.scopes) ||
     body.scopes.length === 0 ||
     !Array.from(body.scopes).every((scope: unknown) =>
-      AGENT_SCOPES.some((allowed) => allowed === scope),
+      ISSUABLE_SCOPES.some((allowed) => allowed === scope),
     )
   )
     throw new SyncHttpError(422, 'invalid');
   const scopes = body.scopes;
   return {
     name: body.name.trim(),
-    scopes: AGENT_SCOPES.filter((scope) => scopes.includes(scope)),
+    scopes: ISSUABLE_SCOPES.filter((scope) => scopes.includes(scope)),
   };
 }
 

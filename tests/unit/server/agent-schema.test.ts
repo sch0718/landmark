@@ -17,7 +17,7 @@ afterEach(() => {
   db.close();
 });
 
-it.each([0, 6])('버전 %i에서 AI 표 두 개와 색인 다섯 개를 멱등으로 만든다', async (version) => {
+it.each([0, 6, 7])('버전 %i에서 AI 표 세 개와 색인 여섯 개를 멱등으로 만든다', async (version) => {
   if (version) {
     await db.batch(
       SCHEMA_STATEMENTS.filter((sql) => !sql.includes('agent_')).map((sql) => db.prepare(sql)),
@@ -37,6 +37,8 @@ it.each([0, 6])('버전 %i에서 AI 표 두 개와 색인 다섯 개를 멱등�
       .all(),
   ).toEqual({
     results: [
+      { name: 'agent_changes', type: 'table' },
+      { name: 'agent_changes_user', type: 'index' },
       { name: 'agent_inbox', type: 'table' },
       { name: 'agent_inbox_expires', type: 'index' },
       { name: 'agent_inbox_key', type: 'index' },
@@ -50,6 +52,8 @@ it.each([0, 6])('버전 %i에서 AI 표 두 개와 색인 다섯 개를 멱등�
     agent_tokens: 'id,user_id,token_hash,name,scopes,created_at,expires_at,last_used_at,revoked_at',
     agent_inbox:
       'id,user_id,token_id,request_key,data,title,start_date,end_date,places,created_at,expires_at',
+    agent_changes:
+      'id,user_id,token_id,request_id,kind,item_id,before_doc,before_rev,after_rev,label,at,undone_at',
   })) {
     const { results } = await db.prepare(`PRAGMA table_info(${table})`).all<{ name: string }>();
     expect(results.map((row) => row.name)).toEqual(columns.split(','));
@@ -61,9 +65,9 @@ it.each([0, 6])('버전 %i에서 AI 표 두 개와 색인 다섯 개를 멱등�
     resetSchemaMemo();
     await ensureSchema(db);
   }
-  expect(SCHEMA_VERSION).toBe(7);
+  expect(SCHEMA_VERSION).toBe(8);
   expect(await db.prepare('SELECT version FROM schema_meta').all()).toEqual({
-    results: [{ version: 7 }],
+    results: [{ version: 8 }],
   });
   if (version) {
     expect(await db.prepare('SELECT id FROM users').all()).toEqual({
@@ -77,7 +81,7 @@ it('스키마 문장에 ALTER를 넣지 않고 AI 문장은 하나씩 멱등으�
     true,
   );
   const statements = SCHEMA_STATEMENTS.filter((sql) => sql.includes('agent_'));
-  expect(statements).toHaveLength(7);
+  expect(statements).toHaveLength(9);
   expect(statements[0]).toMatch(/^-- 7: AI 연결 토큰과 받은함\. 토큰 원문은 두지 않는다\./);
   for (const sql of statements) {
     expect(sql.match(/\bCREATE\b/g)).toHaveLength(1);
@@ -85,7 +89,7 @@ it('스키마 문장에 ALTER를 넣지 않고 AI 문장은 하나씩 멱등으�
   }
 });
 
-it('계정 자료 삭제는 두 AI 표에서 그 사용자의 모든 행만 지운다', async () => {
+it('계정 자료 삭제는 세 AI 표에서 그 사용자의 모든 행만 지운다', async () => {
   await ensureSchema(db);
   for (const userId of ['지울사용자', '남길사용자']) {
     await db
@@ -124,12 +128,29 @@ it('계정 자료 삭제는 두 AI 표에서 그 사용자의 모든 행만 지�
           2,
         )
         .run();
+      await db
+        .prepare('INSERT INTO agent_changes VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+        .bind(
+          crypto.randomUUID(),
+          userId,
+          tokenId,
+          '요청',
+          'place',
+          `p${i}`,
+          null,
+          0,
+          1,
+          '장소',
+          1,
+          null,
+        )
+        .run();
     }
   }
 
   await deleteAccountData(db, '지울사용자');
 
-  for (const table of ['agent_inbox', 'agent_tokens']) {
+  for (const table of ['agent_changes', 'agent_inbox', 'agent_tokens']) {
     expect(await db.prepare(`SELECT user_id FROM ${table} ORDER BY id`).all()).toEqual({
       results: [{ user_id: '남길사용자' }, { user_id: '남길사용자' }],
     });

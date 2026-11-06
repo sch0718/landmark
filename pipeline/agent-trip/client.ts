@@ -21,6 +21,7 @@ const messages = {
   offline: '서버에 연결하지 못했어요',
   timeout: '서버가 제때 응답하지 않아요',
   server: '서버가 요청을 처리하지 못했어요',
+  resync: '서버 기록이 오래돼 처음부터 다시 읽어야 해요',
 } satisfies Partial<Record<TripErrorCode, string>>;
 const issue = (code: keyof typeof messages): TripIssue => ({
   path: '',
@@ -29,9 +30,19 @@ const issue = (code: keyof typeof messages): TripIssue => ({
 });
 
 /** 끝점별 성공 필드를 확인한 뒤에만 CLI와 저장 파일에 넘긴다. */
-function validSuccess(path: string, value: unknown): boolean {
+function validSuccess(fullPath: string, value: unknown): boolean {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
   const data = value as Record<string, unknown>;
+  const path = fullPath.split('?')[0]!;
+  if (path === '/library/changes')
+    return (
+      Array.isArray(data.items) &&
+      typeof data.more === 'boolean' &&
+      typeof data.next === 'object' &&
+      data.next !== null
+    );
+  if (path === '/library/edit' || path === '/library/undo') return Array.isArray(data.results);
+  if (path === '/library/edits') return Array.isArray(data.changes);
   if (path === '/whoami')
     return (
       typeof data.name === 'string' &&
@@ -53,6 +64,25 @@ function validSuccess(path: string, value: unknown): boolean {
     return typeof data.expiresAt === 'string' && Number.isFinite(Date.parse(data.expiresAt));
   return false;
 }
+
+export type LibraryPage = {
+  rev: number;
+  more: boolean;
+  next: { rev: number; key: string };
+  items: { kind: string; id: string; rev: number; deleted: boolean; doc: unknown }[];
+};
+export type EditResult = { kind: string; id: string; status: string; rev?: number; doc?: unknown };
+export type ChangeEntry = {
+  id: string;
+  requestId: string;
+  kind: string;
+  itemId: string;
+  beforeRev: number;
+  afterRev: number;
+  label: string;
+  at: number;
+  undoneAt: number | null;
+};
 
 export function createAgentClient(app: string, token: string, deps: AgentClientDeps) {
   async function request<T>(
@@ -122,6 +152,22 @@ export function createAgentClient(app: string, token: string, deps: AgentClientD
       request<{ id: string; expiresAt: number; created: boolean }>('/inbox', 'POST', body),
     createShare: (body: { body: string; kind: 'trip'; keepUntil?: string; deleteToken: string }) =>
       request<{ id: string; expiresAt: string; created: boolean }>('/share', 'POST', body),
+    libraryChanges: (next: { rev: number; key: string }) =>
+      request<LibraryPage>(
+        `/library/changes?since=${next.rev}${next.key ? '&after=' + encodeURIComponent(next.key) : ''}`,
+      ),
+    libraryEdits: () => request<{ changes: ChangeEntry[] }>('/library/edits'),
+    libraryEdit: (body: {
+      v: 1;
+      requestId: string;
+      ops: { op: 'put' | 'delete'; kind: string; id: string; baseRev: number; doc?: unknown }[];
+    }) => request<{ rev: number; results: EditResult[] }>('/library/edit', 'POST', body),
+    libraryUndo: (body: { ids: string[] } | { requestId: string }) =>
+      request<{ results: { id: string; status: string }[]; more?: boolean }>(
+        '/library/undo',
+        'POST',
+        body,
+      ),
     deleteShare: (id: string, deleteToken: string) =>
       request<null>('/share/' + encodeURIComponent(id), 'DELETE', undefined, {
         'X-Delete-Token': deleteToken,
@@ -131,6 +177,7 @@ export function createAgentClient(app: string, token: string, deps: AgentClientD
 /** 서버가 보낸 문구는 쓰지 않고 상태와 알려진 코드만 옮긴다. */
 export function toIssue(status: number, body: unknown): TripIssue {
   if (status === 404) return issue('old-server');
+  if (status === 410) return issue('resync');
   const code =
     body !== null && typeof body === 'object' && 'error' in body ? body.error : undefined;
   const allowed: Record<number, readonly string[]> = {

@@ -34,6 +34,7 @@ export const ACCOUNT_DATA_TABLES: string[] = [
   'library_backups',
   'agent_inbox',
   'agent_tokens',
+  'agent_changes',
 ];
 export type MeReply = {
   userId: string;
@@ -75,7 +76,7 @@ const isRecord = (v: unknown): v is Record<string, unknown> =>
   !!v && typeof v === 'object' && !Array.isArray(v);
 const integer = (v: unknown): v is number =>
   typeof v === 'number' && Number.isSafeInteger(v) && v >= 0;
-const idPattern = /^[A-Za-z0-9]{1,64}$/;
+export const idPattern = /^[A-Za-z0-9]{1,64}$/;
 const devicePattern = /^[a-z0-9]{16}$/;
 export function parsePullQuery(url: URL): PullQuery {
   const q = url.searchParams;
@@ -103,10 +104,12 @@ type StateRow = { rev: number; purged_rev: number; purged_at: number };
 type ItemRow = { kind: ItemKind; id: string; rev: number; deleted: number; doc: string };
 export async function pullChanges(
   db: MeetDb,
-  user: SyncUser,
+  user: Pick<SyncUser, 'userId'> & Partial<Pick<SyncUser, 'sessionId'>>,
   q: PullQuery,
   now: number,
 ): Promise<{ body: string; purgedAt: number } | { resync: number }> {
+  // 기기 등록은 동기화 세션이 있을 때만 한다(에이전트 읽기는 기기를 만들지 않는다).
+  if (q.deviceId !== null && !user.sessionId) invalid('device');
   const state = await db
     .prepare('SELECT rev, purged_rev, purged_at FROM library_state WHERE user_id = ?')
     .bind(user.userId)
@@ -128,7 +131,7 @@ export async function pullChanges(
   const next = last
     ? { rev: last.rev, key: itemKey(last.kind, last.id) }
     : { rev: q.since, key: q.after };
-  if (state && !more && q.deviceId)
+  if (state && !more && q.deviceId && user.sessionId)
     await db
       .prepare(
         `INSERT INTO library_devices (user_id, device_id, session_id, last_rev, last_sync_at, created_at) SELECT ?1, ?2, ?3, ?4, ?5, ?5 WHERE (SELECT count(*) FROM library_devices WHERE user_id = ?1) < ${DEVICE_MAX} OR EXISTS (SELECT 1 FROM library_devices WHERE user_id = ?1 AND device_id = ?2) ON CONFLICT(user_id, device_id) DO UPDATE SET session_id = excluded.session_id, last_rev = excluded.last_rev, last_sync_at = excluded.last_sync_at WHERE library_devices.session_id <> excluded.session_id OR library_devices.last_sync_at <= excluded.last_sync_at - ${DEVICE_TOUCH_MS}`,
@@ -205,14 +208,18 @@ export type PushReply = {
   rev: number;
   results: { kind: ItemKind; id: string; rev: number; doc?: unknown }[];
   rejected: { kind: ItemKind; id: string; reason: 'invalid' | 'too-large' | 'clock' }[];
+  /** `noMerge`일 때만 싣는다. 저장된 rev가 `baseRev`와 달라 쓰지 않은 항목과 현재 문서(행이 없으면 `null`). */
+  conflicts?: { kind: ItemKind; id: string; rev: number; doc: unknown }[];
 };
 const utf8Bytes = (text: string) => new TextEncoder().encode(text).byteLength;
 export async function pushItems(
   db: MeetDb,
-  user: SyncUser,
+  user: Pick<SyncUser, 'userId'>,
   body: PushBody,
   now: number,
   quota: { items: number; bytes: number } = LIBRARY_QUOTA,
+  // noMerge: 저장된 rev가 baseRev(없는 행은 0)와 다르면 병합하지 않고 conflict로 돌려준다(AI 편집).
+  opts: { noMerge?: boolean } = {},
 ): Promise<PushReply> {
   const accepted: { item: PushItem; doc: AnyItem; text: string }[] = [];
   const rejected: PushReply['rejected'] = [];
@@ -230,25 +237,44 @@ export async function pushItems(
     const doc = (decoded as { ok: true; doc: AnyItem }).doc;
     accepted.push({ item, doc, text: stableStringify(doc) });
   }
+  // noMerge에서 앞 시도에 이미 끝난 항목. 기본 병합 방식에서는 늘 비어 있다.
+  const settled = {
+    results: [] as PushReply['results'],
+    tooLarge: [] as PushReply['rejected'],
+    conflicts: [] as NonNullable<PushReply['conflicts']>,
+  };
+  let pending = accepted;
   for (let attempt = 0; attempt < 3; attempt++) {
     const state = await db
       .prepare('SELECT rev FROM library_state WHERE user_id = ?')
       .bind(user.userId)
       .first<{ rev: number }>();
     const r0 = state?.rev ?? 0;
-    const rows = accepted.length
+    const rows = pending.length
       ? (
           await db
             .prepare(
               // 행 값 IN이라 기본 키(user_id, kind, item_id)로 찾는다(사용자 행 전체를 훑지 않음).
               "SELECT kind, item_id AS id, rev, deleted, doc FROM library_items WHERE user_id = ?1 AND (kind, item_id) IN (SELECT json_extract(value, '$[0]'), json_extract(value, '$[1]') FROM json_each(?2))",
             )
-            .bind(user.userId, JSON.stringify(accepted.map((a) => [a.item.kind, a.item.id])))
+            .bind(user.userId, JSON.stringify(pending.map((a) => [a.item.kind, a.item.id])))
             .all<ItemRow>()
         ).results
       : [];
     const byKey = new Map(rows.map((r) => [itemKey(r.kind, r.id), r]));
-    const evaluated = accepted.map((a) => {
+    if (opts.noMerge)
+      pending = pending.filter((a) => {
+        const stored = byKey.get(itemKey(a.item.kind, a.item.id));
+        if ((stored?.rev ?? 0) === a.item.baseRev) return true;
+        settled.conflicts.push({
+          kind: a.item.kind,
+          id: a.item.id,
+          rev: stored?.rev ?? 0,
+          doc: stored ? JSON.parse(stored.doc) : null,
+        });
+        return false;
+      });
+    const evaluated = pending.map((a) => {
       const stored = byKey.get(itemKey(a.item.kind, a.item.id));
       const doc =
         !stored || stored.rev === a.item.baseRev
@@ -325,30 +351,69 @@ export async function pushItems(
           .bind(user.userId, now),
         db
           .prepare(
-            `INSERT INTO library_items (user_id, kind, item_id, rev, doc, deleted, deleted_at, refs, device_id, updated_at) SELECT ?1, json_extract(value, '$.kind'), json_extract(value, '$.id'), (SELECT rev FROM library_state WHERE user_id = ?1), json_extract(value, '$.doc'), json_extract(value, '$.deleted'), json_extract(value, '$.deletedAt'), json_extract(value, '$.refs'), ?2, ?3 FROM json_each(?4) WHERE true ON CONFLICT(user_id, kind, item_id) DO UPDATE SET rev = excluded.rev, doc = excluded.doc, deleted = excluded.deleted, deleted_at = CASE WHEN excluded.deleted = 0 THEN NULL WHEN library_items.deleted = 1 THEN library_items.deleted_at ELSE excluded.deleted_at END, refs = excluded.refs, device_id = excluded.device_id, updated_at = excluded.updated_at WHERE library_items.rev <= ?5`,
+            `INSERT INTO library_items (user_id, kind, item_id, rev, doc, deleted, deleted_at, refs, device_id, updated_at) SELECT ?1, json_extract(value, '$.kind'), json_extract(value, '$.id'), (SELECT rev FROM library_state WHERE user_id = ?1), json_extract(value, '$.doc'), json_extract(value, '$.deleted'), json_extract(value, '$.deletedAt'), json_extract(value, '$.refs'), ?2, ?3 FROM json_each(?4) WHERE true ON CONFLICT(user_id, kind, item_id) DO UPDATE SET rev = excluded.rev, doc = excluded.doc, deleted = excluded.deleted, deleted_at = CASE WHEN excluded.deleted = 0 THEN NULL WHEN library_items.deleted = 1 THEN library_items.deleted_at ELSE excluded.deleted_at END, refs = excluded.refs, device_id = excluded.device_id, updated_at = excluded.updated_at WHERE library_items.rev <= ?5${
+              // noMerge는 쓴 행의 키를 같은 문장에서 받는다(배치 뒤 다시 읽으면 다른 기기 변경과 섞인다).
+              opts.noMerge ? ' RETURNING kind, item_id AS id' : ''
+            }`,
           )
           .bind(user.userId, body.deviceId, now, JSON.stringify(data), r0),
         db.prepare('SELECT rev FROM library_state WHERE user_id = ?').bind(user.userId),
-      ])) as { meta: { changes: number }; results: { rev: number }[] }[];
-      if (batch[1]!.meta.changes < changed.length) continue;
-      rev = batch[2]!.results[0]!.rev;
+      ])) as {
+        meta: { changes: number };
+        results: { rev?: number; kind?: ItemKind; id?: string }[];
+      }[];
+      const writtenRows = opts.noMerge
+        ? (batch[1]!.results as { kind: ItemKind; id: string }[])
+        : null;
+      if ((writtenRows?.length ?? batch[1]!.meta.changes) < changed.length) {
+        if (!writtenRows) continue;
+        // RETURNING으로 받은 행만 이번에 쓴 것이다. 나머지는 읽은 뒤 다른 기기가 바꿨으니
+        // 다음 시도에서 원래 baseRev로 다시 검사한다(병합하지 않는다).
+        const wrote = batch[2]!.results[0]!.rev!;
+        const written = new Set(writtenRows.map((r) => itemKey(r.kind, r.id)));
+        const lost = changed.filter((e) => !written.has(itemKey(e.item.kind, e.item.id)));
+        settled.results.push(
+          ...kept
+            .filter((e) => !lost.includes(e))
+            .map((e) => ({
+              kind: e.item.kind,
+              id: e.item.id,
+              rev: e.changed ? wrote : e.stored!.rev,
+            })),
+        );
+        settled.tooLarge.push(
+          ...[...overQuota].map((e) => ({
+            kind: e.item.kind,
+            id: e.item.id,
+            reason: 'too-large' as const,
+          })),
+        );
+        pending = lost.map(({ item, doc, text }) => ({ item, doc, text }));
+        continue;
+      }
+      rev = batch[2]!.results[0]!.rev!;
     }
     return {
       rev,
+      ...(opts.noMerge ? { conflicts: settled.conflicts } : {}),
       rejected: [
         ...rejected,
+        ...settled.tooLarge,
         ...[...overQuota].map((e) => ({
           kind: e.item.kind,
           id: e.item.id,
           reason: 'too-large' as const,
         })),
       ],
-      results: kept.map((e) => ({
-        kind: e.item.kind,
-        id: e.item.id,
-        rev: e.changed ? rev : e.stored!.rev,
-        ...(e.resultText !== e.text ? { doc: e.result } : {}),
-      })),
+      results: [
+        ...settled.results,
+        ...kept.map((e) => ({
+          kind: e.item.kind,
+          id: e.item.id,
+          rev: e.changed ? rev : e.stored!.rev,
+          ...(e.resultText !== e.text ? { doc: e.result } : {}),
+        })),
+      ],
     };
   }
   throw new SyncHttpError(409, 'busy');

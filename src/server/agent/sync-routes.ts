@@ -4,6 +4,8 @@ import type { SyncContext, SyncDeps } from '../library-sync/env';
 import { SyncHttpError, syncJson } from '../library-sync/http';
 import { consumeCounter, counterKey } from '../library-sync/limits';
 import type { SyncRoute } from '../library-sync/router';
+import { listChanges } from './changes';
+import { parseUndoBody, undoChanges } from './library-edit';
 import { deleteInboxItem, listInbox, pruneInbox, readInboxItem } from './inbox';
 import {
   AGENT_LIMITS,
@@ -122,6 +124,27 @@ export const AGENT_SYNC_ROUTES: SyncRoute[] = [
       if (!(await deleteInboxItem(ctx.env.DB!, user.userId, params[0]!)))
         throw new SyncHttpError(404, 'not-found');
       return syncJson(204, null);
+    },
+  },
+  {
+    method: 'GET',
+    path: /^\/v1\/agent\/changes$/,
+    pattern: '/v1/agent/changes',
+    allowWhenOff: true,
+    async run(ctx, deps) {
+      const { user, now } = await inboxReader(ctx, deps);
+      return syncJson(200, { changes: await listChanges(ctx.env.DB!, user.userId, now) });
+    },
+  },
+  {
+    method: 'POST',
+    path: /^\/v1\/agent\/changes\/undo$/,
+    pattern: '/v1/agent/changes/undo',
+    allowWhenOff: true,
+    async run(ctx, deps) {
+      const { user, now } = await inboxReader(ctx, deps);
+      const target = parseUndoBody(await readJson(ctx.request, 8192));
+      return syncJson(200, await undoChanges(ctx.env.DB!, user, target, now));
     },
   },
 ];
