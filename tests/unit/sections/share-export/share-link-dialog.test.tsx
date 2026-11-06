@@ -60,6 +60,25 @@ async function setup(linkDoc = makeDoc) {
   return { ...view, d, copy: () => d.getByRole('button', { name: '링크 복사' }) };
 }
 
+function shareServer(...responses: Array<Response | Error>) {
+  vi.stubEnv('VITE_TURNSTILE_SITE_KEY', '');
+  const fetchMock = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>(async () => {
+    const next = responses.shift() ?? new Error('응답 없음');
+    if (next instanceof Error) throw next;
+    return next;
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  return fetchMock;
+}
+const createdResponse = () =>
+  Response.json(
+    { id: 'AAAAAAAAAAAAAAAA', expiresAt: '2026-11-27T00:00:00.000Z', created: true },
+    { status: 201 },
+  );
+const SHORT_URL = new RegExp(
+  `^${window.location.origin.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/s/AAAAAAAAAAAAAAAA#k=[A-Za-z0-9_-]{22}$`,
+);
+
 afterEach(() => {
   setAppRuntimeForTest(null);
   toastMock.mockReset();
@@ -79,44 +98,158 @@ describe('공유 창 링크 버튼', () => {
     props.onClose.mockClear();
   });
 
-  it('복사 성공을 알리고 제목·메모를 담은 앱 주소 링크를 복사한다', async () => {
+  it('누르면 짧은 링크를 만들어 바로 복사하고, 같은 입력이면 다시 만들지 않는다', async () => {
+    const user = userEvent.setup();
+    const fetchMock = shareServer(createdResponse(), createdResponse());
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+    const { d, copy } = await setup();
+    expect(
+      await d.findByText(
+        /^링크를 보내면 짧은 링크를 위해 암호화한 사본을 Landmark 서버에 .+까지 보관해요\. 링크를 받은 사람은 누구나 볼 수 있어요$/,
+      ),
+    ).toBeVisible();
+    await waitFor(() => expect(copy()).toBeEnabled());
+    expect(fetchMock).not.toHaveBeenCalled();
+    await user.click(copy());
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+    expect(writeText.mock.calls[0]![0]).toMatch(SHORT_URL);
+    expect(toastMock).toHaveBeenCalledWith('링크를 복사했어요');
+    expect(
+      d.getByText(
+        '짧은 링크를 만들었어요(11월 27일까지). 설정 › 보낸 짧은 링크에서 지울 수 있어요',
+      ),
+    ).toBeVisible();
+    await user.click(copy());
+    expect(writeText).toHaveBeenCalledTimes(2);
+    expect(writeText.mock.calls[1]![0]).toBe(writeText.mock.calls[0]![0]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    // 제목이 바뀌면 새로 만든다.
+    await user.type(d.getByRole('textbox', { name: '제목' }), '2');
+    await waitFor(() => expect(copy()).toBeEnabled());
+    await user.click(copy());
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+  });
+
+  it('짧은 링크를 만들지 못하면 안내하고, 그 창에서는 제목·메모를 담은 긴 링크를 복사한다', async () => {
     vi.stubEnv('VITE_APP_URL', 'https://app.test/');
     const user = userEvent.setup();
+    shareServer(new TypeError('끊김'));
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
     const { d, copy } = await setup();
     await waitFor(() => expect(copy()).toBeEnabled());
     await user.click(copy());
-    expect(writeText).toHaveBeenCalledTimes(1);
+    expect(await d.findByRole('alert')).toHaveTextContent(
+      '인터넷 연결을 확인해 주세요. 링크 복사를 이용해 주세요',
+    );
+    expect(writeText).not.toHaveBeenCalled();
+    await user.click(copy());
     const url = writeText.mock.calls[0]![0] as string;
     expect(url).toMatch(/^https:\/\/app.test\/view#d=/);
     expect(await readShareHash(new URL(url).hash.slice(3))).toEqual({ ok: true, doc });
     expect(toastMock).toHaveBeenCalledWith('링크를 복사했어요');
-    const title = d.getByRole('textbox', { name: '제목' });
-    await user.clear(title);
-    await user.type(title, '바뀐 제목');
     await user.click(d.getByRole('checkbox', { name: '메모 포함' }));
     await waitFor(() => expect(copy()).toBeEnabled());
+    // 메모를 끄면 다른 긴 링크라 짧은 링크를 다시 만들려 한다(이번엔 서버 응답이 없어 실패).
+    await user.click(copy());
+    expect(await d.findByRole('alert')).toBeVisible();
     await user.click(copy());
     const changed = await readShareHash(
       new URL(writeText.mock.calls[1]![0] as string).hash.slice(3),
     );
-    expect(changed.ok && changed.doc.title).toBe('바뀐 제목');
     expect(changed.ok && changed.doc.places[0]!.memo).toBeUndefined();
   });
 
-  it('복사가 거부되면 창 안에 실패를 알린다', async () => {
+  it('짧은 링크를 기다리는 사이 메모를 끄고 다시 복사하면, 늦게 끝난 앞 요청은 클립보드를 덮어쓰지 않는다', async () => {
     const user = userEvent.setup();
-    Object.defineProperty(navigator, 'clipboard', {
-      configurable: true,
-      value: { writeText: vi.fn().mockRejectedValue(new Error('거부')) },
-    });
+    let first!: (r: Response) => void;
+    vi.stubEnv('VITE_TURNSTILE_SITE_KEY', '');
+    const fetchMock = vi
+      .fn<() => Promise<Response>>()
+      .mockImplementationOnce(() => new Promise<Response>((r) => (first = r)))
+      .mockResolvedValueOnce(
+        Response.json(
+          { id: 'BBBBBBBBBBBBBBBB', expiresAt: '2026-11-27T00:00:00.000Z', created: true },
+          { status: 201 },
+        ),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+    const { d, copy } = await setup();
+    await waitFor(() => expect(copy()).toBeEnabled());
+    await user.click(copy());
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    await user.click(d.getByRole('checkbox', { name: '메모 포함' }));
+    await waitFor(() => expect(copy()).toBeEnabled());
+    await user.click(copy());
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+    expect(writeText.mock.calls[0]![0]).toContain('/s/BBBBBBBBBBBBBBBB#k=');
+    await act(async () => first(createdResponse()));
+    expect(writeText).toHaveBeenCalledTimes(1);
+  });
+
+  it('짧은 링크를 기다리는 사이 메모만 꺼도, 늦게 끝난 요청은 옛 링크를 복사하지 않는다', async () => {
+    const user = userEvent.setup();
+    let first!: (r: Response) => void;
+    vi.stubEnv('VITE_TURNSTILE_SITE_KEY', '');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => new Promise<Response>((r) => (first = r))),
+    );
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+    const { d, copy } = await setup();
+    await waitFor(() => expect(copy()).toBeEnabled());
+    await user.click(copy());
+    await waitFor(() => expect(first).toBeDefined());
+    await user.click(d.getByRole('checkbox', { name: '메모 포함' }));
+    await waitFor(() => expect(copy()).toBeEnabled());
+    await act(async () => first(createdResponse()));
+    expect(writeText).not.toHaveBeenCalled();
+    expect(toastMock).not.toHaveBeenCalled();
+  });
+
+  it('짧은 링크가 꺼져 있으면 알리고, 그 창에서는 긴 링크를 복사한다', async () => {
+    const user = userEvent.setup();
+    shareServer(
+      Response.json(
+        { reason: 'off', error: { code: 'UNAVAILABLE', message: '꺼짐' } },
+        { status: 503 },
+      ),
+    );
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
     const { d, copy } = await setup();
     await waitFor(() => expect(copy()).toBeEnabled());
     await user.click(copy());
     expect(await d.findByRole('alert')).toHaveTextContent(
+      '지금은 짧은 링크를 만들 수 없어요. 링크 복사를 이용해 주세요',
+    );
+    await user.click(copy());
+    expect(writeText.mock.calls[0]![0]).toContain('/view#d=');
+  });
+
+  it('만든 뒤 복사가 막히면 한 번 더 누르게 하고, 그때도 거부되면 창 안에 알린다', async () => {
+    const user = userEvent.setup();
+    shareServer(createdResponse());
+    const writeText = vi.fn().mockRejectedValue(new Error('거부'));
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+    const { d, copy } = await setup();
+    await waitFor(() => expect(copy()).toBeEnabled());
+    await user.click(copy());
+    expect(
+      await d.findByText(
+        '짧은 링크를 만들었어요(11월 27일까지). `링크 복사`를 한 번 더 눌러 주세요. 설정 › 보낸 짧은 링크에서 지울 수 있어요',
+      ),
+    ).toBeVisible();
+    expect(d.queryByRole('alert')).toBeNull();
+    await user.click(copy());
+    expect(await d.findByRole('alert')).toHaveTextContent(
       '링크를 복사하지 못했어요. 다시 시도해 주세요',
     );
+    expect(writeText.mock.calls[1]![0]).toMatch(SHORT_URL);
     expect(toastMock).not.toHaveBeenCalled();
   });
 
@@ -129,15 +262,19 @@ describe('공유 창 링크 버튼', () => {
     expect(d.queryByText('링크를 받은 사람은 누구나 메모를 볼 수 있어요')).toBeNull();
   });
 
-  it('링크 공유는 미리 만든 URL과 제목으로 호출한다(파일 공유 불가여도 표시)', async () => {
+  it('링크 공유는 짧은 링크를 만든 뒤 한 번 더 누르면 그 주소와 제목으로 호출한다', async () => {
     const user = userEvent.setup();
+    shareServer(createdResponse());
     const share = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, 'share', { configurable: true, value: share });
     const { d } = await setup();
     const button = d.getByRole('button', { name: '링크 공유' });
     await waitFor(() => expect(button).toBeEnabled());
     await user.click(button);
-    expect(share).toHaveBeenCalledWith({ title: '시험', url: expect.stringContaining('/view#d=') });
+    expect(await d.findByText(/`링크 공유`를 한 번 더 눌러 주세요/)).toBeVisible();
+    expect(share).not.toHaveBeenCalled();
+    await user.click(button);
+    expect(share).toHaveBeenCalledWith({ title: '시험', url: expect.stringMatching(SHORT_URL) });
   });
 
   it('압축 기능이 없으면 링크 버튼·메모 안내를 숨긴다', async () => {
@@ -163,7 +300,7 @@ describe('공유 창 링크 버튼', () => {
   });
 
   it('복사가 늦게 끝나도 닫힌 창의 성공 토스트를 띄우지 않는다', async () => {
-    let done!: () => void;
+    let done: (() => void) | undefined;
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
       value: {
@@ -173,11 +310,13 @@ describe('공유 창 링크 버튼', () => {
           }),
       },
     });
+    shareServer(createdResponse());
     const { copy, rerender } = await setup();
     await waitFor(() => expect(copy()).toBeEnabled());
     fireEvent.click(copy());
+    await waitFor(() => expect(done).toBeDefined());
     rerender(<ShareFileDialog {...props} open={false} />);
-    await act(async () => done());
+    await act(async () => done!());
     expect(toastMock).not.toHaveBeenCalled();
   });
 });
@@ -192,9 +331,12 @@ it.each(['실패', '취소'])('링크 공유 %s를 구분해 안내한다', asyn
         new DOMException(kind, kind === '취소' ? 'AbortError' : 'NotAllowedError'),
       ),
   });
+  shareServer(createdResponse());
   const { d } = await setup();
   const button = d.getByRole('button', { name: '링크 공유' });
   await waitFor(() => expect(button).toBeEnabled());
+  await user.click(button);
+  await d.findByText(/`링크 공유`를 한 번 더 눌러 주세요/);
   await user.click(button);
   if (kind === '취소') expect(d.queryByRole('alert')).toBeNull();
   else
@@ -261,22 +403,6 @@ describe('카카오톡 공유', () => {
     }).join('');
     return () => ({ ...doc, places: [{ ...doc.places[0]!, memo }] });
   }
-  function shareServer(...responses: Array<Response | Error>) {
-    vi.stubEnv('VITE_TURNSTILE_SITE_KEY', '');
-    const fetchMock = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>(async () => {
-      const next = responses.shift() ?? new Error('응답 없음');
-      if (next instanceof Error) throw next;
-      return next;
-    });
-    vi.stubGlobal('fetch', fetchMock);
-    return fetchMock;
-  }
-  const createdResponse = () =>
-    Response.json(
-      { id: 'AAAAAAAAAAAAAAAA', expiresAt: '2026-11-27T00:00:00.000Z', created: true },
-      { status: 201 },
-    );
-
   it('한도(400자)를 넘는 링크는 누를 때 짧은 링크를 만들고 다음 클릭에서 보낸다', async () => {
     const sdk = kakao();
     vi.stubEnv('VITE_APP_URL', 'https://app.test');
@@ -284,7 +410,7 @@ describe('카카오톡 공유', () => {
     const { d, copy } = await setup(longDoc());
     expect(
       await d.findByText(
-        /^카카오톡으로 보내면 짧은 링크를 위해 암호화한 사본을 Landmark 서버에 .+까지 보관해요\. 링크를 받은 사람은 누구나 볼 수 있어요$/,
+        /^링크를 보내면 짧은 링크를 위해 암호화한 사본을 Landmark 서버에 .+까지 보관해요\. 링크를 받은 사람은 누구나 볼 수 있어요$/,
       ),
     ).toBeVisible();
     const button = d.getByRole('button', { name: '카카오톡' });
@@ -381,9 +507,9 @@ describe('카카오톡 공유', () => {
     expect(button).toBeDisabled();
     await waitFor(() => expect(document.querySelector('script[src*="kakaocdn"]')).not.toBeNull());
     fireEvent.error(document.querySelector('script[src*="kakaocdn"]')!);
-    expect(await d.findByRole('status')).toHaveTextContent(
-      '카카오톡을 불러오지 못했어요. 링크 복사를 이용해 주세요',
-    );
+    expect(
+      await d.findByText('카카오톡을 불러오지 못했어요. 링크 복사를 이용해 주세요'),
+    ).toBeVisible();
     await waitFor(() => expect(copy()).toBeEnabled());
     expect(button).toBeDisabled();
   });

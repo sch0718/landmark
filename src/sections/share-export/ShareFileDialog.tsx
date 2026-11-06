@@ -9,7 +9,7 @@ import FormControlLabel from '@mui/material/FormControlLabel';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { Effect, Result } from 'effect';
-import { useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { toast } from 'sonner';
 import { HelpButton } from 'src/components/HelpButton';
 import type { ShareDoc } from 'src/schema/share';
@@ -29,7 +29,7 @@ import {
 import { ShareTemplate } from 'src/services/share-template';
 import { formatShortExpiry, shortExpiresAt } from 'src/domain/share/short-link';
 import { useShareLink } from './use-share-link';
-import { SHORT_FAILED, useShortLink } from './use-short-link';
+import { SHORT_FAILED, useShortLink, type ShortMeta } from './use-short-link';
 import {
   useKakao,
   kakaoUrlFits,
@@ -196,72 +196,131 @@ export function ShareFileDialog({
   const kakao = useKakao(open && linksSupported);
   const kakaoTooLong = link?.kind === 'direct' && !kakaoUrlFits(link.href);
   const linkDisabled = disabled || link?.kind !== 'direct';
-  // 긴 링크가 카카오톡 한도를 넘으면 누를 때 짧은 링크를 만들고, 다음 클릭에서 보낸다(올리기가 비동기라서).
+  // 받는 사람이 긴 링크를 꺼리므로 `링크 복사`·`링크 공유`도 짧은 링크를 먼저 쓴다. 누를 때 만들고(올리기가 비동기라서),
+  // 복사는 만든 직후 바로 해 본다. 브라우저가 막으면(사용자 동작이 끝남) 한 번 더 누르게 안내한다. 공유 창은 사용자 동작
+  // 직후에만 열려서 늘 한 번 더 누른다. 만들기가 실패하면(확인 실패는 다시 시도) 그 창에서는 긴 링크를 쓴다.
+  // 카카오톡은 한도(400자)를 넘을 때만 짧은 링크가 필요하고, 실패해도 다시 눌러 만들 수 있다.
   const short = useShortLink(open, link?.kind === 'direct' ? link.href : null);
   const shortState = short.state;
   const shortMeta = link?.kind === 'direct' ? link.short : undefined;
   const shortOff = shortState.status === 'failed' && shortState.error === 'switched-off';
-  const shortUsable = kakaoTooLong && shortMeta !== undefined && !shortOff;
+  const shortFallback = shortState.status === 'failed' && shortState.error !== 'turnstile';
+  const shortFirst = shortMeta !== undefined && !shortFallback;
+  const kakaoShort = kakaoTooLong && shortMeta !== undefined && !shortOff;
+  const shortCreating = shortState.status === 'creating';
+  // 만든 뒤 한 번 더 눌러야 하는 단추(그 긴 링크에 대해서만).
+  const [again, setAgain] = useState<{ href: string; kind: 'copy' | 'share' } | null>(null);
+  const againKind =
+    shortState.status === 'ready' && link?.kind === 'direct' && again?.href === link.href
+      ? again.kind
+      : null;
   const [openedAt, setOpenedAt] = useState(() => new Date());
   const [shortSession, setShortSession] = useState(open);
   if (open !== shortSession) {
     setShortSession(open);
-    if (open) setOpenedAt(new Date());
+    if (open) {
+      setOpenedAt(new Date());
+      setAgain(null);
+    }
   }
-  const shortNotice = !shortUsable
-    ? null
-    : shortState.status === 'ready'
-      ? `짧은 링크를 만들었어요(${formatShortExpiry(shortState.expiresAt, openedAt)}까지). 설정 › 보낸 짧은 링크에서 지울 수 있어요`
-      : `카카오톡으로 보내면 짧은 링크를 위해 암호화한 사본을 Landmark 서버에 ${formatShortExpiry(
-          shortExpiresAt(shortMeta.kind, shortMeta.keepUntil, openedAt),
-          openedAt,
-        )}까지 보관해요. 링크를 받은 사람은 누구나 볼 수 있어요`;
+  const shortNotice =
+    shortMeta === undefined || (!shortFirst && !kakaoShort)
+      ? null
+      : shortState.status === 'ready'
+        ? `짧은 링크를 만들었어요(${formatShortExpiry(shortState.expiresAt, openedAt)}까지). ${
+            againKind === null
+              ? ''
+              : `\`${againKind === 'copy' ? '링크 복사' : '링크 공유'}\`를 한 번 더 눌러 주세요. `
+          }설정 › 보낸 짧은 링크에서 지울 수 있어요`
+        : shortCreating
+          ? '짧은 링크 만드는 중…'
+          : `링크를 보내면 짧은 링크를 위해 암호화한 사본을 Landmark 서버에 ${formatShortExpiry(
+              shortExpiresAt(shortMeta.kind, shortMeta.keepUntil, openedAt),
+              openedAt,
+            )}까지 보관해요. 링크를 받은 사람은 누구나 볼 수 있어요`;
+  // 꺼짐은 카카오톡 단추 옆 안내(`KAKAO_TOO_LONG`)가 보일 때는 그것이 대신한다.
+  const kakaoOffShown = kakao.enabled && !kakao.failed && kakaoTooLong;
   const shortError =
-    shortUsable && shortState.status === 'failed' ? SHORT_FAILED[shortState.error] : null;
-  const kakaoLabel = !shortUsable
+    shortState.status === 'failed' && !(shortOff && kakaoOffShown)
+      ? SHORT_FAILED[shortState.error]
+      : null;
+  const kakaoLabel = !kakaoShort
     ? '카카오톡'
-    : shortState.status === 'creating'
+    : shortCreating
       ? '짧은 링크 만드는 중…'
       : shortState.status === 'ready'
         ? '카카오톡으로 보내기'
         : '카카오톡';
   const kakaoDisabled =
-    linkDisabled ||
-    !kakao.ready ||
-    (kakaoTooLong && !shortUsable) ||
-    shortState.status === 'creating';
+    linkDisabled || !kakao.ready || (kakaoTooLong && !kakaoShort) || shortCreating;
   const runKakao = () => {
     if (kakaoDisabled || link?.kind !== 'direct') return;
     setError(null);
-    if (kakaoTooLong) {
-      if (shortState.status !== 'ready') {
-        if (shortMeta !== undefined) void short.create(link.href, trimmed, shortMeta);
-        return;
-      }
+    if (kakaoTooLong && shortState.status !== 'ready') {
+      setAgain(null);
+      if (shortMeta !== undefined) void short.create(link.href, trimmed, shortMeta);
+      return;
     }
     if (
       !sendAppKakao({
         title: trimmed,
-        url: shortState.status === 'ready' && kakaoTooLong ? shortState.url : link.href,
+        url: shortState.status === 'ready' ? shortState.url : link.href,
         description: kakaoDescription,
         buttonTitle: kakaoButtonTitle,
       })
     )
       setError(KAKAO_SEND_FAILED);
   };
+  // 마지막으로 누른 복사·공유. 짧은 링크를 기다리는 사이 입력을 바꿔 다시 누르면, 앞 요청이 끝나도 옛 링크(예: 메모 포함)로
+  // 클립보드를 덮어쓰지 않게 한다.
+  const linkOpRef = useRef(0);
+  // 제목·메모·후보를 바꿔 긴 링크가 달라지면, 기다리던 자동 복사도 무효로 한다.
+  const longHref = link?.kind === 'direct' ? link.href : null;
+  useEffect(() => {
+    linkOpRef.current += 1;
+  }, [longHref]);
+  const copyText = async (url: string, stale: () => boolean) => {
+    await navigator.clipboard.writeText(url);
+    if (!stale()) toast('링크를 복사했어요');
+  };
+  /** 짧은 링크를 만들고, 복사면 바로 해 본다. 막히면 한 번 더 누르게 안내한다. */
+  const makeShort = async (kind: 'copy' | 'share', href: string, meta: ShortMeta) => {
+    const runId = runIdRef.current;
+    const op = ++linkOpRef.current;
+    const stale = () => runIdRef.current !== runId || linkOpRef.current !== op;
+    setError(null);
+    setAgain(null);
+    const url = await short.create(href, trimmed, meta);
+    if (url === null || stale()) return;
+    if (kind === 'copy') {
+      try {
+        await copyText(url, stale);
+        return;
+      } catch {
+        // 만드는 동안 사용자 동작이 끝나 클립보드가 막혔다. 아래에서 다시 누르게 한다.
+      }
+    }
+    if (!stale()) setAgain({ href, kind });
+  };
   const runLink = async (kind: 'copy' | 'share') => {
-    if (busyRef.current || linkDisabled || link?.kind !== 'direct') return;
+    if (busyRef.current || linkDisabled || shortCreating || link?.kind !== 'direct') return;
+    if (shortFirst && shortMeta !== undefined && shortState.status !== 'ready') {
+      void makeShort(kind, link.href, shortMeta);
+      return;
+    }
+    const url = shortState.status === 'ready' ? shortState.url : link.href;
+    linkOpRef.current += 1;
     const runId = runIdRef.current;
     const stale = () => runIdRef.current !== runId;
     busyRef.current = true;
     setBusy(true);
     setError(null);
+    setAgain(null);
     try {
       if (kind === 'copy') {
-        await navigator.clipboard.writeText(link.href);
-        if (!stale()) toast('링크를 복사했어요');
+        await copyText(url, stale);
       } else {
-        await navigator.share({ title: trimmed, url: link.href });
+        await navigator.share({ title: trimmed, url });
       }
     } catch (e) {
       if (!stale() && !isAbort(e)) {
@@ -383,7 +442,7 @@ export function ShareFileDialog({
               <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
                 <Button
                   variant="outlined"
-                  disabled={linkDisabled}
+                  disabled={linkDisabled || shortCreating}
                   onClick={() => void runLink('copy')}
                   sx={{ minHeight: 44 }}
                 >
@@ -392,7 +451,7 @@ export function ShareFileDialog({
                 {typeof navigator.share === 'function' && (
                   <Button
                     variant="outlined"
-                    disabled={linkDisabled}
+                    disabled={linkDisabled || shortCreating}
                     onClick={() => void runLink('share')}
                     sx={{ minHeight: 44 }}
                   >
@@ -410,7 +469,7 @@ export function ShareFileDialog({
                   </Button>
                 )}
               </Box>
-              {kakao.enabled && (kakao.failed || (kakaoTooLong && !shortUsable)) && (
+              {kakao.enabled && (kakao.failed || (kakaoTooLong && !kakaoShort)) && (
                 <Typography
                   role="status"
                   variant="body2"
@@ -419,7 +478,7 @@ export function ShareFileDialog({
                   {kakao.failed ? KAKAO_LOAD_FAILED : KAKAO_TOO_LONG}
                 </Typography>
               )}
-              {kakao.enabled && !kakao.failed && shortNotice !== null && (
+              {shortNotice !== null && (
                 <Typography
                   role="status"
                   variant="body2"
@@ -428,7 +487,7 @@ export function ShareFileDialog({
                   {shortNotice}
                 </Typography>
               )}
-              {kakao.enabled && shortError !== null && (
+              {shortError !== null && (
                 <Typography role="alert" variant="body2" color="error">
                   {shortError}
                 </Typography>

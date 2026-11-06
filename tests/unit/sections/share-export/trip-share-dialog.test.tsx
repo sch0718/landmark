@@ -68,7 +68,16 @@ afterEach(() => {
 const dialog = () => screen.getByRole('dialog', { name: '일정 공유' });
 const saveButton = () => within(dialog()).getByRole('button', { name: '파일 저장' });
 const memoBox = () => within(dialog()).getByRole('checkbox', { name: '메모 포함' });
-const statusLine = () => within(dialog()).getByRole('status');
+// 링크 단추 아래의 짧은 링크 안내도 상태 줄이라, 경로 상태 줄만 고른다.
+const routeStatuses = (d: HTMLElement) =>
+  within(d)
+    .queryAllByRole('status')
+    .filter((el) => !el.textContent?.includes('짧은 링크'));
+const statusLine = () => {
+  const [line, ...rest] = routeStatuses(dialog());
+  if (line === undefined || rest.length > 0) throw new Error('경로 상태 줄이 하나가 아니에요');
+  return line;
+};
 
 /** 여행 목록 카드 메뉴에서 일정 공유 창을 연다. */
 async function openFromList(user: ReturnType<typeof userEvent.setup>, title = '강릉 여행') {
@@ -179,7 +188,7 @@ describe('일정 공유 창', () => {
     const user = userEvent.setup();
     await open(withTrip(plannerLibrary(), makeTrip({ stops: [[P1]] })), { path: '/trips' });
     const d = await openFromList(user);
-    expect(within(d).queryByRole('status')).not.toBeInTheDocument();
+    expect(routeStatuses(d)).toHaveLength(0);
   });
 
   it('일정이 0곳이고 후보도 없으면 안내를 보이고 저장을 막는다', async () => {

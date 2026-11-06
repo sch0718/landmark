@@ -18,7 +18,7 @@ export const SHORT_FAILED: Record<ShortLinkError | 'turnstile-load', string> = {
   'turnstile-load': '확인 도구를 불러오지 못했어요. 링크 복사를 이용해 주세요',
   turnstile: '확인에 실패했어요. 다시 해 주세요',
   'rate-limited': '오늘 만들 수 있는 짧은 링크를 다 썼어요. 링크 복사를 이용해 주세요',
-  'switched-off': '링크가 길어 카카오톡으로 보낼 수 없어요. 링크 복사를 이용해 주세요',
+  'switched-off': '지금은 짧은 링크를 만들 수 없어요. 링크 복사를 이용해 주세요',
   unavailable: '짧은 링크를 만들지 못했어요. 링크 복사를 이용해 주세요',
   'not-found': '짧은 링크를 만들지 못했어요. 링크 복사를 이용해 주세요',
   unauthorized: '짧은 링크를 만들지 못했어요. 링크 복사를 이용해 주세요',
@@ -35,8 +35,9 @@ export function shortMetaOf(doc: ShareDoc): ShortMeta {
 type Attempt = { body: string; key: string; deleteToken: string };
 
 /**
- * 카카오톡용 짧은 링크. 사용자가 누를 때만 서버에 올리고, 창이 열려 있는 동안 긴 링크(제목·메모 포함이 담김)별로 기억한다.
- * 창을 닫으면 모두 잊고, 닫은 뒤 끝난 요청은 화면에 반영하지 않는다(만든 링크는 기기 목록에는 남는다).
+ * 공유 창의 짧은 링크(`링크 복사`·`링크 공유`·`카카오톡`이 함께 쓴다). 사용자가 누를 때만 서버에 올리고, 창이 열려 있는
+ * 동안 긴 링크(제목·메모 포함이 담김)별로 기억한다. 창을 닫으면 모두 잊고, 닫은 뒤 끝난 요청은 화면에 반영하지 않는다
+ * (만든 링크는 기기 목록에는 남는다). `create`는 만든 주소를, 실패했거나 창이 닫혔으면 null을 돌려준다.
  */
 export function useShortLink(open: boolean, longHref: string | null) {
   const [states, setStates] = useState<ReadonlyMap<string, ShortLinkState>>(new Map());
@@ -56,57 +57,58 @@ export function useShortLink(open: boolean, longHref: string | null) {
   const set = (href: string, state: ShortLinkState) =>
     setStates((prev) => new Map(prev).set(href, state));
 
-  const create = useCallback(async (href: string, title: string, meta: ShortMeta) => {
-    const run = runId.current;
-    const live = () => runId.current === run;
-    set(href, { status: 'creating' });
-    let attempt = attempts.current.get(href);
-    try {
-      if (!attempt) {
-        const hash = new URL(href).hash.replace(/^#d=/, '');
-        attempt = { ...(await encryptShareHash(hash)), deleteToken: newDeleteToken() };
-        attempts.current.set(href, attempt);
+  const create = useCallback(
+    async (href: string, title: string, meta: ShortMeta): Promise<string | null> => {
+      const run = runId.current;
+      const live = () => runId.current === run;
+      set(href, { status: 'creating' });
+      let attempt = attempts.current.get(href);
+      try {
+        if (!attempt) {
+          const hash = new URL(href).hash.replace(/^#d=/, '');
+          attempt = { ...(await encryptShareHash(hash)), deleteToken: newDeleteToken() };
+          attempts.current.set(href, attempt);
+        }
+      } catch {
+        if (live()) set(href, { status: 'failed', error: 'invalid' });
+        return null;
       }
-    } catch {
-      if (live()) set(href, { status: 'failed', error: 'invalid' });
-      return;
-    }
-    let turnstile: string;
-    try {
-      turnstile = await getTurnstileToken();
-    } catch {
-      if (live()) set(href, { status: 'failed', error: 'turnstile-load' });
-      return;
-    }
-    const result = await shareApi.create({
-      body: attempt.body,
-      kind: meta.kind,
-      keepUntil: meta.keepUntil,
-      turnstile,
-      deleteToken: attempt.deleteToken,
-    });
-    if (!result.ok) {
-      if (live()) set(href, { status: 'failed', error: result.error });
-      return;
-    }
-    const { id, expiresAt } = result.value;
-    sentLinks.add({
-      id,
-      deleteToken: attempt.deleteToken,
-      title,
-      kind: meta.kind,
-      createdAt: new Date().toISOString(),
-      expiresAt,
-    });
-    if (!live()) return;
-    // 사본을 올린 곳(지금 출처의 `/api/share`)과 같은 주소여야 열린다. `VITE_APP_URL`이 다른 배포를 가리켜도
-    // 그 배포의 D1에는 이 링크가 없다. 카카오 SDK도 등록한 출처에서만 동작하므로 지금 출처를 쓴다.
-    set(href, {
-      status: 'ready',
-      url: `${window.location.origin}/s/${id}#k=${attempt.key}`,
-      expiresAt: new Date(expiresAt),
-    });
-  }, []);
+      let turnstile: string;
+      try {
+        turnstile = await getTurnstileToken();
+      } catch {
+        if (live()) set(href, { status: 'failed', error: 'turnstile-load' });
+        return null;
+      }
+      const result = await shareApi.create({
+        body: attempt.body,
+        kind: meta.kind,
+        keepUntil: meta.keepUntil,
+        turnstile,
+        deleteToken: attempt.deleteToken,
+      });
+      if (!result.ok) {
+        if (live()) set(href, { status: 'failed', error: result.error });
+        return null;
+      }
+      const { id, expiresAt } = result.value;
+      sentLinks.add({
+        id,
+        deleteToken: attempt.deleteToken,
+        title,
+        kind: meta.kind,
+        createdAt: new Date().toISOString(),
+        expiresAt,
+      });
+      if (!live()) return null;
+      // 사본을 올린 곳(지금 출처의 `/api/share`)과 같은 주소여야 열린다. `VITE_APP_URL`이 다른 배포를 가리켜도
+      // 그 배포의 D1에는 이 링크가 없다. 카카오 SDK도 등록한 출처에서만 동작하므로 지금 출처를 쓴다.
+      const url = `${window.location.origin}/s/${id}#k=${attempt.key}`;
+      set(href, { status: 'ready', url, expiresAt: new Date(expiresAt) });
+      return url;
+    },
+    [],
+  );
 
   const state: ShortLinkState = (longHref === null ? undefined : states.get(longHref)) ?? {
     status: 'idle',
