@@ -104,10 +104,12 @@ type StateRow = { rev: number; purged_rev: number; purged_at: number };
 type ItemRow = { kind: ItemKind; id: string; rev: number; deleted: number; doc: string };
 export async function pullChanges(
   db: MeetDb,
-  user: SyncUser,
+  user: Pick<SyncUser, 'userId'> & Partial<Pick<SyncUser, 'sessionId'>>,
   q: PullQuery,
   now: number,
 ): Promise<{ body: string; purgedAt: number } | { resync: number }> {
+  // 기기 등록은 동기화 세션이 있을 때만 한다(에이전트 읽기는 기기를 만들지 않는다).
+  if (q.deviceId !== null && !user.sessionId) invalid('device');
   const state = await db
     .prepare('SELECT rev, purged_rev, purged_at FROM library_state WHERE user_id = ?')
     .bind(user.userId)
@@ -129,7 +131,7 @@ export async function pullChanges(
   const next = last
     ? { rev: last.rev, key: itemKey(last.kind, last.id) }
     : { rev: q.since, key: q.after };
-  if (state && !more && q.deviceId)
+  if (state && !more && q.deviceId && user.sessionId)
     await db
       .prepare(
         `INSERT INTO library_devices (user_id, device_id, session_id, last_rev, last_sync_at, created_at) SELECT ?1, ?2, ?3, ?4, ?5, ?5 WHERE (SELECT count(*) FROM library_devices WHERE user_id = ?1) < ${DEVICE_MAX} OR EXISTS (SELECT 1 FROM library_devices WHERE user_id = ?1 AND device_id = ?2) ON CONFLICT(user_id, device_id) DO UPDATE SET session_id = excluded.session_id, last_rev = excluded.last_rev, last_sync_at = excluded.last_sync_at WHERE library_devices.session_id <> excluded.session_id OR library_devices.last_sync_at <= excluded.last_sync_at - ${DEVICE_TOUCH_MS}`,

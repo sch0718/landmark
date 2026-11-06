@@ -6,6 +6,7 @@ import { ApiError } from '../http';
 import type { SyncContext, SyncDeps } from '../library-sync/env';
 import { syncError, SyncHttpError, syncJson } from '../library-sync/http';
 import { consumeCounter, counterKey } from '../library-sync/limits';
+import { parsePullQuery, pullChanges, PUSH_MAX_BYTES } from '../library-sync/library';
 import { ensureSchema } from '../meet/db';
 import { hashToken } from '../meet/tokens';
 import {
@@ -17,6 +18,8 @@ import {
   SHARE_REQUEST_MAX_BYTES,
 } from '../share/handlers';
 import { requireAgentToken, type AgentPrincipal } from './auth';
+import { listChanges, pruneChanges } from './changes';
+import { editItems, parseEditBody, parseUndoBody, undoChanges } from './library-edit';
 import { checkInboxDoc, findPendingInbox, parseInboxBody, pruneInbox, putInbox } from './inbox';
 import { AGENT_LIMITS, type AgentScope } from './tokens';
 
@@ -26,6 +29,8 @@ export type AgentRoute = {
   pattern: string;
   scope: AgentScope | null;
   allowWhenOff?: true;
+  /** 값이 'off'인 AGENT_EDIT이면 토큰 검사 전에 막는다. */
+  editSwitch?: true;
   run(ctx: SyncContext, deps: SyncDeps, who: AgentPrincipal, params: string[]): Promise<Response>;
 };
 
@@ -37,8 +42,9 @@ async function consume(
   action: string,
   max: number,
   now: number,
+  amount = 1,
 ): Promise<void> {
-  if (!(await consumeCounter(ctx.env.DB!, counterKey(action, who.userId, now), 1, max)))
+  if (!(await consumeCounter(ctx.env.DB!, counterKey(action, who.userId, now), amount, max)))
     throw new SyncHttpError(429, 'rate-limited');
 }
 
@@ -120,6 +126,68 @@ export const AGENT_ROUTES: AgentRoute[] = [
       return syncJson(204, null);
     },
   },
+  {
+    method: 'GET',
+    path: /^\/v1\/library\/changes$/,
+    pattern: '/v1/library/changes',
+    scope: 'library:read',
+    async run(ctx, deps, who) {
+      const now = deps.now();
+      const url = new URL(ctx.request.url);
+      // 에이전트 읽기는 기기 동기화가 아니라 서버 사본 읽기다.
+      if (url.searchParams.has('device'))
+        throw new SyncHttpError(422, 'invalid', { path: 'device' });
+      const query = parsePullQuery(url);
+      await consume(ctx, who, 'agent-library-read', AGENT_LIMITS.libraryRead, now);
+      const result = await pullChanges(ctx.env.DB!, who, { ...query, deviceId: null }, now);
+      if ('resync' in result) return syncJson(410, { error: 'resync', purgedRev: result.resync });
+      return new Response(result.body, {
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Cache-Control': 'private, no-store',
+        },
+      });
+    },
+  },
+  {
+    method: 'GET',
+    path: /^\/v1\/library\/edits$/,
+    pattern: '/v1/library/edits',
+    scope: 'library:read',
+    async run(ctx, deps, who) {
+      const now = deps.now();
+      await consume(ctx, who, 'agent-library-read', AGENT_LIMITS.libraryRead, now);
+      return syncJson(200, { changes: await listChanges(ctx.env.DB!, who.userId, now) });
+    },
+  },
+  {
+    method: 'POST',
+    path: /^\/v1\/library\/edit$/,
+    pattern: '/v1/library/edit',
+    scope: 'library:write',
+    editSwitch: true,
+    async run(ctx, deps, who) {
+      const now = deps.now();
+      const body = parseEditBody(await readLimitedJson(ctx.request, PUSH_MAX_BYTES));
+      await consume(ctx, who, 'agent-edit', AGENT_LIMITS.edit, now, body.ops.length);
+      const reply = await editItems(ctx.env.DB!, who, body, now);
+      ctx.waitUntil(pruneChanges(ctx.env.DB!, who.userId, now).catch(() => undefined));
+      return syncJson(200, reply);
+    },
+  },
+  {
+    method: 'POST',
+    path: /^\/v1\/library\/undo$/,
+    pattern: '/v1/library/undo',
+    scope: 'library:write',
+    editSwitch: true,
+    async run(ctx, deps, who) {
+      const now = deps.now();
+      const target = parseUndoBody(await readLimitedJson(ctx.request, SHARE_REQUEST_MAX_BYTES));
+      await consume(ctx, who, 'agent-library-read', AGENT_LIMITS.libraryRead, now);
+      return syncJson(200, await undoChanges(ctx.env.DB!, who, target, now));
+    },
+  },
 ];
 
 export async function handleAgent(ctx: SyncContext, deps: SyncDeps): Promise<Response> {
@@ -138,6 +206,7 @@ export async function handleAgent(ctx: SyncContext, deps: SyncDeps): Promise<Res
     if (!ctx.env.DB) throw new SyncHttpError(503, 'config');
     await ensureSchema(ctx.env.DB);
     if (ctx.env.AGENT_API === 'off' && !route.allowWhenOff) throw new SyncHttpError(503, 'off');
+    if (route.editSwitch && ctx.env.AGENT_EDIT === 'off') throw new SyncHttpError(503, 'off');
     const who = await requireAgentToken(ctx, deps, route.scope);
     response = await route.run(ctx, deps, who, route.path.exec(path)!.slice(1));
   } catch (error) {

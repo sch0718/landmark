@@ -14,6 +14,8 @@ export type SyncEnv = {
   AUTO_BACKUP?: string;
   /** 'off'면 AI 연결 토큰 경로와 새 발급을 막는다(목록·철회·받은함 읽기·지우기·짧은 링크 지우기는 됨) */
   AGENT_API?: string;
+  /** 'off'면 에이전트 edit·undo를 막는다(읽기·앱 기록 조회·되돌리기는 됨). 값이 없으면 켜짐. */
+  AGENT_EDIT?: string;
   SHARE_SHORT?: string;
   FIREBASE_PROJECT_ID?: string;
   ALLOWED_EMAILS?: string;

@@ -417,3 +417,18 @@ it('개수 상한은 행을 더할 때만 보고, 묘비 면제분은 다른 항
   expect(reply.rejected).toEqual([{ kind: 'place', id: 'place00001', reason: 'too-large' }]);
   expect(reply.results.map((r) => r.id)).toEqual(['place00002']);
 });
+it('세션 없는 사용자는 deviceId null로 읽고 기기 행을 만들지 않는다', async () => {
+  await pushItems(db, user, body([place()]), now);
+  const bare = { userId: user.userId };
+  const read = await pullChanges(
+    db,
+    bare,
+    { since: 0, after: '', limit: 500, deviceId: null },
+    now,
+  );
+  expect('body' in read && JSON.parse(read.body).items).toHaveLength(1);
+  await expect(
+    pullChanges(db, bare, { since: 0, after: '', limit: 500, deviceId: device }, now),
+  ).rejects.toMatchObject({ status: 422, code: 'invalid', extra: { path: 'device' } });
+  expect(await db.prepare('SELECT count(*) AS n FROM library_devices').first()).toEqual({ n: 0 });
+});

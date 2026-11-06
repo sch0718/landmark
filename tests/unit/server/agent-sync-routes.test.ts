@@ -212,4 +212,85 @@ describe('세션 AI 연결 경로', () => {
     await error(await request('/agent/inbox/bad'), 404, 'not-found');
     await error(await request('/agent/inbox/bad', 'DELETE'), 404, 'not-found');
   });
+
+  describe('AI 변경 기록·되돌리기', () => {
+    const requestId = '11111111-2222-4333-8444-555555555555';
+    const t = '2026-10-01T00:00:00.000Z';
+    const f = <T>(value: T) => ({ value, updatedAt: t });
+    async function seedChange() {
+      const issued = await issue();
+      const user = await userId(issued.token);
+      const { issueAgentToken } = await import('src/server/agent/tokens');
+      const { productionDeps } = await import('src/server/library-sync/env');
+      const lib = await issueAgentToken(
+        server.db,
+        user,
+        { name: '보관함', scopes: ['library:read', 'library:write'] },
+        productionDeps(),
+      );
+      secrets.push(lib.token);
+      const doc = {
+        id: 'place00001',
+        source: { kind: 'pin' },
+        name: f('장소'),
+        address: '',
+        lng: 127,
+        lat: 37,
+        category: f(null),
+        memo: f('처음'),
+        labelIds: f([]),
+        saved: f(true),
+        createdAt: t,
+        deletedAt: null,
+      };
+      const edited = await server.agentFetch(origin + '/api/agent/v1/library/edit', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${lib.token}` },
+        body: JSON.stringify({
+          v: 1,
+          requestId,
+          ops: [{ op: 'put', kind: 'place', id: 'place00001', baseRev: 0, doc }],
+        }),
+      });
+      expect(edited.status).toBe(200);
+      return user;
+    }
+    it('기록 조회와 되돌리기는 두 스위치가 꺼져도 된다', async () => {
+      await seedChange();
+      server.env.AGENT_API = 'off';
+      server.env.AGENT_EDIT = 'off';
+      server.env.LIBRARY_SYNC = 'off';
+      const list = await request('/agent/changes');
+      expect(list.status).toBe(200);
+      const { changes } = (await list.json()) as { changes: { id: string; itemId: string }[] };
+      expect(changes).toMatchObject([{ itemId: 'place00001', undoneAt: null }]);
+      const undone = await request('/agent/changes/undo', 'POST', { ids: [changes[0]!.id] });
+      expect(await undone.json()).toEqual({ results: [{ id: changes[0]!.id, status: 'undone' }] });
+      const again = await request('/agent/changes/undo', 'POST', { requestId });
+      expect(await again.json()).toEqual({ results: [{ id: changes[0]!.id, status: 'already' }] });
+    });
+    it('세션과 본문을 검사하고 다른 사용자의 기록은 보이지 않는다', async () => {
+      await seedChange();
+      await error(
+        await request('/agent/changes', 'GET', undefined, { 'X-Landmark-Session': '' }),
+        401,
+        'missing-token',
+      );
+      for (const body of [
+        {},
+        { ids: [] },
+        { ids: [1] },
+        { ids: ['a'], requestId },
+        { requestId: 'x' },
+      ])
+        expect((await request('/agent/changes/undo', 'POST', body)).status).toBe(422);
+      server.env.ALLOWED_ACCOUNTS += ',kakao:dev-other';
+      session = await server.login('other');
+      secrets.push(session);
+      expect(await (await request('/agent/changes')).json()).toEqual({ changes: [] });
+      expect(await (await request('/agent/changes/undo', 'POST', { requestId })).json()).toEqual({
+        results: [],
+      });
+    });
+  });
 });

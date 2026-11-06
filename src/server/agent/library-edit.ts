@@ -12,7 +12,13 @@ import type { Trip } from '../../schema/trip';
 import { idPattern, LIBRARY_QUOTA, pushItems, type PushItem } from '../library-sync/library';
 import { SyncHttpError } from '../library-sync/http';
 import type { MeetDb } from '../meet/db';
-import { CHANGES_KEEP_MS, listRequestChanges, recordChanges, type ChangeRow } from './changes';
+import {
+  CHANGES_KEEP_MS,
+  CHANGES_MAX,
+  listRequestChanges,
+  recordChanges,
+  type ChangeRow,
+} from './changes';
 
 export const EDIT_MAX_OPS = 50;
 const LABEL_MAX_CHARS = 80;
@@ -68,6 +74,28 @@ export function parseEditBody(value: unknown): EditBody {
     seen.add(key);
   }
   return value as unknown as EditBody;
+}
+
+/** `undo` 본문: `{ ids }` 또는 `{ requestId }` 중 하나. */
+export function parseUndoBody(value: unknown): { ids: string[] } | { requestId: string } {
+  if (!isRecord(value)) invalid('');
+  const keys = Object.keys(value);
+  if (keys.length !== 1) invalid('');
+  if (keys[0] === 'requestId') {
+    if (typeof value.requestId !== 'string' || !uuidPattern.test(value.requestId))
+      invalid('requestId');
+    return { requestId: value.requestId };
+  }
+  if (keys[0] !== 'ids') invalid('');
+  const ids = value.ids;
+  if (
+    !Array.isArray(ids) ||
+    ids.length < 1 ||
+    ids.length > CHANGES_MAX ||
+    !ids.every((id) => typeof id === 'string' && uuidPattern.test(id))
+  )
+    invalid('ids');
+  return { ids: ids as string[] };
 }
 
 type Row = { kind: ItemKind; id: string; rev: number; deleted: number; doc: string };
