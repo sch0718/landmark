@@ -1,8 +1,19 @@
 export const AGENT_INBOX_KEY = 'tripmap:agent-inbox:v1';
-export type AgentInboxLocal = { v: 1; userId: string | null; notified: string[] };
+export type AgentInboxLocal = {
+  v: 1;
+  userId: string | null;
+  notified: string[];
+  /** 이미 알린 AI 변경 기록 id예요. 옛 값에는 없어 빈 배열로 읽어요. */
+  notifiedChanges: string[];
+};
+const KEEP = 100;
+const strings = (value: unknown): string[] =>
+  Array.isArray(value)
+    ? value.filter((id): id is string => typeof id === 'string').slice(-KEEP)
+    : [];
 
 export function readAgentInboxLocal(storage: Storage, userId: string | null): AgentInboxLocal {
-  const empty: AgentInboxLocal = { v: 1, userId, notified: [] };
+  const empty: AgentInboxLocal = { v: 1, userId, notified: [], notifiedChanges: [] };
   try {
     const value: unknown = JSON.parse(storage.getItem(AGENT_INBOX_KEY) ?? 'null');
     if (
@@ -20,7 +31,8 @@ export function readAgentInboxLocal(storage: Storage, userId: string | null): Ag
     return {
       v: 1,
       userId,
-      notified: value.notified.filter((id): id is string => typeof id === 'string').slice(-100),
+      notified: strings(value.notified),
+      notifiedChanges: 'notifiedChanges' in value ? strings(value.notifiedChanges) : [],
     };
   } catch {
     return empty;
@@ -34,7 +46,8 @@ export function writeAgentInboxLocal(storage: Storage, value: AgentInboxLocal): 
       JSON.stringify({
         v: 1,
         userId: value.userId,
-        notified: value.notified.slice(-100),
+        notified: value.notified.slice(-KEEP),
+        notifiedChanges: value.notifiedChanges.slice(-KEEP),
       }),
     );
   } catch {

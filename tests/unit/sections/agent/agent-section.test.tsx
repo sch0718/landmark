@@ -14,7 +14,7 @@ import {
   SYNC_META_KEY,
   SYNC_SESSION_KEY,
 } from 'src/services/library-sync/storage';
-import { agentInboxOpenAtom } from 'src/stores/agent-inbox';
+import { agentChangesOpenAtom, agentInboxOpenAtom } from 'src/stores/agent-inbox';
 import { OFF_STATUS, syncStatusAtom } from 'src/stores/sync-status';
 
 const mocks = vi.hoisted(() => ({
@@ -542,5 +542,43 @@ describe('새 AI 연결 창', () => {
       }),
     );
     expect(screen.queryByRole('textbox', { name: '연결 토큰' })).toBeNull();
+  });
+  describe('AI 변경 기록 단추', () => {
+    const writer = {
+      ...token,
+      id: 'w',
+      scopes: ['library:read' as const, 'library:write' as const],
+    };
+    const record = {
+      id: 'c1',
+      tokenId: 'w',
+      tokenName: '도우미',
+      requestId: 'r',
+      kind: 'place',
+      itemId: 'i',
+      beforeRev: 1,
+      afterRev: 2,
+      label: '카페',
+      at: now,
+      undoneAt: null,
+    };
+    it('보관함 쓰기 연결도 기록도 없으면 보이지 않아요', async () => {
+      vi.mocked(api.changes).mockResolvedValue({ ok: true, data: { changes: [] } });
+      mount();
+      await screen.findByText('받은 일정 없음');
+      expect(screen.queryByRole('button', { name: 'AI 변경 기록' })).toBeNull();
+    });
+    it('library:write 연결이 있으면 보여 주고 누르면 창 상태를 켜요', async () => {
+      vi.mocked(api.tokens).mockResolvedValue(list([writer]));
+      vi.mocked(api.changes).mockResolvedValue({ ok: true, data: { changes: [] } });
+      const { user, store } = mount();
+      await user.click(await screen.findByRole('button', { name: 'AI 변경 기록' }));
+      expect(store.get(agentChangesOpenAtom)).toBe(true);
+    });
+    it('연결이 없어도 기록이 있으면 보여요', async () => {
+      vi.mocked(api.changes).mockResolvedValue({ ok: true, data: { changes: [record] } });
+      mount();
+      expect(await screen.findByRole('button', { name: 'AI 변경 기록' })).toBeInTheDocument();
+    });
   });
 });

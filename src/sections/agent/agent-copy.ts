@@ -1,4 +1,4 @@
-import type { AgentTokenView, InboxItemView } from 'src/services/agent-inbox/api';
+import type { AgentChangeView, AgentTokenView, InboxItemView } from 'src/services/agent-inbox/api';
 
 function dateParts(value: string): [number, number, number] {
   return value.split('-').map(Number) as [number, number, number];
@@ -24,7 +24,7 @@ function calendarDay(date: Date): number {
   return Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / 86_400_000;
 }
 
-export function fromLine(item: InboxItemView, now: Date): string {
+export function fromLine(item: Pick<InboxItemView, 'from' | 'createdAt'>, now: Date): string {
   const received = new Date(item.createdAt);
   const gap = calendarDay(now) - calendarDay(received);
   const day =
@@ -60,4 +60,21 @@ export function lastUsedLabel(lastUsedAt: number | null, now: Date): string {
   const used = new Date(lastUsedAt);
   const gap = calendarDay(now) - calendarDay(used);
   return gap === 0 ? '오늘' : gap === 1 ? '어제' : monthDay(used);
+}
+
+const KIND_NAMES: Record<string, string> = {
+  label: '라벨',
+  place: '장소',
+  folder: '폴더',
+  trip: '여행',
+  meeting: '모임',
+};
+
+export function changeTitle(change: AgentChangeView): string {
+  return `${KIND_NAMES[change.kind] ?? '항목'} · ${change.label}`;
+}
+
+export function changeLine(change: AgentChangeView, now: Date): string {
+  const line = fromLine({ from: change.tokenName, createdAt: change.at }, now);
+  return change.undoneAt === null ? line : `${line} · 되돌림`;
 }
