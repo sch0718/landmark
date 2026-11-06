@@ -543,6 +543,40 @@ workerd 반복 중앙값은 5회씩 두 묶음 각각의 중앙값(묶음마다 
 
 이 저장소 작업에서는 워크스페이스 스킬을 고치지 않습니다. 스킬이 지킬 규약은 설계서의 「워크스페이스 스킬 연결 규약」을 따릅니다(`yarn --silent --cwd <저장소> trip <명령> <절대 경로> --json`).
 
+### AI의 보관함 편집
+
+토큰에 `library:read`·`library:write`를 둘 다 주면 AI가 보관함(장소·라벨·여행·폴더·약속)을 읽고 고칩니다. 쓰려면 두 범위가 모두 필요하고, 새 연결을 만들 때 설정 › 동기화 › AI 연결의 「보관함 읽기·쓰기」 스위치를 켜야만 받습니다(기본 꺼짐, 기존 토큰은 그대로 못 씁니다). 배경과 결정은 [설계서](superpowers/specs/2026-11-06-agent-library-edit-design.md)를 참고하며, 아래는 현재 코드 기준입니다.
+
+| 경로 | 범위 | 내용 |
+| --- | --- | --- |
+| `GET /api/agent/v1/library/changes?since=<rev>&limit=` | `library:read` | 동기화 `pullChanges`와 같은 항목 목록(`rev` 순) |
+| `GET /api/agent/v1/library/edits` | `library:read` | 이 사용자의 변경 기록 |
+| `POST /api/agent/v1/library/edit` | `library:write` | `{ v: 1, requestId, ops: [{ op, kind, id, baseRev, doc? }] }`, 한 번에 50개 |
+| `POST /api/agent/v1/library/undo` | `library:write` | `{ ids }` 또는 `{ requestId }` |
+| `GET /api/sync/v1/agent/changes`, `POST /api/sync/v1/agent/changes/undo` | 동기화 세션 | 앱의 `AI 변경 기록` 창용 |
+
+- **편집 규칙**: 항목마다 `baseRev`가 저장된 `rev`와 같아야 하고(새 항목은 0), 다르면 `conflict`와 현재 문서를 돌려줍니다. 병합하지 않으며 한 항목이 실패해도 나머지는 적용합니다. `put`은 `deletedAt: null`만 받고 삭제는 `delete`로만 합니다. 여행이 참조하는 장소가 없으면 `invalid-ref`, 여행이 쓰는 장소를 지우면 `referenced`입니다. 라벨 참조는 서버가 검사하지 않습니다. 같은 `requestId`로 다시 보내면 이미 적용된 항목은 건너뜁니다.
+- **한도**: 쓰기 하루 500항목(사용자의 모든 토큰 합산, 넘으면 `429 rate-limited`), 한 번에 50개, 읽기 하루 2000회입니다.
+- **`agent_changes`**(D1 스키마 8): 적용된 항목마다 고치기 전 문서와 `before_rev`·`after_rev`를 남깁니다. 사용자당 최근 100건·30일이며 `before_doc` 합계가 5MB를 넘으면 오래된 것부터 지웁니다. `서버 자료 모두 지우기`가 함께 지웁니다.
+- **되돌리기**: 지금 `rev`가 그 변경의 `after_rev`와 같을 때만 되돌리고, 다르면 `changed`로 건너뜁니다. 되돌리기도 새 `rev`를 만들므로 같은 항목에 AI 변경이 여러 번 쌓였으면 가장 최근 변경 하나만 되돌릴 수 있습니다. 한 번에 50건까지만 처리하고 `{ requestId }`는 응답의 `more`가 false가 될 때까지 되풀이해 부릅니다(앱·CLI가 자동으로 합니다). 결과는 `undone`·`changed`·`already`·`gone`(기록 만료)입니다.
+- **`AGENT_EDIT=off`**: `edit`·`undo`가 토큰 검사 전에 `503 off`가 됩니다. 읽기와 앱의 기록 조회·되돌리기는 꺼져도 동작합니다. `AGENT_API=off`는 이 경로도 함께 끕니다(앱의 되돌리기는 예외).
+- **알려진 한계**: 편집과 변경 기록 쓰기는 한 트랜잭션이 아니라서, 기록 쓰기가 D1 오류로 실패하면 이미 반영된 항목이 기록 없이 남을 수 있습니다(같은 `baseRev`로 다시 보내면 `conflict`라 AI가 다시 읽습니다). 없는 라벨을 가리키는 장소·폴더 수정은 기기의 `repairLibrary`가 참조를 떼어 내므로 일부가 사라질 수 있어, AI는 쓰기 전에 `library/changes`로 라벨을 확인합니다.
+
+CLI는 `yarn trip library list|get|put|delete|changes|undo`입니다(`--help`로 전체 사용법).
+
+```bash
+yarn --silent trip library list --kind trip --json
+yarn --silent trip library get trip <id> --json
+yarn --silent trip library put trip <id> --file 문서.json --base-rev <N> --json
+yarn --silent trip library delete place <id> --base-rev <N> --json
+yarn --silent trip library changes --json
+yarn --silent trip library undo <변경 id> --json    # 또는 --request <requestId>
+```
+
+`put`은 문서를 앱 스키마로 먼저 검사해 보내며, `conflict`·참조 오류는 서버 거절로 끝 코드 5와 사유를 냅니다.
+
+로컬에서 시험하려면 위 「로컬에서 키 없이 해 보기(AI 연결)」의 1~3단계로 `yarn dev:sync`와 로그인을 하고, AI 연결을 만들 때 `보관함 읽기·쓰기`를 켠 토큰을 키체인 `-a localhost:8795`나 `LANDMARK_AGENT_TOKEN`에 넣습니다. `yarn trip library list --app http://localhost:8795`로 읽고 `put`으로 고친 뒤, 설정 › 동기화 › AI 연결의 `AI 변경 기록`에서 `되돌리기`를 눌러 같은 값으로 돌아오는지 봅니다. 병합 뒤에는 미리보기에서 위 순서를 한 번 더 확인합니다.
+
 ### 공유 짧은 링크(`/s/<id>`)
 
 장소 내보내기·일정 공유의 긴 링크(`/view#d=…`)는 수천 자라 받는 사람이 열기를 꺼리고 카카오톡 한도(400자)도 넘으므로, `링크 복사`·`링크 공유`·`카카오톡`을 누르면 브라우저가 해시를 압축 바이트로 되돌려 AES-GCM(링크마다 새 128비트 키)으로 암호화해 D1에 올리고 `<지금 출처>/s/<16자 id>#k=<22자 키>`(운영 72자)를 받습니다. 링크는 `VITE_APP_URL`이 아니라 사본을 올린 지금 출처로 만듭니다(다른 배포의 D1에는 그 링크가 없다). 키는 링크의 해시에만 있어 서버로 가지 않습니다. 약속과 같은 D1·Turnstile·`IP_HASH_SALT`를 쓰므로 새 설정은 없습니다(`SHARE_SHORT`만 선택). 설계: `docs/superpowers/specs/2026-10-28-share-short-link-design.md`.
