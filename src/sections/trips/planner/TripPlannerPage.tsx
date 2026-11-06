@@ -247,13 +247,16 @@ function TimelinePane({
         </>
       ) : (
         // 넓은 화면: Day가 많아도 한눈에 고르도록 세로 목록을 시간표 왼쪽에 둔다.
-        <Box sx={{ flex: 1, minHeight: 0, display: 'flex' }}>
+        // 함께 편집 상태 줄은 그 위에 칸 너비 그대로 둔다.
+        <>
           <TripCollabSync tripId={trip.id} />
-          <DayTabs trip={trip} dayIndex={dayIndex} onSelect={onSelectDay} vertical />
-          <Box sx={{ flex: 1, minWidth: 0, minHeight: 0, overflow: 'auto' }}>
-            <DayTimeline trip={trip} dayIndex={dayIndex} plan={plan} />
+          <Box sx={{ flex: 1, minHeight: 0, display: 'flex' }}>
+            <DayTabs trip={trip} dayIndex={dayIndex} onSelect={onSelectDay} vertical />
+            <Box sx={{ flex: 1, minWidth: 0, minHeight: 0, overflow: 'auto' }}>
+              <DayTimeline trip={trip} dayIndex={dayIndex} plan={plan} />
+            </Box>
           </Box>
-        </Box>
+        </>
       )}
     </Box>
   );
