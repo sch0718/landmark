@@ -34,6 +34,7 @@ export const ACCOUNT_DATA_TABLES: string[] = [
   'library_backups',
   'agent_inbox',
   'agent_tokens',
+  'agent_changes',
 ];
 export type MeReply = {
   userId: string;
