@@ -12,7 +12,7 @@ import type { Trip } from '../../schema/trip';
 import { idPattern, LIBRARY_QUOTA, pushItems, type PushItem } from '../library-sync/library';
 import { SyncHttpError } from '../library-sync/http';
 import type { MeetDb } from '../meet/db';
-import { listRequestChanges, recordChanges, type ChangeRow } from './changes';
+import { CHANGES_KEEP_MS, listRequestChanges, recordChanges, type ChangeRow } from './changes';
 
 export const EDIT_MAX_OPS = 50;
 const LABEL_MAX_CHARS = 80;
@@ -226,4 +226,99 @@ export async function editItems(
     rev: reply.rev,
     results: body.ops.map((op) => results.get(itemKey(op.kind, op.id))!),
   };
+}
+
+export type UndoStatus = 'undone' | 'changed' | 'already' | 'gone';
+export type UndoReply = { results: { id: string; status: UndoStatus }[] };
+type UndoRow = {
+  id: string;
+  token_id: string;
+  kind: ItemKind;
+  item_id: string;
+  before_doc: string | null;
+  after_rev: number;
+  undone_at: number | null;
+};
+
+/** 설계서 「되돌리기」. 새 변경 기록은 만들지 않는다. 라우트·토큰·스위치 검사는 호출자가 한다. */
+export async function undoChanges(
+  db: MeetDb,
+  who: { userId: string },
+  target: { ids: string[] } | { requestId: string },
+  now: number,
+): Promise<UndoReply> {
+  const at = new Date(now).toISOString();
+  const cols = 'id, token_id, kind, item_id, before_doc, after_rev, undone_at';
+  const live = now - CHANGES_KEEP_MS;
+  const found = (
+    'ids' in target
+      ? await db
+          .prepare(
+            `SELECT ${cols} FROM agent_changes WHERE user_id = ?1 AND at > ?2 AND id IN (SELECT value FROM json_each(?3)) ORDER BY at DESC, rowid DESC`,
+          )
+          .bind(who.userId, live, JSON.stringify(target.ids))
+          .all<UndoRow>()
+      : await db
+          .prepare(
+            `SELECT ${cols} FROM agent_changes WHERE user_id = ?1 AND at > ?2 AND request_id = ?3 ORDER BY at DESC, rowid DESC`,
+          )
+          .bind(who.userId, live, target.requestId)
+          .all<UndoRow>()
+  ).results;
+
+  const results: UndoReply['results'] = [];
+  for (const change of found) {
+    const done = (status: UndoStatus) => results.push({ id: change.id, status });
+    if (change.undone_at !== null) {
+      done('already');
+      continue;
+    }
+    const current = await db
+      .prepare('SELECT rev, doc FROM library_items WHERE user_id = ? AND kind = ? AND item_id = ?')
+      .bind(who.userId, change.kind, change.item_id)
+      .first<{ rev: number; doc: string }>();
+    if (!current || current.rev !== change.after_rev) {
+      done('changed');
+      continue;
+    }
+    const now0 = JSON.parse(current.doc) as AnyItem;
+    const doc =
+      change.before_doc === null
+        ? { ...now0, deletedAt: at }
+        : stampChangedFields(now0, JSON.parse(change.before_doc), at);
+    const reply = await pushItems(
+      db,
+      { userId: who.userId },
+      {
+        v: 1,
+        deviceId: 'agnt' + change.token_id,
+        items: [
+          {
+            kind: change.kind,
+            id: change.item_id,
+            baseRev: change.after_rev,
+            baseDeleted: null,
+            doc: doc as AnyItem,
+          },
+        ],
+      },
+      now,
+      LIBRARY_QUOTA,
+      { noMerge: true },
+    );
+    if (!reply.results.length) {
+      done('changed');
+      continue;
+    }
+    await db
+      .prepare('UPDATE agent_changes SET undone_at = ? WHERE user_id = ? AND id = ?')
+      .bind(now, who.userId, change.id)
+      .run();
+    done('undone');
+  }
+  if ('ids' in target) {
+    const seen = new Set(found.map((c) => c.id));
+    for (const id of target.ids) if (!seen.has(id)) results.push({ id, status: 'gone' });
+  }
+  return { results };
 }

@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { editItems } from 'src/server/agent/library-edit';
+import { editItems, undoChanges } from 'src/server/agent/library-edit';
 import { pushItems } from 'src/server/library-sync/library';
 import { ensureSchema, type MeetStatement } from 'src/server/meet/db';
 import { SyncHttpError } from 'src/server/library-sync/http';
@@ -396,4 +396,122 @@ it('쓰기 직전 다른 기기의 수정·같은 id 생성은 재시도에서�
   expect((await records()).map((r) => [r.item_id, r.before_rev, r.after_rev])).toEqual([
     ['place00002', 1, 4],
   ]);
+});
+
+const undo = (target: { ids: string[] } | { requestId: string }, at = now) =>
+  undoChanges(db, { userId: who.userId }, target, at);
+const changeIds = async () =>
+  (
+    await db.prepare('SELECT id FROM agent_changes ORDER BY rowid').all<{ id: string }>()
+  ).results.map((r) => r.id);
+const parsed = async (kind: ItemKind, id: string) => JSON.parse((await row(kind, id))!.doc);
+
+it('되돌리기: 수정을 복원하고 바뀐 필드에 시각을 찍으며 새 기록은 만들지 않는다', async () => {
+  await seed([['place', place()]]);
+  await edit([put('place', { ...place(), memo: f('AI') }, 1)]);
+  const id = (await changeIds())[0]!;
+  const later = now + 1000;
+  expect(await undo({ ids: [id] }, later)).toEqual({ results: [{ id, status: 'undone' }] });
+  const doc = await parsed('place', 'place00001');
+  expect(doc.memo).toEqual({ value: '처음', updatedAt: new Date(later).toISOString() });
+  expect(doc.name.updatedAt).toBe(t);
+  expect((await row('place', 'place00001'))!.rev).toBe(3);
+  expect(await records()).toHaveLength(1);
+  expect(await undo({ ids: [id] }, later)).toEqual({ results: [{ id, status: 'already' }] });
+});
+
+it('되돌리기: AI가 새로 만든 항목은 묘비가 된다', async () => {
+  await edit([put('place', place())]);
+  const id = (await changeIds())[0]!;
+  expect((await undo({ ids: [id] })).results[0]!.status).toBe('undone');
+  const r = (await row('place', 'place00001'))!;
+  expect(r.deleted).toBe(1);
+  expect((JSON.parse(r.doc) as Place).deletedAt).toBe(iso);
+});
+
+it('되돌리기: AI가 지운 항목은 묘비가 풀린다', async () => {
+  await seed([['place', place()]]);
+  await edit([del('place', 'place00001', 1)]);
+  const id = (await changeIds())[0]!;
+  expect((await undo({ ids: [id] })).results[0]!.status).toBe('undone');
+  const r = (await row('place', 'place00001'))!;
+  expect(r.deleted).toBe(0);
+  expect((JSON.parse(r.doc) as Place).deletedAt).toBeNull();
+});
+
+it('되돌리기: 그 사이 다른 기기가 고쳤으면 changed이고 덮어쓰지 않는다', async () => {
+  await seed([['place', place()]]);
+  await edit([put('place', { ...place(), memo: f('AI') }, 1)]);
+  const id = (await changeIds())[0]!;
+  await otherDevice({ ...place(), name: f('다른 기기', '2026-10-20T00:00:00.000Z') }, 2);
+  expect(await undo({ ids: [id] })).toEqual({ results: [{ id, status: 'changed' }] });
+  expect((await parsed('place', 'place00001')).name.value).toBe('다른 기기');
+  expect(
+    (await db.prepare('SELECT undone_at FROM agent_changes').first<{ undone_at: number | null }>())!
+      .undone_at,
+  ).toBeNull();
+});
+
+it('되돌리기: 없는 id와 만료된 기록은 gone이다', async () => {
+  await seed([['place', place()]]);
+  await edit([put('place', { ...place(), memo: f('AI') }, 1)]);
+  const id = (await changeIds())[0]!;
+  const old = now + 31 * 24 * 60 * 60 * 1000;
+  expect(await undo({ ids: [id, 'nope'] }, old)).toEqual({
+    results: [
+      { id, status: 'gone' },
+      { id: 'nope', status: 'gone' },
+    ],
+  });
+});
+
+it('되돌리기: requestId 묶음은 같은 at이면 나중 기록부터 처리한다', async () => {
+  await edit([put('place', place()), put('place', place('place00002'))]);
+  const [a, b] = (await changeIds()) as [string, string];
+  expect(await undo({ requestId })).toEqual({
+    results: [
+      { id: b, status: 'undone' },
+      { id: a, status: 'undone' },
+    ],
+  });
+});
+
+it('되돌리기: 같은 항목의 변경 A·B에서 B를 되돌리면 A는 changed로 남는다', async () => {
+  await seed([['place', place()]]);
+  await edit(
+    [put('place', { ...place(), memo: f('A') }, 1)],
+    '11111111-2222-4333-8444-555555555551',
+  );
+  await edit(
+    [put('place', { ...place(), memo: f('B') }, 2)],
+    '11111111-2222-4333-8444-555555555552',
+  );
+  const [a, b] = (await changeIds()) as [string, string];
+  expect((await undo({ ids: [b] })).results[0]!.status).toBe('undone');
+  expect((await undo({ ids: [a] })).results[0]!.status).toBe('changed');
+  expect((await parsed('place', 'place00001')).memo.value).toBe('A');
+});
+
+it('되돌리기: 검사와 쓰기 사이 다른 기기 변경은 changed로 보존하고 기록을 남기지 않는다', async () => {
+  await seed([['place', place()]]);
+  await edit([put('place', { ...place(), memo: f('AI') }, 1)]);
+  const id = (await changeIds())[0]!;
+  const batch = db.batch.bind(db);
+  let armed = true;
+  vi.spyOn(db, 'batch').mockImplementation(async (stmts) => {
+    if (armed) {
+      armed = false;
+      await otherDevice({ ...place(), name: f('다른 기기', '2026-10-20T00:00:00.000Z') }, 2);
+    }
+    return batch(stmts);
+  });
+  expect(await undo({ ids: [id] })).toEqual({ results: [{ id, status: 'changed' }] });
+  const doc = await parsed('place', 'place00001');
+  // 다른 기기 문서가 그대로 남는다(되돌리기가 덮어쓰지 않음).
+  expect([doc.name.value, doc.memo.value]).toEqual(['다른 기기', '처음']);
+  expect((await row('place', 'place00001'))!.rev).toBe(3);
+  expect(
+    (await db.prepare('SELECT undone_at FROM agent_changes').first<{ undone_at: number | null }>())!
+      .undone_at,
+  ).toBeNull();
 });
