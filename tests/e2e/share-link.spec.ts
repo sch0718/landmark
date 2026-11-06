@@ -9,7 +9,7 @@ import {
   rowsOf,
   SEA_COUNT,
   seedStorage,
-  timeline,
+  openTripShare,
 } from './fixtures';
 
 /** Chromium은 실제 클립보드를 읽는다. WebKit에서는 권한 API가 없어 버튼 준비 상태까지만 확인한다. */
@@ -88,7 +88,7 @@ test('일정 링크 복사 → Day·지도 → 여행 가져오기', async ({ pa
   await addButton(page, '초당순두부 본점').click();
   await addButton(page, '경포대').click();
   await openSheetTab(page, 'Day 1');
-  await timeline(page).getByRole('button', { name: '일정 공유', exact: true }).click();
+  await openTripShare(page);
   const url = await copiedLink(
     page,
     page.getByRole('dialog', { name: '일정 공유' }),

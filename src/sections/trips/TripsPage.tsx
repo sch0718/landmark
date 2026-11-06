@@ -58,7 +58,6 @@ function TripCard({ trip, library, onMenu, liveShared, collabShared }: CardProps
       sx={{
         position: 'relative',
         listStyle: 'none',
-        mb: 1.25,
         border: '1px solid var(--tm-border)',
         borderRadius: 'var(--tm-radius-md)',
         bgcolor: 'var(--tm-bg-raised)',
@@ -146,7 +145,18 @@ function TripList({
   onMenu(trip: Trip, anchor: HTMLElement): void;
 }) {
   return (
-    <Box component="ul" aria-label={label} sx={{ m: 0, p: 0 }}>
+    // 넓은 화면은 카드를 여러 열로 놓아 가로 공간을 쓴다. 좁으면 한 열이다.
+    <Box
+      component="ul"
+      aria-label={label}
+      sx={{
+        m: 0,
+        p: 0,
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 320px), 1fr))',
+        gap: 1.25,
+      }}
+    >
       {trips.map((trip) => (
         <TripCard
           key={trip.id}
@@ -225,7 +235,7 @@ export function TripsPage() {
   const empty = upcoming.length === 0 && past.length === 0;
 
   return (
-    <Box sx={{ maxWidth: 640, mx: 'auto', px: 2, py: 2 }}>
+    <Box sx={{ maxWidth: 1200, mx: 'auto', px: 2, py: 2 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
         <Box component="h1" sx={{ m: 0, fontSize: 20, fontWeight: 800 }}>
           여행

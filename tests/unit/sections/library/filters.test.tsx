@@ -405,14 +405,14 @@ describe('visited sort', () => {
     expect(screen.getByRole('button', { name: '최근 저장순' })).toBeInTheDocument();
   });
 
-  it('라벨 관리 링크가 칩 줄의 첫 조작 요소다', async () => {
+  it('라벨 관리 링크가 칩 줄의 첫 조작 요소이고 스크롤 영역 밖에 있다', async () => {
     await renderLibrary(sampleLibrary(), { prefs: LIST });
     const link = screen.getByRole('link', { name: '라벨 관리' });
-    const group = screen.getByRole('group', { name: '라벨' });
-    const row = group.parentElement!;
-    const first = row.querySelector('a, button');
-    expect(first).toBe(link);
-    // 링크는 라벨 필터 묶음 밖에 있다.
-    expect(group).not.toContainElement(link);
+    const scroller = screen.getByRole('group', { name: '라벨 스크롤' });
+    const bar = link.parentElement!;
+    expect(bar).toContainElement(scroller);
+    expect(bar.querySelector('a, button')).toBe(link);
+    // 칩이 링크 밑으로 숨지 않게, 링크는 가로 스크롤 영역 밖에 있다.
+    expect(scroller).not.toContainElement(link);
   });
 });

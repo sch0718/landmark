@@ -212,7 +212,24 @@ export async function openSheetTab(
 ): Promise<void> {
   if (!isCompact(page)) return;
   const sheet = page.getByRole('region', { name: '일정 시트' });
-  await sheet.getByRole('tab', { name: name === 'candidates' ? /^후보 / : name }).click();
+  if (name === 'candidates') {
+    await sheet.getByRole('tab', { name: /^후보 / }).click();
+    return;
+  }
+  // 시트의 Day 탭은 지금 고른 Day 하나다. 다른 Day는 `Day 목록`에서 고른다.
+  const tab = sheet.getByRole('tab', { name, exact: true });
+  if (await tab.isVisible()) {
+    await tab.click();
+    return;
+  }
+  await sheet.getByRole('button', { name: 'Day 목록' }).click();
+  await page.getByRole('menuitem', { name: new RegExp(`^${name} `) }).click();
+}
+
+/** 계획 화면에서 일정 공유 창을 연다(Day 머리의 `여행 메뉴` → `일정 공유`). */
+export async function openTripShare(page: Page): Promise<void> {
+  await timeline(page).getByRole('button', { name: '여행 메뉴' }).click();
+  await page.getByRole('menuitem', { name: '일정 공유' }).click();
 }
 
 /** 계획 화면의 후보 칸(좁은 화면은 일정 시트). */

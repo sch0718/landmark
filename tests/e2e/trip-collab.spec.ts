@@ -9,6 +9,7 @@ import {
   openSheetTab,
   seedStorage,
   timeline,
+  openTripShare,
 } from './fixtures';
 import { createTripLiveServer } from './trip-live-server';
 
@@ -51,7 +52,7 @@ async function prepare(page: Page, browser: Browser, changedByOtherOwner = false
   for (const name of STOPS) await addButton(page, name).click();
   await openSheetTab(page, 'Day 1');
   await expect.poll(() => day1Names(page, STOPS)).toEqual(STOPS);
-  await timeline(page).getByRole('button', { name: '일정 공유', exact: true }).click();
+  await openTripShare(page);
   await page.getByRole('button', { name: '갱신 링크…' }).click();
   const live = page.getByRole('dialog', { name: /^갱신 링크/ });
   await live.getByRole('button', { name: '갱신 링크 만들기', exact: true }).click();

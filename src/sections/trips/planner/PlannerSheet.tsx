@@ -1,9 +1,14 @@
 import Box from '@mui/material/Box';
+import IconButton from '@mui/material/IconButton';
+import Menu from '@mui/material/Menu';
+import MenuItem from '@mui/material/MenuItem';
 import Tabs from '@mui/material/Tabs';
 import { useAtomValue } from 'jotai';
 import { useRef, useState, type MouseEvent, type PointerEvent } from 'react';
 import { HelpButton } from 'src/components/HelpButton';
-import { visibleCandidates } from 'src/domain/trips/query';
+import { ChevronDownIcon } from 'src/components/icons';
+import { tripDates, visibleCandidates, visibleStops } from 'src/domain/trips/query';
+import { shortDate } from 'src/sections/trips/trip-dates';
 import type { Library } from 'src/schema/library';
 import type { Trip } from 'src/schema/trip';
 import { CandidatePanel } from 'src/sections/trips/planner/CandidatePanel';
@@ -38,7 +43,8 @@ type Props = {
 /**
  * 좁은 화면의 일정 시트(스펙 §2.3): 지도 위 아래쪽에서 끌어올린다. 높이는 접힘(탭 줄만)·반쯤·거의 전체.
  * 손잡이를 누르면 접힘 → 반쯤 → 거의 전체 → 접힘으로 돌고, 위아래로 끌면 그 방향으로 한 단계 바뀐다.
- * 탭은 `후보 N`, `Day 1`, `Day 2` …이고 내용은 넓은 화면의 후보 칸·시간표와 같다.
+ * 탭은 `후보 N`과 지금 고른 `Day N` 둘이고, 옆 `Day 목록`(날짜·장소 수)에서 다른 Day를 고른다.
+ * Day가 많아도 탭 줄이 넘치지 않는다. 내용은 넓은 화면의 후보 칸·시간표와 같다.
  * 지도 위 카드가 열리면 지도가 보이도록 접는다.
  */
 export function PlannerSheet({ trip, library, dayIndex, plan, onSelectDay }: Props) {
@@ -57,6 +63,8 @@ export function PlannerSheet({ trip, library, dayIndex, plan, onSelectDay }: Pro
   const drag = useRef<{ y: number; pointerId: number } | null>(null);
   const skipClick = useRef(false);
   const candidateCount = visibleCandidates(library, trip).length;
+  const dates = tripDates(trip);
+  const [dayMenu, setDayMenu] = useState<HTMLElement | null>(null);
 
   const step = (direction: 1 | -1) => {
     const next = ORDER[ORDER.indexOf(snap) + direction];
@@ -169,10 +177,6 @@ export function PlannerSheet({ trip, library, dayIndex, plan, onSelectDay }: Pro
             // 이미 고른 탭을 다시 눌러도 접힌 시트는 연다.
             if (snap === 'collapsed') setSnap('half');
           }}
-          variant="scrollable"
-          // Day가 많아 탭이 넘치면 양옆 화살표로 보이지 않는 Day가 있다는 걸 알린다.
-          scrollButtons="auto"
-          allowScrollButtonsMobile
           aria-label="일정 시트 탭"
           sx={{ flex: 1, minWidth: 0, minHeight: 48 }}
         >
@@ -184,17 +188,52 @@ export function PlannerSheet({ trip, library, dayIndex, plan, onSelectDay }: Pro
             label={`후보 ${candidateCount}`}
             sx={{ textTransform: 'none' }}
           />
-          {trip.days.map((_, i) => (
-            <DropTab
-              key={i}
-              dropId={`tab:${i}`}
-              target={{ kind: 'day', dayIndex: i }}
-              value={i}
-              label={`Day ${i + 1}`}
-              sx={{ textTransform: 'none' }}
-            />
-          ))}
+          {/* Day 탭은 지금 고른 Day 하나다. 다른 Day는 옆 `Day 목록`에서 고른다. */}
+          <DropTab
+            key={dayIndex}
+            dropId={`tab:${dayIndex}`}
+            target={{ kind: 'day', dayIndex }}
+            value={dayIndex}
+            label={
+              <span>
+                {`Day ${dayIndex + 1}`}{' '}
+                {/* 날짜는 눈으로만 본다(탭 이름은 `Day N`). 목록에는 날짜가 함께 읽힌다. */}
+                <Box component="span" aria-hidden="true" sx={{ fontSize: 12 }}>
+                  {dates[dayIndex] === undefined ? '' : shortDate(dates[dayIndex])}
+                </Box>
+              </span>
+            }
+            sx={{ textTransform: 'none' }}
+          />
         </Tabs>
+        <IconButton
+          aria-label="Day 목록"
+          aria-haspopup="menu"
+          aria-expanded={dayMenu !== null}
+          onClick={(event) => setDayMenu(event.currentTarget)}
+          sx={{ flex: 'none', width: 44, height: 44 }}
+        >
+          <ChevronDownIcon aria-hidden="true" width={20} height={20} />
+        </IconButton>
+        <Menu anchorEl={dayMenu} open={dayMenu !== null} onClose={() => setDayMenu(null)}>
+          {trip.days.map((day, i) => (
+            <MenuItem
+              key={i}
+              selected={tab === 'day' && i === dayIndex}
+              onClick={() => {
+                setDayMenu(null);
+                select(i);
+              }}
+              sx={{ minHeight: 44, gap: 1 }}
+            >
+              <Box component="span" sx={{ fontWeight: 800 }}>{`Day ${i + 1}`}</Box>
+              <span>{dates[i] === undefined ? '' : shortDate(dates[i])}</span>
+              <Box component="span" sx={{ ml: 'auto', pl: 2, color: 'var(--tm-text-secondary)' }}>
+                {`${visibleStops(library, day).length}곳`}
+              </Box>
+            </MenuItem>
+          ))}
+        </Menu>
         {(snap === 'collapsed' || tab !== 'candidates') && <HelpButton page="trips" />}
       </Box>
       {/* 후보 칸이 그려지지 않으면(접힘·Day 탭) 화면 `h1`(여행 제목)을 눈에만 숨겨 남긴다. */}
