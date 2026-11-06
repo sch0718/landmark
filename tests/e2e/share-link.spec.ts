@@ -12,7 +12,10 @@ import {
   timeline,
 } from './fixtures';
 
-/** Chromium은 실제 클립보드를 읽는다. WebKit에서는 권한 API가 없어 버튼 준비 상태까지만 확인한다. */
+/**
+ * Chromium은 실제 클립보드를 읽는다. WebKit에서는 권한 API가 없어 버튼 준비 상태까지만 확인한다.
+ * `링크 복사`는 짧은 링크를 만들어 복사하므로, 부르기 전에 `installShareServer`를 켜 둔다.
+ */
 async function copiedLink(
   page: Page,
   dialog: Locator,
@@ -28,9 +31,18 @@ async function copiedLink(
   await expect(page.getByText('링크를 복사했어요')).toBeVisible();
   const url = await page.evaluate(() => navigator.clipboard.readText());
   expect(url).toMatch(
-    new RegExp(`^${base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/view#d=[A-Za-z0-9_-]+$`),
+    new RegExp(
+      `^${base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/s/[A-Za-z0-9_-]{16}#k=[A-Za-z0-9_-]{22}$`,
+    ),
   );
   return url;
+}
+
+/** 짧은 링크를 열면 같은 탭의 `/view#d=…`로 바뀐다. 바뀐 주소를 돌려준다. */
+async function openShortLink(page: Page, url: string): Promise<string> {
+  await page.goto(url);
+  await expect(page).toHaveURL(/\/view#d=[A-Za-z0-9_-]+$/);
+  return page.url();
 }
 
 /** 같은 탭에서 원래 해시 그대로 /import로 보낸다. 앱은 곧 주소를 /로 지운다. */
@@ -53,16 +65,18 @@ test('@smoke 장소 링크 복사 → 도메인 목록·지도 → 같은 탭 �
   browserName,
   baseURL,
 }) => {
+  const { installShareServer } = await import('./share-server');
+  page.context().once('close', await installShareServer(page.context()));
   await seedStorage(page, { prefs: { libraryView: 'list' } });
   await page.goto('/');
   await page.getByRole('group', { name: '라벨' }).getByRole('button', { name: /^바다/ }).click();
   await expect(rowsOf(page)).toHaveCount(SEA_COUNT);
   await page.getByRole('button', { name: '내보내기', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: '내보내기' });
-  const url = await copiedLink(page, dialog, browserName, baseURL!);
-  if (url === null) return;
+  const short = await copiedLink(page, dialog, browserName, baseURL!);
+  if (short === null) return;
   await emptyLibrary(page);
-  await page.goto(url);
+  const url = await openShortLink(page, short);
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('바다');
   await expect(page).toHaveTitle('바다');
   await expect(page.locator('meta[name="description"]')).toHaveAttribute(
@@ -83,21 +97,23 @@ test('@smoke 장소 링크 복사 → 도메인 목록·지도 → 같은 탭 �
 });
 
 test('일정 링크 복사 → Day·지도 → 여행 가져오기', async ({ page, browserName, baseURL }) => {
+  const { installShareServer } = await import('./share-server');
+  page.context().once('close', await installShareServer(page.context()));
   await mockRoutes(page);
   await createGangneungTrip(page);
   await addButton(page, '초당순두부 본점').click();
   await addButton(page, '경포대').click();
   await openSheetTab(page, 'Day 1');
   await timeline(page).getByRole('button', { name: '일정 공유', exact: true }).click();
-  const url = await copiedLink(
+  const short = await copiedLink(
     page,
     page.getByRole('dialog', { name: '일정 공유' }),
     browserName,
     baseURL!,
   );
-  if (url === null) return;
+  if (short === null) return;
   await emptyLibrary(page);
-  await page.goto(url);
+  const url = await openShortLink(page, short);
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('강릉 여행');
   await expect(page.getByRole('tablist', { name: 'Day 고르기' })).toBeVisible();
   await expect(
@@ -142,7 +158,7 @@ test('@smoke 장소 링크가 카카오톡 한도(400자)를 넘으면 짧은 �
     await expect(dialog.getByRole('button', { name: '링크 복사', exact: true })).toBeEnabled();
     await expect(
       dialog.getByText(
-        /^카카오톡으로 보내면 짧은 링크를 위해 암호화한 사본을 Landmark 서버에 .+까지 보관해요/,
+        /^링크를 보내면 짧은 링크를 위해 암호화한 사본을 Landmark 서버에 .+까지 보관해요/,
       ),
     ).toBeVisible();
     await dialog.getByRole('button', { name: '카카오톡', exact: true }).click();
