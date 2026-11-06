@@ -49,6 +49,7 @@ describe('받은함 문구', () => {
   });
   it('범위 순서를 고정해요', () => {
     expect(scopeLabel(['share:create', 'inbox:write'])).toBe('받은함·짧은 링크');
+    expect(scopeLabel(['inbox:write', 'library:read', 'library:write'])).toBe('받은함·보관함');
     expect(scopeLabel(['inbox:write'])).toBe('받은함');
     expect(scopeLabel(['share:create'])).toBe('짧은 링크');
   });

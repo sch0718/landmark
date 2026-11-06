@@ -18,7 +18,7 @@ import {
   SYNC_META_KEY,
   SYNC_SESSION_KEY,
 } from 'src/services/library-sync/storage';
-import { agentInboxOpenAtom } from 'src/stores/agent-inbox';
+import { agentChangesOpenAtom, agentInboxOpenAtom } from 'src/stores/agent-inbox';
 import { syncStatusAtom } from 'src/stores/sync-status';
 import { AgentTokenDialog } from './AgentTokenDialog';
 import { expiryLabel, lastUsedLabel, scopeLabel } from './agent-copy';
@@ -55,6 +55,8 @@ export function AgentSection(): JSX.Element | null {
 function SignedInAgentSection({ userId, sessionId }: { userId: string; sessionId: string }) {
   const api = useMemo(() => (userId && sessionId ? createAgentApi() : null), [userId, sessionId]);
   const [inboxOpen, setInboxOpen] = useAtom(agentInboxOpenAtom);
+  const [changesOpen, setChangesOpen] = useAtom(agentChangesOpenAtom);
+  const [hasChanges, setHasChanges] = useState(false);
   const [info, setInfo] = useState<
     Extract<Awaited<ReturnType<AgentApi['tokens']>>, { ok: true }>['data'] | null
   >(null);
@@ -91,7 +93,11 @@ function SignedInAgentSection({ userId, sessionId }: { userId: string; sessionId
       return;
     }
     try {
-      const [tokens, inbox] = await Promise.allSettled([api.tokens(), api.inbox()]);
+      const [tokens, inbox, changes] = await Promise.allSettled([
+        api.tokens(),
+        api.inbox(),
+        Promise.resolve().then(() => api.changes()),
+      ]);
       if (!current()) return;
       setNow(new Date(Date.now()));
       if (tokens.status === 'rejected') setFailure('server');
@@ -101,6 +107,11 @@ function SignedInAgentSection({ userId, sessionId }: { userId: string; sessionId
         setInboxCount(inbox.value.data.items.length);
         setInboxFailed(false);
       } else setInboxFailed(true);
+      setHasChanges(
+        changes.status === 'fulfilled' &&
+          changes.value?.ok === true &&
+          changes.value.data.changes.length > 0,
+      );
     } catch {
       if (current()) setFailure('server');
     } finally {
@@ -109,7 +120,7 @@ function SignedInAgentSection({ userId, sessionId }: { userId: string; sessionId
   }, [api, currentOwner]);
   useEffect(() => {
     let active = true;
-    if (!inboxOpen)
+    if (!inboxOpen && !changesOpen)
       queueMicrotask(() => {
         if (active) void refresh();
       });
@@ -117,7 +128,7 @@ function SignedInAgentSection({ userId, sessionId }: { userId: string; sessionId
       active = false;
       refreshRun.current += 1;
     };
-  }, [inboxOpen, refresh]);
+  }, [inboxOpen, changesOpen, refresh]);
   useEffect(
     () => () => {
       revokeRun.current += 1;
@@ -229,6 +240,11 @@ function SignedInAgentSection({ userId, sessionId }: { userId: string; sessionId
           >
             새 연결 만들기
           </Button>
+          {(hasChanges || info?.tokens.some((t) => t.scopes.includes('library:write'))) && (
+            <Button onClick={() => setChangesOpen(true)} sx={{ minHeight: 44 }}>
+              AI 변경 기록
+            </Button>
+          )}
           {inboxFailed ? (
             <Box>
               <Typography role="alert" variant="body2">

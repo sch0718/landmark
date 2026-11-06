@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 import { loadSyncEngine } from 'src/services/library-sync/boot';
 import { getSharedSyncStorage } from 'src/services/library-sync/shared-api';
 import { readSession, readSyncMeta } from 'src/services/library-sync/storage';
-import { agentInboxOpenAtom } from 'src/stores/agent-inbox';
+import { agentChangesOpenAtom, agentInboxOpenAtom } from 'src/stores/agent-inbox';
 import { syncStatusAtom } from 'src/stores/sync-status';
 import { createAgentApi, sameOwner, type AgentApi } from './api';
 import { readAgentInboxLocal, writeAgentInboxLocal } from './storage';
@@ -15,6 +15,7 @@ export type InboxCheckDeps = {
   storage: Storage;
   now(): number;
   notify(count: number): void;
+  notifyChanges(count: number): void;
   session(): string | null;
   schedule(): void;
   visible?(): boolean;
@@ -53,7 +54,31 @@ async function check(
   const ids = reply.data.items.map((item) => item.id);
   if (ids.some((id) => !local.notified.includes(id))) deps.notify(ids.length);
   writeAgentInboxLocal(deps.storage, { ...local, notified: ids });
+  await checkChanges(deps, api, session, active);
   return { outcome: 'ok', session };
+}
+
+/** 변경 기록을 읽어 알리지 않은 변경이 있으면 알려요. 실패해도 받은함 확인에는 영향이 없어요. */
+async function checkChanges(
+  deps: InboxCheckDeps,
+  api: AgentApi,
+  session: string | null,
+  active: () => boolean,
+): Promise<void> {
+  try {
+    const reply = await api.changes();
+    if (!active() || !sameOwner(api.owner) || deps.session() !== session) return;
+    if (!reply?.ok || !Array.isArray(reply.data.changes)) return;
+    const local = readAgentInboxLocal(deps.storage, api.owner);
+    const ids = reply.data.changes.map((change) => change.id);
+    const fresh = reply.data.changes.filter(
+      (change) => change.undoneAt === null && !local.notifiedChanges.includes(change.id),
+    );
+    if (fresh.length > 0) deps.notifyChanges(fresh.length);
+    writeAgentInboxLocal(deps.storage, { ...local, notifiedChanges: ids });
+  } catch {
+    // 변경 기록을 읽지 못하면 다음 확인 때 다시 시도해요.
+  }
 }
 
 /** 새 항목만 알리고 인증 실패면 해당 요청의 세션에서 확인을 멈춰요. */
@@ -141,6 +166,10 @@ export async function startInboxCheck(): Promise<void> {
           toast(`AI가 보낸 일정 ${count}개`, {
             action: { label: '보기', onClick: openInboxDialog },
           }),
+        notifyChanges: (count) =>
+          toast(`AI가 보관함을 바꿨어요 ${count}건`, {
+            action: { label: '기록 보기', onClick: openChangesDialog },
+          }),
         session: () => readSession(storage)?.sessionId ?? null,
         schedule: () => engine.schedule('manual'),
         visible: () => document.visibilityState !== 'hidden',
@@ -168,4 +197,8 @@ export async function discardInboxItem(id: string, owner: string | null): Promis
 
 export function openInboxDialog(): void {
   getDefaultStore().set(agentInboxOpenAtom, true);
+}
+
+export function openChangesDialog(): void {
+  getDefaultStore().set(agentChangesOpenAtom, true);
 }

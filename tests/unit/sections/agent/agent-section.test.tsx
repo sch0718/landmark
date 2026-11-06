@@ -14,7 +14,7 @@ import {
   SYNC_META_KEY,
   SYNC_SESSION_KEY,
 } from 'src/services/library-sync/storage';
-import { agentInboxOpenAtom } from 'src/stores/agent-inbox';
+import { agentChangesOpenAtom, agentInboxOpenAtom } from 'src/stores/agent-inbox';
 import { OFF_STATUS, syncStatusAtom } from 'src/stores/sync-status';
 
 const mocks = vi.hoisted(() => ({
@@ -90,6 +90,8 @@ beforeEach(() => {
     inbox: vi.fn().mockResolvedValue({ ok: true, data: { items: [] } }),
     item: vi.fn(),
     discard: vi.fn(),
+    changes: vi.fn(),
+    undo: vi.fn(),
   };
   mocks.create.mockReturnValue(api);
   mocks.sameOwner.mockReturnValue(true);
@@ -404,6 +406,58 @@ describe('새 AI 연결 창', () => {
     await user.click(dialog.getByRole('button', { name: '만들기' }));
     expect(api.issue).toHaveBeenCalledExactlyOnceWith({ name: '도우미', scopes: ['inbox:write'] });
   });
+  it('받은함·짧은 링크를 끄고 보관함만 켜도 만들 수 있어요', async () => {
+    vi.mocked(api.issue).mockResolvedValue({ ok: false, reason: 'server' });
+    const { user } = mount();
+    const dialog = await openCreate(user);
+    await user.click(dialog.getByRole('checkbox', { name: '받은함으로 일정 보내기' }));
+    await user.click(dialog.getByRole('checkbox', { name: '공유 짧은 링크 만들기' }));
+    expect(dialog.getByRole('button', { name: '만들기' })).toBeDisabled();
+    await user.click(dialog.getByRole('checkbox', { name: /^보관함 읽기·쓰기/ }));
+    expect(dialog.getByRole('button', { name: '만들기' })).toBeEnabled();
+    await user.click(dialog.getByRole('button', { name: '만들기' }));
+    expect(api.issue).toHaveBeenCalledExactlyOnceWith({
+      name: 'Claude Code',
+      scopes: ['library:read', 'library:write'],
+    });
+  });
+  it('보관함 스위치는 기본 꺼짐이고 켜면 읽기·쓰기 범위와 되돌리기 안내를 더해요', async () => {
+    vi.mocked(api.issue).mockResolvedValue({
+      ok: true,
+      data: { ...token, token: 'lmk_' + 'a'.repeat(43) },
+    });
+    const { user } = mount();
+    const dialog = await openCreate(user);
+    const lib = dialog.getByRole('checkbox', {
+      name: '보관함 읽기·쓰기 — AI가 보관함·여행을 직접 고칠 수 있어요',
+    });
+    expect(lib).not.toBeChecked();
+    await user.click(lib);
+    expect(lib).toBeChecked();
+    await user.click(dialog.getByRole('button', { name: '만들기' }));
+    expect(api.issue).toHaveBeenCalledExactlyOnceWith({
+      name: 'Claude Code',
+      scopes: ['inbox:write', 'share:create', 'library:read', 'library:write'],
+    });
+    expect(
+      await dialog.findByText('고친 내용은 설정 › AI 연결 › AI 변경 기록에서 되돌릴 수 있어요'),
+    ).toBeInTheDocument();
+  });
+  it('보관함 스위치가 꺼져 있으면 안내를 보이지 않고 범위에 넣지 않아요', async () => {
+    vi.mocked(api.issue).mockResolvedValue({
+      ok: true,
+      data: { ...token, token: 'lmk_' + 'a'.repeat(43) },
+    });
+    const { user } = mount();
+    const dialog = await openCreate(user);
+    await user.click(dialog.getByRole('button', { name: '만들기' }));
+    await dialog.findByRole('textbox', { name: '연결 토큰' });
+    expect(api.issue).toHaveBeenCalledExactlyOnceWith({
+      name: 'Claude Code',
+      scopes: ['inbox:write', 'share:create'],
+    });
+    expect(dialog.queryByText(/AI 변경 기록/)).toBeNull();
+  });
   it.each(['닫기', 'Escape', '바깥 클릭'] as const)(
     '원문 표시 중 %s 동작과 명시적 닫기 뒤 원문 폐기를 확인해요',
     async (closeMethod) => {
@@ -503,5 +557,43 @@ describe('새 AI 연결 창', () => {
       }),
     );
     expect(screen.queryByRole('textbox', { name: '연결 토큰' })).toBeNull();
+  });
+  describe('AI 변경 기록 단추', () => {
+    const writer = {
+      ...token,
+      id: 'w',
+      scopes: ['library:read' as const, 'library:write' as const],
+    };
+    const record = {
+      id: 'c1',
+      tokenId: 'w',
+      tokenName: '도우미',
+      requestId: 'r',
+      kind: 'place',
+      itemId: 'i',
+      beforeRev: 1,
+      afterRev: 2,
+      label: '카페',
+      at: now,
+      undoneAt: null,
+    };
+    it('보관함 쓰기 연결도 기록도 없으면 보이지 않아요', async () => {
+      vi.mocked(api.changes).mockResolvedValue({ ok: true, data: { changes: [] } });
+      mount();
+      await screen.findByText('받은 일정 없음');
+      expect(screen.queryByRole('button', { name: 'AI 변경 기록' })).toBeNull();
+    });
+    it('library:write 연결이 있으면 보여 주고 누르면 창 상태를 켜요', async () => {
+      vi.mocked(api.tokens).mockResolvedValue(list([writer]));
+      vi.mocked(api.changes).mockResolvedValue({ ok: true, data: { changes: [] } });
+      const { user, store } = mount();
+      await user.click(await screen.findByRole('button', { name: 'AI 변경 기록' }));
+      expect(store.get(agentChangesOpenAtom)).toBe(true);
+    });
+    it('연결이 없어도 기록이 있으면 보여요', async () => {
+      vi.mocked(api.changes).mockResolvedValue({ ok: true, data: { changes: [record] } });
+      mount();
+      expect(await screen.findByRole('button', { name: 'AI 변경 기록' })).toBeInTheDocument();
+    });
   });
 });

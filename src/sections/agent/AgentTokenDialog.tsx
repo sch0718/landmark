@@ -41,6 +41,8 @@ function TokenDialogContent({ api, onClose, onIssued }: Omit<Props, 'open'>) {
   const [name, setName] = useState('Claude Code');
   const [inbox, setInbox] = useState(true);
   const [share, setShare] = useState(true);
+  const [library, setLibrary] = useState(false);
+  const [issuedLibrary, setIssuedLibrary] = useState(false);
   const [token, setToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -67,7 +69,7 @@ function TokenDialogContent({ api, onClose, onIssued }: Omit<Props, 'open'>) {
   };
   const validName = name.trim().length >= 1 && name.trim().length <= 40;
   const issue = async () => {
-    if (!validName || (!inbox && !share) || busyRef.current || !currentOwner()) return;
+    if (!validName || (!inbox && !share && !library) || busyRef.current || !currentOwner()) return;
     const request = ++run.current;
     const current = () => request === run.current && currentOwner();
     busyRef.current = true;
@@ -78,6 +80,7 @@ function TokenDialogContent({ api, onClose, onIssued }: Omit<Props, 'open'>) {
     const scopes: AgentTokenView['scopes'] = [
       ...(inbox ? ['inbox:write' as const] : []),
       ...(share ? ['share:create' as const] : []),
+      ...(library ? ['library:read' as const, 'library:write' as const] : []),
     ];
     try {
       const result = await api.issue({ name: name.trim(), scopes });
@@ -86,8 +89,10 @@ function TokenDialogContent({ api, onClose, onIssued }: Omit<Props, 'open'>) {
         if (result.ok && currentOwner()) onIssued();
         return;
       }
-      if (result.ok) setToken(result.data.token);
-      else setError(issueFailure(result.reason));
+      if (result.ok) {
+        setToken(result.data.token);
+        setIssuedLibrary(library);
+      } else setError(issueFailure(result.reason));
     } catch {
       if (current()) setError('연결을 만들지 못했어요');
     } finally {
@@ -157,6 +162,17 @@ function TokenDialogContent({ api, onClose, onIssued }: Omit<Props, 'open'>) {
                   />
                 }
               />
+              <FormControlLabel
+                label="보관함 읽기·쓰기 — AI가 보관함·여행을 직접 고칠 수 있어요"
+                control={
+                  <Checkbox
+                    checked={library}
+                    disabled={busy}
+                    onChange={(_, value) => setLibrary(value)}
+                    sx={{ minHeight: 44, minWidth: 44 }}
+                  />
+                }
+              />
             </>
           ) : (
             <>
@@ -177,6 +193,11 @@ function TokenDialogContent({ api, onClose, onIssued }: Omit<Props, 'open'>) {
               <Typography variant="body2">
                 이 창을 닫으면 다시 볼 수 없어요. 잃어버렸다면 철회하고 새로 만들어 주세요
               </Typography>
+              {issuedLibrary && (
+                <Typography variant="body2">
+                  고친 내용은 설정 › AI 연결 › AI 변경 기록에서 되돌릴 수 있어요
+                </Typography>
+              )}
             </>
           )}
           {error && (
@@ -193,7 +214,7 @@ function TokenDialogContent({ api, onClose, onIssued }: Omit<Props, 'open'>) {
         {token === null && (
           <Button
             onClick={() => void issue()}
-            disabled={!validName || (!inbox && !share) || busy}
+            disabled={!validName || (!inbox && !share && !library) || busy}
             sx={{ minHeight: 44 }}
           >
             만들기

@@ -1,12 +1,18 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { getDefaultStore } from 'jotai';
 import { createMemoryStorage } from 'src/repositories/edit-layer-repo';
-import { type AgentApi, type AgentFailure, type InboxItemView } from 'src/services/agent-inbox/api';
+import {
+  type AgentApi,
+  type AgentChangeView,
+  type AgentFailure,
+  type InboxItemView,
+} from 'src/services/agent-inbox/api';
 import {
   attachInboxCheck,
   checkInboxOnce,
   discardInboxItem,
   INBOX_CHECK_GAP_MS,
+  openChangesDialog,
   openInboxDialog,
   sameOwnerNow,
   startInboxCheck,
@@ -25,7 +31,7 @@ import {
   writeSession,
   writeSyncMeta,
 } from 'src/services/library-sync/storage';
-import { agentInboxOpenAtom } from 'src/stores/agent-inbox';
+import { agentChangesOpenAtom, agentInboxOpenAtom } from 'src/stores/agent-inbox';
 import { OFF_STATUS, syncStatusAtom } from 'src/stores/sync-status';
 const { loadEngine, toast } = vi.hoisted(() => ({ loadEngine: vi.fn(), toast: vi.fn() }));
 vi.mock('src/services/library-sync/boot', () => ({ loadSyncEngine: loadEngine }));
@@ -52,6 +58,9 @@ const reply = (...ids: string[]) => ({ ok: true as const, data: { items: ids.map
 const clientApi = (send: ReturnType<typeof vi.fn>) => ({ client: { send } }) as unknown as SyncApi;
 function fixture() {
   const inbox = vi.fn<AgentApi['inbox']>().mockResolvedValue(reply('first'));
+  const changes = vi
+    .fn<AgentApi['changes']>()
+    .mockResolvedValue({ ok: true, data: { changes: [] } });
   const api: AgentApi = {
     owner: 'account-a',
     inbox,
@@ -60,16 +69,19 @@ function fixture() {
     revoke: vi.fn(),
     item: vi.fn(),
     discard: vi.fn(),
+    changes,
+    undo: vi.fn(),
   };
   const deps: InboxCheckDeps = {
     api: () => api,
     storage,
     now: vi.fn(() => 0),
     notify: vi.fn(),
+    notifyChanges: vi.fn(),
     session: () => readSession(storage)?.sessionId ?? null,
     schedule: vi.fn(),
   };
-  return { deps, api, inbox };
+  return { deps, api, inbox, changes };
 }
 function engine() {
   let listener: (s: { phase: string }) => void = () => {};
@@ -102,6 +114,7 @@ beforeEach(() => {
   login();
   getDefaultStore().set(syncStatusAtom, OFF_STATUS);
   getDefaultStore().set(agentInboxOpenAtom, false);
+  getDefaultStore().set(agentChangesOpenAtom, false);
 });
 afterEach(() => {
   vi.restoreAllMocks();
@@ -163,7 +176,12 @@ it('새 id가 있을 때만 전체 개수를 알리고 기기에 기록해요', 
 });
 it('다른 사용자의 알림 기록을 비워 같은 id도 다시 알려요', async () => {
   const { deps } = fixture();
-  writeAgentInboxLocal(storage, { v: 1, userId: 'account-b', notified: ['first', 'old'] });
+  writeAgentInboxLocal(storage, {
+    v: 1,
+    userId: 'account-b',
+    notified: ['first', 'old'],
+    notifiedChanges: [],
+  });
   await checkInboxOnce(deps);
   expect(deps.notify).toHaveBeenCalledWith(1);
   expect(readAgentInboxLocal(storage, 'account-a').notified).toEqual(['first']);
@@ -321,7 +339,7 @@ it('같은 페이지에서 계정을 바꾸면 새 API의 B 머리글로 확인�
   getDefaultStore().set(syncStatusAtom, { ...OFF_STATUS, phase: 'synced' });
   await Promise.all([startInboxCheck(), startInboxCheck()]);
   await settle();
-  expect(send).toHaveBeenLastCalledWith('GET', '/v1/agent/inbox', {
+  expect(send).toHaveBeenCalledWith('GET', '/v1/agent/inbox', {
     headers: { 'X-Landmark-Backup-User': 'account-a' },
   });
   expect(toast).toHaveBeenCalledWith('AI가 보낸 일정 1개', {
@@ -330,7 +348,10 @@ it('같은 페이지에서 계정을 바꾸면 새 API의 B 머리글로 확인�
   login('account-b');
   e.emit();
   await settle();
-  expect(send).toHaveBeenLastCalledWith('GET', '/v1/agent/inbox', {
+  expect(send).toHaveBeenLastCalledWith('GET', '/v1/agent/changes', {
+    headers: { 'X-Landmark-Backup-User': 'account-b' },
+  });
+  expect(send).toHaveBeenCalledWith('GET', '/v1/agent/inbox', {
     headers: { 'X-Landmark-Backup-User': 'account-b' },
   });
   expect(toast).toHaveBeenCalledTimes(2);
@@ -407,4 +428,69 @@ it.each([
   await settle();
   expect(inbox).toHaveBeenCalledTimes(['synced', 'conflict'].includes(phase) ? 1 : 0);
   detach();
+});
+
+const change = (id: string, undoneAt: number | null = null): AgentChangeView => ({
+  id,
+  tokenId: 't',
+  tokenName: '도우미',
+  requestId: 'r',
+  kind: 'place',
+  itemId: 'i-' + id,
+  beforeRev: 1,
+  afterRev: 2,
+  label: '카페',
+  at: 1,
+  undoneAt,
+});
+const changed = (...list: AgentChangeView[]) => ({ ok: true as const, data: { changes: list } });
+it('알리지 않은 변경만 개수로 알리고 알린 id는 기기에 기록해요', async () => {
+  const { deps, changes } = fixture();
+  changes.mockResolvedValue(changed(change('c1'), change('c2')));
+  await checkInboxOnce(deps);
+  expect(deps.notifyChanges).toHaveBeenCalledExactlyOnceWith(2);
+  expect(readAgentInboxLocal(storage, 'account-a').notifiedChanges).toEqual(['c1', 'c2']);
+  await checkInboxOnce(deps);
+  expect(deps.notifyChanges).toHaveBeenCalledOnce();
+  changes.mockResolvedValue(changed(change('c1'), change('c2'), change('c3')));
+  await checkInboxOnce(deps);
+  expect(deps.notifyChanges).toHaveBeenLastCalledWith(1);
+  expect(readAgentInboxLocal(storage, 'account-a').notified).toEqual(['first']);
+});
+it('이미 되돌린 변경은 알리지 않아요', async () => {
+  const { deps, changes } = fixture();
+  changes.mockResolvedValue(changed(change('c1', 5)));
+  await checkInboxOnce(deps);
+  expect(deps.notifyChanges).not.toHaveBeenCalled();
+});
+it('변경 기록을 읽지 못해도 받은함 확인은 ok로 끝나요', async () => {
+  const { deps, changes } = fixture();
+  changes.mockResolvedValue({ ok: false, reason: 'server' });
+  expect(await checkInboxOnce(deps)).toBe('ok');
+  changes.mockRejectedValue(new Error('x'));
+  expect(await checkInboxOnce(deps)).toBe('ok');
+  expect(deps.notifyChanges).not.toHaveBeenCalled();
+  expect(deps.notify).toHaveBeenCalledOnce();
+});
+it('변경 기록도 10분에 한 번만 읽어요', async () => {
+  const { deps, changes } = fixture();
+  const e = engine();
+  let now = 0;
+  deps.now = () => now;
+  attachInboxCheck(e, deps, () => ({ phase: 'off' }));
+  e.emit();
+  await settle();
+  now = INBOX_CHECK_GAP_MS - 1;
+  e.emit();
+  await settle();
+  expect(changes).toHaveBeenCalledTimes(1);
+  now++;
+  e.emit();
+  await settle();
+  expect(changes).toHaveBeenCalledTimes(2);
+});
+it('변경 기록 창 열기는 변경 기록 창 상태만 켜요', () => {
+  openChangesDialog();
+  expect(getDefaultStore().get(agentChangesOpenAtom)).toBe(true);
+  expect(getDefaultStore().get(agentInboxOpenAtom)).toBe(false);
 });

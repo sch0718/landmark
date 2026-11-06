@@ -263,7 +263,9 @@ describe('세션 AI 연결 경로', () => {
       const list = await request('/agent/changes');
       expect(list.status).toBe(200);
       const { changes } = (await list.json()) as { changes: { id: string; itemId: string }[] };
-      expect(changes).toMatchObject([{ itemId: 'place00001', undoneAt: null }]);
+      expect(changes).toMatchObject([
+        { itemId: 'place00001', undoneAt: null, tokenName: '보관함' },
+      ]);
       const undone = await request('/agent/changes/undo', 'POST', { ids: [changes[0]!.id] });
       expect(await undone.json()).toEqual({ results: [{ id: changes[0]!.id, status: 'undone' }] });
       const again = await request('/agent/changes/undo', 'POST', { requestId });
@@ -271,6 +273,14 @@ describe('세션 AI 연결 경로', () => {
         results: [{ id: changes[0]!.id, status: 'already' }],
         more: false,
       });
+    });
+    it('토큰이 지워졌으면 tokenName은 null이다', async () => {
+      await seedChange();
+      await server.db.prepare("DELETE FROM agent_tokens WHERE name = '보관함'").run();
+      const { changes } = (await (await request('/agent/changes')).json()) as {
+        changes: { tokenName: string | null }[];
+      };
+      expect(changes.map((change) => change.tokenName)).toEqual([null]);
     });
     it('세션과 본문을 검사하고 다른 사용자의 기록은 보이지 않는다', async () => {
       await seedChange();

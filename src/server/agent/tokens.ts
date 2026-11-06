@@ -10,8 +10,13 @@ export const AGENT_SCOPES = [
   'library:read',
   'library:write',
 ] as const;
-/** 새 연결에 고를 수 있는 범위. library 범위는 PR ②에서 연다. */
-export const ISSUABLE_SCOPES = ['inbox:write', 'share:create'] as const;
+/** 새 연결에 고를 수 있는 범위. library:write는 library:read와 함께만 받는다. */
+export const ISSUABLE_SCOPES = [
+  'inbox:write',
+  'share:create',
+  'library:read',
+  'library:write',
+] as const;
 export const AGENT_TOKEN_PATTERN = /^lmk_[A-Za-z0-9_-]{43}$/;
 export const AGENT_TOKEN_TTL_MS = 90 * 24 * 60 * 60 * 1000;
 export const AGENT_TOKEN_MAX_ACTIVE = 10;
@@ -75,6 +80,8 @@ export function parseIssueBody(value: unknown): { name: string; scopes: AgentSco
   )
     throw new SyncHttpError(422, 'invalid');
   const scopes = body.scopes;
+  if (scopes.includes('library:write') && !scopes.includes('library:read'))
+    throw new SyncHttpError(422, 'invalid');
   return {
     name: body.name.trim(),
     scopes: ISSUABLE_SCOPES.filter((scope) => scopes.includes(scope)),
