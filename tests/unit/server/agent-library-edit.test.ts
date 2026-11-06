@@ -627,3 +627,13 @@ it('되돌리기: 상한만큼을 한 번에 되돌려도 D1 쿼리는 호출당
   expect(again.results.filter((r) => r.status === 'undone')).toHaveLength(UNDO_MAX_PER_CALL);
   expect(restored.prepare).toBeLessThanOrEqual(40);
 });
+
+it('편집: 50개 항목을 한 번에 편집해도 D1 쿼리는 호출당 40개 이하다', async () => {
+  const counts = countQueries();
+  const reply = await edit(manyPlaces(50).map((p) => put('place', p)));
+  expect(reply).toBeDefined();
+  expect(
+    (await db.prepare('SELECT COUNT(*) AS n FROM agent_changes').first<{ n: number }>())!.n,
+  ).toBe(50);
+  expect(counts.prepare).toBeLessThanOrEqual(40);
+});

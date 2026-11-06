@@ -141,3 +141,49 @@ it('기록할 행이 없으면 아무 것도 하지 않는다', async () => {
   await recordChanges(db, []);
   expect(await count()).toBe(0);
 });
+
+it('recordChanges: 50행도 prepare 한 번, batch 없이 한 문장으로 넣는다', async () => {
+  let prepares = 0;
+  let batches = 0;
+  const prepare = db.prepare.bind(db);
+  const batch = db.batch.bind(db);
+  db.prepare = ((sql: string) => (prepares++, prepare(sql))) as typeof db.prepare;
+  db.batch = ((stmts: never[]) => (batches++, batch(stmts))) as typeof db.batch;
+  await recordChanges(
+    db,
+    Array.from({ length: 50 }, (_, i) => row(i)),
+  );
+  db.prepare = prepare;
+  db.batch = batch;
+  expect(prepares).toBe(1);
+  expect(batches).toBeLessThanOrEqual(1);
+  expect(await count()).toBe(50);
+});
+
+it('recordChanges: null before_doc·긴 한국어·특수문자가 그대로 저장되고 undone_at은 NULL이다', async () => {
+  const long = '가나다라마바사'.repeat(5000);
+  const special = '{"t":"따옴표 \\" \' \n줄바꿈\t탭 \\\\ 😀 %?"}';
+  await recordChanges(db, [
+    row(1, { beforeDoc: null }),
+    row(2, { beforeDoc: long }),
+    row(3, { beforeDoc: special, label: '라벨 "인용"\n둘째 줄' }),
+  ]);
+  const { results } = await db
+    .prepare(
+      'SELECT id, before_doc, label, before_rev, after_rev, at, undone_at FROM agent_changes ORDER BY rowid',
+    )
+    .all<{
+      id: string;
+      before_doc: string | null;
+      label: string;
+      before_rev: number;
+      after_rev: number;
+      at: number;
+      undone_at: number | null;
+    }>();
+  expect(results.map((r) => r.before_doc)).toEqual([null, long, special]);
+  expect(results[2]!.label).toBe('라벨 "인용"\n둘째 줄');
+  expect(
+    results.every((r) => r.undone_at === null && r.before_rev === 1 && r.after_rev === 2),
+  ).toBe(true);
+});
