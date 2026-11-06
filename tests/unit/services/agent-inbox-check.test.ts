@@ -60,6 +60,8 @@ function fixture() {
     revoke: vi.fn(),
     item: vi.fn(),
     discard: vi.fn(),
+    changes: vi.fn(),
+    undo: vi.fn(),
   };
   const deps: InboxCheckDeps = {
     api: () => api,

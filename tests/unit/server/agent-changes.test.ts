@@ -71,6 +71,7 @@ it('기록한 변경을 최근 순으로, 같은 시각이면 나중에 넣은 �
     label: '장소 2',
     at: now - 1000,
     undoneAt: null,
+    tokenName: null,
   });
   expect(JSON.stringify(list)).not.toContain('beforeDoc');
 });

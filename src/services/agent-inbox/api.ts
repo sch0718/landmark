@@ -17,7 +17,7 @@ export type AgentResult<T> = { ok: true; data: T } | { ok: false; reason: AgentF
 export type AgentTokenView = {
   id: string;
   name: string;
-  scopes: ('inbox:write' | 'share:create')[];
+  scopes: ('inbox:write' | 'share:create' | 'library:read' | 'library:write')[];
   createdAt: number;
   expiresAt: number;
   lastUsedAt: number | null;
@@ -33,6 +33,21 @@ export type InboxItemView = {
   createdAt: number;
   expiresAt: number;
 };
+export type AgentChangeView = {
+  id: string;
+  tokenId: string;
+  tokenName: string | null;
+  requestId: string;
+  kind: string;
+  itemId: string;
+  beforeRev: number;
+  afterRev: number;
+  label: string;
+  at: number;
+  undoneAt: number | null;
+};
+export type UndoStatus = { id: string; status: string };
+export type UndoInput = { ids: string[] } | { requestId: string };
 export type AgentApi = {
   owner: string | null;
   tokens(): Promise<
@@ -56,7 +71,13 @@ export type AgentApi = {
   inbox(): Promise<AgentResult<{ items: InboxItemView[] }>>;
   item(id: string): Promise<AgentResult<{ id: string; data: string }>>;
   discard(id: string): Promise<AgentResult<null>>;
+  changes(): Promise<AgentResult<{ changes: AgentChangeView[] }>>;
+  /** 한 번에 처리되지 않은 나머지(`more`)는 끝까지 이어서 불러 결과를 합쳐요. */
+  undo(input: UndoInput): Promise<AgentResult<{ results: UndoStatus[] }>>;
 };
+
+/** `more`가 참인 동안 같은 요청을 반복해 결과를 합쳐요. 무한 반복을 막으려고 횟수에 상한을 둬요. */
+const UNDO_MAX_ROUNDS = 50;
 
 export function toAgentFailure(fail: {
   kind: string;
@@ -76,7 +97,7 @@ export function createAgentApi(api?: Pick<SyncApi, 'client'> | null): AgentApi |
   async function send<T>(
     method: 'GET' | 'POST' | 'DELETE',
     path: string,
-    body?: { name: string; scopes: AgentTokenView['scopes'] },
+    body?: object,
   ): Promise<AgentResult<T>> {
     const options = {
       ...(body === undefined ? {} : { body }),
@@ -89,7 +110,10 @@ export function createAgentApi(api?: Pick<SyncApi, 'client'> | null): AgentApi |
     if (result.ok) return { ok: true, data: result.data };
     // 발급 경로의 409는 토큰 개수 초과뿐이고 클라이언트가 오류 코드를 버려요.
     const reason =
-      body !== undefined && result.kind === 'server' && result.status === 409
+      path === '/v1/agent/tokens' &&
+      method === 'POST' &&
+      result.kind === 'server' &&
+      result.status === 409
         ? 'too-many'
         : toAgentFailure(result);
     return { ok: false, reason };
@@ -97,6 +121,20 @@ export function createAgentApi(api?: Pick<SyncApi, 'client'> | null): AgentApi |
   async function remove(path: string): Promise<AgentResult<null>> {
     const result = await send('DELETE', path);
     return result.ok ? { ok: true, data: null } : result;
+  }
+  async function undo(input: UndoInput): Promise<AgentResult<{ results: UndoStatus[] }>> {
+    const results: UndoStatus[] = [];
+    for (let round = 0; round < UNDO_MAX_ROUNDS; round += 1) {
+      const page = await send<{ results: UndoStatus[]; more?: boolean }>(
+        'POST',
+        '/v1/agent/changes/undo',
+        input,
+      );
+      if (!page.ok) return page;
+      results.push(...page.data.results);
+      if (page.data.more !== true) break;
+    }
+    return { ok: true, data: { results } };
   }
   return {
     owner,
@@ -106,6 +144,8 @@ export function createAgentApi(api?: Pick<SyncApi, 'client'> | null): AgentApi |
     inbox: () => send('GET', '/v1/agent/inbox'),
     item: (id) => send('GET', '/v1/agent/inbox/' + encodeURIComponent(id)),
     discard: (id) => remove('/v1/agent/inbox/' + encodeURIComponent(id)),
+    changes: () => send('GET', '/v1/agent/changes'),
+    undo,
   };
 }
 

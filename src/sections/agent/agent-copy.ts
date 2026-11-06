@@ -42,6 +42,7 @@ export function scopeLabel(scopes: readonly AgentTokenView['scopes'][number][]):
   return [
     scopes.includes('inbox:write') ? '받은함' : '',
     scopes.includes('share:create') ? '짧은 링크' : '',
+    scopes.includes('library:read') && scopes.includes('library:write') ? '보관함' : '',
   ]
     .filter(Boolean)
     .join('·');

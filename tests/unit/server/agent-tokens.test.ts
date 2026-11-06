@@ -125,6 +125,13 @@ describe('입력과 무작위 값', () => {
     );
   });
 
+  it('library:read·library:write는 받고 write만 있으면 거절한다', () => {
+    expect(parseIssueBody({ ...input, scopes: ['library:read'] }).scopes).toEqual(['library:read']);
+    expect(
+      parseIssueBody({ ...input, scopes: ['library:write', 'inbox:write', 'library:read'] }).scopes,
+    ).toEqual(['inbox:write', 'library:read', 'library:write']);
+  });
+
   it.each([
     null,
     [],
@@ -142,7 +149,7 @@ describe('입력과 무작위 값', () => {
     { ...input, scopes: Array(1) },
     { ...input, scopes: 'inbox:write' },
     { ...input, scopes: [1] },
-    { ...input, scopes: ['library:read'] },
+    { ...input, scopes: ['library:write'] },
     { ...input, scopes: ['inbox:write', 'library:write'] },
   ])('잘못된 발급 입력 %#를 422로 거절한다', async (value) => {
     await failure(

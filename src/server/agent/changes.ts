@@ -19,7 +19,11 @@ export type ChangeRow = {
   at: number;
 };
 
-export type ChangeMeta = Omit<ChangeRow, 'userId' | 'beforeDoc'> & { undoneAt: number | null };
+export type ChangeMeta = Omit<ChangeRow, 'userId' | 'beforeDoc'> & {
+  undoneAt: number | null;
+  /** 토큰이 지워졌으면 null */
+  tokenName: string | null;
+};
 
 export async function recordChanges(db: MeetDb, rows: ChangeRow[]): Promise<void> {
   if (!rows.length) return;
@@ -52,9 +56,10 @@ export async function recordChanges(db: MeetDb, rows: ChangeRow[]): Promise<void
 export async function listChanges(db: MeetDb, userId: string, now: number): Promise<ChangeMeta[]> {
   const { results } = await db
     .prepare(
-      `SELECT id, token_id, request_id, kind, item_id, before_rev, after_rev, label, at, undone_at
-       FROM agent_changes WHERE user_id = ? AND at > ?
-       ORDER BY at DESC, rowid DESC LIMIT ?`,
+      `SELECT c.id, c.token_id, c.request_id, c.kind, c.item_id, c.before_rev, c.after_rev, c.label, c.at, c.undone_at, t.name AS token_name
+       FROM agent_changes c LEFT JOIN agent_tokens t ON t.id = c.token_id AND t.user_id = c.user_id
+       WHERE c.user_id = ? AND c.at > ?
+       ORDER BY c.at DESC, c.rowid DESC LIMIT ?`,
     )
     .bind(userId, now - CHANGES_KEEP_MS, CHANGES_MAX)
     .all<{
@@ -68,6 +73,7 @@ export async function listChanges(db: MeetDb, userId: string, now: number): Prom
       label: string;
       at: number;
       undone_at: number | null;
+      token_name: string | null;
     }>();
   return results.map((row) => ({
     id: row.id,
@@ -80,6 +86,7 @@ export async function listChanges(db: MeetDb, userId: string, now: number): Prom
     label: row.label,
     at: row.at,
     undoneAt: row.undone_at,
+    tokenName: row.token_name,
   }));
 }
 

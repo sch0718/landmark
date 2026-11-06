@@ -56,6 +56,8 @@ beforeEach(() => {
     inbox: vi.fn().mockResolvedValue({ ok: true, data: { items: [item] } }),
     item: vi.fn(),
     discard: vi.fn().mockResolvedValue({ ok: true, data: null }),
+    changes: vi.fn(),
+    undo: vi.fn(),
   };
   mocks.create.mockReturnValue(api);
   mocks.sameOwner.mockReturnValue(true);

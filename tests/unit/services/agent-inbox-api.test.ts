@@ -203,3 +203,42 @@ it('같은 계정이고 저장된 세션이 있을 때만 소유자가 같아요
   expect(sameOwner('account-b')).toBe(false);
   expect(sameOwner(null)).toBe(false);
 });
+
+it('changes는 변경 기록을 읽고 undo는 more를 끝까지 따라가 결과를 합쳐요', async () => {
+  const send = vi
+    .fn()
+    .mockResolvedValueOnce({ ok: true, data: { changes: [] } })
+    .mockResolvedValueOnce({
+      ok: true,
+      data: { results: [{ id: 'a', status: 'undone' }], more: true },
+    })
+    .mockResolvedValueOnce({
+      ok: true,
+      data: { results: [{ id: 'b', status: 'already' }], more: false },
+    });
+  const api = createAgentApi(clientApi(send))!;
+  expect(await api.changes()).toEqual({ ok: true, data: { changes: [] } });
+  expect(send).toHaveBeenLastCalledWith('GET', '/v1/agent/changes');
+  const result = await api.undo({ requestId: 'r' });
+  expect(result).toEqual({
+    ok: true,
+    data: {
+      results: [
+        { id: 'a', status: 'undone' },
+        { id: 'b', status: 'already' },
+      ],
+    },
+  });
+  expect(send).toHaveBeenCalledTimes(3);
+  expect(send).toHaveBeenLastCalledWith('POST', '/v1/agent/changes/undo', {
+    body: { requestId: 'r' },
+  });
+});
+
+it('undo 도중 실패하면 그 실패를 그대로 돌려줘요', async () => {
+  const send = vi.fn().mockResolvedValue({ ok: false, kind: 'offline' });
+  expect(await createAgentApi(clientApi(send))!.undo({ ids: ['a'] })).toEqual({
+    ok: false,
+    reason: 'offline',
+  });
+});
