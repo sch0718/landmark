@@ -1,9 +1,10 @@
 // @vitest-environment node
-import { afterEach, beforeEach, expect, it } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import {
   CHANGES_KEEP_MS,
   CHANGES_MAX,
-  CHANGES_BEFORE_DOC_MAX_CHARS,
+  CHANGES_BEFORE_DOC_MAX_BYTES,
+  RECORD_CHUNK_BYTES,
   listChanges,
   pruneChanges,
   recordChanges,
@@ -117,9 +118,9 @@ it('정리는 100건을 넘은 행과 30일 지난 행만 그 사용자에게서
   expect(await count('u2')).toBe(1);
 });
 
-it('이전 문서 합계가 5MB를 넘으면 가장 오래된 기록부터 지운다', async () => {
+it('이전 문서 UTF-8 바이트 합계가 5MiB를 넘으면 가장 오래된 기록부터 지운다', async () => {
   const big = 'x'.repeat(200_000);
-  // 30건 × 200,000자 = 6MB. 합계 5MB 이하로 남는 가장 최근 26건(5MiB=5,242,880자)을 둔다.
+  // 30건 × 200,000바이트 = 6MB. 5MiB(5,242,880바이트) 이하인 가장 최근 26건을 둔다.
   await recordChanges(
     db,
     Array.from({ length: 30 }, (_, i) => row(i, { beforeDoc: big, at: now - 10_000 + i })),
@@ -129,13 +130,72 @@ it('이전 문서 합계가 5MB를 넘으면 가장 오래된 기록부터 지�
   await pruneChanges(db, 'u1', now);
 
   const kept = await db
-    .prepare('SELECT id, length(before_doc) AS n FROM agent_changes ORDER BY at, rowid')
+    .prepare(
+      'SELECT id, length(CAST(before_doc AS BLOB)) AS n FROM agent_changes ORDER BY at, rowid',
+    )
     .all<{ id: string; n: number | null }>();
   const total = kept.results.reduce((sum, item) => sum + (item.n ?? 0), 0);
-  expect(total).toBeLessThanOrEqual(CHANGES_BEFORE_DOC_MAX_CHARS);
+  expect(total).toBeLessThanOrEqual(CHANGES_BEFORE_DOC_MAX_BYTES);
   expect(kept.results).toHaveLength(26);
   expect(kept.results[0]!.id).toBe('change0004');
   expect(kept.results.at(-1)!.id).toBe('change0029');
+});
+
+it('정리는 101행과 150행 모두 prepare 한 번만 쓰고 batch를 호출하지 않는다', async () => {
+  const calls: { prepares: number; batchSizes: number[] }[] = [];
+  for (const size of [101, 150]) {
+    const userId = `u${size}`;
+    await recordChanges(
+      db,
+      Array.from({ length: size }, (_, i) => row(i + size * 10, { userId, beforeDoc: null })),
+    );
+    const call = { prepares: 0, batchSizes: [] as number[] };
+    const prepare = db.prepare.bind(db);
+    const batch = db.batch.bind(db);
+    db.prepare = ((sql: string) => (call.prepares++, prepare(sql))) as typeof db.prepare;
+    db.batch = ((stmts: never[]) => (
+      call.batchSizes.push(stmts.length),
+      batch(stmts)
+    )) as typeof db.batch;
+    try {
+      await pruneChanges(db, userId, now);
+    } finally {
+      db.prepare = prepare;
+      db.batch = batch;
+    }
+    calls.push(call);
+    expect(await count(userId)).toBe(CHANGES_MAX);
+    expect((await listChanges(db, userId, now)).at(-1)!.id).toBe(row(size * 11 - CHANGES_MAX).id);
+  }
+  expect(calls).toEqual([
+    { prepares: 1, batchSizes: [] },
+    { prepares: 1, batchSizes: [] },
+  ]);
+});
+
+it('한국어 이전 문서는 글자 합계가 상한 이하여도 UTF-8 바이트 합계가 넘으면 같은 시각의 오래된 행부터 지운다', async () => {
+  const korean = '한'.repeat(600_000);
+  expect(korean.length * 3).toBeLessThan(CHANGES_BEFORE_DOC_MAX_BYTES);
+  expect(new TextEncoder().encode(korean).byteLength * 3).toBeGreaterThan(
+    CHANGES_BEFORE_DOC_MAX_BYTES,
+  );
+  await recordChanges(db, [
+    row(1, { beforeDoc: korean }),
+    row(2, { beforeDoc: korean }),
+    row(3, { beforeDoc: korean }),
+  ]);
+
+  await pruneChanges(db, 'u1', now);
+
+  const kept = await db
+    .prepare(
+      'SELECT id, length(CAST(before_doc AS BLOB)) AS bytes FROM agent_changes ORDER BY at DESC, rowid DESC',
+    )
+    .all<{ id: string; bytes: number }>();
+  expect(kept.results.map((change) => change.id)).toEqual(['change0003', 'change0002']);
+  expect(kept.results.reduce((sum, change) => sum + change.bytes, 0)).toBeLessThanOrEqual(
+    CHANGES_BEFORE_DOC_MAX_BYTES,
+  );
 });
 
 it('기록할 행이 없으면 아무 것도 하지 않는다', async () => {
@@ -187,4 +247,31 @@ it('recordChanges: null before_doc·긴 한국어·특수문자가 그대로 저
   expect(
     results.every((r) => r.undone_at === null && r.before_rev === 1 && r.after_rev === 2),
   ).toBe(true);
+});
+
+it('이전 문서 합계가 클 때 JSON을 나눠 한 번의 batch로 넣고, 문장당 바인드 값이 한도 안이다', async () => {
+  const big = JSON.stringify({ memo: 'x'.repeat(400_000) });
+  const rows = Array.from({ length: 6 }, (_, i) => row(i + 1, { beforeDoc: big }));
+  const realPrepare = db.prepare.bind(db);
+  const prepare = vi.spyOn(db, 'prepare');
+  const batch = vi.spyOn(db, 'batch');
+  const sizes: number[] = [];
+  prepare.mockImplementation((sql: string) => {
+    const stmt = realPrepare(sql);
+    const bind = stmt.bind.bind(stmt);
+    stmt.bind = (...args: (string | number | null)[]) => {
+      if (typeof args[0] === 'string' && sql.includes('INSERT INTO agent_changes'))
+        sizes.push(new TextEncoder().encode(args[0]).byteLength);
+      return bind(...args);
+    };
+    return stmt;
+  });
+
+  await recordChanges(db, rows);
+
+  expect(batch).toHaveBeenCalledTimes(1);
+  expect(sizes.length).toBeGreaterThan(1);
+  expect(sizes.length).toBeLessThanOrEqual(rows.length);
+  for (const size of sizes) expect(size).toBeLessThanOrEqual(RECORD_CHUNK_BYTES);
+  expect(await count()).toBe(6);
 });

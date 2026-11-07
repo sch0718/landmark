@@ -2,8 +2,8 @@ import type { MeetDb } from '../meet/db';
 
 export const CHANGES_MAX = 100;
 export const CHANGES_KEEP_MS = 30 * 24 * 60 * 60 * 1000;
-/** 사용자별 before_doc 글자 수 합계 상한(5MiB). 넘으면 오래된 기록부터 지운다. */
-export const CHANGES_BEFORE_DOC_MAX_CHARS = 5 * 1024 * 1024;
+/** 사용자별 before_doc UTF-8 바이트 합계 상한(5MiB). 넘으면 오래된 기록부터 지운다. */
+export const CHANGES_BEFORE_DOC_MAX_BYTES = 5 * 1024 * 1024;
 
 export type ChangeRow = {
   id: string;
@@ -25,34 +25,49 @@ export type ChangeMeta = Omit<ChangeRow, 'userId' | 'beforeDoc'> & {
   tokenName: string | null;
 };
 
-export async function recordChanges(db: MeetDb, rows: ChangeRow[]): Promise<void> {
-  if (!rows.length) return;
-  // 행 수와 무관하게 SQL 한 문장(json_each)으로 넣는다(Workers Free 호출당 D1 쿼리 한도).
-  const data = rows.map((row) => [
-    row.id,
-    row.userId,
-    row.tokenId,
-    row.requestId,
-    row.kind,
-    row.itemId,
-    row.beforeDoc,
-    row.beforeRev,
-    row.afterRev,
-    row.label,
-    row.at,
-  ]);
-  await db
-    .prepare(
-      `INSERT INTO agent_changes
+/** 한 문장에 묶는 JSON 크기 상한(바이트). D1의 문자열·행 한도(2MB)보다 충분히 작게 둔다. */
+export const RECORD_CHUNK_BYTES = 1_000_000;
+const utf8Bytes = (text: string) => new TextEncoder().encode(text).byteLength;
+
+const RECORD_SQL = `INSERT INTO agent_changes
         (id, user_id, token_id, request_id, kind, item_id, before_doc, before_rev, after_rev, label, at, undone_at)
        SELECT json_extract(value, '$[0]'), json_extract(value, '$[1]'), json_extract(value, '$[2]'),
          json_extract(value, '$[3]'), json_extract(value, '$[4]'), json_extract(value, '$[5]'),
          json_extract(value, '$[6]'), json_extract(value, '$[7]'), json_extract(value, '$[8]'),
          json_extract(value, '$[9]'), json_extract(value, '$[10]'), NULL
-       FROM json_each(?)`,
-    )
-    .bind(JSON.stringify(data))
-    .run();
+       FROM json_each(?)`;
+
+/** 문서 하나는 ITEM_DOC_MAX_CHARS(20만 자) 이하라 이스케이프 뒤에도 행당 약 600KB다. 그래서 한 행이 혼자 한도를 넘지 않는다. */
+export async function recordChanges(db: MeetDb, rows: ChangeRow[]): Promise<void> {
+  if (!rows.length) return;
+  // JSON을 RECORD_CHUNK_BYTES 안팎으로 나눠 db.batch 한 번에 보낸다(D1 문자열 2MB 한도, 호출당 쿼리 수는 몇 개).
+  const chunks: string[][] = [[]];
+  let size = 2;
+  for (const row of rows) {
+    const text = JSON.stringify([
+      row.id,
+      row.userId,
+      row.tokenId,
+      row.requestId,
+      row.kind,
+      row.itemId,
+      row.beforeDoc,
+      row.beforeRev,
+      row.afterRev,
+      row.label,
+      row.at,
+    ]);
+    const bytes = utf8Bytes(text) + 1;
+    const last = chunks[chunks.length - 1]!;
+    if (last.length && size + bytes > RECORD_CHUNK_BYTES) {
+      chunks.push([text]);
+      size = 2 + bytes;
+    } else {
+      last.push(text);
+      size += bytes;
+    }
+  }
+  await db.batch(chunks.map((chunk) => db.prepare(RECORD_SQL).bind(`[${chunk.join(',')}]`)));
 }
 
 /** 최근 순(같은 시각이면 나중에 넣은 것 먼저). before_doc은 싣지 않는다. */
@@ -93,38 +108,25 @@ export async function listChanges(db: MeetDb, userId: string, now: number): Prom
   }));
 }
 
-/** 30일 지난 행, 100건 초과 행, before_doc 합계 5MiB 초과분(오래된 것부터)을 지운다. */
+/** 30일 지난 행, 100건 초과 행, before_doc UTF-8 바이트 합계 5MiB 초과분을 지운다. */
 export async function pruneChanges(db: MeetDb, userId: string, now: number): Promise<void> {
-  const { results } = await db
+  // 최근 순에서 세 조건 모두 한 번 넘으면 더 오래된 행도 넘으므로 한 문장으로 지운다.
+  await db
     .prepare(
-      `SELECT id, at, COALESCE(length(before_doc), 0) AS size
-       FROM agent_changes WHERE user_id = ? ORDER BY at DESC, rowid DESC`,
+      `DELETE FROM agent_changes WHERE user_id = ? AND id IN (
+         SELECT id FROM (
+           SELECT id, at,
+             ROW_NUMBER() OVER (ORDER BY at DESC, rowid DESC) AS position,
+             SUM(COALESCE(length(CAST(before_doc AS BLOB)), 0)) OVER (
+               ORDER BY at DESC, rowid DESC ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+             ) AS total_bytes
+           FROM agent_changes WHERE user_id = ?
+         )
+         WHERE at <= ? OR position > ? OR total_bytes > ?
+       )`,
     )
-    .bind(userId)
-    .all<{ id: string; at: number; size: number }>();
-  const stale: string[] = [];
-  let kept = 0;
-  let total = 0;
-  for (const row of results) {
-    total += row.size;
-    if (
-      row.at <= now - CHANGES_KEEP_MS ||
-      kept >= CHANGES_MAX ||
-      total > CHANGES_BEFORE_DOC_MAX_CHARS
-    ) {
-      // 한 번 넘으면 그보다 오래된 행도 모두 지운다.
-      stale.push(row.id);
-      total = Number.POSITIVE_INFINITY;
-      continue;
-    }
-    kept += 1;
-  }
-  if (!stale.length) return;
-  await db.batch(
-    stale.map((id) =>
-      db.prepare('DELETE FROM agent_changes WHERE user_id = ? AND id = ?').bind(userId, id),
-    ),
-  );
+    .bind(userId, userId, now - CHANGES_KEEP_MS, CHANGES_MAX, CHANGES_BEFORE_DOC_MAX_BYTES)
+    .run();
 }
 
 /** 한 요청(`requestId`)으로 이미 적용된 항목. 재전송을 건너뛸 때 쓴다. */
