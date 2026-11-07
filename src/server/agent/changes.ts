@@ -2,8 +2,8 @@ import type { MeetDb } from '../meet/db';
 
 export const CHANGES_MAX = 100;
 export const CHANGES_KEEP_MS = 30 * 24 * 60 * 60 * 1000;
-/** 사용자별 before_doc 글자 수 합계 상한(5MiB). 넘으면 오래된 기록부터 지운다. */
-export const CHANGES_BEFORE_DOC_MAX_CHARS = 5 * 1024 * 1024;
+/** 사용자별 before_doc UTF-8 바이트 합계 상한(5MiB). 넘으면 오래된 기록부터 지운다. */
+export const CHANGES_BEFORE_DOC_MAX_BYTES = 5 * 1024 * 1024;
 
 export type ChangeRow = {
   id: string;
@@ -93,38 +93,25 @@ export async function listChanges(db: MeetDb, userId: string, now: number): Prom
   }));
 }
 
-/** 30일 지난 행, 100건 초과 행, before_doc 합계 5MiB 초과분(오래된 것부터)을 지운다. */
+/** 30일 지난 행, 100건 초과 행, before_doc UTF-8 바이트 합계 5MiB 초과분을 지운다. */
 export async function pruneChanges(db: MeetDb, userId: string, now: number): Promise<void> {
-  const { results } = await db
+  // 최근 순에서 세 조건 모두 한 번 넘으면 더 오래된 행도 넘으므로 한 문장으로 지운다.
+  await db
     .prepare(
-      `SELECT id, at, COALESCE(length(before_doc), 0) AS size
-       FROM agent_changes WHERE user_id = ? ORDER BY at DESC, rowid DESC`,
+      `DELETE FROM agent_changes WHERE user_id = ? AND id IN (
+         SELECT id FROM (
+           SELECT id, at,
+             ROW_NUMBER() OVER (ORDER BY at DESC, rowid DESC) AS position,
+             SUM(COALESCE(length(CAST(before_doc AS BLOB)), 0)) OVER (
+               ORDER BY at DESC, rowid DESC ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+             ) AS total_bytes
+           FROM agent_changes WHERE user_id = ?
+         )
+         WHERE at <= ? OR position > ? OR total_bytes > ?
+       )`,
     )
-    .bind(userId)
-    .all<{ id: string; at: number; size: number }>();
-  const stale: string[] = [];
-  let kept = 0;
-  let total = 0;
-  for (const row of results) {
-    total += row.size;
-    if (
-      row.at <= now - CHANGES_KEEP_MS ||
-      kept >= CHANGES_MAX ||
-      total > CHANGES_BEFORE_DOC_MAX_CHARS
-    ) {
-      // 한 번 넘으면 그보다 오래된 행도 모두 지운다.
-      stale.push(row.id);
-      total = Number.POSITIVE_INFINITY;
-      continue;
-    }
-    kept += 1;
-  }
-  if (!stale.length) return;
-  await db.batch(
-    stale.map((id) =>
-      db.prepare('DELETE FROM agent_changes WHERE user_id = ? AND id = ?').bind(userId, id),
-    ),
-  );
+    .bind(userId, userId, now - CHANGES_KEEP_MS, CHANGES_MAX, CHANGES_BEFORE_DOC_MAX_BYTES)
+    .run();
 }
 
 /** 한 요청(`requestId`)으로 이미 적용된 항목. 재전송을 건너뛸 때 쓴다. */
