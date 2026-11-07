@@ -25,34 +25,49 @@ export type ChangeMeta = Omit<ChangeRow, 'userId' | 'beforeDoc'> & {
   tokenName: string | null;
 };
 
-export async function recordChanges(db: MeetDb, rows: ChangeRow[]): Promise<void> {
-  if (!rows.length) return;
-  // 행 수와 무관하게 SQL 한 문장(json_each)으로 넣는다(Workers Free 호출당 D1 쿼리 한도).
-  const data = rows.map((row) => [
-    row.id,
-    row.userId,
-    row.tokenId,
-    row.requestId,
-    row.kind,
-    row.itemId,
-    row.beforeDoc,
-    row.beforeRev,
-    row.afterRev,
-    row.label,
-    row.at,
-  ]);
-  await db
-    .prepare(
-      `INSERT INTO agent_changes
+/** 한 문장에 묶는 JSON 크기 상한(바이트). D1의 문자열·행 한도(2MB)보다 충분히 작게 둔다. */
+export const RECORD_CHUNK_BYTES = 1_000_000;
+const utf8Bytes = (text: string) => new TextEncoder().encode(text).byteLength;
+
+const RECORD_SQL = `INSERT INTO agent_changes
         (id, user_id, token_id, request_id, kind, item_id, before_doc, before_rev, after_rev, label, at, undone_at)
        SELECT json_extract(value, '$[0]'), json_extract(value, '$[1]'), json_extract(value, '$[2]'),
          json_extract(value, '$[3]'), json_extract(value, '$[4]'), json_extract(value, '$[5]'),
          json_extract(value, '$[6]'), json_extract(value, '$[7]'), json_extract(value, '$[8]'),
          json_extract(value, '$[9]'), json_extract(value, '$[10]'), NULL
-       FROM json_each(?)`,
-    )
-    .bind(JSON.stringify(data))
-    .run();
+       FROM json_each(?)`;
+
+/** 문서 하나는 ITEM_DOC_MAX_CHARS(20만 자) 이하라 이스케이프 뒤에도 행당 약 600KB다. 그래서 한 행이 혼자 한도를 넘지 않는다. */
+export async function recordChanges(db: MeetDb, rows: ChangeRow[]): Promise<void> {
+  if (!rows.length) return;
+  // JSON을 RECORD_CHUNK_BYTES 안팎으로 나눠 db.batch 한 번에 보낸다(D1 문자열 2MB 한도, 호출당 쿼리 수는 몇 개).
+  const chunks: string[][] = [[]];
+  let size = 2;
+  for (const row of rows) {
+    const text = JSON.stringify([
+      row.id,
+      row.userId,
+      row.tokenId,
+      row.requestId,
+      row.kind,
+      row.itemId,
+      row.beforeDoc,
+      row.beforeRev,
+      row.afterRev,
+      row.label,
+      row.at,
+    ]);
+    const bytes = utf8Bytes(text) + 1;
+    const last = chunks[chunks.length - 1]!;
+    if (last.length && size + bytes > RECORD_CHUNK_BYTES) {
+      chunks.push([text]);
+      size = 2 + bytes;
+    } else {
+      last.push(text);
+      size += bytes;
+    }
+  }
+  await db.batch(chunks.map((chunk) => db.prepare(RECORD_SQL).bind(`[${chunk.join(',')}]`)));
 }
 
 /** 최근 순(같은 시각이면 나중에 넣은 것 먼저). before_doc은 싣지 않는다. */

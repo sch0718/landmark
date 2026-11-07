@@ -1,9 +1,10 @@
 // @vitest-environment node
-import { afterEach, beforeEach, expect, it } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import {
   CHANGES_KEEP_MS,
   CHANGES_MAX,
   CHANGES_BEFORE_DOC_MAX_BYTES,
+  RECORD_CHUNK_BYTES,
   listChanges,
   pruneChanges,
   recordChanges,
@@ -246,4 +247,31 @@ it('recordChanges: null before_doc·긴 한국어·특수문자가 그대로 저
   expect(
     results.every((r) => r.undone_at === null && r.before_rev === 1 && r.after_rev === 2),
   ).toBe(true);
+});
+
+it('이전 문서 합계가 클 때 JSON을 나눠 한 번의 batch로 넣고, 문장당 바인드 값이 한도 안이다', async () => {
+  const big = JSON.stringify({ memo: 'x'.repeat(400_000) });
+  const rows = Array.from({ length: 6 }, (_, i) => row(i + 1, { beforeDoc: big }));
+  const realPrepare = db.prepare.bind(db);
+  const prepare = vi.spyOn(db, 'prepare');
+  const batch = vi.spyOn(db, 'batch');
+  const sizes: number[] = [];
+  prepare.mockImplementation((sql: string) => {
+    const stmt = realPrepare(sql);
+    const bind = stmt.bind.bind(stmt);
+    stmt.bind = (...args: (string | number | null)[]) => {
+      if (typeof args[0] === 'string' && sql.includes('INSERT INTO agent_changes'))
+        sizes.push(new TextEncoder().encode(args[0]).byteLength);
+      return bind(...args);
+    };
+    return stmt;
+  });
+
+  await recordChanges(db, rows);
+
+  expect(batch).toHaveBeenCalledTimes(1);
+  expect(sizes.length).toBeGreaterThan(1);
+  expect(sizes.length).toBeLessThanOrEqual(rows.length);
+  for (const size of sizes) expect(size).toBeLessThanOrEqual(RECORD_CHUNK_BYTES);
+  expect(await count()).toBe(6);
 });
