@@ -759,7 +759,7 @@ describe('온라인 약속 Pages 진입점', () => {
     ['풀기', 'POST'],
   ] as const;
   it.each(routes)('%s는 실제 DB와 처리 함수를 연결한다', async (action, method) => {
-    const { createSqliteD1 } = await import('../../helpers/sqlite-d1');
+    const { createTestD1 } = await import('@sch0718/firebase-session/testing/d1');
     const { buildMeeting } = await import('../../fixtures/builders');
     const { docFromMeeting } = await import('src/domain/meeting/online-doc');
     const { onRequestPost: create } = await import('../../../functions/api/meet/index');
@@ -767,7 +767,7 @@ describe('온라인 약속 Pages 진입점', () => {
     const { onRequestPost: claim } = await import('../../../functions/api/meet/[id]/claim');
     const { onRequestPut: reply } = await import('../../../functions/api/meet/[id]/reply');
     const { onRequestPost: release } = await import('../../../functions/api/meet/[id]/release');
-    const db = createSqliteD1();
+    const db = createTestD1();
     const pending: Promise<unknown>[] = [];
     const meeting = buildMeeting();
     const doc = {
@@ -821,11 +821,11 @@ describe('온라인 약속 Pages 진입점', () => {
     }
   });
   it('올리기의 Turnstile 호출은 런타임 fetch의 this를 보존한다', async () => {
-    const { createSqliteD1 } = await import('../../helpers/sqlite-d1');
+    const { createTestD1 } = await import('@sch0718/firebase-session/testing/d1');
     const { buildMeeting } = await import('../../fixtures/builders');
     const { docFromMeeting } = await import('src/domain/meeting/online-doc');
     const { onRequestPost } = await import('../../../functions/api/meet/index');
-    const db = createSqliteD1();
+    const db = createTestD1();
     const pending: Promise<unknown>[] = [];
     const url = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
     const calls = stubFetch({ [url]: () => new Response('{"success":true}') });
@@ -857,11 +857,11 @@ describe('온라인 약속 Pages 진입점', () => {
 
 describe('짧은 링크 함수 진입점', () => {
   it('만들기·열기·지우기를 실제 DB와 처리 함수에 연결한다', async () => {
-    const { createSqliteD1 } = await import('../../helpers/sqlite-d1');
+    const { createTestD1 } = await import('@sch0718/firebase-session/testing/d1');
     const { onRequestPost: create } = await import('../../../functions/api/share/index');
     const { onRequestDelete: remove } = await import('../../../functions/api/share/[id]');
     const { onRequestGet: open } = await import('../../../functions/s/[id]');
-    const db = createSqliteD1();
+    const db = createTestD1();
     const pending: Promise<unknown>[] = [];
     const ctx = (verb: string, path: string, id?: string, init: RequestInit = {}) => ({
       request: new Request(`http://localhost:8788${path}`, { method: verb, ...init }),
@@ -906,13 +906,13 @@ describe('짧은 링크 함수 진입점', () => {
 });
 
 it('trip-live 진입점은 env.DB로 만들기·읽기·다시 만들기·삭제를 처리한다', async () => {
-  const { createSqliteD1 } = await import('../../helpers/sqlite-d1');
+  const { createTestD1 } = await import('@sch0718/firebase-session/testing/d1');
   const { buildLiveDoc } = await import('../../fixtures/live-trip');
   const { onRequestPost } = await import('../../../functions/api/trip-live/index');
   const { onRequestGet, onRequestPut, onRequestDelete } =
     await import('../../../functions/api/trip-live/[id]');
   const { onRequestPost: rotate } = await import('../../../functions/api/trip-live/[id]/rotate');
-  const db = createSqliteD1();
+  const db = createTestD1();
   const pending: Promise<unknown>[] = [];
   const owner = 'o'.repeat(43),
     view = 'v'.repeat(43),
@@ -957,7 +957,7 @@ it('trip-live 진입점은 env.DB로 만들기·읽기·다시 만들기·삭제
 });
 
 it('trip-collab 진입점은 env.DB로 초대·수락·읽기·거두기를 처리한다', async () => {
-  const { createSqliteD1 } = await import('../../helpers/sqlite-d1');
+  const { createTestD1 } = await import('@sch0718/firebase-session/testing/d1');
   const { buildLiveDoc } = await import('../../fixtures/live-trip');
   const { onRequestPost: create } = await import('../../../functions/api/trip-live/index');
   const { onRequestPost: invite } = await import('../../../functions/api/trip-collab/[id]/invites');
@@ -965,7 +965,7 @@ it('trip-collab 진입점은 env.DB로 초대·수락·읽기·거두기를 처�
   const { onRequestGet: state } = await import('../../../functions/api/trip-collab/[id]/state');
   const { onRequestDelete: remove } =
     await import('../../../functions/api/trip-collab/[id]/members/[device]');
-  const db = createSqliteD1(),
+  const db = createTestD1(),
     pending: Promise<unknown>[] = [],
     id = 'abcdefghij',
     owner = 'o'.repeat(43),

@@ -1,7 +1,7 @@
 import type { BrowserContext } from '@playwright/test';
 import { require as tsxRequire } from 'tsx/cjs/api';
 import type { MeetDeps } from '../../src/server/meet/handlers';
-import { createSqliteD1 } from '../helpers/sqlite-d1';
+import { createTestD1 } from '@sch0718/firebase-session/testing/d1';
 const { handleLiveCreate, handleLiveGet, handleLiveUpdate, handleLiveRotate, handleLiveDelete } =
   tsxRequire(
     '../../src/server/trip-live/handlers.ts',
@@ -27,7 +27,7 @@ export function createTripLiveServer(): {
   install(context: BrowserContext): Promise<void>;
   close(): void;
 } {
-  const db = createSqliteD1();
+  const db = createTestD1();
   const deps: MeetDeps = {
     now: () => new Date(),
     fetch: async () => {

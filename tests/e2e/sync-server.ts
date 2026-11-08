@@ -1,7 +1,7 @@
 import type { BrowserContext, Route } from '@playwright/test';
 import { require as tsxRequire } from 'tsx/cjs/api';
 import type { SyncDeps } from '../../src/server/library-sync/env';
-import { createSqliteD1 } from '../helpers/sqlite-d1';
+import { createTestD1 } from '@sch0718/firebase-session/testing/d1';
 // Playwright의 ESM 로더 훅과 충돌하지 않도록 기존 약속 시험과 같은 방식으로 읽는다.
 const { handleSync } = tsxRequire(
   '../../src/server/library-sync/router.ts',
@@ -29,7 +29,7 @@ type GetRequest = {
   status: number;
 };
 export function createSyncServer() {
-  const db = createSqliteD1();
+  const db = createTestD1();
   const getRequests: GetRequest[] = [];
   const blocked = async () => {
     throw new Error('동기화 시험에서는 외부 통신을 쓰지 않아요');

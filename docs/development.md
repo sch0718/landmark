@@ -31,7 +31,7 @@
 
 - **Node 24** (`.nvmrc` = `24`). `nvm use`로 맞춥니다.
 - 패키지 매니저는 Yarn 1(`packageManager: yarn@1.22.22`).
-- 일부 개발 의존성의 `engines`가 `package.json`의 `engines.node`(`>=22`)보다 좁습니다.
+- 일부 개발 의존성의 `engines`가 `package.json`의 `engines.node`(`>=22.16`)보다 좁습니다.
   - jsdom 30: `^22.22.2 || ^24.15.0 || >=26`, @babel/core 8: `^22.18.0 || >=24.11.0`
   - 그래서 Node 24.1 같은 이른 마이너 버전에서는 `yarn install`이 engines 오류로 멈춥니다(2026-10-04 확인: 24.1.0에서 실패).
   - 그래서 저장소 루트의 `.yarnrc`에 `ignore-engines true`를 두었습니다. 로컬·CI·Cloudflare Pages 모두 플래그 없이 `yarn install`이 됩니다.
@@ -49,7 +49,7 @@ yarn install --frozen-lockfile  # .yarnrc의 ignore-engines가 적용된다
 | --- | --- | --- |
 | `@sch0718/kakao-share` | `0.1.1` | 카카오톡 공유(`src/sections/share-export/kakao.ts`) |
 | `@sch0718/seen-store` | `0.1.0` | 처음 안내 기록(`src/services/help-seen.ts`). 기기 키 `tripmap:help-seen:v1`을 그대로 넘겨 기존 기록을 이어 씁니다 |
-| `@sch0718/firebase-session` | `0.3.0` | 보관함 동기화 로그인·기기 세션(`src/server/library-sync/`, `src/services/library-sync/`) |
+| `@sch0718/firebase-session` | `0.5.0` | 보관함 동기화 로그인·기기 세션(`src/server/library-sync/`, `src/services/library-sync/`) |
 | `@sch0718/motion-kit` | `0.1.0`(devDependency) | 움직이는 그림 생성기(`scripts/motion/`, 아래) |
 
 `.npmrc`는 `@sch0718/*`만 GitHub Packages에서 받도록 합니다.
@@ -160,7 +160,7 @@ curl -H 'Origin: http://localhost:8788' 'http://localhost:8788/api/place?url=htt
 | `PUT /api/meet/:id/reply` | `{ likes, origin?, times?, docRev? }` 저장 → `200 { rev, timesDropped? }` | 해당 참석자·주최자 |
 | `POST /api/meet/:id/release` | `{ participantId }`로 차지 풀기, `{ host: true, hostToken }`(새 토큰은 브라우저가 만듦)로 주최자 토큰 재발급 → `200 { rev, hostToken? }`. 같은 새 토큰 재시도는 이전 인증이 철회됐어도 버전을 바꾸지 않고 성공 | 주최자 |
 
-- 진입점은 `functions/api/meet/*`, 처리 코드는 `src/server/meet/*`입니다. `MeetDb` 인터페이스에 D1을 넘기며, 단위 시험은 Node 24 내장 `node:sqlite` 어댑터(`tests/helpers/sqlite-d1.ts`)를 씁니다. 브라우저 API·저장은 `src/services/meet-online/*`, 화면은 `use-online-meeting.ts`·`OnlineHostMenu.tsx`·`OnlineInviteView.tsx`·`MeetLinkPage.tsx`에 있습니다.
+- 진입점은 `functions/api/meet/*`, 처리 코드는 `src/server/meet/*`입니다. `MeetDb` 인터페이스에 D1을 넘기며, 단위 시험은 공용 시험 도우미(`@sch0718/firebase-session/testing/d1`)를 씁니다. 브라우저 API·저장은 `src/services/meet-online/*`, 화면은 `use-online-meeting.ts`·`OnlineHostMenu.tsx`·`OnlineInviteView.tsx`·`MeetLinkPage.tsx`에 있습니다.
 - `rev`는 본문·답장·차지 변경을 확인하는 버전이고, DB의 `doc_rev`(응답의 `docRev`)는 본문 변경 때만 오릅니다. 주최자가 보내는 `baseRev`는 `doc_rev`이며, 다르면 `409 CONFLICT`와 현재 `docRev`를 줍니다. 친구 답장 때문에 본문 저장이 충돌하지 않습니다. 참석자 차지·답장·풀기의 동시 변경은 최대 5번 시도하고 계속 충돌하면 `409 CONFLICT`(`reason: 'busy'`)를 줍니다.
 - 올리지 않은 주최자 수정은 마지막으로 맞춘 본문(`syncedDoc`)과의 내용 비교로 판정합니다. 제목·일시·이동수단·후보·확정과 주최자 참석자 id·이름을 비교하며, `seen`의 답장 전용 참석자는 이름이 자동 추가 때의 `seenNames[id]`와 같을 때만 뺍니다. 이름이 다르면 주최자 수정으로 보존하고 다음 본문 저장에 싣습니다. `seenNames`는 `seen`과 함께 추가·삭제하며 원격 본문을 받으면 받은 이름으로 맞춥니다. 출발지가 `syncedDoc`과도 마지막 답장 출발지(`replyOrigins[id]`)와도 다르거나 아래 덮어쓰기 조건이면 주최자 수정입니다. 수정이 없고 `docRev`가 다르거나 기록이 없으면 서버 본문을 받고 `syncedDoc`·`docRev`를 맞춥니다. 첫 기기(`syncedDoc: null`)는 수정 없음으로 보며, 미전송 수정이 있으면 본문과 두 기록을 보존합니다.
 - 참석자는 새 본문과 남는 답장 전용 참석자를 합쳐 10명까지입니다. 본문 갱신도 같은 `rev` 조건에서 검사·저장하며 초과하면 `409`(`reason: 'full'`)을 돌려줍니다.

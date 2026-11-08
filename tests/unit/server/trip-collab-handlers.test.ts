@@ -15,14 +15,14 @@ import {
 import { resetSchemaMemo } from 'src/server/meet/db';
 import type { MeetContext } from 'src/server/meet/env';
 import { hashToken } from 'src/server/meet/tokens';
-import { createSqliteD1 } from '../../helpers/sqlite-d1';
+import { createTestD1 } from '@sch0718/firebase-session/testing/d1';
 import { buildLiveDoc } from '../../fixtures/live-trip';
 const id = 'abcdefghij',
   owner = 'o'.repeat(43),
   view = 'v'.repeat(43),
   invite = 'i'.repeat(43),
   device = 'd'.repeat(43);
-let db: ReturnType<typeof createSqliteD1>, pending: Promise<unknown>[], now: Date;
+let db: ReturnType<typeof createTestD1>, pending: Promise<unknown>[], now: Date;
 const deps = { now: () => now, fetch: vi.fn<typeof fetch>() };
 const doc = () => ({ ...buildLiveDoc(), v: 2 as const });
 function ctx(
@@ -91,7 +91,7 @@ const progress = (body: unknown, token = device, env = {}) =>
   handleCollabProgress(ctx('POST', token, body, '', env), deps);
 beforeEach(() => {
   resetSchemaMemo();
-  db = createSqliteD1();
+  db = createTestD1();
   pending = [];
   now = new Date('2026-11-01T00:00:00.000Z');
 });

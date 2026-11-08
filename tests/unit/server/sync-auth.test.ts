@@ -4,8 +4,8 @@ import { handleSync } from 'src/server/library-sync/router';
 import { providerStatus, redirectUrisFor } from 'src/server/library-sync/auth';
 import { isSyncOrigin } from 'src/server/library-sync/http';
 import { productionDeps, type SyncContext } from 'src/server/library-sync/env';
-import { createSqliteD1 } from '../../helpers/sqlite-d1';
-const db = createSqliteD1();
+import { createTestD1 } from '@sch0718/firebase-session/testing/d1';
+const db = createTestD1();
 const ctx = (
   path: string,
   extra: Partial<SyncContext['env']> = {},
@@ -122,8 +122,7 @@ it('공급자 설정과 콜백 주소를 검사한다', () => {
   expect(
     redirectUrisFor(
       ctx('/', {
-        SYNC_REDIRECT_URIS:
-          'https://example.com/auth/callback,https://example.com/#x,javascript:bad',
+        SYNC_REDIRECT_URIS: `https://example.com/auth/callback,https://example.com/#x,javascript:bad,https://example.com/${'a'.repeat(2048)}`,
       }),
     ),
   ).toEqual(['https://example.com/auth/callback']);
@@ -138,8 +137,12 @@ it('스위치·설정·메서드·출처와 no-store를 지킨다', async () => 
     reason: 'config',
   });
   for (const [path, env, method, status] of [
+    ['/v1/session', { LIBRARY_SYNC: 'off' }, 'POST', 503],
     ['/v1/session/social', { LIBRARY_SYNC: 'off' }, 'POST', 503],
     ['/v1/session', { LIBRARY_SYNC: 'off' }, 'DELETE', 401],
+    ['/v1/sessions', { LIBRARY_SYNC: 'off' }, 'GET', 401],
+    ['/v1/session/social', { LIBRARY_SYNC: 'off' }, 'GET', 405],
+    ['/v1/sessions?others=1&x=1', {}, 'DELETE', 401],
     ['/none', {}, 'GET', 404],
     ['/v1/status', { DB: undefined }, 'GET', 503],
   ] as const)
@@ -147,6 +150,16 @@ it('스위치·설정·메서드·출처와 no-store를 지킨다', async () => 
   const bad = ctx('/v1/status');
   bad.request = new Request(bad.request.url, { headers: { Origin: 'https://evil.example' } });
   expect((await handleSync(bad, deps)).status).toBe(403);
+});
+it('off 상태 생성 경로 503도 로그 path에 패턴을 남긴다', async () => {
+  const deps = productionDeps();
+  const logs: string[] = [];
+  deps.log = (m: string) => logs.push(m);
+  for (const path of ['/v1/session', '/v1/session/social']) {
+    logs.length = 0;
+    expect((await handleSync(ctx(path, { LIBRARY_SYNC: 'off' }, 'POST'), deps)).status).toBe(503);
+    expect(JSON.parse(logs.at(-1)!)).toMatchObject({ path, status: 503 });
+  }
 });
 it('로그인 61번째는 공급자 호출 전에 제한한다', async () => {
   const deps = productionDeps();

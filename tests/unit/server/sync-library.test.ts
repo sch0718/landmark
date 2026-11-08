@@ -14,7 +14,8 @@ import {
   DEVICE_MAX,
 } from 'src/server/library-sync/library';
 import type { SyncUser } from 'src/server/library-sync/auth';
-import { createSqliteD1 } from '../../helpers/sqlite-d1';
+import { createTestD1 } from '@sch0718/firebase-session/testing/d1';
+import { createSyncMemoryServer } from '../../helpers/sync-memory-server';
 import type { Place } from 'src/schema/library';
 const now = Date.parse('2026-10-29T00:00:00.000Z');
 const t = '2026-10-03T00:00:00.000Z';
@@ -42,9 +43,9 @@ const user: SyncUser = {
 };
 const other = { ...user, userId: 'user-b' };
 const device = 'a'.repeat(16);
-let db: ReturnType<typeof createSqliteD1>;
+let db: ReturnType<typeof createTestD1>;
 beforeEach(async () => {
-  db = createSqliteD1();
+  db = createTestD1();
   await ensureSchema(db);
 });
 afterEach(() => db.close());
@@ -228,7 +229,7 @@ it('90일 정리는 여행 참조 장소를 남기고 계정 지우기는 다른
 it('인증 라우트는 사용자 한도·본문 상한·off에서도 계정 삭제를 지킨다', async () => {
   const { handleSync } = await import('src/server/library-sync/router');
   const { productionDeps } = await import('src/server/library-sync/env');
-  const { createFakeSocial } = await import('src/server/library-sync/dev-fake-social');
+  const { createFakeSocial } = await import('@sch0718/firebase-session/testing');
   const { socialAuthorizeUrl, socialNonce } = await import('@sch0718/firebase-session/client');
   const { base64url } = await import('@sch0718/firebase-session/worker');
   const deps = productionDeps();
@@ -270,10 +271,14 @@ it('인증 라우트는 사용자 한도·본문 상한·off에서도 계정 삭
   query.set('provider', 'kakao');
   query.set('sub', 'me');
   query.set('result', 'ok');
-  const approve = await createFakeSocial({ now: () => now }).handle(
-    new Request('http://localhost:8795/api/sync/dev/fake-social/approve?' + query),
-    ['http://localhost:8795/auth/callback'],
-  );
+  const approve = await createFakeSocial({
+    basePath: '/api/sync/dev/fake-social',
+    defaultSub: 'dev-me',
+    approveResponse: 'refresh',
+    now: () => now,
+  }).handle(new Request('http://localhost:8795/api/sync/dev/fake-social/approve?' + query), [
+    'http://localhost:8795/auth/callback',
+  ]);
   const callback = new URL(
     (await approve!.text()).match(/url=([^"<]+)/)![1]!.replaceAll('&amp;', '&'),
   );
@@ -284,7 +289,12 @@ it('인증 라우트는 사용자 한도·본문 상한·off에서도 계정 삭
     redirectUri: 'http://localhost:8795/auth/callback',
   });
   expect(logged.status).toBe(200);
+  expect(logged.headers.get('Cache-Control')).toBe('private, no-store');
   session.value = (await logged.json()).sessionId;
+  const invalid = await call('/v1/sessions?others=1&x=1', 'DELETE');
+  expect(invalid.status).toBe(400);
+  expect(await invalid.json()).toEqual({ error: 'bad-request' });
+  expect(invalid.headers.get('Cache-Control')).toBe('private, no-store');
   expect((await call('/v1/library/push', 'POST', 'x'.repeat(1000001))).status).toBe(413);
   expect((await call('/v1/library/push', 'POST', body([place()]))).status).toBe(200);
   const me = await (await call('/v1/me')).json();
@@ -432,3 +442,50 @@ it('세션 없는 사용자는 deviceId null로 읽고 기기 행을 만들지 �
   ).rejects.toMatchObject({ status: 422, code: 'invalid', extra: { path: 'device' } });
   expect(await db.prepare('SELECT count(*) AS n FROM library_devices').first()).toEqual({ n: 0 });
 });
+
+it.each(['current', 'others', 'id'] as const)(
+  '%s 철회는 off에서도 해당 세션의 기기 기록만 지운다',
+  async (target) => {
+    const server = createSyncMemoryServer({ ALLOWED_ACCOUNTS: undefined });
+    try {
+      const origin = 'http://localhost:8795/api/sync';
+      const tokens = [await server.login(), await server.login(), await server.login('other')];
+      const users = await server.db
+        .prepare('SELECT id AS userId FROM users')
+        .all<{ userId: string }>();
+      for (const user of users.results)
+        await pushItems(server.db, user, body([place()]), Date.now());
+      const request = (path: string, index = 0, method = 'GET') =>
+        server.fetch(origin + path, {
+          method,
+          headers: { 'X-Landmark-Session': tokens[index]! },
+        });
+      for (let i = 0; i < tokens.length; i++)
+        expect(
+          (await request('/v1/library/changes?device=' + String(i).repeat(16), i)).status,
+        ).toBe(200);
+      const { sessions } = await (await request('/v1/sessions')).json();
+      const otherId = sessions.find((session: { current: boolean }) => !session.current).id;
+      server.env.LIBRARY_SYNC = 'off';
+      const path =
+        target === 'current'
+          ? '/v1/session'
+          : target === 'others'
+            ? '/v1/sessions?others=1'
+            : '/v1/sessions/' + otherId;
+      const response = await request(path, 0, 'DELETE');
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ revoked: 1 });
+      expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+      const remaining = await server.db
+        .prepare('SELECT device_id FROM library_devices ORDER BY device_id')
+        .all();
+      expect(remaining.results).toEqual([
+        { device_id: (target === 'current' ? '1' : '0').repeat(16) },
+        { device_id: '2'.repeat(16) },
+      ]);
+    } finally {
+      server.db.close();
+    }
+  },
+);

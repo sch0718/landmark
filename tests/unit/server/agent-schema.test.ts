@@ -4,13 +4,13 @@ import { deleteAccountData } from 'src/server/library-sync/library';
 import { ensureSchema, resetSchemaMemo } from 'src/server/meet/db';
 import { SCHEMA_STATEMENTS, SCHEMA_VERSION } from 'src/server/meet/schema-sql';
 import { hashToken } from 'src/server/meet/tokens';
-import { createSqliteD1 } from '../../helpers/sqlite-d1';
+import { createTestD1 } from '@sch0718/firebase-session/testing/d1';
 
-let db: ReturnType<typeof createSqliteD1>;
+let db: ReturnType<typeof createTestD1>;
 
 beforeEach(() => {
   resetSchemaMemo();
-  db = createSqliteD1();
+  db = createTestD1();
 });
 
 afterEach(() => {
@@ -32,22 +32,22 @@ it.each([0, 6, 7])('버전 %i에서 AI 표 세 개와 색인 여섯 개를 멱�
   await ensureSchema(db);
 
   expect(
-    await db
-      .prepare("SELECT name, type FROM sqlite_master WHERE name LIKE 'agent_%' ORDER BY name")
-      .all(),
-  ).toEqual({
-    results: [
-      { name: 'agent_changes', type: 'table' },
-      { name: 'agent_changes_user', type: 'index' },
-      { name: 'agent_inbox', type: 'table' },
-      { name: 'agent_inbox_expires', type: 'index' },
-      { name: 'agent_inbox_key', type: 'index' },
-      { name: 'agent_inbox_user', type: 'index' },
-      { name: 'agent_tokens', type: 'table' },
-      { name: 'agent_tokens_hash', type: 'index' },
-      { name: 'agent_tokens_user', type: 'index' },
-    ],
-  });
+    (
+      await db
+        .prepare("SELECT name, type FROM sqlite_master WHERE name LIKE 'agent_%' ORDER BY name")
+        .all()
+    ).results,
+  ).toEqual([
+    { name: 'agent_changes', type: 'table' },
+    { name: 'agent_changes_user', type: 'index' },
+    { name: 'agent_inbox', type: 'table' },
+    { name: 'agent_inbox_expires', type: 'index' },
+    { name: 'agent_inbox_key', type: 'index' },
+    { name: 'agent_inbox_user', type: 'index' },
+    { name: 'agent_tokens', type: 'table' },
+    { name: 'agent_tokens_hash', type: 'index' },
+    { name: 'agent_tokens_user', type: 'index' },
+  ]);
   for (const [table, columns] of Object.entries({
     agent_tokens: 'id,user_id,token_hash,name,scopes,created_at,expires_at,last_used_at,revoked_at',
     agent_inbox:
@@ -66,13 +66,13 @@ it.each([0, 6, 7])('버전 %i에서 AI 표 세 개와 색인 여섯 개를 멱�
     await ensureSchema(db);
   }
   expect(SCHEMA_VERSION).toBe(8);
-  expect(await db.prepare('SELECT version FROM schema_meta').all()).toEqual({
-    results: [{ version: 8 }],
-  });
+  expect((await db.prepare('SELECT version FROM schema_meta').all()).results).toEqual([
+    { version: 8 },
+  ]);
   if (version) {
-    expect(await db.prepare('SELECT id FROM users').all()).toEqual({
-      results: [{ id: '기존사용자' }],
-    });
+    expect((await db.prepare('SELECT id FROM users').all()).results).toEqual([
+      { id: '기존사용자' },
+    ]);
   }
 });
 
@@ -151,11 +151,10 @@ it('계정 자료 삭제는 세 AI 표에서 그 사용자의 모든 행만 지�
   await deleteAccountData(db, '지울사용자');
 
   for (const table of ['agent_changes', 'agent_inbox', 'agent_tokens']) {
-    expect(await db.prepare(`SELECT user_id FROM ${table} ORDER BY id`).all()).toEqual({
-      results: [{ user_id: '남길사용자' }, { user_id: '남길사용자' }],
-    });
+    expect((await db.prepare(`SELECT user_id FROM ${table} ORDER BY id`).all()).results).toEqual([
+      { user_id: '남길사용자' },
+      { user_id: '남길사용자' },
+    ]);
   }
-  expect(await db.prepare('SELECT id FROM users').all()).toEqual({
-    results: [{ id: '남길사용자' }],
-  });
+  expect((await db.prepare('SELECT id FROM users').all()).results).toEqual([{ id: '남길사용자' }]);
 });

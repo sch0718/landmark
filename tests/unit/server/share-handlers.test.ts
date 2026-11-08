@@ -19,13 +19,13 @@ import {
 } from 'src/server/share/handlers';
 import { OPEN_SCRIPT, OPEN_TEXT } from 'src/server/share/open-page';
 import { encryptShareHash } from 'src/services/share-short/crypto';
-import { createSqliteD1 } from '../../helpers/sqlite-d1';
+import { createTestD1 } from '@sch0718/firebase-session/testing/d1';
 
 const NOW = new Date('2026-10-28T03:00:00.000Z');
 const DAY = 24 * 60 * 60 * 1000;
 const LOCAL = 'http://localhost:8788';
 const BODY = 'A'.repeat(64);
-let db: ReturnType<typeof createSqliteD1>;
+let db: ReturnType<typeof createTestD1>;
 let env: MeetEnv;
 let deps: MeetDeps;
 let pending: Promise<unknown>[];
@@ -33,7 +33,7 @@ let now: Date;
 
 beforeEach(() => {
   resetSchemaMemo();
-  db = createSqliteD1();
+  db = createTestD1();
   env = { DB: db };
   now = NOW;
   deps = { fetch: vi.fn<typeof fetch>(), now: () => now };
@@ -113,18 +113,16 @@ describe('POST /api/share', () => {
       expiresAt: new Date(NOW.getTime() + 30 * DAY).toISOString(),
       created: true,
     });
-    expect(await db.prepare('SELECT * FROM share_links').all()).toEqual({
-      results: [
-        {
-          id: body.id,
-          body: BODY,
-          kind: 'places',
-          delete_hash: await hashToken(token),
-          created_at: NOW.toISOString(),
-          expires_at: body.expiresAt,
-        },
-      ],
-    });
+    expect((await db.prepare('SELECT * FROM share_links').all()).results).toEqual([
+      {
+        id: body.id,
+        body: BODY,
+        kind: 'places',
+        delete_hash: await hashToken(token),
+        created_at: NOW.toISOString(),
+        expires_at: body.expiresAt,
+      },
+    ]);
   });
 
   it.each([
@@ -159,9 +157,9 @@ describe('POST /api/share', () => {
       expiresAt: first.expiresAt,
       created: false,
     });
-    expect(await db.prepare('SELECT body FROM share_links').all()).toEqual({
-      results: [{ body: BODY }],
-    });
+    expect((await db.prepare('SELECT body FROM share_links').all()).results).toEqual([
+      { body: BODY },
+    ]);
   });
 
   it('id가 겹치면 새 id로 다시 넣는다', async () => {
@@ -546,18 +544,16 @@ describe('insertShareLink', () => {
         created: true,
       });
       const stored = await db.prepare('SELECT * FROM share_links').all();
-      expect(stored).toEqual({
-        results: [
-          {
-            id: result.id,
-            body: BODY,
-            kind: 'places',
-            delete_hash: deleteHash,
-            created_at: NOW.toISOString(),
-            expires_at: result.expiresAt,
-          },
-        ],
-      });
+      expect(stored.results).toEqual([
+        {
+          id: result.id,
+          body: BODY,
+          kind: 'places',
+          delete_hash: deleteHash,
+          created_at: NOW.toISOString(),
+          expires_at: result.expiresAt,
+        },
+      ]);
       const output = JSON.stringify({ result, stored, logs: logs.map((log) => log.mock.calls) });
       expect(output.includes(token)).toBe(false);
     } finally {
@@ -590,9 +586,9 @@ describe('insertShareLink', () => {
     );
     expect(again).toEqual({ ...first, created: false });
     expect(newId).not.toHaveBeenCalled();
-    expect(await db.prepare('SELECT body, kind, expires_at FROM share_links').all()).toEqual({
-      results: [{ body: BODY, kind: 'places', expires_at: first.expiresAt }],
-    });
+    expect(
+      (await db.prepare('SELECT body, kind, expires_at FROM share_links').all()).results,
+    ).toEqual([{ body: BODY, kind: 'places', expires_at: first.expiresAt }]);
   });
 
   it('같은 삭제 해시로 동시에 넣어도 처음 링크 하나만 남는다', async () => {
@@ -603,9 +599,9 @@ describe('insertShareLink', () => {
     ]);
     expect(first.created).toBe(true);
     expect(again).toEqual({ ...first, created: false });
-    expect(await db.prepare('SELECT body FROM share_links').all()).toEqual({
-      results: [{ body: BODY }],
-    });
+    expect((await db.prepare('SELECT body FROM share_links').all()).results).toEqual([
+      { body: BODY },
+    ]);
   });
 
   it('id가 두 번 겹쳐도 세 번째 id로 넣는다', async () => {

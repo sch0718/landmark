@@ -676,13 +676,13 @@ it.each([false, true])(
   '올리기 응답 유실 뒤 제목 수정 %s 후 다시 공유하면 같은 토큰으로 복구하고 수정은 자동으로 올린다',
   async (edited) => {
     const { webcrypto } = await import('node:crypto');
-    const { createSqliteD1 } = await import('../../../helpers/sqlite-d1');
+    const { createTestD1 } = await import('@sch0718/firebase-session/testing/d1');
     const { handleCreate } = await import('src/server/meet/handlers');
     const { meetApi: actualApi } = await vi.importActual<
       typeof import('src/services/meet-online/client')
     >('src/services/meet-online/client');
     vi.stubGlobal('crypto', webcrypto);
-    const db = createSqliteD1();
+    const db = createTestD1();
     const pending: Promise<unknown>[] = [];
     const sentTokens: string[] = [];
     const storedBeforeRequest: boolean[] = [];
@@ -1202,13 +1202,13 @@ it.each(['확인', '다시 발급'] as const)(
   '재발급 응답 유실 뒤 %s에서 같은 토큰으로 주최자 권한을 복구한다',
   async (path) => {
     const { webcrypto } = await import('node:crypto');
-    const { createSqliteD1 } = await import('../../../helpers/sqlite-d1');
+    const { createTestD1 } = await import('@sch0718/firebase-session/testing/d1');
     const { handleCreate, handleRelease, handleGet } = await import('src/server/meet/handlers');
     const { meetApi: actualApi } = await vi.importActual<
       typeof import('src/services/meet-online/client')
     >('src/services/meet-online/client');
     vi.stubGlobal('crypto', webcrypto);
-    const db = createSqliteD1();
+    const db = createTestD1();
     const pending: Promise<unknown>[] = [];
     const sentTokens: string[] = [];
     const context = (request: Request) => ({

@@ -7,12 +7,12 @@ import {
   UNDO_MAX_PER_CALL,
 } from 'src/server/agent/library-edit';
 import { pushItems } from 'src/server/library-sync/library';
-import { ensureSchema, type MeetStatement } from 'src/server/meet/db';
+import { ensureSchema } from 'src/server/meet/db';
 import { SyncHttpError } from 'src/server/library-sync/http';
 import type { ItemKind } from 'src/domain/library-sync/items';
 import type { Place } from 'src/schema/library';
 import type { Trip } from 'src/schema/trip';
-import { createSqliteD1 } from '../../helpers/sqlite-d1';
+import { createTestD1 } from '@sch0718/firebase-session/testing/d1';
 
 const now = Date.parse('2026-11-06T00:00:00.000Z');
 const iso = new Date(now).toISOString();
@@ -75,9 +75,9 @@ const del = (kind: ItemKind, id: string, baseRev: number): Op => ({
   baseRev,
 });
 
-let db: ReturnType<typeof createSqliteD1>;
+let db: ReturnType<typeof createTestD1>;
 beforeEach(async () => {
-  db = createSqliteD1();
+  db = createTestD1();
   await ensureSchema(db);
 });
 afterEach(() => {
@@ -345,17 +345,17 @@ it('1단계 이후 다른 기기가 고치면 conflict이고 그 기기 값을 �
     if (!armed || sql !== 'SELECT rev FROM library_state WHERE user_id = ?') return stmt;
     armed = false;
     // pushItems가 처음 읽기 직전에 다른 기기가 쓴다.
-    return {
-      bind: (...values: (string | number | null)[]) => {
-        const bound = stmt.bind(...values);
-        const first = bound.first.bind(bound);
-        bound.first = async <T>() => {
-          await otherDevice({ ...place(), name: f('다른 기기', '2026-10-20T00:00:00.000Z') }, 1);
-          return first<T>();
-        };
-        return bound;
-      },
-    } as MeetStatement;
+    const bind = stmt.bind.bind(stmt);
+    stmt.bind = (...values: (string | number | null)[]) => {
+      const bound = bind(...values);
+      const first = bound.first.bind(bound);
+      bound.first = async <T>() => {
+        await otherDevice({ ...place(), name: f('다른 기기', '2026-10-20T00:00:00.000Z') }, 1);
+        return first<T>();
+      };
+      return bound;
+    };
+    return stmt;
   });
   const reply = await edit([put('place', { ...place(), memo: f('AI') }, 1)]);
   expect(reply.results[0]).toMatchObject({

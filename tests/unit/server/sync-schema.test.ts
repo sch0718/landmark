@@ -2,9 +2,9 @@
 import { expect, it } from 'vitest';
 import { ensureSchema } from 'src/server/meet/db';
 import { SCHEMA_STATEMENTS } from 'src/server/meet/schema-sql';
-import { createSqliteD1 } from '../../helpers/sqlite-d1';
+import { createTestD1 } from '@sch0718/firebase-session/testing/d1';
 it('버전 2에서 표 다섯 개와 identity를 멱등으로 더한다', async () => {
-  const db = createSqliteD1();
+  const db = createTestD1();
   try {
     await db.batch(SCHEMA_STATEMENTS.slice(0, 10).map((s) => db.prepare(s)));
     await db.prepare('INSERT INTO schema_meta VALUES (2)').run();

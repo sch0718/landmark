@@ -1,13 +1,18 @@
 import {
   createSessionAuth,
   publicSessionId,
+  parseRedirectUris,
+  socialLoginOptions,
   type D1Database,
   type SessionAuth,
-  type SocialLoginOptions,
 } from '@sch0718/firebase-session/worker';
 import type { SyncContext, SyncDeps } from './env';
 import { isLocalRequest, SyncHttpError } from './http';
-import { createFakeSocial } from './dev-fake-social';
+import {
+  createFakeSocial,
+  FAKE_CLIENT_IDS,
+  FAKE_CLIENT_SECRET,
+} from '@sch0718/firebase-session/testing';
 export const SYNC_SESSION_HEADER = 'X-Landmark-Session';
 export type SyncUser = {
   userId: string;
@@ -19,26 +24,18 @@ export type SyncUser = {
 export function devFakeEnabled(ctx: SyncContext): boolean {
   return isLocalRequest(ctx.request) && ctx.env.SYNC_DEV_FAKE_SOCIAL === '1';
 }
+export function fakeSocial(now: () => number) {
+  return createFakeSocial({
+    basePath: '/api/sync/dev/fake-social',
+    defaultSub: 'dev-me',
+    approveResponse: 'refresh',
+    now,
+  });
+}
 export function redirectUrisFor(ctx: SyncContext): string[] {
-  if (ctx.env.SYNC_REDIRECT_URIS === undefined)
-    return [new URL(ctx.request.url).origin + '/auth/callback'];
-  return ctx.env.SYNC_REDIRECT_URIS.split(',')
-    .map((s) => s.trim())
-    .filter((s) => {
-      try {
-        const url = new URL(s);
-        return (
-          !s.includes('#') &&
-          !url.username &&
-          !url.password &&
-          (url.protocol === 'https:' ||
-            (url.protocol === 'http:' &&
-              ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)))
-        );
-      } catch {
-        return false;
-      }
-    });
+  return parseRedirectUris(
+    ctx.env.SYNC_REDIRECT_URIS ?? [new URL(ctx.request.url).origin + '/auth/callback'],
+  );
 }
 /** 허용 목록 변수가 둘 다 없으면(정의되지 않음) 누구나 쓴다. 하나라도 있으면 목록 안만(빈 값은 모두 거절). */
 export function allowListOpen(env: SyncContext['env']): boolean {
@@ -56,35 +53,23 @@ export function providerStatus(ctx: SyncContext) {
 export function sessionAuthFor(ctx: SyncContext, deps: SyncDeps): SessionAuth {
   if (!ctx.env.DB) throw new SyncHttpError(503, 'config');
   const status = providerStatus(ctx);
-  const fake = status.devFake ? createFakeSocial({ now: deps.now }) : null;
+  const fake = status.devFake ? fakeSocial(deps.now) : null;
   const redirectUris = redirectUrisFor(ctx);
   const env = ctx.env;
-  const social: SocialLoginOptions | undefined =
-    status.kakao || status.naver
-      ? {
-          allowedAccounts: env.ALLOWED_ACCOUNTS,
-          keys: fake?.keys ?? deps.socialKeys,
-          fetch: fake?.fetch ?? deps.fetch,
-          ...(status.kakao
-            ? {
-                kakao: {
-                  clientId: fake ? 'dev-fake-kakao' : env.KAKAO_CLIENT_ID!,
-                  clientSecret: fake ? 'dev-fake-secret' : env.KAKAO_CLIENT_SECRET,
-                  redirectUris,
-                },
-              }
-            : {}),
-          ...(status.naver
-            ? {
-                naver: {
-                  clientId: fake ? 'dev-fake-naver' : env.NAVER_CLIENT_ID!,
-                  clientSecret: fake ? 'dev-fake-secret' : env.NAVER_CLIENT_SECRET,
-                  redirectUris,
-                },
-              }
-            : {}),
-        }
-      : undefined;
+  const social = socialLoginOptions({
+    allowedAccounts: env.ALLOWED_ACCOUNTS,
+    kakao: {
+      clientId: fake ? FAKE_CLIENT_IDS.kakao : env.KAKAO_CLIENT_ID,
+      clientSecret: fake ? FAKE_CLIENT_SECRET : env.KAKAO_CLIENT_SECRET,
+    },
+    naver: {
+      clientId: fake ? FAKE_CLIENT_IDS.naver : env.NAVER_CLIENT_ID,
+      clientSecret: fake ? FAKE_CLIENT_SECRET : env.NAVER_CLIENT_SECRET,
+    },
+    redirectUris,
+    keys: fake?.keys ?? deps.socialKeys,
+    fetch: fake?.fetch ?? deps.fetch,
+  });
   return createSessionAuth({
     db: env.DB as unknown as D1Database,
     projectId: env.FIREBASE_PROJECT_ID ?? '',
