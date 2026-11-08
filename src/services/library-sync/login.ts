@@ -1,7 +1,6 @@
 import {
   beginSocialSignIn,
   readSocialCallback,
-  SOCIAL_AUTHORIZE_URLS,
   type AuthClient,
   type SignInResult,
   type SocialProvider,
@@ -67,17 +66,6 @@ export function deviceLabel(ua: string): string {
               : '브라우저';
   return `${device} · ${browser}`.slice(0, 40);
 }
-export function fakeAuthorizeUrl(realUrl: string, origin: string): string {
-  const real = new URL(realUrl);
-  const provider = (Object.keys(SOCIAL_AUTHORIZE_URLS) as SocialProvider[]).find(
-    (p) => new URL(SOCIAL_AUTHORIZE_URLS[p]).origin === real.origin,
-  );
-  if (!provider) throw new Error('알 수 없는 로그인 공급자예요');
-  const url = new URL(origin + '/api/sync/dev/fake-social/authorize');
-  url.search = real.search;
-  url.searchParams.set('provider', provider);
-  return url.href;
-}
 export async function startSocialLogin(
   provider: SocialProvider,
   config: SyncClientConfig,
@@ -93,10 +81,15 @@ export async function startSocialLogin(
   } catch {
     throw new SyncStorageError();
   }
+  let navigate = nav;
+  if (import.meta.env.DEV && config.devFake) {
+    const { fakeAuthorizeUrl } = await import('@sch0718/firebase-session/testing');
+    navigate = (url) => nav(fakeAuthorizeUrl(url, origin + '/api/sync/dev/fake-social'));
+  }
   await beginSocialSignIn(provider, {
     clientId,
     redirectUri: origin + AUTH_CALLBACK_PATH,
-    navigate: config.devFake ? (url) => nav(fakeAuthorizeUrl(url, origin)) : nav,
+    navigate,
     storage,
   });
 }

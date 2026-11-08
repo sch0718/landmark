@@ -1,7 +1,7 @@
 import type { BrowserContext } from '@playwright/test';
 import { require as tsxRequire } from 'tsx/cjs/api';
 import type { MeetDeps } from '../../src/server/meet/handlers';
-import { createSqliteD1 } from '../helpers/sqlite-d1';
+import { createTestD1 } from '@sch0718/firebase-session/testing/d1';
 
 // 약속 시험(`meet-server.ts`)처럼 진짜 처리 코드와 시험용 SQLite로 짧은 링크 요청을 받는다.
 const { handleShareCreate, handleShareDelete, handleShareOpen } = tsxRequire(
@@ -11,7 +11,7 @@ const { handleShareCreate, handleShareDelete, handleShareOpen } = tsxRequire(
 
 /** `/api/share`·`/api/share/:id`·`/s/:id`를 가로챈다. 시험마다 DB 하나를 쓴다. */
 export async function installShareServer(context: BrowserContext): Promise<() => void> {
-  const db = createSqliteD1();
+  const db = createTestD1();
   const deps: MeetDeps = {
     now: () => new Date(),
     fetch: async () => {

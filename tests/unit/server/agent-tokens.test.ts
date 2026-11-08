@@ -285,18 +285,18 @@ describe('인증', () => {
     }
     expect(await authCount()).toBe(headers.length);
     expect(
-      await server.db
-        .prepare('SELECT key, count FROM rate_counters WHERE key LIKE ?')
-        .bind('agent-auth-fail:%')
-        .all(),
-    ).toEqual({
-      results: [
-        {
-          key: counterKey('agent-auth-fail', await hashIp('192.0.2.7', 'dev-salt'), now),
-          count: headers.length,
-        },
-      ],
-    });
+      (
+        await server.db
+          .prepare('SELECT key, count FROM rate_counters WHERE key LIKE ?')
+          .bind('agent-auth-fail:%')
+          .all()
+      ).results,
+    ).toEqual([
+      {
+        key: counterKey('agent-auth-fail', await hashIp('192.0.2.7', 'dev-salt'), now),
+        count: headers.length,
+      },
+    ]);
   });
 
   it('정상 인증은 권한과 공급자만 돌려주고 알 수 없는 저장 범위는 버린다', async () => {

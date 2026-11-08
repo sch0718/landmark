@@ -1385,13 +1385,13 @@ it.each(['기존 참석자', '새 이름'] as const)(
   '응답 유실 뒤 같은 선택은 저장한 토큰으로 재시도해 좋아요 화면을 연다: %s',
   async (choice) => {
     const { webcrypto } = await import('node:crypto');
-    const { createSqliteD1 } = await import('../../../helpers/sqlite-d1');
+    const { createTestD1 } = await import('@sch0718/firebase-session/testing/d1');
     const { handleCreate, handleClaim } = await import('src/server/meet/handlers');
     const { meetApi: actualApi } = await vi.importActual<
       typeof import('src/services/meet-online/client')
     >('src/services/meet-online/client');
     vi.stubGlobal('crypto', webcrypto);
-    const db = createSqliteD1();
+    const db = createTestD1();
     const pending: Promise<unknown>[] = [];
     const newPerson = choice === '새 이름';
     const who = newPerson ? { newName: '새 친구' } : { participantId: 'person02' };

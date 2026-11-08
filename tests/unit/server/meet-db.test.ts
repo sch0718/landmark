@@ -2,13 +2,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ensureSchema, resetSchemaMemo, type MeetDb } from 'src/server/meet/db';
 import { SCHEMA_STATEMENTS, SCHEMA_VERSION } from 'src/server/meet/schema-sql';
-import { createSqliteD1 } from '../../helpers/sqlite-d1';
+import { createTestD1 } from '@sch0718/firebase-session/testing/d1';
 
-let db: ReturnType<typeof createSqliteD1>;
+let db: ReturnType<typeof createTestD1>;
 
 beforeEach(() => {
   resetSchemaMemo();
-  db = createSqliteD1();
+  db = createTestD1();
 });
 
 afterEach(() => {
@@ -28,48 +28,51 @@ describe('ensureSchema', () => {
     await ensureSchema(db);
 
     expect(SCHEMA_VERSION).toBe(8);
-    expect(await db.prepare('SELECT version FROM schema_meta').all()).toEqual({
-      results: [{ version: 8 }],
-    });
+    expect((await db.prepare('SELECT version FROM schema_meta').all()).results).toEqual([
+      { version: 8 },
+    ]);
     expect(
-      await db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all(),
-    ).toEqual({
-      results: [
-        { name: 'agent_changes' },
-        { name: 'agent_inbox' },
-        { name: 'agent_tokens' },
-        { name: 'library_backup_parts' },
-        { name: 'library_backups' },
-        { name: 'library_devices' },
-        { name: 'library_items' },
-        { name: 'library_state' },
-        { name: 'meeting_replies' },
-        { name: 'meeting_tokens' },
-        { name: 'meetings' },
-        { name: 'rate_counters' },
-        { name: 'schema_meta' },
-        { name: 'sessions' },
-        { name: 'share_links' },
-        { name: 'trip_collab_devices' },
-        { name: 'trip_collab_meta' },
-        { name: 'trip_progress' },
-        { name: 'trip_share_tokens' },
-        { name: 'trip_shares' },
-        { name: 'users' },
-      ],
-    });
+      (await db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all())
+        .results,
+    ).toEqual([
+      { name: 'agent_changes' },
+      { name: 'agent_inbox' },
+      { name: 'agent_tokens' },
+      { name: 'library_backup_parts' },
+      { name: 'library_backups' },
+      { name: 'library_devices' },
+      { name: 'library_items' },
+      { name: 'library_state' },
+      { name: 'meeting_replies' },
+      { name: 'meeting_tokens' },
+      { name: 'meetings' },
+      { name: 'rate_counters' },
+      { name: 'schema_meta' },
+      { name: 'sessions' },
+      { name: 'share_links' },
+      { name: 'trip_collab_devices' },
+      { name: 'trip_collab_meta' },
+      { name: 'trip_progress' },
+      { name: 'trip_share_tokens' },
+      { name: 'trip_shares' },
+      { name: 'users' },
+    ]);
     expect(
-      await db
-        .prepare(
-          "SELECT name FROM sqlite_master WHERE name IN ('meetings_expires', 'meeting_tokens_guest') ORDER BY name",
-        )
-        .all(),
-    ).toEqual({ results: [{ name: 'meeting_tokens_guest' }, { name: 'meetings_expires' }] });
+      (
+        await db
+          .prepare(
+            "SELECT name FROM sqlite_master WHERE name IN ('meetings_expires', 'meeting_tokens_guest') ORDER BY name",
+          )
+          .all()
+      ).results,
+    ).toEqual([{ name: 'meeting_tokens_guest' }, { name: 'meetings_expires' }]);
     expect(
-      await db
-        .prepare("SELECT name FROM sqlite_master WHERE name LIKE 'share_links_%' ORDER BY name")
-        .all(),
-    ).toEqual({ results: [{ name: 'share_links_delete' }, { name: 'share_links_expires' }] });
+      (
+        await db
+          .prepare("SELECT name FROM sqlite_master WHERE name LIKE 'share_links_%' ORDER BY name")
+          .all()
+      ).results,
+    ).toEqual([{ name: 'share_links_delete' }, { name: 'share_links_expires' }]);
   });
 
   it('버전 1 DB는 약속 자료를 그대로 두고 짧은 링크 표를 더한다', async () => {
@@ -86,15 +89,15 @@ describe('ensureSchema', () => {
 
     await ensureSchema(db);
 
-    expect(await db.prepare('SELECT id FROM meetings').all()).toEqual({
-      results: [{ id: 'meeting001' }],
-    });
+    expect((await db.prepare('SELECT id FROM meetings').all()).results).toEqual([
+      { id: 'meeting001' },
+    ]);
     expect(await db.prepare('SELECT COUNT(*) AS count FROM share_links').first()).toEqual({
       count: 0,
     });
-    expect(await db.prepare('SELECT version FROM schema_meta').all()).toEqual({
-      results: [{ version: 8 }],
-    });
+    expect((await db.prepare('SELECT version FROM schema_meta').all()).results).toEqual([
+      { version: 8 },
+    ]);
   });
 
   it('두 번 불러도 초기화와 버전 읽기는 한 번만 한다', async () => {
@@ -107,9 +110,9 @@ describe('ensureSchema', () => {
 
     expect(batch).toHaveBeenCalledTimes(1);
     expect(prepare).toHaveBeenCalledTimes(prepared);
-    expect(await db.prepare('SELECT version FROM schema_meta').all()).toEqual({
-      results: [{ version: 8 }],
-    });
+    expect((await db.prepare('SELECT version FROM schema_meta').all()).results).toEqual([
+      { version: 8 },
+    ]);
   });
 
   it('동시에 들어온 초기화도 한 배치로 처리한다', async () => {
@@ -153,16 +156,16 @@ describe('ensureSchema', () => {
       id: 'meeting001',
       doc: '{}',
     });
-    expect(await db.prepare('SELECT version FROM schema_meta').all()).toEqual({
-      results: [{ version: 8 }],
-    });
+    expect((await db.prepare('SELECT version FROM schema_meta').all()).results).toEqual([
+      { version: 8 },
+    ]);
   });
 
   it('버전 표가 비어 있어도 초기화한다', async () => {
     await db.prepare('CREATE TABLE schema_meta (version INTEGER NOT NULL)').run();
     await ensureSchema(db);
     expect(await db.prepare('SELECT version FROM schema_meta').first()).toEqual({ version: 8 });
-    expect(await db.prepare('SELECT * FROM rate_counters').all()).toEqual({ results: [] });
+    expect((await db.prepare('SELECT * FROM rate_counters').all()).results).toEqual([]);
   });
 
   it.each([8, 9])('이미 버전 %i이면 배치를 실행하지 않는다', async (version) => {
@@ -215,26 +218,28 @@ describe('meeting_tokens_guest', () => {
   });
 });
 
-describe('createSqliteD1', () => {
+describe('createTestD1', () => {
   it('bind·first·all·run과 RETURNING을 D1 모양으로 돌려준다', async () => {
     const meetDb: MeetDb = db;
     await meetDb
       .prepare('CREATE TABLE sample (id TEXT PRIMARY KEY, value INTEGER, note TEXT)')
       .run();
     expect(await meetDb.prepare('SELECT * FROM sample').first()).toBeNull();
-    expect(await meetDb.prepare('SELECT * FROM sample').all()).toEqual({ results: [] });
+    expect((await meetDb.prepare('SELECT * FROM sample').all()).results).toEqual([]);
     expect(
-      await meetDb.prepare('INSERT INTO sample VALUES (?, ?, ?)').bind('가', 1, null).run(),
-    ).toEqual({ meta: { changes: 1 } });
+      (await meetDb.prepare('INSERT INTO sample VALUES (?, ?, ?)').bind('가', 1, null).run()).meta
+        .changes,
+    ).toEqual(1);
     expect(
       await meetDb.prepare('UPDATE sample SET value = value + 1 RETURNING value').first(),
     ).toEqual({ value: 2 });
-    expect(await meetDb.prepare('SELECT * FROM sample').all()).toEqual({
-      results: [{ id: '가', value: 2, note: null }],
-    });
+    expect((await meetDb.prepare('SELECT * FROM sample').all()).results).toEqual([
+      { id: '가', value: 2, note: null },
+    ]);
     expect(
-      await meetDb.prepare('UPDATE sample SET value = 3 WHERE id = ?').bind('없음').run(),
-    ).toEqual({ meta: { changes: 0 } });
+      (await meetDb.prepare('UPDATE sample SET value = 3 WHERE id = ?').bind('없음').run()).meta
+        .changes,
+    ).toEqual(0);
   });
 
   it('배치 중간에 실패하면 앞의 표 생성과 쓰기도 되돌린다', async () => {

@@ -2,10 +2,10 @@
 import { expect, it } from 'vitest';
 import { ensureSchema } from 'src/server/meet/db';
 import { SCHEMA_STATEMENTS } from 'src/server/meet/schema-sql';
-import { createSqliteD1 } from '../../helpers/sqlite-d1';
+import { createTestD1 } from '@sch0718/firebase-session/testing/d1';
 
 it.each([0, 5])('버전 %i에서 백업 표 두 개를 멱등으로 만든다', async (version) => {
-  const db = createSqliteD1();
+  const db = createTestD1();
   try {
     if (version) {
       await db.prepare('CREATE TABLE schema_meta (version INTEGER NOT NULL)').run();

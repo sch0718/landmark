@@ -11,9 +11,9 @@ import {
   type ChangeRow,
 } from 'src/server/agent/changes';
 import { ensureSchema, resetSchemaMemo } from 'src/server/meet/db';
-import { createSqliteD1 } from '../../helpers/sqlite-d1';
+import { createTestD1 } from '@sch0718/firebase-session/testing/d1';
 
-let db: ReturnType<typeof createSqliteD1>;
+let db: ReturnType<typeof createTestD1>;
 const now = 1_800_000_000_000;
 
 function row(n: number, extra: Partial<ChangeRow> = {}): ChangeRow {
@@ -43,7 +43,7 @@ async function count(userId = 'u1'): Promise<number> {
 
 beforeEach(async () => {
   resetSchemaMemo();
-  db = createSqliteD1();
+  db = createTestD1();
   await ensureSchema(db);
 });
 

@@ -3,9 +3,9 @@ import { base64url } from '@sch0718/firebase-session/worker';
 import { handleAgent } from '../../src/server/agent/router';
 import { handleSync } from '../../src/server/library-sync/router';
 import { productionDeps, type SyncEnv } from '../../src/server/library-sync/env';
-import { createSqliteD1 } from './sqlite-d1';
+import { createTestD1 } from '@sch0718/firebase-session/testing/d1';
 export function createSyncMemoryServer(extra: Partial<SyncEnv> = {}) {
-  const db = createSqliteD1();
+  const db = createTestD1();
   const env: SyncEnv = {
     DB: db,
     SYNC_DEV_FAKE_SOCIAL: '1',

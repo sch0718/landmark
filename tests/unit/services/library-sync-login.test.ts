@@ -2,7 +2,6 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import {
   afterLogin,
   deviceLabel,
-  fakeAuthorizeUrl,
   startSocialLogin,
   finishSocialLogin,
 } from 'src/services/library-sync/login';
@@ -25,15 +24,10 @@ const api = (userId = 'u') =>
       }),
     },
   }) as unknown as SyncApi;
-it('기기 이름과 가짜 인가 주소를 만든다', () => {
+it('기기 이름을 만든다', () => {
   expect(deviceLabel('iPhone Safari')).toBe('iPhone · Safari');
   expect(deviceLabel('Android Chrome')).toBe('Android · Chrome');
   expect(deviceLabel('Macintosh Chrome KAKAOTALK')).toBe('Mac · 카카오톡');
-  const url = new URL(
-    fakeAuthorizeUrl('https://kauth.kakao.com/oauth/authorize?state=s', 'http://localhost:8795'),
-  );
-  expect(url.pathname).toBe('/api/sync/dev/fake-social/authorize');
-  expect(url.searchParams.get('provider')).toBe('kakao');
 });
 it('소셜 콜백을 한 번만 읽고 세션을 저장해 첫 연결을 고르게 한다', async () => {
   const navigate = vi.fn();
@@ -49,7 +43,8 @@ it('소셜 콜백을 한 번만 읽고 세션을 저장해 첫 연결을 고르�
     { navigate, storage: localStorage, origin: 'http://localhost:8795' },
   );
   const url = new URL(navigate.mock.calls[0]![0]);
-  expect(url.pathname).toContain('/dev/fake-social/authorize');
+  expect(url.pathname).toBe('/api/sync/dev/fake-social/authorize');
+  expect(url.searchParams.get('provider')).toBe('kakao');
   const href = `http://localhost:8795/auth/callback?code=test-code&state=${url.searchParams.get('state')}`;
   expect(await finishSocialLogin(api(), href, localStorage, '시험')).toMatchObject({
     ok: true,

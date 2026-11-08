@@ -24,7 +24,7 @@ import { SyncHttpError, syncError } from 'src/server/library-sync/http';
 import { ensureSchema } from 'src/server/meet/db';
 import { hashToken } from 'src/server/meet/tokens';
 import { encodeShareHash, hashDoc } from 'src/share-viewer/encode';
-import { createSqliteD1 } from '../../helpers/sqlite-d1';
+import { createTestD1 } from '@sch0718/firebase-session/testing/d1';
 import { importedAgentLibrary, largeAgentDoc } from '../../helpers/agent-import-doc';
 
 const fixture = JSON.parse(
@@ -45,7 +45,7 @@ const tripDoc = () => structuredClone(fixture) as ShareDocV2;
 const encode = (doc: ShareDoc) => encodeShareHash(hashDoc(doc));
 const invalid = (reason: string) => ({ status: 422, code: 'invalid', extra: { reason } });
 
-let db: ReturnType<typeof createSqliteD1>;
+let db: ReturnType<typeof createTestD1>;
 let body: InboxBody;
 let secret: string;
 let logs: ReturnType<typeof vi.spyOn>[];
@@ -54,7 +54,7 @@ beforeEach(async () => {
   logs = ['log', 'info', 'warn', 'error', 'debug'].map((method) =>
     vi.spyOn(console, method as 'log').mockImplementation(() => undefined),
   );
-  db = createSqliteD1();
+  db = createTestD1();
   await ensureSchema(db);
   secret = randomKey();
   await db

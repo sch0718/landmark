@@ -2,14 +2,14 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ensureSchema, resetSchemaMemo } from 'src/server/meet/db';
 import { consumeLimit, LIMITS, pruneLimits, type LimitAction } from 'src/server/meet/limits';
-import { createSqliteD1 } from '../../helpers/sqlite-d1';
+import { createTestD1 } from '@sch0718/firebase-session/testing/d1';
 
-let db: ReturnType<typeof createSqliteD1>;
+let db: ReturnType<typeof createTestD1>;
 const now = new Date('2026-10-26T12:00:00Z');
 
 beforeEach(async () => {
   resetSchemaMemo();
-  db = createSqliteD1();
+  db = createTestD1();
   await ensureSchema(db);
 });
 
@@ -95,9 +95,10 @@ describe('pruneLimits', () => {
 
     await pruneLimits(db, new Date('2026-10-27T00:00:00+09:00'));
 
-    expect(await db.prepare('SELECT key FROM rate_counters ORDER BY key').all()).toEqual({
-      results: [{ key: 'claim:IP해시:2026-10-27' }, { key: 'create:IP해시:2026-10-26' }],
-    });
+    expect((await db.prepare('SELECT key FROM rate_counters ORDER BY key').all()).results).toEqual([
+      { key: 'claim:IP해시:2026-10-27' },
+      { key: 'create:IP해시:2026-10-26' },
+    ]);
   });
 
   it('한 번에 최대 200개를 지우고 다음 호출에서 나머지를 지운다', async () => {

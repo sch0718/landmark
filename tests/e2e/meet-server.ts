@@ -2,7 +2,7 @@ import type { BrowserContext } from '@playwright/test';
 import { require as tsxRequire } from 'tsx/cjs/api';
 import type { MeetContext } from '../../src/server/meet/env';
 import type { MeetDeps } from '../../src/server/meet/handlers';
-import { createSqliteD1 } from '../helpers/sqlite-d1';
+import { createTestD1 } from '@sch0718/firebase-session/testing/d1';
 
 // Node에서도 기존 dayjs 플러그인의 확장자 없는 import를 읽도록 이미 쓰는 tsx로 불러온다.
 const {
@@ -35,7 +35,7 @@ const ACTIONS: Record<string, Handler> = {
 
 /** 시험마다 DB 하나를 만들고 같은 시험의 모든 브라우저 문맥이 공유한다. */
 export function createMeetServer(): MeetServer {
-  const db = createSqliteD1();
+  const db = createTestD1();
   const deps: MeetDeps = {
     now: () => new Date(),
     fetch: async () => {

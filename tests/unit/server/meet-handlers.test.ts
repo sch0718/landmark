@@ -23,7 +23,7 @@ import {
 } from 'src/server/meet/handlers';
 import { hashIp, hashToken, newToken } from 'src/server/meet/tokens';
 import { verifyTurnstile } from 'src/server/meet/turnstile';
-import { createSqliteD1 } from '../../helpers/sqlite-d1';
+import { createTestD1 } from '@sch0718/firebase-session/testing/d1';
 import { buildMeeting } from '../../fixtures/builders';
 
 const NOW = new Date('2026-10-26T12:00:00.000Z');
@@ -41,13 +41,13 @@ const doc = (patch: Partial<MeetingDoc> = {}): MeetingDoc => ({
   times: { choice01: { person01: 10, person02: 20 } },
   ...patch,
 });
-let db: ReturnType<typeof createSqliteD1>;
+let db: ReturnType<typeof createTestD1>;
 let deps: MeetDeps;
 let pending: Promise<unknown>[];
 let env: MeetEnv;
 
 beforeEach(() => {
-  db = createSqliteD1();
+  db = createTestD1();
   deps = { fetch: vi.fn<typeof fetch>(), now: () => NOW };
   pending = [];
   env = { DB: db, MEET_ONLINE: 'on' };
@@ -786,7 +786,7 @@ describe('약속 읽기와 좌표 가리기', () => {
     expect((await handleGet(context('GET', undefined, { query }), deps)).status).toBe(
       query ? 304 : 200,
     );
-    expect(await db.prepare('SELECT * FROM rate_counters').all()).toEqual({ results: [] });
+    expect((await db.prepare('SELECT * FROM rate_counters').all()).results).toEqual([]);
   });
   it.each(['', '?since=1'])('읽기 한도를 다 써도 정상 읽기 %s는 허용한다', async (query) => {
     await seed();
@@ -1253,12 +1253,13 @@ describe('약속 고치기와 지우기', () => {
     expect(
       (await handleUpdate(context('PUT', { doc: next, baseRev: 1 }, { token }), deps)).status,
     ).toBe(200);
-    expect(await db.prepare('SELECT participant_id FROM meeting_replies').all()).toEqual({
-      results: [{ participant_id: 'person03' }],
-    });
+    expect((await db.prepare('SELECT participant_id FROM meeting_replies').all()).results).toEqual([
+      { participant_id: 'person03' },
+    ]);
     expect(
-      await db.prepare("SELECT participant_id FROM meeting_tokens WHERE kind = 'guest'").all(),
-    ).toEqual({ results: [{ participant_id: 'person03' }] });
+      (await db.prepare("SELECT participant_id FROM meeting_tokens WHERE kind = 'guest'").all())
+        .results,
+    ).toEqual([{ participant_id: 'person03' }]);
     expect(await count('meeting_tokens')).toBe(2);
   });
   it('갱신 실패 시 참석자 답장과 토큰도 남긴다', async () => {
@@ -1796,7 +1797,7 @@ describe('참석자 답장', () => {
       // 제한이 사라져도 시험 자체가 끝없이 돌지 않게 한다.
       if (attempts > 5) throw new Error('재시도 한도 초과');
       const results = await batch(statements);
-      results[results.length - 1] = { meta: { changes: 0 } };
+      results[results.length - 1]!.meta.changes = 0;
       return results;
     });
 
@@ -1913,9 +1914,9 @@ describe('참석자 답장', () => {
     );
     expect(await count('meeting_replies')).toBe(0);
     expect((await handleReply(context('PUT', { likes: [] }, { token }), deps)).status).toBe(200);
-    expect(await db.prepare('SELECT participant_id FROM meeting_replies').all()).toEqual({
-      results: [{ participant_id: 'person02' }],
-    });
+    expect((await db.prepare('SELECT participant_id FROM meeting_replies').all()).results).toEqual([
+      { participant_id: 'person02' },
+    ]);
   });
   it('새 참석자는 claim 이름을 보존하고 두 번째 답장은 같은 줄을 덮는다', async () => {
     await seed();
@@ -2128,9 +2129,9 @@ describe('참석자 풀기와 주최자 재발급', () => {
       (await (await handleGet(context('GET', undefined, { token: body.hostToken }), deps)).json())
         .doc.participants[0].origin,
     ).toEqual(home);
-    expect(await db.prepare("SELECT hash FROM meeting_tokens WHERE kind = 'host'").all()).toEqual({
-      results: [{ hash: await hashToken(body.hostToken) }],
-    });
+    expect(
+      (await db.prepare("SELECT hash FROM meeting_tokens WHERE kind = 'host'").all()).results,
+    ).toEqual([{ hash: await hashToken(body.hostToken) }]);
     expect(await db.prepare('SELECT rev, doc_rev FROM meetings').first()).toEqual({
       rev: 2,
       doc_rev: 1,

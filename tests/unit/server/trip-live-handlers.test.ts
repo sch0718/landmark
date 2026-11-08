@@ -12,7 +12,7 @@ import {
   handleLiveDelete,
   pruneExpiredLive,
 } from 'src/server/trip-live/handlers';
-import { createSqliteD1 } from '../../helpers/sqlite-d1';
+import { createTestD1 } from '@sch0718/firebase-session/testing/d1';
 import { buildLiveLibrary } from '../../fixtures/builders';
 
 const id = 'abcdefghij';
@@ -21,7 +21,7 @@ const owner = 'o'.repeat(43),
   fresh = 'n'.repeat(43);
 const now = new Date('2026-11-01T00:00:00Z');
 const deps = { now: () => now, fetch: vi.fn<typeof fetch>() };
-let db: ReturnType<typeof createSqliteD1>;
+let db: ReturnType<typeof createTestD1>;
 let pending: Promise<unknown>[];
 const doc = () => ({
   format: 'landmark-trip-live',
@@ -81,7 +81,7 @@ const update = (baseRev = 1, token = owner) =>
 const rotate = (body: unknown, token = owner) => handleLiveRotate(ctx('POST', body, token), deps);
 beforeEach(async () => {
   resetSchemaMemo();
-  db = createSqliteD1();
+  db = createTestD1();
   pending = [];
   await ensureSchema(db);
   deps.fetch.mockReset();
@@ -487,9 +487,9 @@ it('만료 정리는 만료된 함께 편집 자료만 지운다', async () => {
   await addCollabRows('expired000');
   expect(await pruneExpiredLive(db, now, 20)).toBe(1);
   for (const table of ['trip_collab_devices', 'trip_collab_meta', 'trip_progress'])
-    expect(await db.prepare(`SELECT share_id FROM ${table}`).all()).toEqual({
-      results: [{ share_id: id }],
-    });
+    expect((await db.prepare(`SELECT share_id FROM ${table}`).all()).results).toEqual([
+      { share_id: id },
+    ]);
 });
 it('공동 편집 스위치가 꺼지면 2A PUT의 v2만 막고 v1·읽기는 유지한다', async () => {
   await create();
