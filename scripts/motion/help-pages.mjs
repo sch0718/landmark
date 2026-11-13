@@ -952,7 +952,7 @@ ${tapAt(c, X + W / 2, 339, 1.8)}`,
     steps: [
       {
         title: '테마와 모드',
-        sub: '파스텔·수첩·나이트, 라이트·다크',
+        sub: '파스텔·수첩·나이트 등 10종, 라이트·다크',
         screen: (c) => `${sectionTitle(c, TOP + 4, '테마')}
 ${rise(
   c,

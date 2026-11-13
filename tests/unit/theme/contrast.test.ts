@@ -38,7 +38,7 @@ describe('contrastRatio', () => {
   });
 });
 
-describe('theme contrast (6 themes)', () => {
+describe('theme contrast (every theme and mode)', () => {
   it('meets AA for text, accent, label and input-border pairs', () => {
     const failures: string[] = [];
     const check = (where: string, fg: string, bg: string, min: number) => {

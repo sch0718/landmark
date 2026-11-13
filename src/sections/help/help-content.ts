@@ -270,7 +270,7 @@ export const HELP_PAGES = [
     steps: [
       {
         title: '테마와 모드',
-        sub: '파스텔·수첩·나이트, 라이트·다크',
+        sub: '파스텔·수첩·나이트 등 10종, 라이트·다크',
       },
       {
         title: '백업 파일 받기',

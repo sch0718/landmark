@@ -48,7 +48,12 @@ export function createAppTheme(name: ThemeName, mode: ColorMode): Theme {
   return createTheme({
     palette: {
       mode,
-      primary: { main: t.accent.main, contrastText: t.accent.contrast },
+      // 다크는 MUI가 main을 어둡게 만든 hover 바탕(primary.dark)에서 검정 글자 대비가 모자라 main을 그대로 쓴다.
+      primary: {
+        main: t.accent.main,
+        dark: mode === 'dark' ? t.accent.main : undefined,
+        contrastText: t.accent.contrast,
+      },
       error: { main: t.error, dark: t.errorHover },
       background: { default: t.bg.base, paper: t.bg.surface },
       text: { primary: t.text.primary, secondary: t.text.secondary, disabled: t.text.muted },

@@ -16,7 +16,18 @@ export const LibraryQuerySchema = Schema.Struct({
 });
 
 export const PrefsSchema = Schema.Struct({
-  theme: Schema.Literals(['pastel', 'paper', 'night']),
+  theme: Schema.Literals([
+    'pastel',
+    'paper',
+    'night',
+    'violet',
+    'blue',
+    'teal',
+    'forest',
+    'rose',
+    'plum',
+    'mono',
+  ]),
   mode: Schema.Literals(['system', 'light', 'dark']),
   libraryView: Schema.Literals(['bento', 'cards', 'tiles', 'list']),
   query: LibraryQuerySchema,
