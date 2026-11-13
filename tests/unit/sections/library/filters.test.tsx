@@ -224,6 +224,13 @@ describe('visit chips', () => {
     expect(screen.getByRole('group', { name: '라벨' })).toBeInTheDocument();
   });
 
+  it('방문 묶음 뒤 구분선은 1px 세로선이다(MUI `width: 1`은 100%)', async () => {
+    await renderLibrary(withOneVisited(), { prefs: LIST });
+    const divider = screen.getByRole('group', { name: '방문' }).nextElementSibling as HTMLElement;
+    expect(divider).toHaveAttribute('aria-hidden', 'true');
+    expect(getComputedStyle(divider).width).toBe('1px');
+  });
+
   it('shows counts and filters to visited / unvisited places', async () => {
     const user = userEvent.setup();
     await renderLibrary(withOneVisited(), { prefs: LIST });

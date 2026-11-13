@@ -108,7 +108,8 @@ export function LabelChips({ query, onChange, labels, counts, manageLink = true,
             aria-hidden="true"
             sx={{
               flex: 'none',
-              width: 1,
+              // sx의 숫자 1은 100%다. 세로선이라 px로 적는다.
+              width: '1px',
               height: 24,
               alignSelf: 'center',
               bgcolor: 'var(--tm-border)',
