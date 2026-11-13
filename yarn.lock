@@ -1843,6 +1843,13 @@
   resolved "https://npm.pkg.github.com/download/@sch0718/seen-store/0.1.0/445958d792aba693e9f6ab294a1e1dd96d189d7d#445958d792aba693e9f6ab294a1e1dd96d189d7d"
   integrity sha512-RHPUy1yySNSbRsmAa4jlemTl2I43mRhCOK5tMQvuNMCq+9Y0RnwpJHaaPvTIqsfdsRrAqwVfDvMDobAmWHPEAg==
 
+"@sch0718/token-check@0.1.0":
+  version "0.1.0"
+  resolved "https://npm.pkg.github.com/download/@sch0718/token-check/0.1.0/ac24132e1325848e5caab701faf656eed75ed5b0#ac24132e1325848e5caab701faf656eed75ed5b0"
+  integrity sha512-q8/hI3mfctucYSPZERrfCbEnljNYwwWuFZtaGEDuNtok0L5JOmjcLfxPjZwiVDpA2eS4P5g0ifUjWL574Mrn9Q==
+  dependencies:
+    chroma-js "3.2.0"
+
 "@sindresorhus/is@^7.0.2":
   version "7.2.0"
   resolved "https://registry.yarnpkg.com/@sindresorhus/is/-/is-7.2.0.tgz#7c594e1a64336d2008d99d814056d459421504d4"
@@ -2307,6 +2314,11 @@ chai@^6.2.2:
   version "6.3.0"
   resolved "https://registry.yarnpkg.com/chai/-/chai-6.3.0.tgz#91f89eb789c2bb1ae1787d78c8518e1d3cebfc07"
   integrity sha512-XWAtwJ6OHO+tj0EKCs0Y2UamnyOxseZWltU4x2U2wh8g4AigdjwvtUjvLP2tqkA/avxHEtzxNaqGq/YGNwckKg==
+
+chroma-js@3.2.0:
+  version "3.2.0"
+  resolved "https://registry.yarnpkg.com/chroma-js/-/chroma-js-3.2.0.tgz#4e9e665290b9bbfece524fccf759d5120e351ff2"
+  integrity sha512-os/OippSlX1RlWWr+QDPcGUZs0uoqr32urfxESG9U93lhUfbnlyckte84Q8P1UQY/qth983AS1JONKmLS4T0nw==
 
 cliui@^8.0.1:
   version "8.0.1"

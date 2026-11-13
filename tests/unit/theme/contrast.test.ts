@@ -1,6 +1,6 @@
+import { contrast as contrastRatio } from '@sch0718/token-check';
 import { describe, expect, it } from 'vitest';
 import { LABEL_COLORS } from 'src/schema/library';
-import { contrastRatio } from 'src/theme/contrast';
 import { TOKENS, type ColorMode, type ThemeName } from 'src/theme/tokens';
 
 const THEMES = Object.keys(TOKENS) as ThemeName[];
@@ -9,6 +9,7 @@ const all = THEMES.flatMap((name) =>
   MODES.map((mode) => ({ name, mode, tokens: TOKENS[name][mode] })),
 );
 
+// 대비 계산은 공용 @sch0718/token-check(chroma.js)다. 랜드마크가 기대는 입력 형식과 합성 규칙만 여기서 확인한다.
 describe('contrastRatio', () => {
   it('matches known WCAG values', () => {
     expect(contrastRatio('#000000', '#FFFFFF')).toBeCloseTo(21, 5);
@@ -33,7 +34,7 @@ describe('contrastRatio', () => {
   });
 
   it('rejects colors it cannot read', () => {
-    expect(() => contrastRatio('red', '#fff')).toThrow();
+    expect(() => contrastRatio('not-a-color', '#fff')).toThrow();
   });
 });
 
