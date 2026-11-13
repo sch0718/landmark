@@ -49,6 +49,13 @@ describe('SettingsPage', () => {
       '파스텔',
       '수첩',
       '나이트',
+      '보라',
+      '파랑',
+      '청록',
+      '숲',
+      '장미',
+      '자두',
+      '모노',
     ]);
     expect(themes.getByRole('radio', { name: '파스텔' })).toHaveAttribute('aria-checked', 'true');
     await user.click(themes.getByRole('radio', { name: '나이트' }));

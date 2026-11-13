@@ -7,6 +7,13 @@ const THEMES: ReadonlyArray<{ value: ThemeName; label: string }> = [
   { value: 'pastel', label: '파스텔' },
   { value: 'paper', label: '수첩' },
   { value: 'night', label: '나이트' },
+  { value: 'violet', label: '보라' },
+  { value: 'blue', label: '파랑' },
+  { value: 'teal', label: '청록' },
+  { value: 'forest', label: '숲' },
+  { value: 'rose', label: '장미' },
+  { value: 'plum', label: '자두' },
+  { value: 'mono', label: '모노' },
 ];
 
 /** 그 테마로 보이는 작은 벤토 미리보기. 지금 적용 중인 모드의 토큰으로 그린다(CSS 변수는 현재 테마 값이라 쓰지 않는다). */
@@ -23,7 +30,7 @@ function MiniBento({ theme }: { theme: ThemeName }) {
       aria-hidden="true"
       sx={{
         display: 'grid',
-        gridTemplateColumns: '2fr 1fr',
+        gridTemplateColumns: '1fr 1fr',
         gridTemplateRows: '1fr 1fr',
         gap: '4px',
         height: 64,
@@ -33,24 +40,32 @@ function MiniBento({ theme }: { theme: ThemeName }) {
         bgcolor: t.bg.base,
       }}
     >
-      <Box sx={block('red', { gridRow: '1 / span 2' })} />
-      <Box sx={block('teal', {})} />
+      <Box sx={block('red', {})} />
       <Box
-        sx={{ borderRadius: `${Math.round(t.radius.sm / 2)}px`, background: t.accent.gradient }}
+        sx={{
+          gridRow: '1 / span 2',
+          borderRadius: `${Math.round(t.radius.sm / 2)}px`,
+          background: t.accent.gradient,
+        }}
       />
+      <Box sx={block('teal', {})} />
     </Box>
   );
 }
 
 type Props = { value: ThemeName; onChange(theme: ThemeName): void };
 
-/** 테마 3종. 미리보기 카드를 눌러 고른다. */
+/** 테마 10종. 미리보기 카드를 눌러 고른다. 폰은 4열, 넓은 화면은 5열. 미리보기 오른쪽 열이 강조색이다. */
 export function ThemePicker({ value, onChange }: Props) {
   return (
     <Box
       role="radiogroup"
       aria-label="테마"
-      sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 1 }}
+      sx={{
+        display: 'grid',
+        gridTemplateColumns: { xs: 'repeat(4, 1fr)', sm: 'repeat(5, 1fr)' },
+        gap: 1,
+      }}
     >
       {THEMES.map(({ value: theme, label }) => {
         const checked = theme === value;

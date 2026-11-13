@@ -1,9 +1,10 @@
 import type { LabelColor } from 'src/schema/library';
 import { night } from 'src/theme/tokens/night';
 import { paper } from 'src/theme/tokens/paper';
+import { PALETTE_THEMES, type PaletteThemeName } from 'src/theme/tokens/palettes';
 import { pastel } from 'src/theme/tokens/pastel';
 
-export type ThemeName = 'pastel' | 'paper' | 'night';
+export type ThemeName = 'pastel' | 'paper' | 'night' | PaletteThemeName;
 export type ColorMode = 'light' | 'dark';
 
 export type Tokens = {
@@ -42,4 +43,5 @@ export const TOKENS: Record<ThemeName, { light: Tokens; dark: Tokens }> = {
   pastel,
   paper,
   night,
+  ...PALETTE_THEMES,
 };

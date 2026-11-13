@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="960" height="520" viewBox="0 0 960 520" role="img" aria-labelledby="motion-title motion-desc">
 <title id="motion-title">랜드마크 도움말 — 설정</title>
-<desc id="motion-desc">설정 사용법: 1. 테마와 모드(파스텔·수첩·나이트, 라이트·다크) 2. 백업 파일 받기(보관함 전체를 파일 하나로) 3. 다른 기기에서 되살리기(‘백업 파일로 되살리기’ → 파일 고르기) 4. 백업 알림(오래 백업하지 않으면 보관함 위에 알려요) 5. 기기 간 동기화(설정 › 동기화에서 로그인)</desc>
+<desc id="motion-desc">설정 사용법: 1. 테마와 모드(파스텔·수첩·나이트 등 10종, 라이트·다크) 2. 백업 파일 받기(보관함 전체를 파일 하나로) 3. 다른 기기에서 되살리기(‘백업 파일로 되살리기’ → 파일 고르기) 4. 백업 알림(오래 백업하지 않으면 보관함 위에 알려요) 5. 기기 간 동기화(설정 › 동기화에서 로그인)</desc>
 <style>
 text{font-family:'Pretendard Variable', Pretendard, 'Apple SD Gothic Neo', 'Noto Sans KR', system-ui, sans-serif}
 .sc{opacity:0;animation:scene 18s linear infinite backwards}
@@ -34,7 +34,7 @@ text{font-family:'Pretendard Variable', Pretendard, 'Apple SD Gothic Neo', 'Noto
 <text x="58" y="240.5" font-size="13" font-weight="800" fill="#B4B4BC" text-anchor="middle">1</text>
 <g class="sc s0" style="animation-delay:0.00s"><circle cx="58" cy="236" r="13" fill="#D9F99D"/><text x="58" y="240.5" font-size="13" font-weight="800" fill="#18181B" text-anchor="middle">1</text></g>
 <text x="82" y="234" font-size="16" font-weight="800" fill="#F4F4F5" text-anchor="start">테마와 모드</text>
-<text x="82" y="252" font-size="13" font-weight="400" fill="#8E8E98" text-anchor="start">파스텔·수첩·나이트, 라이트·다크</text>
+<text x="82" y="252" font-size="13" font-weight="400" fill="#8E8E98" text-anchor="start">파스텔·수첩·나이트 등 10종, 라이트·다크</text>
 </g><g>
 <rect class="sc s1" style="animation-delay:3.60s" x="32" y="265" width="510" height="48" rx="14" fill="#2A3E18"/>
 <circle cx="58" cy="288" r="13" fill="none" stroke="#71717D" stroke-width="1.5"/>
