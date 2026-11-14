@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "strict": true,
+    "allowJs": true,
+    "checkJs": false
+  },
+  "files": [],
+  "references": [],
+  "include": ["./**/*.ts", "./story.mjs"]
+}
