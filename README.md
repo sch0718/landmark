@@ -56,7 +56,7 @@
 | [여행](docs/help/trips.md)       | 후보 → Day 배치, 이동 시간·도착 시각, 당일 모드                   |
 | [약속](docs/help/meetings.md)    | 중간 지점 찾기, 후보 링크·자동 집계, 확정                         |
 | [공유](docs/help/share.md)       | 링크·HTML 파일로 보내기, 받은 장소 담기                           |
-| [설정](docs/help/settings.md)    | 테마, 백업·되살리기, 옛 여행 가져오기                             |
+| [설정](docs/help/settings.md)    | 테마 10종·라이트/다크, 백업·되살리기, 옛 여행 가져오기            |
 
 ## 내 데이터는 어디에 있나요?
 
