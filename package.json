@@ -16,6 +16,7 @@
     "build:icons": "node scripts/build-icons.mjs",
     "build:notices": "node scripts/build-notices.mjs",
     "build:motion": "node --disable-warning=ExperimentalWarning scripts/build-motion.mjs && prettier --write --log-level warn docs/help src/sections/help/help-content.ts",
+    "demo:video": "yarn build:viewer && node scripts/demo-videos/voice.mjs && playwright test -c scripts/demo-videos/playwright.config.ts && node scripts/demo-videos/compose.mjs",
     "build:viewer": "vite build --config vite.viewer.config.ts",
     "build:map": "vite build --config vite.map.config.ts",
     "build:map:e2e": "VITE_MAP_ADAPTER=fake vite build --config vite.map.config.ts",
