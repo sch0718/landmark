@@ -15,15 +15,23 @@ export function SharePlaceRows({
   selected,
   existing,
   onToggle,
+  focusPlaceId,
   disabled = false,
 }: {
   doc: ShareDoc;
   selected: ReadonlySet<string>;
   existing: ReadonlySet<string>;
   onToggle(id: string): void;
+  focusPlaceId?: string;
   /** 행 체크박스를 잠근다(여행을 함께 가져올 때는 모든 장소가 고정이다). */
   disabled?: boolean;
 }) {
+  const places = useMemo(() => {
+    const focused = doc.places.find((place) => place.id === focusPlaceId);
+    return focused
+      ? [focused, ...doc.places.filter((place) => place.id !== focusPlaceId)]
+      : doc.places;
+  }, [doc, focusPlaceId]);
   const labelsById = useMemo(() => {
     const byId = new Map<string, { label: ShareLabel; name: string }>();
     for (const label of doc.labels) {
@@ -39,7 +47,7 @@ export function SharePlaceRows({
       aria-label="가져올 장소"
       sx={{ listStyle: 'none', m: 0, p: 0, borderTop: '1px solid var(--tm-border)' }}
     >
-      {doc.places.map((place) => {
+      {places.map((place) => {
         const chips = [...new Set(place.labelIds)].flatMap((id) => labelsById.get(id) ?? []);
         return (
           <Box component="li" key={place.id} sx={{ borderBottom: '1px solid var(--tm-border)' }}>

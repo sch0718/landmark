@@ -27,7 +27,7 @@ export function recommendMarkers(
         textColor: tokens.text.secondary,
         borderColor: tokens.accent.main,
         dimmed: true,
-        clusterable: true,
+        clusterable: false,
         fit: false,
       });
       byId.set(id, { rec, placeId: place.id });

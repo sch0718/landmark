@@ -110,6 +110,7 @@ async function openShare(
   options: {
     library?: Library;
     doc?: ShareDoc;
+    focusPlaceId?: string;
     prefs?: Partial<Prefs>;
     ids?: string[];
     geolocation?: NonNullable<Parameters<typeof renderLibrary>[1]>['geolocation'];
@@ -122,12 +123,40 @@ async function openShare(
     geolocation: options.geolocation,
   });
   const doc = options.doc ?? makeDoc();
-  act(() => rendered.store.set(addFlowAtom, { step: 'share', doc }));
+  act(() =>
+    rendered.store.set(addFlowAtom, { step: 'share', doc, focusPlaceId: options.focusPlaceId }),
+  );
   await within(panel()).findByRole('heading', { name: '강릉 모음 · 3곳' });
   return { user, ...rendered };
 }
 
 describe('공유 파일 미리보기', () => {
+  it('핀으로 연 장소만 맨 앞에 그리고 선택하되 문서와 가져오기 순서는 유지한다', async () => {
+    const doc = makeDoc();
+    const { user, store } = await openShare({ doc, focusPlaceId: 'p3' });
+    const places = within(panel()).getByRole('list', { name: '가져올 장소' });
+    expect(
+      within(places)
+        .getAllByRole('listitem')
+        .map((item) => item.textContent),
+    ).toEqual([
+      expect.stringContaining('창가 카페'),
+      expect.stringContaining('바다 앞 카페'),
+      expect.stringContaining('경포 해변'),
+    ]);
+    expect(row('창가 카페')).toBeChecked();
+    expect(row('바다 앞 카페')).not.toBeChecked();
+    expect(row('경포 해변')).not.toBeChecked();
+    expect(doc.places.map((place) => place.id)).toEqual(['p1', 'p2', 'p3']);
+
+    await user.click(within(panel()).getByRole('button', { name: '모두 선택' }));
+    await user.click(importButton(3));
+    await waitFor(() => expect(store.get(addFlowAtom)).toEqual({ step: 'closed' }));
+    const lib = store.get(libraryAtom);
+    expect(lib.places.newplace01!.name.value).toBe('경포 해변');
+    expect(lib.places.newplace02!.name.value).toBe('창가 카페');
+  });
+
   it('머리글·날짜·행·표시·라벨 줄을 보인다', async () => {
     await openShare();
     expect(within(panel()).getByText('2026.10.13 만든 파일')).toBeInTheDocument();

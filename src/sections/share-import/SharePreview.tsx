@@ -338,6 +338,7 @@ export function SharePreview({
         )}
         <SharePlaceRows
           doc={doc}
+          focusPlaceId={focusPlaceId}
           selected={selected}
           existing={existing}
           onToggle={toggle}
