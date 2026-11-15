@@ -31,7 +31,8 @@ import { ShareTripBox } from 'src/sections/share-import/ShareTripBox';
 import { objectParticle, subjectParticle } from 'src/sections/trips/planner/format';
 import { paths } from 'src/routes/paths';
 import { loadAgentInbox } from 'src/services/agent-inbox/boot';
-import { addFlowAtom, type InboxRef } from 'src/stores/add-place';
+import { formatPeriod } from 'src/sections/recommend/format';
+import { addFlowAtom, type RecommendRef, type InboxRef } from 'src/stores/add-place';
 import { libraryAtom, useLibraryAction } from 'src/stores/library-state';
 import { nearbyOffAtom } from 'src/stores/my-location';
 
@@ -43,7 +44,17 @@ const NOTE_SX = { mt: 0.5, fontSize: 12, color: 'var(--tm-text-secondary)' } as 
  * 가져오기는 `LibraryStore.update` 한 번의 `importShare`로 최신본에 적용한다(토스트 개수도 그 결과에서 센다).
  * 공유 파일 가져오기에는 여행 대상이 붙지 않는다(＋ 시트가 여행 화면에서는 이 항목을 숨긴다).
  */
-export function SharePreview({ doc, inbox }: { doc: ShareDoc; inbox?: InboxRef }) {
+export function SharePreview({
+  doc,
+  inbox,
+  recommend,
+  focusPlaceId,
+}: {
+  doc: ShareDoc;
+  inbox?: InboxRef;
+  recommend?: RecommendRef;
+  focusPlaceId?: string;
+}) {
   const library = useAtomValue(libraryAtom);
   const setFlow = useSetAtom(addFlowAtom);
   const { run } = useLibraryAction();
@@ -52,7 +63,12 @@ export function SharePreview({ doc, inbox }: { doc: ShareDoc; inbox?: InboxRef }
   const navigate = useNavigate();
 
   const [picked, setPicked] = useState<ReadonlySet<string>>(
-    () => new Set(doc.places.map((place) => place.id)),
+    () =>
+      new Set(
+        focusPlaceId && doc.places.some((place) => place.id === focusPlaceId)
+          ? [focusPlaceId]
+          : doc.places.map((place) => place.id),
+      ),
   );
   // v2 문서면 여행 칸을 보이고(기본 켬), 켜져 있으면 모든 장소를 가져온다.
   const trip = doc.version === 2 ? doc.trips[0] : undefined;
@@ -64,7 +80,7 @@ export function SharePreview({ doc, inbox }: { doc: ShareDoc; inbox?: InboxRef }
     [library, trip],
   );
   const [titleOn, setTitleOn] = useState(true);
-  const [name, setName] = useState(() => defaultTitleLabel(doc.title));
+  const [name, setName] = useState(() => defaultTitleLabel(recommend?.title ?? doc.title));
   const [memoOn, setMemoOn] = useState(true);
   const [saving, setSaving] = useState(false);
   // 같은 이벤트 루프 안의 두 번째 클릭은 아직 `saving`을 못 본다.
@@ -208,16 +224,31 @@ export function SharePreview({ doc, inbox }: { doc: ShareDoc; inbox?: InboxRef }
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
       <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto', p: 2 }}>
         <Typography variant="h6" component="h2" sx={{ fontWeight: 800, wordBreak: 'break-word' }}>
-          {`${shareTitle(doc.title)} · ${doc.places.length}곳`}
+          {`${recommend?.title ?? shareTitle(doc.title)} · ${doc.places.length}곳`}
         </Typography>
         {inbox && (
           <Typography variant="body2" sx={{ color: 'var(--tm-text-secondary)' }}>
             {`AI 연결 「${inbox.from ?? '이름 없는 연결'}」${subjectParticle(inbox.from ?? '이름 없는 연결')} 보낸 일정`}
           </Typography>
         )}
-        <Typography variant="body2" sx={{ color: 'var(--tm-text-secondary)' }}>
-          {`${localDate(doc.createdAt)} 만든 파일`}
-        </Typography>
+        {recommend ? (
+          <>
+            {recommend.description && (
+              <Typography variant="body2" sx={{ color: 'var(--tm-text-secondary)' }}>
+                {recommend.description}
+              </Typography>
+            )}
+            <Typography
+              variant="body2"
+              sx={{ color: 'var(--tm-text-secondary)' }}
+            >{`${formatPeriod(recommend.startDate, recommend.endDate)} 추천`}</Typography>
+          </>
+        ) : (
+          <Typography
+            variant="body2"
+            sx={{ color: 'var(--tm-text-secondary)' }}
+          >{`${localDate(doc.createdAt)} 만든 파일`}</Typography>
+        )}
 
         {trip !== undefined && (
           <ShareTripBox
@@ -239,7 +270,7 @@ export function SharePreview({ doc, inbox }: { doc: ShareDoc; inbox?: InboxRef }
             control={
               <Switch checked={titleOn} onChange={(event) => setTitleOn(event.target.checked)} />
             }
-            label="파일 제목 라벨도 붙이기"
+            label={recommend ? '추천 제목 라벨도 붙이기' : '파일 제목 라벨도 붙이기'}
             sx={{ minHeight: 44 }}
           />
           {titleOn && (
@@ -247,7 +278,7 @@ export function SharePreview({ doc, inbox }: { doc: ShareDoc; inbox?: InboxRef }
               <Box
                 component="input"
                 type="text"
-                aria-label="파일 제목 라벨 이름"
+                aria-label={recommend ? '추천 제목 라벨 이름' : '파일 제목 라벨 이름'}
                 aria-invalid={nameTooLong}
                 aria-describedby={nameTooLong ? nameErrorId : undefined}
                 autoComplete="off"
@@ -265,7 +296,8 @@ export function SharePreview({ doc, inbox }: { doc: ShareDoc; inbox?: InboxRef }
           )}
         </Box>
 
-        <Box sx={{ mt: 1 }}>
+        {/* 추천 문서에는 메모가 없어 이 스위치가 늘 꺼져 있으므로 보이지 않는다. */}
+        <Box sx={{ mt: 1, display: recommend ? 'none' : undefined }}>
           <FormControlLabel
             control={
               <Switch

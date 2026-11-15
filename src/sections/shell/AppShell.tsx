@@ -37,6 +37,7 @@ import {
   showsAddPanel,
 } from 'src/stores/add-place';
 import { libraryAtom } from 'src/stores/library-state';
+import { useRecommendationsBoot } from 'src/stores/recommend';
 import { detailOriginAtom } from 'src/stores/library-ui';
 
 /** 슬롯 하나. 랜드마크(`aria-label`)와 스크롤을 맡는다. */
@@ -206,6 +207,7 @@ export function AppShell() {
   useAddFlowRoute(layout === 'compact' ? isMap : isLibraryView);
   // `/import`로 들어오면 주소를 `/`로 바꾸고 공유 파일 가져오기 흐름을 연다.
   useImportEntry();
+  useRecommendationsBoot();
 
   // 닫기(선택 해제). 휴대폰은 시트를 연 기록을 되감는다(`useCloseDetail` → `useCloseSheet`, 하단 탭과 같은 규칙).
   const closeDetail = useCloseDetail();

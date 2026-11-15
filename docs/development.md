@@ -90,6 +90,7 @@ Yarn 1(1.22.22)은 `.npmrc`의 `GITHUB_PACKAGES_TOKEN`이 정의되지 않으면
 | `VITE_FIREBASE_*`, `VITE_KAKAO_LOGIN_CLIENT_ID`, `VITE_NAVER_LOGIN_CLIENT_ID` | 동기화 공급자 공개 설정. 아래 보관함 동기화 절 참고 |
 | `FIREBASE_PROJECT_ID`, `KAKAO_CLIENT_ID`, `NAVER_CLIENT_ID` | 서버 로그인 공급자 설정 |
 | `KAKAO_CLIENT_SECRET`, `NAVER_CLIENT_SECRET`, `ALLOWED_EMAILS`, `ALLOWED_ACCOUNTS` | Pages 서버 시크릿. 값은 저장소에 넣지 않습니다 |
+| `ADMIN_ACCOUNTS` | Pages 서버 변수. 관리자 `kakao:<sub>,naver:<sub>,google:<이메일>` 콤마 목록. 없거나 비면 관리자 없음. 앞뒤 공백과 Google 이메일 대소문자는 무시 |
 | `SYNC_REDIRECT_URIS` | 허용 콜백 URI 목록(콤마). 기본은 요청 출처 + `/auth/callback` |
 | `VITE_SYNC_DEV_FAKE`, `SYNC_DEV_FAKE_SOCIAL` | 각각 개발 UI·localhost 서버 가짜 카카오·네이버 스위치(`1`) |
 | `SHARE_SHORT` | `off`면 공유 짧은 링크 만들기만 중단(`링크 복사`·`링크 공유`는 긴 링크로, 카카오톡 단추는 예전처럼 꺼지고 `링크 복사` 안내). 이미 만든 `/s/<id>` 열기·지우기는 계속 동작 |
@@ -288,6 +289,31 @@ npx wrangler d1 execute landmark --remote --command "SELECT version FROM schema_
 비상 중단은 Pages의 `LIBRARY_SYNC=off` 후 재배포입니다. 로그인·받기·올리기가 503 `off`가 되고 이 기기 저장과 연결 해제·서버 자료 지우기는 계속됩니다. 옛 앱으로 롤백하면 동기화 UI·엔진이 없어져 멈추며 각 기기의 보관함과 D1 자료는 남습니다. `docs/rollback.md`의 버전 행은 병합 뒤 별도 문서 PR에서 추가합니다.
 
 검증은 `yarn typecheck`, `yarn lint`, `yarn test`, `yarn build:ci`와 `E2E_PORT=4181 E2E_MAP_PORT=4182 yarn test:e2e tests/e2e/library-sync.spec.ts --project desktop`입니다. 전체 핵심 E2E는 같은 포트 변수로 `yarn test:e2e:ci`를 실행합니다. 미리보기에서는 실제 Google·카카오·네이버 로그인, 100개 올리기 CPU 시간(무료 CPU 한도를 넘으면 `PUSH_MAX_ITEMS`를 50으로), iOS Safari·카카오톡 인앱 복귀를 사람이 확인합니다.
+
+### 관리자 추천
+
+관리자는 라벨 고치기 창의 `추천으로 게시`로 라벨의 현재 장소를 공개하고, 모든 사용자는 보관함의 추천 카드나 지도의 ☆ 핀에서 골라 담습니다. 라벨 관리 아래의 `게시한 추천`에서 제목·설명·기간을 수정하거나 확인 후 내릴 수 있습니다. 관리자 화면은 로그인 뒤 관리자 목록 API가 성공했을 때만 보입니다. `ADMIN_ACCOUNTS`는 로그인 허용 목록과 별개이며 Pages 서버 변수로 등록합니다. 운영 변수 등록과 재배포는 운영자가 합니다.
+
+경로는 모두 `/api/sync` 아래입니다. 읽기와 관리자 응답은 브라우저에 `Cache-Control: private, no-store`로 보냅니다.
+
+| 요청 | 동작 |
+| --- | --- |
+| `GET /v1/recommendations` | 로그인 없이 오늘(KST)이 기간 안인 추천과 장소 문서를 받기. 시작일·종료일 모두 포함 |
+| `GET /v1/admin/recommendations` | 관리자만 예정·게시 중·끝난 추천의 메타 목록 받기 |
+| `POST /v1/admin/recommendations/<id>` | 관리자 라벨 id로 게시·덮어쓰기. `doc`을 생략하면 기존 장소는 그대로 두고 제목·설명·기간만 수정 |
+| `DELETE /v1/admin/recommendations/<id>` | 관리자만 추천 내리기 |
+
+D1 `recommendations` 표를 스키마 9에서 멱등 생성합니다. 공유 문서 v1 스냅숏을 저장하며 라벨·메모는 넣지 않습니다. 한도는 전체 30행, 추천당 1–500곳, 본문 600,000바이트, 관리자당 하루 게시 100회입니다. `DELETE`는 게시 한도를 쓰지 않습니다. 제목은 라벨 이름 규칙(1–30자), 설명은 줄바꿈 없는 0–80자, 기간은 실제 달력 날짜를 씁니다.
+
+공개 목록은 KST 날짜별 키로 엣지에만 60초 캐시합니다. 게시·내리기는 오늘 키를 지우지만 같은 데이터센터에만 적용되므로 다른 곳에서는 최대 60초 늦을 수 있습니다. 앱은 시작 때 목록을 받고, 화면 복귀·온라인 복귀 때 마지막 성공 조회에서 5분이 지났으면 다시 받습니다. 조회 실패는 앞 목록을 유지합니다. `LIBRARY_SYNC=off`여도 공개 읽기·관리자 목록·내리기는 계속되고 게시만 503으로 멈춥니다.
+
+추천 숨기기와 지도 `추천 장소` 토글은 기기 키 `tripmap:recommend:v1`에 저장합니다. 숨긴 id는 목록에서 사라져도 보존하며 같은 id로 다시 게시돼도 숨깁니다. 보관함·공유 문서·`tripmap:prefs` 형식은 그대로입니다.
+
+로컬에서는 기존 가짜 로그인 명령에 `--binding ADMIN_ACCOUNTS=kakao:dev-me`를 더합니다. 브라우저는 `http://localhost:8795`를 열고 설정에서 가짜 카카오 `me`로 로그인한 뒤 라벨 관리로 갑니다.
+
+```bash
+yarn build:viewer && VITE_SYNC_DEV_FAKE=1 wrangler pages dev --d1 DB --port 8795 --binding SYNC_DEV_FAKE_SOCIAL=1 --binding ALLOWED_ACCOUNTS=kakao:dev-me,naver:dev-me --binding ADMIN_ACCOUNTS=kakao:dev-me --proxy 4185 -- vite --port 4185 --strictPort
+```
 
 ### 서버 백업과 네이버 폴더 변경 알림
 

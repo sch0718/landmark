@@ -2,6 +2,14 @@ import { atom, type PrimitiveAtom } from 'jotai';
 import type { PlaceCandidate } from 'src/domain/library/add-place';
 import type { ShareDoc } from 'src/schema/share';
 
+export type RecommendRef = {
+  id: string;
+  title: string;
+  description: string;
+  startDate: string;
+  endDate: string;
+};
+
 export type InboxRef = { id: string; from: string | null; owner: string | null };
 
 /**
@@ -24,7 +32,13 @@ export type AddFlow =
   | { step: 'pin'; name: string; start: [number, number] | null }
   | { step: 'pin-card'; name: string; lng: number; lat: number }
   | { step: 'share-pick' }
-  | { step: 'share'; doc: ShareDoc; inbox?: InboxRef };
+  | {
+      step: 'share';
+      doc: ShareDoc;
+      inbox?: InboxRef;
+      recommend?: RecommendRef;
+      focusPlaceId?: string;
+    };
 
 export const addFlowAtom: PrimitiveAtom<AddFlow> = atom<AddFlow>({ step: 'closed' });
 
@@ -40,7 +54,11 @@ export const addFlowStepKey = (flow: AddFlow): string => {
     case 'pin-card':
       return `pin-card-${flow.lng},${flow.lat}`;
     case 'share':
-      return flow.inbox ? `share-inbox-${flow.inbox.id}` : 'share';
+      return flow.inbox
+        ? `share-inbox-${flow.inbox.id}`
+        : flow.recommend
+          ? `share-recommend-${flow.recommend.id}-${flow.focusPlaceId ?? 'all'}`
+          : 'share';
     default:
       return flow.step;
   }

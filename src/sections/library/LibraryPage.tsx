@@ -1,4 +1,5 @@
 import Box from '@mui/material/Box';
+import { RecommendCards } from 'src/sections/recommend/RecommendCards';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
@@ -309,11 +310,14 @@ export function LibraryPage() {
 
   if (total === 0) {
     return (
-      <EmptyState
-        title="아직 저장한 장소가 없어요"
-        actionLabel="옛 여행 가져오기"
-        onAction={() => void navigate(paths.settingsImport)}
-      />
+      <>
+        <RecommendCards />
+        <EmptyState
+          title="아직 저장한 장소가 없어요"
+          actionLabel="옛 여행 가져오기"
+          onAction={() => void navigate(paths.settingsImport)}
+        />
+      </>
     );
   }
 
@@ -340,6 +344,7 @@ export function LibraryPage() {
           onExport={() => setExporting(true)}
           onCreateRegionTrip={createRegionTrip}
         />
+        <RecommendCards />
         <NearbyBar
           ref={nearbyBarRef}
           count={places.length}

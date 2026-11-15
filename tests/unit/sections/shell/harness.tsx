@@ -23,6 +23,12 @@ import { ShareTemplate } from 'src/services/share-template';
 import { ThemeRoot } from 'src/theme/ThemeRoot';
 import { PENDING_HOURS_LOOKUP } from '../../helpers/pending-hours-lookup';
 
+// 추천 조회가 다른 기능 시험의 가짜 서버 응답을 먼저 쓰지 않게 한다.
+vi.mock('src/services/recommend/api', async (original) => ({
+  ...(await original<typeof import('src/services/recommend/api')>()),
+  fetchRecommendations: async () => ({ ok: true, items: [] }),
+}));
+
 /**
  * `(min-width:Npx)` 질의를 주어진 폭으로 판정하는 `matchMedia`를 깐다. 나머지 질의는 false.
  * 돌려주는 `setWidth`는 폭을 바꾸고 `change` 리스너를 불러 창 크기 조절을 흉내 낸다.

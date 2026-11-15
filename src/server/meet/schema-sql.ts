@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 8;
+export const SCHEMA_VERSION = 9;
 
 export const SCHEMA_STATEMENTS: string[] = [
   `CREATE TABLE IF NOT EXISTS meetings (
@@ -200,4 +200,15 @@ CREATE TABLE IF NOT EXISTS agent_tokens (
   undone_at INTEGER
 )`,
   'CREATE INDEX IF NOT EXISTS agent_changes_user ON agent_changes(user_id, at)',
+  `CREATE TABLE IF NOT EXISTS recommendations (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL,
+    doc TEXT NOT NULL,
+    places INTEGER NOT NULL,
+    start_date TEXT NOT NULL,
+    end_date TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  )`,
 ];
