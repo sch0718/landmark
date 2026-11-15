@@ -12,6 +12,11 @@
 
 가 보고 싶은 맛집·카페·명소를 그때그때 모아 두세요. 라벨과 이모지로 정리해 두면 여행을 갈 때 일정으로 바로 꺼내 쓸 수 있고, 친구와 만날 곳을 정하거나 링크 하나로 나눌 수도 있습니다.
 
+<p align="center">
+  <a href="https://youtu.be/qhDqJMJbNtY"><img src="docs/readme/demo-video.jpg" width="720" alt="데모 영상: 강릉 여행을 준비하며 장소를 모으고, 일정을 짜고, 링크로 나누는 과정(3분 53초, 음성 설명)"></a><br>
+  <a href="https://youtu.be/qhDqJMJbNtY">▶ 데모 영상 보기</a> · 3분 53초, 음성 설명 · 데모용 데이터
+</p>
+
 ## 이런 걸 할 수 있어요
 
 |                  |                                                                                                                                                     |
