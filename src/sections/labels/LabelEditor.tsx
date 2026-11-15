@@ -24,6 +24,7 @@ type Props = {
   onClose(): void;
   onMerge(): void;
   onDelete(): void;
+  onPublish?: () => void;
   /** 이 라벨에 연결된 살아 있는 네이버 폴더(이름순). 비면 `네이버 폴더` 구역을 그리지 않는다. */
   folders: readonly FolderLink[];
   /** 그 폴더의 다시 가져오기를 연다. */
@@ -100,6 +101,7 @@ export function LabelEditor({
   onClose,
   onMerge,
   onDelete,
+  onPublish,
   folders,
   onResync,
   onUnlink,
@@ -220,7 +222,12 @@ export function LabelEditor({
         )}
       </DialogContent>
       <DialogActions sx={{ justifyContent: 'space-between', px: 3, pb: 2 }}>
-        <Box sx={{ display: 'flex', gap: 0.5 }}>
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+          {onPublish && (
+            <Button onClick={onPublish} sx={{ minHeight: 44 }}>
+              추천으로 게시
+            </Button>
+          )}
           <Button disabled={!canMerge} onClick={onMerge} sx={{ minHeight: 44 }}>
             합치기
           </Button>

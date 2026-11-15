@@ -65,9 +65,9 @@ it.each([0, 6, 7])('버전 %i에서 AI 표 세 개와 색인 여섯 개를 멱�
     resetSchemaMemo();
     await ensureSchema(db);
   }
-  expect(SCHEMA_VERSION).toBe(8);
+  expect(SCHEMA_VERSION).toBe(9);
   expect((await db.prepare('SELECT version FROM schema_meta').all()).results).toEqual([
-    { version: 8 },
+    { version: 9 },
   ]);
   if (version) {
     expect((await db.prepare('SELECT id FROM users').all()).results).toEqual([

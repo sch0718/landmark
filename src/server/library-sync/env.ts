@@ -20,6 +20,7 @@ export type SyncEnv = {
   FIREBASE_PROJECT_ID?: string;
   ALLOWED_EMAILS?: string;
   ALLOWED_ACCOUNTS?: string;
+  ADMIN_ACCOUNTS?: string;
   KAKAO_CLIENT_ID?: string;
   KAKAO_CLIENT_SECRET?: string;
   NAVER_CLIENT_ID?: string;

@@ -541,6 +541,8 @@ Cloudflare 대시보드 › Workers & Pages › `landmark` › Settings › Vari
   wrangler d1 execute landmark --remote --command "DELETE FROM trip_share_tokens WHERE share_id IN (SELECT id FROM trip_shares WHERE expires_at <= strftime('%Y-%m-%dT%H:%M:%fZ','now')); DELETE FROM trip_shares WHERE expires_at <= strftime('%Y-%m-%dT%H:%M:%fZ','now')"
   ```
 
+`tripmap:recommend:v1`·D1 `recommendations` 표는 옛 버전이 읽지 않는다. 되돌려도 보관함 그대로다.
+
 ## 3. 공유 지도 페이지 (`https://sch0718.github.io/landmark/`)
 
 `.github/workflows/deploy-share-map.yml`이 `main`에 지도 관련 파일이 바뀐 커밋이 들어올 때만 `gh-pages` 브랜치로 배포한다(다른 브랜치·태그에서 수동 실행하면 배포 단계는 건너뛴다. `main`에서 수동 실행하면 최신 `main`을 다시 배포할 뿐이라 옛 버전으로 되돌리지는 못한다). 되돌리는 방법은 둘이다.

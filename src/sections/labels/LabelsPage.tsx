@@ -1,3 +1,6 @@
+import { useRecommendAdmin } from 'src/sections/recommend/admin/use-recommend-admin';
+import { PublishDialog } from 'src/sections/recommend/admin/PublishDialog';
+import { PublishedList } from 'src/sections/recommend/admin/PublishedList';
 import { folderWatchAtom, folderNotice, labelNoticeText } from 'src/stores/folder-watch';
 import { createLabel } from 'src/domain/library/label-create';
 import {
@@ -186,6 +189,8 @@ type Open = { kind: 'edit' | 'merge' | 'delete'; id: string };
 /** `/labels`: 라벨을 만들고, 순서를 바꾸고(드래그·키보드), 이름·색·이모지를 고치고, 합치거나 지운다. */
 export function LabelsPage() {
   useDocumentTitle('라벨 관리');
+  const { admin, items, reload } = useRecommendAdmin();
+  const [publishing, setPublishing] = useState<Label | null>(null);
   const library = useAtomValue(libraryAtom);
   const watch = useAtomValue(folderWatchAtom);
   const { run } = useLibraryAction();
@@ -373,11 +378,31 @@ export function LabelsPage() {
         </DndContext>
       )}
 
+      {admin && <PublishedList items={items} reload={reload} />}
+      {admin && publishing && (
+        <PublishDialog
+          key={publishing.id}
+          mode="publish"
+          label={publishing}
+          item={items.find((item) => item.id === publishing.id)}
+          reload={reload}
+          onClose={() => setPublishing(null)}
+        />
+      )}
+
       {target !== undefined && dialog?.kind === 'edit' && (
         <LabelEditor
           key={target.id}
           label={target}
           canMerge={labels.length > 1}
+          onPublish={
+            admin
+              ? () => {
+                  setDialog(null);
+                  setPublishing(target);
+                }
+              : undefined
+          }
           onClose={() => setDialog(null)}
           onMerge={() => setDialog({ kind: 'merge', id: target.id })}
           onDelete={() => setDialog({ kind: 'delete', id: target.id })}

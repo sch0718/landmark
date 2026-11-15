@@ -1,5 +1,6 @@
 import { AGENT_SYNC_ROUTES } from '../agent/sync-routes';
 import { BACKUP_ROUTES } from './backup';
+import { RECOMMEND_ROUTES } from './recommend';
 import {
   handleSessionRoute,
   HttpError,
@@ -131,6 +132,7 @@ export const SYNC_ROUTES: SyncRoute[] = [
     },
   },
   ...BACKUP_ROUTES,
+  ...RECOMMEND_ROUTES,
   ...AGENT_SYNC_ROUTES,
 ];
 export async function handleSync(ctx: SyncContext, deps: SyncDeps): Promise<Response> {

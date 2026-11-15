@@ -1,4 +1,11 @@
 import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import type { recommendMarkers } from './recommend-markers';
+import {
+  recommendPrefsAtom,
+  toggleRecommendMapAtom,
+  visibleRecommendationsAtom,
+} from 'src/stores/recommend';
 import { visuallyHidden } from '@mui/utils';
 import { useAtomValue, useSetAtom, useStore } from 'jotai';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -28,7 +35,7 @@ import { DETAIL_WIDTH } from 'src/sections/shell/pane-widths';
 import { useSheetHalfPx } from 'src/sections/shell/sheet-snap';
 import { useCloseDetail } from 'src/sections/shell/use-close-detail';
 import { useLayout } from 'src/sections/shell/use-layout';
-import { addFlowAtom, showsAddPanel } from 'src/stores/add-place';
+import { addFlowAtom, addOpenerAtom, addTargetAtom, showsAddPanel } from 'src/stores/add-place';
 import { libraryAtom } from 'src/stores/library-state';
 import { focusPlaceAtom } from 'src/stores/library-ui';
 import { locateAtom, myLocationAtom, nearbyAtom } from 'src/stores/my-location';
@@ -65,6 +72,33 @@ export function LibraryMap() {
   const library = useAtomValue(libraryAtom);
   const [query, patch] = useLibraryQuery();
   const tokens = useThemeTokens();
+  const recs = useAtomValue(visibleRecommendationsAtom);
+  const { mapOff } = useAtomValue(recommendPrefsAtom);
+  const toggleRecommendMap = useSetAtom(toggleRecommendMapAtom);
+  const setFlow = useSetAtom(addFlowAtom);
+  const setOpener = useSetAtom(addOpenerAtom);
+  const setTarget = useSetAtom(addTargetAtom);
+  // 공유 가져오기 연산은 추천이 있을 때만 읽어 기존 지연 로딩을 유지한다.
+  const [recommendModule, setRecommendModule] = useState<{
+    recommendMarkers: typeof recommendMarkers;
+  } | null>(null);
+  useEffect(() => {
+    if (!recs.length) return;
+    let active = true;
+    void import('./recommend-markers')
+      .then((module) => {
+        if (active) setRecommendModule(module);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [recs.length]);
+  const recMarkers = useMemo<ReturnType<typeof recommendMarkers>>(
+    () =>
+      recommendModule?.recommendMarkers(recs, library, tokens) ?? { markers: [], byId: new Map() },
+    [recommendModule, recs, library, tokens],
+  );
   const layout = useLayout();
   const openPlace = useOpenPlace();
   const closeDetail = useCloseDetail();
@@ -138,6 +172,11 @@ export function LibraryMap() {
             ),
           ],
     [markers, tempPoint, tokens],
+  );
+
+  const allShownMarkers = useMemo(
+    () => (mapOff ? shownMarkers : [...shownMarkers, ...recMarkers.markers]),
+    [mapOff, shownMarkers, recMarkers],
   );
 
   // 선택이 바뀌면 지도를 그 장소로 옮긴다(렌더 중 상태 갱신). `seq`를 올려 같은 장소도 다시 움직인다.
@@ -247,6 +286,27 @@ export function LibraryMap() {
     (id: string) => {
       if (id === CANDIDATE_MARKER_ID) return; // 아직 보관함에 없는 후보다.
       if (pinning) return; // 핀 모드에서는 위치만 고른다.
+      if (id.startsWith('rec:')) {
+        const item = recMarkers.byId.get(id);
+        if (item) {
+          const { rec, placeId: focusPlaceId } = item;
+          setTarget(null);
+          setOpener(document.activeElement instanceof HTMLElement ? document.activeElement : null);
+          setFlow({
+            step: 'share',
+            doc: rec.doc,
+            recommend: {
+              id: rec.id,
+              title: rec.title,
+              description: rec.description,
+              startDate: rec.startDate,
+              endDate: rec.endDate,
+            },
+            focusPlaceId,
+          });
+        }
+        return;
+      }
       // 고른 마커를 다시 누르면 선택을 푼다(스펙 A1 §3.2). 추가 칸이 열려 있으면 그대로 둔다.
       if (id === placeId) {
         if (!adding) closeDetail();
@@ -256,7 +316,18 @@ export function LibraryMap() {
       requestListScroll((prev) => ({ id, seq: (prev?.seq ?? 0) + 1 }));
       openPlace(id, 'map');
     },
-    [openPlace, requestListScroll, pinning, adding, placeId, closeDetail],
+    [
+      openPlace,
+      requestListScroll,
+      pinning,
+      adding,
+      placeId,
+      closeDetail,
+      recMarkers,
+      setFlow,
+      setOpener,
+      setTarget,
+    ],
   );
 
   // 지도 빈 곳을 누르면 선택을 푼다. 핀 모드(조준점 조작)와 추가 칸이 열려 있을 때는 그쪽 몫이다.
@@ -310,7 +381,7 @@ export function LibraryMap() {
       )}
       <Box sx={{ position: 'relative', flex: 1, minHeight: 0, bgcolor: 'var(--tm-bg-raised)' }}>
         <MapView
-          markers={shownMarkers}
+          markers={allShownMarkers}
           selectedMarker={selectedMarker}
           polylines={[]}
           clusterStyle={clusterStyle}
@@ -324,6 +395,16 @@ export function LibraryMap() {
           myLocation={fix}
           controls={
             <>
+              {recs.length > 0 && (
+                <Button
+                  variant="outlined"
+                  aria-pressed={!mapOff}
+                  onClick={() => toggleRecommendMap()}
+                  sx={{ minHeight: 44, bgcolor: 'var(--tm-bg-surface)' }}
+                >
+                  추천 장소
+                </Button>
+              )}
               <MyLocationButton locating={locating} onClick={() => void onLocate()} />
               <Box
                 sx={{

@@ -54,6 +54,7 @@ export default defineConfig({
         'share-export.spec.ts',
         'share-link.spec.ts',
         'share-import.spec.ts',
+        'recommend.spec.ts',
         'place-adding.spec.ts',
         'folder-resync.spec.ts',
         'trip-planning.spec.ts',
