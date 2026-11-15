@@ -8,7 +8,15 @@ import type { RecommendationMeta } from 'src/server/library-sync/recommend';
 export type { RecommendationMeta };
 export type Recommendation = Omit<RecommendationMeta, 'createdAt'> & { doc: ShareDocV1 };
 export type RecommendFailure =
-  'not-admin' | 'auth' | 'invalid' | 'too-large' | 'limit' | 'off' | 'offline' | 'server';
+  | 'not-admin'
+  | 'auth'
+  | 'invalid'
+  | 'too-many'
+  | 'too-large'
+  | 'limit'
+  | 'off'
+  | 'offline'
+  | 'server';
 export type RecommendResult<T> = { ok: true; data: T } | { ok: false; reason: RecommendFailure };
 export type RecommendPublishBody = {
   title: string;
@@ -68,6 +76,7 @@ export function createRecommendAdminApi(api: Pick<SyncApi, 'client'>) {
     if (r.ok) return { ok: true, data: r.data };
     if (('status' in r && r.status === 403) || r.kind === 'not-allowed')
       return { ok: false, reason: 'not-admin' };
+    if ('code' in r && r.code === 'too-many') return { ok: false, reason: 'too-many' };
     if ('status' in r && r.status === 413) return { ok: false, reason: 'too-large' };
     const reason = toBackupFailure(r);
     return {

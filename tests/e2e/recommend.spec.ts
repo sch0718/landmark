@@ -49,7 +49,7 @@ test('추천 카드에서 메타 제목으로 미리 보고 담은 뒤 카드를
   await page.goto('/');
   await emptyLibrary(page);
   const section = page.getByRole('region', { name: '추천', exact: true });
-  await section.getByRole('button', { name: '가을 단풍', exact: true }).click();
+  await section.getByRole('button', { name: /^가을 단풍.*2곳/ }).click();
   await expect(page.getByRole('heading', { name: '가을 단풍 · 2곳', exact: true })).toBeVisible();
   await expect(page.getByRole('switch', { name: '추천 제목 라벨도 붙이기' })).toBeChecked();
   await expect(page.getByRole('textbox', { name: '추천 제목 라벨 이름' })).toHaveValue('가을 단풍');

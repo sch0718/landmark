@@ -296,7 +296,8 @@ export function SharePreview({
           )}
         </Box>
 
-        <Box sx={{ mt: 1 }}>
+        {/* 추천 문서에는 메모가 없어 이 스위치가 늘 꺼져 있으므로 보이지 않는다. */}
+        <Box sx={{ mt: 1, display: recommend ? 'none' : undefined }}>
           <FormControlLabel
             control={
               <Switch

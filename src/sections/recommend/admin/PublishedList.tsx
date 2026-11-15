@@ -51,6 +51,11 @@ export function PublishedList({
       <Box component="h2" sx={{ fontSize: 18, fontWeight: 800 }}>
         게시한 추천
       </Box>
+      {items.length === 0 && (
+        <Box sx={{ fontSize: 14, color: 'var(--tm-text-secondary)' }}>
+          아직 게시한 추천이 없어요
+        </Box>
+      )}
       <Box component="ul" sx={{ m: 0, p: 0, listStyle: 'none' }}>
         {items.map((item) => (
           <Box
