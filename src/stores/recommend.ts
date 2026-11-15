@@ -20,6 +20,13 @@ export const visibleRecommendationsAtom = atom((get) => {
   const hidden = new Set(get(recommendPrefsAtom).hidden);
   return get(recommendationsAtom).filter((rec) => !hidden.has(rec.id));
 });
+export const hiddenRecommendationCountAtom = atom((get) => {
+  const hidden = new Set(get(recommendPrefsAtom).hidden);
+  return get(recommendationsAtom).filter((rec) => hidden.has(rec.id)).length;
+});
+export const showHiddenRecommendationsAtom = atom(null, (get, set) => {
+  set(recommendPrefsAtom, { ...get(recommendPrefsAtom), hidden: [] });
+});
 export const hideRecommendationAtom = atom(null, (get, set, id: string) => {
   const prefs = get(recommendPrefsAtom);
   if (!prefs.hidden.includes(id))
