@@ -24,4 +24,6 @@ interface ImportMetaEnv {
   readonly VITE_SHARE_MAP_URL?: string;
   /** 보기 화면의 `Landmark에 담기`가 여는 앱 주소. 없으면 `https://landmark.sch0718.dev`. */
   readonly VITE_APP_URL?: string;
+  /** 배포 id(커밋 SHA). `@sch0718/vite-app/app-version`의 `appVersion()`이 빌드 때 넣는다. 개발 서버는 'dev'. */
+  readonly APP_VERSION: string;
 }

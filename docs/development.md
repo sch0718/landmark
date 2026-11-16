@@ -877,6 +877,11 @@ node scripts/measure-ui-assets.mjs dist/assets
 | 환경변수 `VITE_NAVER_MAP_CLIENT_ID` | NCP Client ID (Production·Preview 모두)                          |
 | 환경변수 `GITHUB_PACKAGES_TOKEN` | `read:packages` classic 토큰(비밀값, Production·Preview 모두). 없으면 `yarn install`이 실패해 배포되지 않음 |
 
+- **새 버전 안내:** 빌드가 배포 id(`CF_PAGES_COMMIT_SHA`)를 `import.meta.env.APP_VERSION`과 `dist/version.json`에 넣습니다(`@sch0718/vite-app/app-version`).
+  - 운영 빌드의 `App`은 첫 화면이 뜬 뒤 `src/services/app-update/app-update.ts`를 따로 받습니다(첫 화면 예산 밖, `--require-lazy app-update`).
+  - 시작할 때와 화면이 다시 보일 때(30분 간격) `/version.json`을 비교합니다. 접속 5초 안이고 조작 전이면 바로 새로고침하고, 아니면 「새 버전이 나왔어요. 새로고침해 주세요」 토스트를 띄웁니다(나눠 받기 실패 안내 `ChunkErrorNotice`와 같은 문구).
+  - 앱 셸만 해당합니다. `/view`·공유 지도(`vite.view*`·`vite.map.config.ts`)는 넣지 않았습니다.
+- **릴리스 내용:** 앱 화면이 바뀐 릴리스를 만들 때 GitHub Release 본문과 함께 `src/sections/help/release-notes.ts`에 사용자용 한 줄~세 줄을 더합니다. 도움말 「최근 바뀐 점」과 업데이트 뒤 첫 실행 「업데이트했어요 › 바뀐 점」(기기 키 `tripmap:release-seen:v1`)이 씁니다. 문서만 바뀐 릴리스는 적지 않습니다.
 - `yarn build:ci`는 `yarn validate && yarn typecheck && yarn test && yarn build && yarn size --require-lazy … && yarn build:map`입니다. 검증이나 테스트가 실패하거나, 첫 화면 JS가 예산(`perf-budget.json`)을 넘거나, 나눠 받아야 하는 화면(`--require-lazy`로 지정)이 첫 화면에 합쳐져 따로 나뉘지 않으면 배포되지 않습니다.
 - 저장소 루트의 `functions/`는 Pages가 자동으로 서버 함수(`/api/place`, `/api/naver-folder`, `/api/route`, `/api/search`, `/api/hours`, `/api/meet*`, `/api/share*`, `/s/*`)로 배포합니다. 약속·짧은 링크는 위의 D1·Turnstile·시크릿 설정이 필요합니다. 장소·폴더·경로·검색·영업시간 결과는 Cloudflare Cache API에 장소 1일·폴더 10분·경로(자동차·대중교통 1시간, 도보 7일)·검색 7일·영업시간 1일 동안 둡니다. 약속·짧은 링크 응답은 캐시하지 않습니다.
 - **롤백**: 주요 변경마다 버전 태그(`v0.1.0`~)와 [GitHub Release](https://github.com/sch0718/landmark/releases)를 만듭니다. 배포만 되돌리기(Cloudflare 대시보드), 코드 되돌리기(`git revert` PR), 버전별 데이터 호환은 [롤백](rollback.md)에 있습니다.
