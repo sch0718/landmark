@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RouteErrorScreen } from 'src/components/RouteErrorScreen';
 import { ChunkLoadError } from 'src/lib/lazy-chunk';
@@ -23,13 +23,13 @@ describe('RouteErrorScreen', () => {
     expect(screen.queryByText('문제가 생겨 화면을 표시하지 못했어요')).toBeNull();
   });
 
-  it('새로고침 버튼은 location.reload를 부른다', () => {
+  it('새로고침 버튼은 location.reload를 부른다', async () => {
     routeError.current = new ChunkLoadError('x');
     const reload = vi.fn();
     vi.spyOn(window, 'location', 'get').mockReturnValue({ ...window.location, reload });
     render(<RouteErrorScreen />);
     fireEvent.click(screen.getByRole('button', { name: '새로고침' }));
-    expect(reload).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
   });
 
   it('다른 오류면 지금 화면 그대로', () => {

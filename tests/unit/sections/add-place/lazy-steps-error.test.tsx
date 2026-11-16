@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setAppRuntimeForTest } from 'src/lib/effect/runtime';
@@ -49,7 +49,7 @@ describe('추가 칸 단계 받기 실패', () => {
     await openLink();
     await within(panel()).findByText(NOTICE);
     fireEvent.click(within(panel()).getByRole('button', { name: '새로고침' }));
-    expect(reload).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
   });
 
   it('칸 닫기 버튼으로 칸이 닫힌다', async () => {
