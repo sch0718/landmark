@@ -4,11 +4,14 @@ import react, { reactCompilerPreset } from '@vitejs/plugin-react';
 import Icons from 'unplugin-icons/vite';
 import { defineConfig } from 'vite';
 import { firebaseAuthHelper } from '@sch0718/firebase-session/vite';
+import { appVersion } from '@sch0718/vite-app/app-version';
 import { compileReactIcon } from './build/compile-react-svg-icon.ts';
 
 export default defineConfig(({ command }) => ({
   plugins: [
     firebaseAuthHelper(),
+    // 배포 id를 import.meta.env.APP_VERSION과 dist/version.json에 넣는다(새 버전 안내, src/services/app-update).
+    appVersion(),
     {
       name: 'tripmap:view-route',
       configureServer(server) {
