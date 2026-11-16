@@ -72,6 +72,7 @@ Yarn 1(1.22.22)은 `.npmrc`의 `GITHUB_PACKAGES_TOKEN`이 정의되지 않으면
 | 이름                       | 용도                                                                          |
 | -------------------------- | ----------------------------------------------------------------------------- |
 | `VITE_NAVER_MAP_CLIENT_ID` | 네이버 지도 JS API v3(NCP) Client ID. 로컬은 `.env.local`(gitignore)에 둡니다 |
+| `VITE_GOOGLE_MAPS_API_KEY` | 구글 지도 표시(Maps JavaScript API) 공개 키. 비면 지도 선택 구역을 숨기고 네이버 지도를 씁니다. 설정은 기기별 `tripmap:prefs`에 저장합니다 |
 | `VITE_MAP_ADAPTER`         | `fake`면 네이버 SDK 대신 DOM 가짜 지도를 씁니다(E2E·키 없는 개발용)           |
 | `VITE_KAKAO_JS_KEY` | 카카오톡 공유 JavaScript 키. Pages **Production에만** 넣습니다. 미리보기 도메인은 카카오에 등록할 수 없어 Preview에는 넣지 않습니다. 비어 있으면 단추를 숨깁니다 |
 | `VITE_TURNSTILE_SITE_KEY` | 약속 올리기에 쓰는 Turnstile 공개 사이트 키. Pages Production·Preview의 빌드 환경 변수 |
@@ -100,6 +101,17 @@ Yarn 1(1.22.22)은 `.npmrc`의 `GITHUB_PACKAGES_TOKEN`이 정의되지 않으면
 ```bash
 echo 'VITE_NAVER_MAP_CLIENT_ID=<발급받은 Client ID>' > .env.local
 ```
+
+**구글 지도 키 설정**: Google Cloud에서 키의 API 제한을 **Maps JavaScript API만** 허용하도록 설정합니다(Places·Routes API는 쓰지 않습니다). 애플리케이션 제한은 **HTTP 리퍼러**로 두고 다음 주소를 등록합니다. 키의 실제 값 등록과 배포는 운영자가 합니다.
+
+- `https://landmark.sch0718.dev/*`
+- `https://landmark-c5f.pages.dev/*`
+- `https://*.landmark-c5f.pages.dev/*`(미리보기가 필요할 때)
+- `https://sch0718.github.io/*`(공유 지도 페이지)
+- `http://localhost:5173/*`
+- `http://localhost:8788/*`
+
+교차 출처 iframe 요청에서는 브라우저가 리퍼러의 경로를 뺄 수 있으므로 공유 지도 주소를 `/landmark/*`까지 제한하면 인증이 실패할 수 있습니다([구글 API 보안 권장 사항](https://developers.google.com/maps/api-security-best-practices)). 사용량을 관리하도록 일일 상한(예: 300회/일)을 권장합니다. 구글 어댑터는 앱·지도 페이지에서 모두 동적으로 받아 첫 화면 번들에 넣지 않습니다. 공유 지도는 구글 키가 있고 첫 장소·핀이 하나 이상이며 모두 한국 밖일 때 구글로 고르고, 나머지는 네이버로 고릅니다.
 
 **카카오 콘솔 도메인 등록**: 앱의 JavaScript SDK 도메인과 제품 링크 관리 › 웹 도메인에 운영 앱 주소를 등록합니다. JavaScript 키 값은 저장소에 기록하지 않습니다(확인일: 2026-10-27).
 
@@ -861,6 +873,7 @@ node scripts/measure-ui-assets.mjs dist/assets
 | 빌드 명령                           | `yarn build:ci`                                                  |
 | 출력 디렉터리                       | `dist`                                                           |
 | 환경변수 `NODE_VERSION`             | `24` (engines 검사는 `.yarnrc`의 `ignore-engines true`로 건너뜀) |
+| 환경변수 `VITE_GOOGLE_MAPS_API_KEY` | 구글 지도 표시 키(선택, Production·Preview). API·HTTP 리퍼러 제한은 위 설정 참고 |
 | 환경변수 `VITE_NAVER_MAP_CLIENT_ID` | NCP Client ID (Production·Preview 모두)                          |
 | 환경변수 `GITHUB_PACKAGES_TOKEN` | `read:packages` classic 토큰(비밀값, Production·Preview 모두). 없으면 `yarn install`이 실패해 배포되지 않음 |
 
@@ -877,7 +890,7 @@ node scripts/measure-ui-assets.mjs dist/assets
 - **짧은 링크**: `링크 복사`·`링크 공유`, 그리고 긴 링크가 카카오톡 한도(400자)를 넘을 때 `카카오톡`이 암호화한 사본을 서버에 맡기고 `/s/<id>#k=…`를 보냅니다(위 "공유 짧은 링크"). 받은 사람이 열면 같은 `/view#d=…`로 바뀝니다.
 - **보기 경로**: `yarn build:viewer`가 `public/view.html`도 만듭니다. Cloudflare Pages의 정적 HTML 경로(`/view`)로 제공하며 옛 배포로 되돌리면 이 링크는 열리지 않습니다.
 - **내보내기**: 보관함에서 장소를 고르고(없으면 지금 보이는 목록) `내보내기`를 누르면 HTML 파일 하나가 만들어집니다. 받는 사람은 설치·로그인 없이 휴대폰·PC에서 열어 보기만 합니다. 파일은 미리 빌드한 보기 화면 틀(`public/share-viewer.html`, `yarn build:viewer`)에 데이터를 끼워 만듭니다.
-- **지도 페이지**: 내보낸 파일의 지도는 파일 안 iframe이 띄우는 별도 페이지(`https://sch0718.github.io/landmark/`, `yarn build:map` → `dist-map/`)입니다. 이 저장소의 `gh-pages` 브랜치(GitHub Pages)에 올라가며, 워크플로 `.github/workflows/deploy-share-map.yml`이 `main`에 지도 관련 파일(`src/share-map/**`, `src/components/map/**` 등)이 바뀔 때 자동으로, 또는 수동 실행으로 배포합니다. 저장소 변수 `NAVER_MAP_CLIENT_ID`가 비어 있으면 배포 전에 멈추고, NCP 콘솔 Web 서비스 URL에 `https://sch0718.github.io`가 등록돼 있어야 합니다.
+- **지도 페이지**: 내보낸 파일의 지도는 파일 안 iframe이 띄우는 별도 페이지(`https://sch0718.github.io/landmark/`, `yarn build:map` → `dist-map/`)입니다. 이 저장소의 `gh-pages` 브랜치(GitHub Pages)에 올라가며, 워크플로 `.github/workflows/deploy-share-map.yml`이 `main`에 지도 관련 파일(`src/share-map/**`, `src/components/map/**` 등)이 바뀔 때 자동으로, 또는 수동 실행으로 배포합니다. 저장소 변수 `NAVER_MAP_CLIENT_ID`가 비어 있으면 배포 전에 멈추고, NCP 콘솔 Web 서비스 URL에 `https://sch0718.github.io`가 등록돼 있어야 합니다. 구글 지도도 쓰려면 저장소 변수 `GOOGLE_MAPS_API_KEY`를 등록합니다. 워크플로가 빌드 변수 `VITE_GOOGLE_MAPS_API_KEY`로 넘기며, 비어 있어도 네이버 지도로 빌드·배포합니다. 구글 키만 있는 빌드는 지원하지 않습니다.
 - **가져오기**: 받은 파일을 앱의 ＋ 시트에서 고르거나(PC는 끌어 놓기도), 보기 화면의 `Landmark에 담기`로 `/import`를 열어 미리보기에서 넣을 장소와 라벨을 정해 내 보관함에 합칩니다.
 - **약속 링크**: 새 약속의 `/meet/<id>`는 서버 사본을 읽어 답장을 자동 집계합니다. 주최자 토큰이 없고 다른 참석자의 답장이 이미 있는 약속은 기존 링크 방식을 유지합니다. 후보(`/meet#d=`)·답장(`#r=`)·확정(`#f=`) 읽기와 답장 `반영`은 그대로 남습니다. `MEET_ONLINE=off`일 때 처음 보내는 약속도 링크 방식으로 공유합니다.
 - 설계: `docs/superpowers/specs/2026-10-11-html-share-export-design.md`, `2026-10-13-share-import-design.md`, `2026-10-16-trip-share-design.md`, `2026-10-22-share-link-design.md`, `2026-10-23-meeting-place-design.md`, `2026-10-25-meeting-online-design.md`, `2026-10-28-share-short-link-design.md`.

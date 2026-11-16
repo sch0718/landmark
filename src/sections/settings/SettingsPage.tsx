@@ -50,6 +50,11 @@ const VIEWS: ReadonlyArray<Option<Prefs['libraryView']>> = [
   { value: 'list', label: '목록' },
 ];
 
+const MAP_PROVIDERS: ReadonlyArray<Option<Prefs['mapProvider']>> = [
+  { value: 'naver', label: '네이버' },
+  { value: 'google', label: '구글' },
+];
+
 /** 쿼리로 대화상자를 바로 여는 키(보관함 빈 화면의 "옛 여행 가져오기"). */
 const IMPORT_PARAM = 'import';
 
@@ -159,6 +164,16 @@ export function SettingsPage() {
           onChange={(libraryView) => setPrefs({ ...prefs, libraryView })}
         />
       </Section>
+      {import.meta.env.VITE_GOOGLE_MAPS_API_KEY && (
+        <Section title="지도">
+          <OptionGroup
+            label="지도"
+            value={prefs.mapProvider}
+            options={MAP_PROVIDERS}
+            onChange={(mapProvider) => setPrefs({ ...prefs, mapProvider })}
+          />
+        </Section>
+      )}
       <Section title="백업">
         <BackupSection onRestore={() => setRestoreOpen(true)} />
         {syncFeatureVisible() && (

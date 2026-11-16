@@ -20,6 +20,7 @@ const existingConfig: ViteUserConfig = {
     env: {
       TZ: 'Asia/Seoul',
       VITE_KAKAO_JS_KEY: '',
+      VITE_GOOGLE_MAPS_API_KEY: '',
       VITE_FIREBASE_API_KEY: '',
       VITE_FIREBASE_AUTH_DOMAIN: '',
       VITE_FIREBASE_PROJECT_ID: '',

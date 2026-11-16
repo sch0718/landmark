@@ -9,6 +9,9 @@ import type { MapMarker } from 'src/components/map/MapAdapter';
 import { fitPoints, focusCamera } from 'src/components/map/camera';
 import { MapView } from 'src/components/map/MapView';
 import { StrictMode, useState } from 'react';
+import { createStore, Provider } from 'jotai';
+import { DEFAULT_PREFS } from 'src/schema/prefs';
+import { prefsAtom } from 'src/stores/prefs-state';
 import { installMapResources } from './helpers/map-resources';
 
 const sdk = vi.hoisted(() => ({
@@ -467,7 +470,7 @@ describe('지도 사용 불가', () => {
     warn.mockRestore();
   });
 
-  it('기존 인증 실패가 등록 즉시 통지되면 SDK 요청 없이 callback을 해제한다', () => {
+  it('기존 인증 실패가 등록 즉시 통지되면 SDK 요청 없이 callback을 해제한다', async () => {
     vi.stubEnv('VITE_MAP_ADAPTER', '');
     vi.stubEnv('VITE_NAVER_MAP_CLIENT_ID', 'cid');
     sdk.authAlreadyFailed = true;
@@ -490,8 +493,8 @@ describe('지도 사용 불가', () => {
         }}
       />,
     );
-    expect(unavailable).toHaveBeenCalledTimes(1);
-    expect(order.slice(0, 2)).toEqual(['not-ready', 'unavailable']);
+    await waitFor(() => expect(unavailable).toHaveBeenCalledTimes(1));
+    expect(order.slice(-2)).toEqual(['not-ready', 'unavailable']);
     expect(sdk.authFailure).toBeNull();
     expect(load).not.toHaveBeenCalled();
   });
@@ -859,6 +862,7 @@ describe('MapView 크기와 생명주기', () => {
     const { unmount } = render(
       <MapView {...props} onUnavailable={unavailable} onReadyChange={ready} />,
     );
+    await waitFor(() => expect(reject).toBeTypeOf('function'));
     unmount();
     await act(async () => {
       reject(new Error('late'));
@@ -900,4 +904,42 @@ it('이모지 마커는 방문 체크와 HTML 문자를 모두 텍스트로 보�
   expect(el.textContent).toBe(`✓ ${label}`);
   expect(el.title).toBe(`${label} · 다녀옴`);
   expect(el.children).toHaveLength(0);
+});
+
+it('언마운트 뒤 지도 제공자가 바뀌면 카메라를 이어받고 옛 focus와 맞추기를 건너뛴다', async () => {
+  vi.stubEnv('VITE_MAP_ADAPTER', 'fake');
+  vi.stubEnv('VITE_GOOGLE_MAPS_API_KEY', 'key');
+  const store = createStore();
+  store.set(prefsAtom, { ...DEFAULT_PREFS, mapProvider: 'naver' });
+  const fit = vi.spyOn(FakeMapAdapter.prototype, 'fitBounds');
+  const props = {
+    markers: [mk('전환')],
+    polylines: [],
+    onMarkerClick: vi.fn(),
+    onUnavailable: vi.fn(),
+    fitKey: 'provider-handoff',
+    focus: { point: [128, 37] as [number, number], seq: 12 },
+  };
+  const first = render(
+    <Provider store={store}>
+      <MapView {...props} />
+    </Provider>,
+  );
+  await screen.findByTestId('marker-전환');
+  const camera = { center: [135.5, 34.7] as [number, number], zoom: 13 };
+  const adapter = [...resources.instances].at(-1)!;
+  adapter.setCamera(camera);
+  first.unmount();
+  store.set(prefsAtom, { ...DEFAULT_PREFS, mapProvider: 'google' });
+  fit.mockClear();
+  const setCamera = vi.spyOn(FakeMapAdapter.prototype, 'setCamera');
+  render(
+    <Provider store={store}>
+      <MapView {...props} />
+    </Provider>,
+  );
+  await screen.findByTestId('marker-전환');
+  expect(setCamera).toHaveBeenCalledWith(camera);
+  expect([...resources.instances].at(-1)!.getCamera()).toEqual(camera);
+  expect(fit).not.toHaveBeenCalled();
 });

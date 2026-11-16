@@ -16,6 +16,8 @@ interface ImportMetaEnv {
   /** 약속 올리기 때 지연 로딩하는 Turnstile의 공개 사이트 키. */
   readonly VITE_TURNSTILE_SITE_KEY?: string;
   readonly VITE_NAVER_MAP_CLIENT_ID?: string;
+  /** 비면 구글 선택지를 숨김. */
+  readonly VITE_GOOGLE_MAPS_API_KEY?: string;
   /** 'fake'면 DOM 전용 가짜 지도(테스트·E2E). */
   readonly VITE_MAP_ADAPTER?: string;
   /** 보기 화면 틀이 iframe으로 띄우는 지도 페이지 주소. 없으면 `https://sch0718.github.io/landmark/`. */

@@ -1,4 +1,8 @@
 import Box from '@mui/material/Box';
+import { useAtomValue } from 'jotai';
+import { prefsAtom } from 'src/stores/prefs-state';
+import { resolveMapProvider, type MapProvider } from './map-provider';
+import { onGoogleAuthFailure } from './load-google-sdk';
 import type { ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { fitPoints, focusCamera } from './camera';
@@ -61,7 +65,12 @@ type Props = {
 
 const DEFAULT_PADDING: MapPadding = { top: 40, right: 40, bottom: 40, left: 40 };
 
+// 설정 화면에서는 MapView가 사라지므로 제공자 전환에만 쓸 카메라를 모듈에 보관한다.
+let lastCamera: { provider: MapProvider; key: string; camera: MapCamera } | null = null;
+
 export function MapView(props: Props) {
+  const prefs = useAtomValue(prefsAtom);
+  const provider = resolveMapProvider(prefs.mapProvider, import.meta.env.VITE_GOOGLE_MAPS_API_KEY);
   // frameRef: 컨테이너를 100%로 채우며 크기를 잰다. canvasRef: SDK가 마운트되는 요소.
   // 네이버 SDK의 setSize가 마운트 요소에 px 크기를 인라인으로 쓰므로 둘을 분리해야
   // 영역이 다시 넓어질 때도 측정이 따라간다.
@@ -95,77 +104,103 @@ export function MapView(props: Props) {
     const fittedCache = fittedKeys.current;
     let cancelled = false;
     let disposed = false;
-    let adapter: MapAdapter;
+    let adapter: MapAdapter | null = null;
     let unsubscribeAuth = () => {};
     const dispose = () => {
-      if (disposed) return;
+      if (disposed || !adapter) return;
       disposed = true;
       unsubscribeAuth();
+      const key = displayedKey.current;
+      const camera = adapter.getCamera();
+      if (key !== null && fittedCache.has(key) && camera) lastCamera = { provider, key, camera };
       adapter.destroy();
     };
     const unavailable = (reason: string) => {
       latest.current.onReadyChange?.(false);
       latest.current.onUnavailable(reason);
     };
-    if (import.meta.env.VITE_MAP_ADAPTER === 'fake') {
-      adapter = new FakeMapAdapter();
-    } else {
-      const clientId = import.meta.env.VITE_NAVER_MAP_CLIENT_ID;
-      if (!clientId) {
-        unavailable(MAP_MISSING_CLIENT_ID_MESSAGE);
-        return;
-      }
-      // 휴대폰에서는 SDK 막대(슬라이더)가 왼쪽 위 핀 이름표를 가리고 그 버튼은 28px로 작다. 터치 전용 기기에서는
-      // SDK 막대를 빼고 아래에서 44px ＋/− 버튼(`MapZoomButtons`)을 그린다. 둘은 늘 함께 바뀐다.
-      adapter = new NaverMapAdapter(clientId, { zoomControl: !touchOnly });
-      unsubscribeAuth = onNaverAuthFailure(() => {
-        if (cancelled) return;
-        cancelled = true;
-        adapterRef.current = null;
-        setMountedAdapter(null);
-        dispose();
-        console.warn('네이버 지도 인증에 실패했어요');
-        unavailable(MAP_UNAVAILABLE_MESSAGE);
-      });
-      if (cancelled) {
-        unsubscribeAuth();
-        return;
-      }
+    const clientId = import.meta.env.VITE_NAVER_MAP_CLIENT_ID;
+    if (import.meta.env.VITE_MAP_ADAPTER !== 'fake' && provider === 'naver' && !clientId) {
+      unavailable(MAP_MISSING_CLIENT_ID_MESSAGE);
+      return;
     }
-    adapter.onMarkerClick((id) => latest.current.onMarkerClick(id));
-    adapter.onMapClick(() => latest.current.onMapClick?.());
-    adapter.onBoundsChange((b) => {
-      latest.current.onBoundsChange?.(b);
-      const camera = adapter.getCamera();
-      if (camera) latest.current.onCenterChange?.(camera.center);
-    });
-    adapter.mount(host).then(
-      () => {
+    const createAdapter = (): Promise<MapAdapter> => {
+      if (import.meta.env.VITE_MAP_ADAPTER === 'fake') return Promise.resolve(new FakeMapAdapter());
+      if (provider === 'google') {
+        return import('./GoogleMapAdapter').then(
+          ({ GoogleMapAdapter }) =>
+            new GoogleMapAdapter(import.meta.env.VITE_GOOGLE_MAPS_API_KEY!, {
+              zoomControl: !touchOnly,
+            }),
+        );
+      }
+      // 터치 전용 기기에서는 SDK 막대 대신 44px ＋/− 버튼을 함께 그린다.
+      return Promise.resolve(new NaverMapAdapter(clientId!, { zoomControl: !touchOnly }));
+    };
+    void createAdapter()
+      .then(async (created) => {
+        adapter = created;
         if (cancelled) {
           dispose();
           return;
         }
-        adapterRef.current = adapter;
-        setMountedAdapter(adapter);
-      },
-      (e: unknown) => {
+        if (import.meta.env.VITE_MAP_ADAPTER !== 'fake') {
+          const subscribe = provider === 'google' ? onGoogleAuthFailure : onNaverAuthFailure;
+          unsubscribeAuth = subscribe(() => {
+            if (cancelled) return;
+            cancelled = true;
+            adapterRef.current = null;
+            setMountedAdapter(null);
+            dispose();
+            console.warn('지도 인증에 실패했어요');
+            unavailable(MAP_UNAVAILABLE_MESSAGE);
+          });
+          if (cancelled) {
+            unsubscribeAuth();
+            return;
+          }
+        }
+        created.onMarkerClick((id) => latest.current.onMarkerClick(id));
+        created.onMapClick(() => latest.current.onMapClick?.());
+        created.onBoundsChange((b) => {
+          latest.current.onBoundsChange?.(b);
+          const camera = created.getCamera();
+          if (camera) latest.current.onCenterChange?.(camera.center);
+        });
+        await created.mount(host);
+        if (cancelled) {
+          dispose();
+          return;
+        }
+        const key = latest.current.fitKey ?? 'explore';
+        if (lastCamera && lastCamera.provider !== provider && lastCamera.key === key) {
+          created.setCamera(lastCamera.camera);
+          fittedCache.add(key);
+          displayedKey.current = key;
+          appliedFocus.current = latest.current.focus?.seq ?? null;
+          lastCamera = null;
+        }
+        adapterRef.current = created;
+        setMountedAdapter(created);
+      })
+      .catch((e: unknown) => {
         if (cancelled) return;
         cancelled = true;
         dispose();
         console.warn('지도를 불러오지 못했어요', e);
         unavailable(MAP_UNAVAILABLE_MESSAGE);
-      },
-    );
+      });
     return () => {
       cancelled = true;
       adapterRef.current = null;
+      setMountedAdapter(null);
       dispose();
       cameraCache.clear();
       fittedCache.clear();
       displayedKey.current = null;
       appliedFocus.current = null;
     };
-  }, [activated, touchOnly]);
+  }, [activated, touchOnly, provider]);
 
   const ready = useMapSize(frameRef, mountedAdapter, visible);
   useEffect(() => {
