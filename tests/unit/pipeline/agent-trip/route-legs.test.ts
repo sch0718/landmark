@@ -82,6 +82,31 @@ const stats = (overrides = {}) => ({
 });
 
 describe('여행 구간 미리 조회', () => {
+  it('해외 구간은 조회·대기·경고 없이 직선거리와 빈 경로를 쓴다', async () => {
+    const { built, legs } = fixture([
+      [
+        [2.2945, 48.8584],
+        [2.3364, 48.8606],
+      ],
+    ]);
+    const fetch = vi.fn<typeof globalThis.fetch>();
+    const sleep = vi.fn(async () => {});
+    const warnings: TripIssue[] = [];
+    const result = await prepareRoutes(built, { fetch, sleep }, warnings);
+    expect(result.routeOf(legs[0]!)).toEqual({
+      durationS: 0,
+      distanceM: Math.round(legs[0]!.straightM),
+      tollFare: null,
+      status: 'estimated',
+      queriedAt: null,
+      path: [],
+    });
+    expect(result.stats).toEqual(stats({ estimated: 1 }));
+    expect(fetch).not.toHaveBeenCalled();
+    expect(sleep).not.toHaveBeenCalled();
+    expect(warnings).toEqual([]);
+  });
+
   it.each([
     ['car', [128.0200056, 37.0100056]],
     ['walk', [128.0050056, 37.0000056]],

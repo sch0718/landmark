@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { validateShareValue } from 'src/domain/share/read-share';
 import type { ShareDoc } from 'src/schema/share';
 import { parseShareDoc, readShareDoc } from 'src/share-viewer/parse';
 import { makeShareV2Doc } from '../helpers/share-v2-doc';
@@ -356,4 +357,11 @@ describe('parseShareDoc v2', () => {
     d.body.append(s);
     expect(readShareDoc(d)).toEqual(makeShareV2Doc());
   });
+});
+
+it('파리 장소가 든 공유 문서는 보기 화면과 가져오기 검사를 통과한다', () => {
+  const doc = makeShareV2Doc();
+  doc.places[0] = { ...doc.places[0]!, lng: 2.2945, lat: 48.8584 };
+  expect(parseShareDoc(doc)).toEqual(doc);
+  expect(validateShareValue(doc)).toEqual({ ok: true, doc });
 });

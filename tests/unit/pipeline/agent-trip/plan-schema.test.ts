@@ -42,6 +42,15 @@ const issue = (value: unknown, path: string, code: TripErrorCode = 'schema') => 
 };
 
 describe('계획 파일 스키마', () => {
+  it.each([
+    [124, 33],
+    [132, 39],
+  ])('검색 중심의 한국 경계 %s,%s를 허용한다', (lng, lat) => {
+    const input = plan();
+    input.places[0]!.search = { q: '식당', near: [lng, lat] };
+    expect(parsePlan(input)).toEqual(input);
+  });
+
   it('공백뿐인 이름과 검색어는 필드 경로가 있는 스키마 오류다', () => {
     const input = plan();
     input.places[0]!.name = '  ';
@@ -118,13 +127,13 @@ describe('계획 파일 스키마', () => {
     ['name', '가'.repeat(101)],
     ['address', '가'.repeat(201)],
     ['memo', '가'.repeat(10001)],
-    ['lng', 123.99],
-    ['lng', 132.01],
+    ['lng', -180.01],
+    ['lng', 180.01],
     ['lng', Infinity],
     ['lng', NaN],
     ['lng', '128'],
-    ['lat', 32.99],
-    ['lat', 39.01],
+    ['lat', -90.01],
+    ['lat', 90.01],
     ['foo', true],
   ])('장소 %s의 잘못된 값을 경로로 알린다: %#', (field, value) => {
     const input = plan();
@@ -206,10 +215,10 @@ describe('계획 파일 스키마', () => {
       name: '가'.repeat(100),
       address: '가'.repeat(200),
       memo: '가'.repeat(10000),
-      lng: 124,
-      lat: 33,
+      lng: -180,
+      lat: -90,
     });
-    Object.assign(input.places[1]!, { naverSid: '1'.repeat(20), lng: 132, lat: 39 });
+    Object.assign(input.places[1]!, { naverSid: '1'.repeat(20), lng: 180, lat: 90 });
     Object.assign(input.places[2]!, { link: 'x'.repeat(2000) });
     Object.assign(input.places[3]!, { search: { q: '가'.repeat(40), near: [124, 39] } });
     Object.assign(input.places[4]!, { key: 'a'.repeat(40) });
@@ -427,6 +436,11 @@ describe('계획 오류 경로와 JSON Schema', () => {
     const places = resolve(root.properties.places);
     expect(places.type).toBe('array');
     expect(resolve(places.items).additionalProperties).toBe(false);
+    const search = resolve((resolve(places.items).properties as Record<string, unknown>).search);
+    const near = resolve((search.properties as Record<string, unknown>).near);
+    const bounds = (near.prefixItems as unknown[]).map(resolve);
+    expect(bounds[0]).toMatchObject({ minimum: 124, maximum: 132 });
+    expect(bounds[1]).toMatchObject({ minimum: 33, maximum: 39 });
     const modes = resolve(root.properties.legModes);
     expect(modes.type).toBe('object');
     expect(resolve(modes.additionalProperties).enum).toEqual(['car', 'walk']);

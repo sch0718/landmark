@@ -107,13 +107,13 @@ describe('buildPlaces', () => {
     expect(folders[0]!.count).toBe(1);
   });
 
-  it('좌표 범위 밖(도쿄) 항목은 places에서 빠지고 excludedOutOfRange에 보고된다', () => {
+  it('좌표 범위 밖(경도 181) 항목은 places에서 빠지고 excludedOutOfRange에 보고된다', () => {
     const { places, report, folders } = buildPlaces(source(), [
-      folderA([bm({ sid: '9', name: '도쿄타워', px: 139.7, py: 35.6 }), bm({ sid: '1' })]),
+      folderA([bm({ sid: '9', name: '잘못된 좌표', px: 181, py: 35.6 }), bm({ sid: '1' })]),
       folderB([]),
     ]);
     expect(places['n:9']).toBeUndefined();
-    expect(report.excludedOutOfRange).toEqual([{ sid: '9', name: '도쿄타워' }]);
+    expect(report.excludedOutOfRange).toEqual([{ sid: '9', name: '잘못된 좌표' }]);
     expect(folders[0]!.count).toBe(1);
   });
 
@@ -185,10 +185,10 @@ describe('buildPlaces — naverPlaces(장소 ID 직접 지정)', () => {
   });
 
   it('좌표가 범위 밖이면 제외하고 보고한다', () => {
-    const far: NaverPlace = { ...jeju, sid: '9', name: '도쿄', lng: 139.7, lat: 35.6 };
+    const far: NaverPlace = { ...jeju, sid: '9', name: '잘못된 좌표', lng: 181, lat: 35.6 };
     const r = buildPlaces(source({ folders: [], naverPlaces: ['9'] }), [], [far]);
     expect(r.places['n:9']).toBeUndefined();
-    expect(r.report.excludedOutOfRange).toEqual([{ sid: '9', name: '도쿄' }]);
+    expect(r.report.excludedOutOfRange).toEqual([{ sid: '9', name: '잘못된 좌표' }]);
   });
 
   it('폴더에서 사용 불가로 제외된 sid는 naverPlaces로 되살리지 않는다', () => {
@@ -203,12 +203,12 @@ describe('buildPlaces — naverPlaces(장소 ID 직접 지정)', () => {
   });
 
   it('폴더에서 범위 밖으로 제외된 sid는 한 번만 보고한다', () => {
-    const far = bm({ sid: '20307427', name: '도쿄', px: 139.7, py: 35.6 });
+    const far = bm({ sid: '20307427', name: '잘못된 좌표', px: 181, py: 35.6 });
     const r = buildPlaces(
       source({ folders: [SHARE_A], naverPlaces: ['20307427'] }),
       [folderA([far])],
-      [{ ...jeju, lng: 139.7, lat: 35.6 }],
+      [{ ...jeju, lng: 181, lat: 35.6 }],
     );
-    expect(r.report.excludedOutOfRange).toEqual([{ sid: '20307427', name: '도쿄' }]);
+    expect(r.report.excludedOutOfRange).toEqual([{ sid: '20307427', name: '잘못된 좌표' }]);
   });
 });

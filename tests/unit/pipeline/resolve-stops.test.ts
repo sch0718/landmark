@@ -32,7 +32,7 @@ function setup(stops: { id?: string; place: string; time?: string; note?: string
   const folder: FetchedFolder = {
     shareId: SHARE,
     name: 'f',
-    bookmarks: [bm('1'), bm('9', 139.7, 35.6)],
+    bookmarks: [bm('1'), bm('9', 181, 35.6)],
   };
   return { source, ...buildPlaces(source, [folder]) };
 }

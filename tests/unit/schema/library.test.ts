@@ -72,6 +72,11 @@ function messages(value: unknown): string[] {
 }
 
 describe('LibrarySchema', () => {
+  it('파리 장소가 든 보관함을 읽는다', () => {
+    const paris = place({ name: f('에펠탑'), lng: 2.2945, lat: 48.8584 });
+    expect(safeParse(LibrarySchema, lib([paris])).success).toBe(true);
+  });
+
   it('accepts a minimal valid library', () => {
     expect(safeParse(LibrarySchema, emptyLibrary()).success).toBe(true);
     const l = label('맛집');
@@ -201,7 +206,7 @@ describe('LibrarySchema', () => {
     expect(bad(place({ id: 'ABCDEFGHIJ' })).success).toBe(false);
     expect(bad(place({ id: 'abc' })).success).toBe(false);
     expect(bad(place({ source: { kind: 'naver', sid: 'abc' } })).success).toBe(false);
-    expect(bad(place({ lng: 100 })).success).toBe(false);
+    expect(bad(place({ lng: 180.01 })).success).toBe(false);
     const l = label('x');
     const withColor = {
       ...(lib() as object),

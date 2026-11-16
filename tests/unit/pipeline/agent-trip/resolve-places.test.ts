@@ -377,18 +377,62 @@ describe('계획 장소 조회', () => {
     [132.01, 37],
     [127, 32.99],
     [127, 39.01],
-  ])('구글 좌표 %s,%s가 범위 밖이면 대체 값이 있어도 입력 오류다', async (lng, lat) => {
+  ])('한국 밖 구글 좌표 %s,%s는 대체 좌표 대신 링크 좌표를 쓴다', async (lng, lat) => {
     const { deps } = makeDeps();
-    expect(
-      await failure(plan([{ key: 'a', link: googleLink(null, lat, lng), ...fallback }]), deps),
-    ).toMatchObject({ exit: EXIT.input, issues: [{ code: 'out-of-range', path: 'places[0]' }] });
+    const warnings: TripIssue[] = [];
+    const result = await resolvePlaces(
+      plan([{ key: 'a', link: googleLink(null, lat, lng), ...fallback }]),
+      deps,
+      warnings,
+    );
+    expect(result[0]!.candidate).toMatchObject({ lng, lat });
+    expect(warnings).toEqual([]);
   });
 
-  it('sid 조회 좌표도 범위를 검사한다', async () => {
-    const { deps } = makeDeps({ [summaryUrl()]: { body: summary('범위 밖', 140, 37) } });
+  it.each([
+    [-180.01, 37],
+    [180.01, 37],
+    [127, -90.01],
+    [127, 90.01],
+  ])('전 세계 범위 밖 구글 좌표 %s,%s는 조회 실패이며 대체 핀이 있으면 쓴다', async (lng, lat) => {
+    const { deps } = makeDeps();
+    const link = googleLink(null, lat, lng);
+    const warnings: TripIssue[] = [];
+    const result = await resolvePlaces(plan([{ key: 'a', link, ...fallback }]), deps, warnings);
+    expect(result[0]!.candidate).toMatchObject({ ...fallback, source: { kind: 'pin' } });
+    expect(warnings).toMatchObject([{ code: 'lookup-failed' }]);
+    expect(await failure(plan([{ key: 'a', link }]), deps)).toMatchObject({
+      exit: EXIT.lookup,
+      issues: [{ code: 'lookup-failed' }],
+    });
+  });
+
+  it.each([
+    [-180.01, 37],
+    [180.01, 37],
+    [127, -90.01],
+    [127, 90.01],
+  ])('sid 조회 좌표 %s,%s는 대체 값이 있어도 범위 오류다', async (lng, lat) => {
+    const { deps } = makeDeps({ [summaryUrl()]: { body: summary('범위 밖', lng, lat) } });
     expect(
       await failure(plan([{ key: 'a', naverSid: '20307427', ...fallback }]), deps),
-    ).toMatchObject({ exit: EXIT.input, issues: [{ code: 'out-of-range' }] });
+    ).toMatchObject({
+      exit: EXIT.input,
+      issues: [{ code: 'out-of-range' }],
+    });
+  });
+
+  it('한국 밖 검색 중심은 계획 검사에서 거절되어 조회하지 않는다', async () => {
+    const { deps, fetch } = makeDeps();
+    await expect(
+      (async () => {
+        const parsed = parsePlan(
+          plan([{ key: 'a', search: { q: '에펠탑', near: [2.2945, 48.8584] } }]),
+        );
+        return resolvePlaces(parsed, deps, []);
+      })(),
+    ).rejects.toMatchObject({ exit: EXIT.input });
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   it('구글 id 65자는 링크 경로의 입력 오류다', async () => {
@@ -533,7 +577,7 @@ describe('계획 장소 조회', () => {
     const error = await failure(
       plan([
         { key: 'a', naverSid: '1' },
-        { key: 'b', link: googleLink(null, 40) },
+        { key: 'b', link: googleLink(`0x${'a'.repeat(30)}:0x${'b'.repeat(30)}`) },
         { key: 'c', naverSid: '2' },
       ]),
       deps,
@@ -541,7 +585,7 @@ describe('계획 장소 조회', () => {
     expect(error.exit).toBe(EXIT.input);
     expect(error.issues.map(({ path, code }) => ({ path, code }))).toEqual([
       { path: 'places[0]', code: 'lookup-failed' },
-      { path: 'places[1]', code: 'out-of-range' },
+      { path: 'places[1].link', code: 'out-of-range' },
       { path: 'places[2]', code: 'lookup-failed' },
     ]);
     expect(fetch).toHaveBeenCalledTimes(2);

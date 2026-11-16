@@ -9,6 +9,7 @@ import {
   type LegTime,
   type ScheduleInput,
 } from 'src/domain/trips/schedule';
+import { isAbroadLeg } from 'src/lib/korea';
 import { forkEffect } from 'src/lib/effect/runtime';
 import type { Library } from 'src/schema/library';
 import type { Trip } from 'src/schema/trip';
@@ -19,7 +20,7 @@ import { routeStatesAtom, type RouteState } from 'src/stores/trip-planner';
 
 export type PlannedLeg = Leg & {
   time: LegTime;
-  status: 'routed' | 'estimated' | 'no-route' | 'failed';
+  status: 'routed' | 'estimated' | 'no-route' | 'failed' | 'abroad';
   queriedAt: string | null;
   path: [number, number][];
 };
@@ -151,6 +152,15 @@ const straightPath = (leg: Leg): [number, number][] => [
 
 /** 구간에 시간을 붙인다. 경로가 없으면(요청 전·실패) 직선 추정이다. */
 export function planLeg(leg: Leg, state: RouteState | undefined): PlannedLeg {
+  if (isAbroadLeg(leg.from, leg.to)) {
+    return {
+      ...leg,
+      time: { durationS: 0, distanceM: Math.round(leg.straightM), tollFare: null, estimated: true },
+      status: 'abroad',
+      queriedAt: null,
+      path: straightPath(leg),
+    };
+  }
   if (isSamePointLeg(leg)) {
     return {
       ...leg,
@@ -234,7 +244,7 @@ export function useDayPlan(tripId: string, dayIndex: number): DayPlan {
     const keys = new Set<string>();
     for (const d of order) {
       for (const leg of dayLegs(library, trip, d)) {
-        if (!isSamePointLeg(leg)) keys.add(routeKeyOf(leg));
+        if (!isSamePointLeg(leg) && !isAbroadLeg(leg.from, leg.to)) keys.add(routeKeyOf(leg));
       }
     }
     return [...keys].join('\n');
@@ -269,19 +279,22 @@ export function useDayPlan(tripId: string, dayIndex: number): DayPlan {
       oldestQueriedAt = leg.queriedAt;
     }
   }
-  const offline = legs.some((leg, i) => !isSamePointLeg(leg) && dayStates[i]?.status === 'offline');
+  const offline = legs.some(
+    (leg, i) =>
+      !isSamePointLeg(leg) && !isAbroadLeg(leg.from, leg.to) && dayStates[i]?.status === 'offline',
+  );
 
   // 다시 요청은 화면이 사라져도 끝까지 돌게 둔다(결과는 공용 atom에 남아 다음에 쓴다).
   const refresh = useCallback(() => {
     const requests = legs
-      .filter((leg) => !isSamePointLeg(leg))
+      .filter((leg) => !isSamePointLeg(leg) && !isAbroadLeg(leg.from, leg.to))
       .map((leg) => ({ key: routeKeyOf(leg), refresh: true }));
     if (requests.length > 0) forkEffect(lookupAll(store, requests));
   }, [legs, store]);
   const retryLeg = useCallback(
     (key: string) => {
       const leg = legs.find((l) => l.key === key);
-      if (leg === undefined || isSamePointLeg(leg)) return;
+      if (leg === undefined || isSamePointLeg(leg) || isAbroadLeg(leg.from, leg.to)) return;
       forkEffect(lookupAll(store, [{ key: routeKeyOf(leg), refresh: true }]));
     },
     [legs, store],

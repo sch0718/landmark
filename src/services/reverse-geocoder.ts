@@ -1,4 +1,5 @@
 import { Context, Effect, Layer } from 'effect';
+import { isInKorea } from 'src/lib/korea';
 import { loadNaverSdk } from 'src/components/map/load-naver-sdk';
 
 /** SDK 로드와 변환을 합쳐 기다리는 시한. */
@@ -94,10 +95,12 @@ export class ReverseGeocoder extends Context.Service<
       ReverseGeocoder,
       ReverseGeocoder.of({
         reverse: (lng, lat) =>
-          Effect.tryPromise({ try: () => options.reverse(lng, lat), catch: (e) => e }).pipe(
-            Effect.timeout(REVERSE_TIMEOUT_MS),
-            Effect.catch(() => Effect.succeed(null)),
-          ),
+          !isInKorea(lng, lat)
+            ? Effect.succeed(null)
+            : Effect.tryPromise({ try: () => options.reverse(lng, lat), catch: (e) => e }).pipe(
+                Effect.timeout(REVERSE_TIMEOUT_MS),
+                Effect.catch(() => Effect.succeed(null)),
+              ),
       }),
     );
   }

@@ -1,3 +1,4 @@
+import { isAbroadLeg } from 'src/lib/korea';
 import { queriedLabel } from 'src/sections/trips/planner/format';
 import { useAtomValue, useStore } from 'jotai';
 import { useCallback, useEffect, useMemo } from 'react';
@@ -18,7 +19,7 @@ export type TripLegs = {
   routeOf(leg: Leg): ShareLegTime;
   /** 같은 지점이 아닌 구간 수(모든 Day). */
   total: number;
-  /** 그중 조회 상태가 있는 수(연결 실패 포함). */
+  /** 그중 해외 구간 또는 조회 상태가 있는 수(연결 실패 포함). */
   answered: number;
   /** 답이 있는데 받은 경로(`routed`)가 아닌 수: 경로 없음·실패·연결 실패. */
   estimated: number;
@@ -54,7 +55,11 @@ export function useTripLegs(tripId: string, active: boolean): TripLegs {
   }, [library, tripId]);
 
   // 요청할 구간 키. 문자열 하나로 만들어 내용이 같으면 효과가 다시 돌지 않게 한다.
-  const requestKeys = useMemo(() => [...new Set(legs.map(routeKeyOf))].join('\n'), [legs]);
+  const requestKeys = useMemo(
+    () =>
+      [...new Set(legs.filter((leg) => !isAbroadLeg(leg.from, leg.to)).map(routeKeyOf))].join('\n'),
+    [legs],
+  );
 
   useEffect(
     () => (active ? requestLegs(store, requestKeys) : undefined),
@@ -65,7 +70,7 @@ export function useTripLegs(tripId: string, active: boolean): TripLegs {
 
   const routeOf = useCallback(
     (leg: Leg): ShareLegTime => {
-      if (isSamePointLeg(leg)) return SAME_POINT;
+      if (!isAbroadLeg(leg.from, leg.to) && isSamePointLeg(leg)) return SAME_POINT;
       const planned = planLeg(leg, states[routeKeyOf(leg)]);
       const routed = planned.status === 'routed';
       return {
@@ -86,6 +91,10 @@ export function useTripLegs(tripId: string, active: boolean): TripLegs {
     let estimated = 0;
     let oldestQueriedAt: string | null = null;
     for (const leg of legs) {
+      if (isAbroadLeg(leg.from, leg.to)) {
+        answered += 1;
+        continue;
+      }
       const state = states[routeKeyOf(leg)];
       if (state === undefined) continue;
       answered += 1;

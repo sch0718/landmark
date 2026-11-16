@@ -35,7 +35,7 @@ describe('약속 답장 초안', () => {
     { participantId: 'person01', newName: '민지', likes: [] },
     { participantId: 'person01', likes: ['choice01', 'choice01'] },
     { participantId: 'person01', likes: [42] },
-    { participantId: 'person01', likes: [], origin: { name: '범위 밖', lng: 140, lat: 37 } },
+    { participantId: 'person01', likes: [], origin: { name: '범위 밖', lng: 180.01, lat: 37 } },
     { participantId: 'person01', likes: [], other: '무시하지 않음' },
   ])('잘못된 초안을 저장하지 않는다: %j', (invalid) => {
     const storage = createMemoryStorage();

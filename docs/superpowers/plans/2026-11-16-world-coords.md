@@ -73,6 +73,7 @@
 
 - 현재 코드(`v0.34.1`과 `src`·`tests`가 같다)에서 확인한 처리: `library-store.ts`의 `load`는 스키마 검사 실패 시 `failCorruptWithBackup`으로 원문 사본을 `tripmap:library:v2:corrupt-<시각>`에 남기고 `LibraryCorrupt`로 실패한다(사본을 못 쓰면 `backupKey: null`). 원본 키는 지우지 않는다. `ShellRoute.tsx`의 `CorruptBoundary`가 이를 받아 `CorruptScreen`을 보인다. `library-store.test.ts`에도 같은 계약이 있다. 즉 `docs/rollback.md`의 「손상 화면」 설명과 같고, `새로 시작`만 누르지 않으면 새 버전으로 돌아와 원래 데이터를 읽는다.
 - 구현 뒤 확인: 해외 장소가 든 보관함을 `v0.34.1`로 열어 손상 화면이 뜨는지 한 번 보고, 결과를 이 절에 적는다. 그보다 옛 버전은 따로 확인하지 않는다.
+- 2026-11-16 구현 뒤 확인: `v0.34.1` 태그의 소스를 임시 폴더에 꺼내 파리 장소가 든 보관함으로 `LibraryStore.load`를 실행했다. `LibraryCorrupt` 실패, 손상 사본 생성, 원본 키 보존을 확인했다. 손상 화면·오류 경계 코드도 해당 태그와 동일하다. 브라우저에서 손상 화면을 직접 보는 확인은 샌드박스가 개발 서버 포트 열기를 거부해(`listen EPERM ::1:5173`) 남아 있다.
 
 ## 구현 순서와 검증
 

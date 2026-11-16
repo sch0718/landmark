@@ -105,7 +105,11 @@ async function lookupPlace(
       warnings.push(issue(path, 'not-found', '검색 결과가 없어 적어 준 좌표로 핀을 만들었어요'));
       return pin(place, place.name ?? place.search.q);
     }
-    return issue(path, 'not-found', '검색 결과가 없어요. 이름과 좌표를 적어 주세요');
+    return issue(
+      path,
+      'not-found',
+      '검색 결과가 없어요. 이름과 좌표를 적어 주세요. 해외 장소는 link에 구글맵 링크를 넣어 주세요',
+    );
   }
   // 출처 없는 핀의 이름과 좌표는 계획 스키마에서 이미 검사했다.
   return pin(place, place.name ?? '');
@@ -119,7 +123,7 @@ function checkCandidate(
 ): TripIssue[] {
   const issues: TripIssue[] = [];
   if (!is(Lng, candidate.lng) || !is(Lat, candidate.lat)) {
-    issues.push(issue(path, 'out-of-range', '장소 좌표는 경도 124~132, 위도 33~39여야 해요'));
+    issues.push(issue(path, 'out-of-range', '장소 좌표는 경도 -180~180, 위도 -90~90여야 해요'));
   }
   const source = candidate.source;
   const limits = AGENT_PLACE_LIMITS;

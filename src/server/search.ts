@@ -1,4 +1,5 @@
 // 네이버 자동완성의 장소 결과만 정리한다. Cloudflare 함수에서 상대 경로로 가져온다.
+import { isInKorea } from '../lib/korea';
 import { ApiError } from './http';
 import { BROWSER_USER_AGENT, makeRequester, type Deps } from './request';
 import { parseCoordinate } from './route';
@@ -67,7 +68,7 @@ export async function searchNaverPlaces(
       continue;
     const lng = Number(p.x),
       lat = Number(p.y);
-    if (!(lng >= 124 && lng <= 132 && lat >= 33 && lat <= 39)) continue;
+    if (!isInKorea(lng, lat)) continue;
     results.push({
       name: p.title,
       address:

@@ -312,7 +312,7 @@ it.each([
   { clearReplyOrigins: [{ participantId: 'wrong', origin: changed }] },
   { clearReplyOrigins: [{ participantId: 'person02' }] },
   { clearReplyOrigins: [{ participantId: 'person02', origin: null }] },
-  { clearReplyOrigins: [{ participantId: 'person02', origin: { ...changed, lat: 90 } }] },
+  { clearReplyOrigins: [{ participantId: 'person02', origin: { ...changed, lat: 90.01 } }] },
   {
     clearReplyOrigins: Array.from({ length: 11 }, (_, i) => ({
       participantId: `person${String(i).padStart(2, '0')}`,
@@ -1976,7 +1976,7 @@ describe('참석자 답장', () => {
     { likes: ['choice99'] },
     { likes: [], times: { choice99: 12 }, docRev: 1 },
     { likes: ['choice01', 'choice01'] },
-    { likes: [], origin: { name: '밖', lng: 0, lat: 0 } },
+    { likes: [], origin: { name: '밖', lng: 180.01, lat: 0 } },
     { likes: [], times: { choice01: -1 } },
     { likes: [], extra: true },
     {},

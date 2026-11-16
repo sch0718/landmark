@@ -24,6 +24,26 @@ const reply = () => ({
 const strict = { onExcessProperty: 'error' } as const;
 
 describe('온라인 약속 문서', () => {
+  it.each([
+    [-180, -90, true],
+    [180, 90, true],
+    [180.01, 37, false],
+    [127, 90.01, false],
+  ] as const)('출발지와 후보 좌표 %s,%s의 전 세계 경계를 검사한다', (lng, lat, valid) => {
+    const current = doc();
+    expect(
+      safeParse(
+        MeetingDocSchema,
+        {
+          ...current,
+          participants: [{ ...current.participants[0]!, origin: { ...origin, lng, lat } }],
+          candidates: [{ ...current.candidates[0]!, lng, lat }],
+        },
+        strict,
+      ).success,
+    ).toBe(valid);
+  });
+
   it('정상 문서와 확정 후보를 읽는다', () => {
     expect(safeParse(MeetingDocSchema, doc(), strict).success).toBe(true);
     expect(safeParse(MeetingDocSchema, { ...doc(), decided: 'choice01' }, strict).success).toBe(
@@ -82,10 +102,10 @@ describe('온라인 약속 문서', () => {
       () => ({ ...doc(), participants: [{ ...doc().participants[0], extra: true }] }),
     ],
     [
-      '한국 밖 좌표',
+      '전 세계 범위 밖 좌표',
       () => ({
         ...doc(),
-        participants: [{ ...doc().participants[0], origin: { ...origin, lng: 0 } }],
+        participants: [{ ...doc().participants[0], origin: { ...origin, lng: 180.01 } }],
       }),
     ],
   ] as const)('%s를 거부한다', (_name, invalid) => {

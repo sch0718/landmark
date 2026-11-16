@@ -14,7 +14,8 @@ import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setAppRuntimeForTest } from 'src/lib/effect/runtime';
 import { RouteLookup } from 'src/services/route-lookup';
-import { useDayPlan } from 'src/sections/trips/planner/use-day-plan';
+import { dayLegs } from 'src/domain/trips/query';
+import { planLeg, useDayPlan } from 'src/sections/trips/planner/use-day-plan';
 import { libraryAtom } from 'src/stores/library-state';
 import { selectedDayAtom } from 'src/stores/trip-planner';
 import { T0 } from '../library/fixtures';
@@ -1064,5 +1065,43 @@ describe('검토 반영', () => {
     fireEvent.pointerCancel(handle, { pointerId: 5 });
     fireEvent.pointerUp(handle, { pointerId: 4, clientY: 300 });
     expect(sheet).toHaveAttribute('data-snap', 'full');
+  });
+});
+
+describe('해외 구간', () => {
+  const overseasLibrary = () => {
+    const lib = withTrip(plannerLibrary(), makeTrip({ stops: [[P1, P2]] }));
+    return {
+      ...lib,
+      places: { ...lib.places, [P2]: { ...lib.places[P2]!, lng: 2.2945, lat: 48.8584 } },
+    };
+  };
+  it('planLeg는 해외 구간을 시간 0과 반올림한 직선거리로 만든다', () => {
+    const lib = overseasLibrary();
+    const leg = dayLegs(lib, lib.trips[TRIP]!, 0)[0]!;
+    expect(planLeg(leg, undefined)).toMatchObject({
+      status: 'abroad',
+      queriedAt: null,
+      time: { durationS: 0, distanceM: Math.round(leg.straightM), tollFare: null, estimated: true },
+      path: [
+        [leg.from.lng, leg.from.lat],
+        [2.2945, 48.8584],
+      ],
+    });
+  });
+  it('해외 구간은 처음·다시 계산·다시 시도·연결 복구에도 요청하지 않는다', async () => {
+    const routes = fakeRoutes(() => route(12, 1100));
+    const { store } = await open(overseasLibrary(), { routes, path: '/trips' });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <Provider store={store}>{children}</Provider>
+    );
+    const hook = renderHook(() => useDayPlan(TRIP, 0), { wrapper });
+    expect(hook.result.current.legs[0]?.status).toBe('abroad');
+    await act(async () => {
+      hook.result.current.refresh();
+      hook.result.current.retryLeg(hook.result.current.legs[0]!.key);
+      window.dispatchEvent(new Event('online'));
+    });
+    expect(routes.calls).toHaveLength(0);
   });
 });

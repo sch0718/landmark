@@ -60,6 +60,9 @@ const PlanTime = HHmm.annotate({
 });
 const keyPattern = /^[A-Za-z0-9_-]{1,40}$/;
 
+const SearchLng = Schema.Finite.check(Schema.isBetween({ minimum: 124, maximum: 132 }));
+const SearchLat = Schema.Finite.check(Schema.isBetween({ minimum: 33, maximum: 39 }));
+
 const PlanPlaceSchema = MutableStruct({
   key: Schema.String.check(
     Schema.isPattern(keyPattern, {
@@ -79,7 +82,7 @@ const PlanPlaceSchema = MutableStruct({
   search: Schema.optionalKey(
     MutableStruct({
       q: text(1, 40),
-      near: Schema.optionalKey(Schema.mutable(Schema.Tuple([Lng, Lat]))),
+      near: Schema.optionalKey(Schema.mutable(Schema.Tuple([SearchLng, SearchLat]))),
     }),
   ),
   name: Schema.optionalKey(text(1, AGENT_PLACE_LIMITS.nameChars)),

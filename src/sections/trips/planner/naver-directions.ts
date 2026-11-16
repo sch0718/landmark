@@ -41,3 +41,11 @@ export function naverDirectionsUrl(leg: DirectionsLeg, platform: 'app' | 'web'):
     `${p.lng},${p.lat},${encodeURIComponent(p.name)},,SIMPLE_POI`;
   return `https://map.naver.com/p/directions/${point(from)}/${point(to)}/-/${mode}`;
 }
+
+/** 구글 지도 길찾기 주소. 좌표가 전 세계 범위 밖이거나 유한하지 않으면 null. */
+export function googleDirectionsUrl(leg: DirectionsLeg): string | null {
+  const { from, to, mode } = leg;
+  if (!valid(from) || !valid(to)) return null;
+  const travelmode = { car: 'driving', walk: 'walking', transit: 'transit' }[mode];
+  return `https://www.google.com/maps/dir/?api=1&origin=${from.lat},${from.lng}&destination=${to.lat},${to.lng}&travelmode=${travelmode}`;
+}

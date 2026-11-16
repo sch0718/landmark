@@ -43,8 +43,10 @@ function parseLabel(x: unknown): ShareLabel | null {
 }
 
 /** `Lng`·`Lat`(src/schema/common.ts)과 같은 범위. v2 장소만 확인한다. */
-function inKorea(lng: number, lat: number): boolean {
-  return lng >= 124 && lng <= 132 && lat >= 33 && lat <= 39;
+function inWorld(lng: number, lat: number): boolean {
+  return (
+    Number.isFinite(lng) && Number.isFinite(lat) && Math.abs(lng) <= 180 && Math.abs(lat) <= 90
+  );
 }
 
 function parsePlace(x: unknown, v2 = false): SharePlace | null {
@@ -59,7 +61,7 @@ function parsePlace(x: unknown, v2 = false): SharePlace | null {
   if (kakaoId !== undefined && typeof kakaoId !== 'string') return null;
   if (googleId !== undefined && typeof googleId !== 'string') return null;
   if (v2) {
-    if (!inKorea(lng, lat)) return null;
+    if (!inWorld(lng, lat)) return null;
     if (review !== undefined && (typeof review !== 'string' || review.length > REVIEW_MAX_CHARS)) {
       return null;
     }
@@ -303,7 +305,7 @@ export function parseLinkDoc(value: unknown): ShareDoc | null {
       )
     )
       return null;
-    if (!isFiniteNumber(p.lng) || !isFiniteNumber(p.lat) || !inKorea(p.lng, p.lat)) return null;
+    if (!isFiniteNumber(p.lng) || !isFiniteNumber(p.lat) || !inWorld(p.lng, p.lat)) return null;
   }
   if (!value.labels.every((l) => keys(l, 'id name color order'))) return null;
   if (!unique(value.places as Rec[]) || !unique(value.labels as Rec[])) return null;

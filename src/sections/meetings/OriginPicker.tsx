@@ -13,6 +13,7 @@ import { useEffect, useId, useState } from 'react';
 import { MapView } from 'src/components/map/MapView';
 import { searchPlaces } from 'src/domain/library/query';
 import { fitMeetingText } from 'src/domain/meeting/limits';
+import { isInKorea } from 'src/lib/korea';
 import { startEffect } from 'src/lib/effect/runtime';
 import { LIBRARY_LIMITS } from 'src/schema/library';
 import { OriginSchema, type Origin } from 'src/schema/meeting';
@@ -60,8 +61,10 @@ function PickerContent({ origin, onPick, onClose, id }: Omit<Props, 'open'> & { 
         (found) => {
           if (!active) return;
           setResults(
-            found.filter((place) =>
-              validOrigin(fitOrigin({ name: place.name, lng: place.lng, lat: place.lat })),
+            found.filter(
+              (place) =>
+                isInKorea(place.lng, place.lat) &&
+                validOrigin(fitOrigin({ name: place.name, lng: place.lng, lat: place.lat })),
             ),
           );
           setLoading(false);

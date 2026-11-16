@@ -7,7 +7,11 @@ import {
   formatTotals,
   queriedLabel,
 } from 'src/sections/trips/planner/format';
-import { naverDirectionsUrl } from 'src/sections/trips/planner/naver-directions';
+import { isAbroadLeg } from 'src/lib/korea';
+import {
+  googleDirectionsUrl,
+  naverDirectionsUrl,
+} from 'src/sections/trips/planner/naver-directions';
 import { addDays, periodLabel, shortDate } from 'src/sections/trips/trip-dates';
 import type { ImportLink } from './encode';
 import type { MapPort } from './map-frame';
@@ -238,10 +242,15 @@ export function renderTripViewer(
   function legRow(leg: ShareLeg): HTMLLIElement {
     const li = el(d, 'li');
     const box = el(d, 'div', undefined, 'row leg');
+    const from = placeById.get(leg.from);
+    const to = placeById.get(leg.to);
+    const abroad = from !== undefined && to !== undefined && isAbroadLeg(from, to);
     const parts = [
-      `${MODE_LABEL[leg.mode]} ${formatDuration(leg.durationS)} · ${formatDistance(leg.distanceM)}`,
+      abroad
+        ? `${MODE_LABEL[leg.mode]} 직선 ${formatDistance(leg.distanceM)} · 이동 시간은 구글맵에서 확인`
+        : `${MODE_LABEL[leg.mode]} ${formatDuration(leg.durationS)} · ${formatDistance(leg.distanceM)}`,
     ];
-    const status = STATUS_TEXT[leg.status];
+    const status = abroad ? null : STATUS_TEXT[leg.status];
     if (status !== null) parts.push(status);
     if (leg.tollFare !== null && leg.tollFare > 0) {
       parts.push(`통행료 ${leg.tollFare.toLocaleString('ko-KR')}원`);
@@ -250,7 +259,7 @@ export function renderTripViewer(
 
     const href = directionsHref(leg);
     if (href !== null) {
-      const a = el(d, 'a', '길찾기', 'directions');
+      const a = el(d, 'a', abroad ? '구글맵에서 길찾기' : '길찾기', 'directions');
       setDirections(a, href);
       directions.push({ a, leg });
       box.append(a);
@@ -259,19 +268,19 @@ export function renderTripViewer(
     return li;
   }
 
-  /** 구간의 길찾기 주소. 좁은 화면은 앱(`nmap://`), 아니면 웹. 좌표가 어긋나면 null. */
+  /** 구간의 길찾기 주소. 해외는 구글 웹, 국내는 좁은 화면에서 앱(`nmap://`), 아니면 웹. 좌표가 어긋나면 null. */
   function directionsHref(leg: ShareLeg): string | null {
     const from = placeById.get(leg.from);
     const to = placeById.get(leg.to);
     if (from === undefined || to === undefined) return null;
-    return naverDirectionsUrl(
-      {
-        from: { name: from.name, lng: from.lng, lat: from.lat },
-        to: { name: to.name, lng: to.lng, lat: to.lat },
-        mode: leg.mode,
-      },
-      opts.compact() ? 'app' : 'web',
-    );
+    const directions = {
+      from: { name: from.name, lng: from.lng, lat: from.lat },
+      to: { name: to.name, lng: to.lng, lat: to.lat },
+      mode: leg.mode,
+    };
+    return isAbroadLeg(from, to)
+      ? googleDirectionsUrl(directions)
+      : naverDirectionsUrl(directions, opts.compact() ? 'app' : 'web');
   }
 
   /** 링크 주소를 정한다. 웹 길찾기만 새 탭으로 연다. 앱 주소(nmap://)는 새 탭이면 빈 탭이 남는다. */
