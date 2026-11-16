@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { envelope, type MapPlace, type ToMap } from 'src/share-protocol';
 import { startShareMap } from 'src/share-map/main';
+import * as mapModule from 'src/share-map/map';
+import { FakeMapAdapter } from 'src/components/map/FakeMapAdapter';
+import type { MapProvider } from 'src/components/map/map-provider';
 
 const NOTICE = '랜드마크에서 내보낸 파일 안에서 쓰는 지도예요';
 
@@ -37,7 +40,9 @@ describe('startShareMap', () => {
   });
 
   /** jsdom iframe의 창을 지도 페이지 창으로 쓴다: 그 `parent`가 내보낸 파일 쪽 창이다. */
-  async function setupFrame(opts: { dark?: boolean } = {}) {
+  async function setupFrame(
+    opts: { dark?: boolean; createAdapter?: Parameters<typeof startShareMap>[2] } = {},
+  ) {
     const frame = document.createElement('iframe');
     document.body.append(frame);
     const win = frame.contentWindow;
@@ -52,7 +57,7 @@ describe('startShareMap', () => {
     Object.defineProperty(root, 'clientWidth', { configurable: true, get: () => 800 });
     Object.defineProperty(root, 'clientHeight', { configurable: true, get: () => 600 });
     document.body.append(root);
-    startShareMap(win, root);
+    startShareMap(win, root, opts.createAdapter);
     await settle();
     // iframe 창의 MessageEvent로 만들어야 jsdom이 그 창에 보낼 수 있다.
     const FrameMessageEvent = (win as unknown as { MessageEvent: typeof MessageEvent })
@@ -188,6 +193,107 @@ describe('startShareMap', () => {
     receive(envelope({ kind: 'focus', placeId: 'b' }, 2));
     const marker = markers().find((m) => m.textContent === '정자 빵집');
     expect(marker?.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it.each([
+    ['해외 장소', [{ ...PLACES[0]!, lng: 135.5, lat: 34.7 }], 'google'],
+    ['한국 장소', PLACES, 'naver'],
+    ['빈 목록', [], 'naver'],
+  ] as const)('구글 키가 있으면 첫 init의 %s로 지도를 고른다', async (_, places, provider) => {
+    vi.stubEnv('VITE_MAP_ADAPTER', '');
+    vi.stubEnv('VITE_NAVER_MAP_CLIENT_ID', 'id');
+    vi.stubEnv('VITE_GOOGLE_MAPS_API_KEY', 'key');
+    const createAdapter = vi.fn<(provider: MapProvider) => Promise<{ adapter: FakeMapAdapter }>>(
+      async () => ({
+        adapter: new FakeMapAdapter(),
+      }),
+    );
+    const { receive, markers } = await setupFrame({ createAdapter });
+    expect(createAdapter).not.toHaveBeenCalled();
+    receive(envelope({ kind: 'init', places: [...places] }));
+    await settle();
+    expect(createAdapter).toHaveBeenCalledExactlyOnceWith(provider);
+    expect(markers()).toHaveLength(places.length);
+    receive(envelope({ kind: 'init', places: PLACES }));
+    expect(createAdapter).toHaveBeenCalledTimes(1);
+  });
+
+  it('첫 draw의 해외 핀으로 구글을 고른다', async () => {
+    vi.stubEnv('VITE_MAP_ADAPTER', '');
+    vi.stubEnv('VITE_NAVER_MAP_CLIENT_ID', 'id');
+    vi.stubEnv('VITE_GOOGLE_MAPS_API_KEY', 'key');
+    const createAdapter = vi.fn<(provider: MapProvider) => Promise<{ adapter: FakeMapAdapter }>>(
+      async () => ({
+        adapter: new FakeMapAdapter(),
+      }),
+    );
+    const { receive, markers } = await setupFrame({ createAdapter });
+    receive(
+      envelope(
+        {
+          kind: 'draw',
+          pins: [{ id: '해외', label: '명소', lng: 135.5, lat: 34.7, day: 0, role: 'stop' }],
+          lines: [],
+        },
+        2,
+      ),
+    );
+    await settle();
+    expect(createAdapter).toHaveBeenCalledExactlyOnceWith('google');
+    expect(markers()).toHaveLength(1);
+  });
+
+  it('어댑터 생성이 늦으면 첫 init 전후의 메시지를 모두 받은 순서대로 넘긴다', async () => {
+    vi.stubEnv('VITE_MAP_ADAPTER', '');
+    vi.stubEnv('VITE_NAVER_MAP_CLIENT_ID', 'id');
+    vi.stubEnv('VITE_GOOGLE_MAPS_API_KEY', 'key');
+    let release!: (value: { adapter: FakeMapAdapter }) => void;
+    const createAdapter = vi.fn(
+      () =>
+        new Promise<{ adapter: FakeMapAdapter }>((resolve) => {
+          release = resolve;
+        }),
+    );
+    const calls: string[] = [];
+    vi.spyOn(mapModule, 'createShareMap').mockReturnValue({
+      init: () => {
+        calls.push('init');
+      },
+      draw: () => {
+        calls.push('draw');
+      },
+      filter: () => {
+        calls.push('filter');
+      },
+      focus: () => {
+        calls.push('focus');
+      },
+    });
+    const { receive } = await setupFrame({ createAdapter });
+    receive(envelope({ kind: 'focus', placeId: 'a' }));
+    receive(envelope({ kind: 'filter', placeIds: ['a'] }));
+    expect(createAdapter).not.toHaveBeenCalled();
+    receive(envelope({ kind: 'init', places: PLACES }));
+    receive(envelope({ kind: 'filter', placeIds: ['b'] }));
+    receive(envelope({ kind: 'focus', placeId: 'b' }));
+    expect(calls).toEqual([]);
+    release({ adapter: new FakeMapAdapter() });
+    await settle();
+    expect(calls).toEqual(['focus', 'filter', 'init', 'filter', 'focus']);
+    receive(envelope({ kind: 'focus', placeId: null }));
+    expect(calls.at(-1)).toBe('focus');
+    expect(createAdapter).toHaveBeenCalledTimes(1);
+  });
+
+  it('어댑터 import 실패는 tiles-failed로 알린다', async () => {
+    vi.stubEnv('VITE_MAP_ADAPTER', '');
+    vi.stubEnv('VITE_NAVER_MAP_CLIENT_ID', 'id');
+    vi.stubEnv('VITE_GOOGLE_MAPS_API_KEY', 'key');
+    const createAdapter = vi.fn(() => Promise.reject(new Error('불러오기 실패')));
+    const { receive, post } = await setupFrame({ createAdapter });
+    receive(envelope({ kind: 'init', places: PLACES }));
+    await settle();
+    expect(post).toHaveBeenLastCalledWith(envelope({ kind: 'tiles-failed' }), '*');
   });
 
   it('가짜 지도가 아니고 클라이언트 ID가 비어 있으면 ready 뒤 tiles-failed를 보내고 지도를 만들지 않는다', async () => {

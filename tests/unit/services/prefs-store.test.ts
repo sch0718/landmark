@@ -16,6 +16,13 @@ const run = <A>(
   }).pipe(Effect.provide(PrefsStore.layerWith({ storage })));
 
 describe('PrefsStore', () => {
+  it('지도 선택이 없는 옛 선호는 네이버로 읽고 나머지 설정을 유지한다', () => {
+    const old = { theme: 'night', mode: 'dark', libraryView: 'list', query: DEFAULT_PREFS.query };
+    expect(safeParse(PrefsSchema, old)).toEqual({
+      success: true,
+      data: { ...old, mapProvider: 'naver' },
+    });
+  });
   it.effect('returns defaults when nothing is stored', () =>
     Effect.gen(function* () {
       const prefs = yield* run(createMemoryStorage(), (s) => s.get);
@@ -44,6 +51,7 @@ describe('PrefsStore', () => {
     Effect.gen(function* () {
       const storage = createMemoryStorage();
       const prefs: Prefs = {
+        mapProvider: 'naver',
         theme: 'night',
         mode: 'dark',
         libraryView: 'list',

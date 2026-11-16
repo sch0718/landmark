@@ -173,6 +173,7 @@ describe('ThemeRoot', () => {
       theme: 'night',
       mode: 'dark',
       libraryView: 'list',
+      mapProvider: 'naver',
       query: { ...DEFAULT_PREFS.query, text: '물회', sort: 'name' },
     } satisfies Partial<Prefs>;
     const { renderRoot, store, storage } = setup(saved);

@@ -30,6 +30,7 @@ afterEach(() => {
   cleanup();
   setAppRuntimeForTest(null);
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
   vi.restoreAllMocks();
   Reflect.deleteProperty(navigator, 'storage');
 });
@@ -39,6 +40,23 @@ const savedPrefs = (storage: Storage) => JSON.parse(storage.getItem(PREFS_KEY)!)
 const stored = (storage: Storage) => JSON.parse(storage.getItem(LIBRARY_KEY)!) as Library;
 
 describe('SettingsPage', () => {
+  it('구글 키가 비면 지도 구역을 숨긴다', async () => {
+    vi.stubEnv('VITE_GOOGLE_MAPS_API_KEY', '');
+    await open();
+    expect(screen.queryByRole('region', { name: '지도' })).toBeNull();
+  });
+
+  it('구글 키가 있으면 지도 선택을 보여 주고 저장한다', async () => {
+    vi.stubEnv('VITE_GOOGLE_MAPS_API_KEY', 'key');
+    const user = userEvent.setup();
+    const { storage } = await open();
+    const group = within(screen.getByRole('radiogroup', { name: '지도' }));
+    expect(group.getByRole('radio', { name: '네이버' })).toHaveAttribute('aria-checked', 'true');
+    await user.click(group.getByRole('radio', { name: '구글' }));
+    await waitFor(() => expect(savedPrefs(storage).mapProvider).toBe('google'));
+    expect(group.getByRole('radio', { name: '구글' })).toHaveAttribute('aria-checked', 'true');
+  });
+
   it('theme/mode/view changes persist via PrefsStore and apply immediately', async () => {
     const user = userEvent.setup();
     const { storage } = await open();
