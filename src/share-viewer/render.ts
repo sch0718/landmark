@@ -2,6 +2,7 @@ import { LABEL_COLORS } from 'src/schema/label-colors';
 import type { ShareDoc, ShareLabel, SharePlace } from 'src/schema/share';
 import { pastel } from 'src/theme/tokens/pastel';
 import type { Tokens } from 'src/theme/tokens';
+import { isInKorea } from 'src/lib/korea';
 import type { ImportLink } from './encode';
 import type { MapPort } from './map-frame';
 
@@ -98,7 +99,7 @@ function localDate(iso: string): string {
 }
 
 /**
- * 장소 카드(이름·라벨 칩·주소·메모·한 줄 평·`네이버 지도에서 보기`). 누르기·포커스 동작은 부르는 쪽이 붙인다.
+ * 장소 카드(이름·라벨 칩·주소·메모·한 줄 평·지도 앱 링크). 누르기·포커스 동작은 부르는 쪽이 붙인다.
  * 한 줄 평은 v2 문서의 장소에만 있다.
  */
 export function placeCard(
@@ -126,10 +127,19 @@ export function placeCard(
   return article;
 }
 
-/** `네이버 지도에서 보기` 링크(새 탭). */
+/** 해외(한국 밖) 장소를 구글맵에서 여는 주소. 네이버 장소 id가 없으면 좌표로 연다. */
+export function googleMapsUrl(place: SharePlace): string {
+  return `https://www.google.com/maps/search/?api=1&query=${place.lat},${place.lng}`;
+}
+
+/**
+ * 장소를 지도 앱에서 여는 링크(새 탭). 네이버 장소이거나 한국 안이면 `네이버 지도에서 보기`,
+ * 그 밖의 해외 장소는 네이버에 결과가 없으므로 `구글맵에서 보기`.
+ */
 export function naverLink(d: Document, place: SharePlace): HTMLAnchorElement {
-  const link = el(d, 'a', '네이버 지도에서 보기');
-  link.href = naverUrl(place);
+  const overseas = place.naverSid === undefined && !isInKorea(place.lng, place.lat);
+  const link = el(d, 'a', overseas ? '구글맵에서 보기' : '네이버 지도에서 보기');
+  link.href = overseas ? googleMapsUrl(place) : naverUrl(place);
   link.target = '_blank';
   link.rel = 'noopener noreferrer';
   return link;
