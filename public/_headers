@@ -1,5 +1,7 @@
 /*
   X-Robots-Tag: noindex
+/assets/*
+  Cache-Control: public, max-age=0, must-revalidate
 /data/*
   Cache-Control: public, max-age=60
 /third-party-notices.txt
