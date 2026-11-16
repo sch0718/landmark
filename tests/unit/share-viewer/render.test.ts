@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ShareDocV1, SharePlace } from 'src/schema/share';
 import {
   applyTheme,
+  naverLink,
   naverUrl,
   renderBroken,
   renderViewer,
@@ -340,5 +341,18 @@ describe('Landmark에 담기', () => {
     const handle = mount(makeDoc());
     handle.setImportLink({ kind: 'unsupported' });
     expect(importAnchor()!.getAttribute('href')).toBe(`${APP}/import`);
+  });
+});
+
+describe('naverLink', () => {
+  it('해외 장소는 구글맵 좌표 링크로 연다', () => {
+    const a = naverLink(document, place({ id: 'a', lng: 2.2945, lat: 48.8584 }));
+    expect(a.textContent).toBe('구글맵에서 보기');
+    expect(a.href).toBe('https://www.google.com/maps/search/?api=1&query=48.8584,2.2945');
+  });
+
+  it('한국 장소는 네이버 지도로 연다', () => {
+    const a = naverLink(document, place({ id: 'a', lng: 127, lat: 37.5 }));
+    expect(a.textContent).toBe('네이버 지도에서 보기');
   });
 });
