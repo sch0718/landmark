@@ -21,16 +21,17 @@ export function App() {
     if (!import.meta.env.PROD) return;
     let stop: (() => void) | undefined;
     let cancelled = false;
-    import('src/services/app-update/app-update')
-      .then((m) => {
+    import('src/services/app-update/app-update').then(
+      (m) => {
         if (cancelled) return;
         stop = m.startAppUpdate(import.meta.env.APP_VERSION, () => {
           void router.navigate(`${paths.help}#release-notes`);
         });
-      })
-      .catch(() => {
+      },
+      () => {
         // 새 배포로 옛 파일이 없으면 받지 못한다. 그때는 화면 이동 때 나눠 받기 실패 안내가 대신한다.
-      });
+      },
+    );
     return () => {
       cancelled = true;
       stop?.();

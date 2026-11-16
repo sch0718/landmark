@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { toast } from 'sonner';
-import { NEW_VERSION_MESSAGE, RELEASE_SEEN_KEY, startAppUpdate } from './app-update';
+import {
+  NEW_VERSION_MESSAGE,
+  RELEASE_SEEN_KEY,
+  startAppUpdate,
+} from 'src/services/app-update/app-update';
 
 vi.mock('sonner', () => ({ toast: vi.fn() }));
 vi.mock('src/sections/help/release-notes', () => ({

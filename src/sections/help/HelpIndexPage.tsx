@@ -15,7 +15,7 @@ export function HelpIndexPage() {
   const { hash } = useLocation();
   // 「업데이트했어요 › 바뀐 점」으로 오면 그 절로 옮긴다.
   useEffect(() => {
-    if (hash === '#release-notes') document.getElementById('release-notes')?.scrollIntoView();
+    if (hash === '#release-notes') document.getElementById('release-notes')?.scrollIntoView?.();
   }, [hash]);
   return (
     <Box sx={{ maxWidth: 960, mx: 'auto', p: 2 }}>
