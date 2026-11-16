@@ -7,7 +7,7 @@ import { categoryColor, dayColor } from 'src/components/map/map-colors';
 import { createMarkerLabelElement } from 'src/components/map/marker-label';
 import type { MapMarker } from 'src/components/map/MapAdapter';
 import { fitPoints, focusCamera } from 'src/components/map/camera';
-import { MapView } from 'src/components/map/MapView';
+import { MapView, MAP_CHUNK_ERROR_MESSAGE } from 'src/components/map/MapView';
 import { StrictMode, useState } from 'react';
 import { createStore, Provider } from 'jotai';
 import { DEFAULT_PREFS } from 'src/schema/prefs';
@@ -29,6 +29,10 @@ vi.mock('src/components/map/load-naver-sdk', () => ({
     };
   }),
 }));
+
+vi.mock('src/components/map/GoogleMapAdapter', () => {
+  throw new Error('Failed to fetch dynamically imported module');
+});
 
 let resources: ReturnType<typeof installMapResources>;
 beforeEach(() => {
@@ -942,4 +946,52 @@ it('언마운트 뒤 지도 제공자가 바뀌면 카메라를 이어받고 옛
   expect(setCamera).toHaveBeenCalledWith(camera);
   expect([...resources.instances].at(-1)!.getCamera()).toEqual(camera);
   expect(fit).not.toHaveBeenCalled();
+});
+
+it('다른 경로에서 쌓인 카메라는 제공자가 바뀌어도 이어받지 않는다', async () => {
+  vi.stubEnv('VITE_MAP_ADAPTER', 'fake');
+  vi.stubEnv('VITE_GOOGLE_MAPS_API_KEY', 'key');
+  const store = createStore();
+  store.set(prefsAtom, { ...DEFAULT_PREFS, mapProvider: 'naver' });
+  const props = {
+    markers: [mk('경로')],
+    polylines: [],
+    onMarkerClick: vi.fn(),
+    onUnavailable: vi.fn(),
+    fitKey: 'path-handoff',
+  };
+  window.history.pushState({}, '', '/a');
+  const first = render(
+    <Provider store={store}>
+      <MapView {...props} />
+    </Provider>,
+  );
+  await screen.findByTestId('marker-경로');
+  [...resources.instances].at(-1)!.setCamera({ center: [135.5, 34.7], zoom: 13 });
+  first.unmount();
+  window.history.pushState({}, '', '/b');
+  store.set(prefsAtom, { ...DEFAULT_PREFS, mapProvider: 'google' });
+  const setCamera = vi.spyOn(FakeMapAdapter.prototype, 'setCamera');
+  render(
+    <Provider store={store}>
+      <MapView {...props} />
+    </Provider>,
+  );
+  await screen.findByTestId('marker-경로');
+  expect(setCamera).not.toHaveBeenCalledWith({ center: [135.5, 34.7], zoom: 13 });
+  window.history.pushState({}, '', '/');
+});
+
+it('구글 어댑터 청크를 받지 못하면 새 버전 안내를 낸다', async () => {
+  vi.stubEnv('VITE_GOOGLE_MAPS_API_KEY', 'test-key');
+  vi.spyOn(console, 'warn').mockImplementation(() => {});
+  const store = createStore();
+  store.set(prefsAtom, { ...DEFAULT_PREFS, mapProvider: 'google' });
+  const onUnavailable = vi.fn();
+  render(
+    <Provider store={store}>
+      <MapView markers={[]} polylines={[]} onMarkerClick={vi.fn()} onUnavailable={onUnavailable} />
+    </Provider>,
+  );
+  await waitFor(() => expect(onUnavailable).toHaveBeenCalledWith(MAP_CHUNK_ERROR_MESSAGE));
 });

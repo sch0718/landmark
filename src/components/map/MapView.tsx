@@ -18,6 +18,7 @@ import {
   type MapPolyline,
   type MyLocation,
 } from './MapAdapter';
+import { isChunkLoadError, lazyChunk } from 'src/lib/lazy-chunk';
 import { onNaverAuthFailure } from './load-naver-sdk';
 import { MapZoomButtons } from './MapZoomButtons';
 import { NaverMapAdapter } from './NaverMapAdapter';
@@ -25,6 +26,7 @@ import { isTouchOnly } from './touch-only';
 import { useMapSize } from './use-map-size';
 
 export const MAP_UNAVAILABLE_MESSAGE = '지도를 불러오지 못했어요. 도메인 등록을 확인하세요';
+export const MAP_CHUNK_ERROR_MESSAGE = '새 버전이 나왔어요. 앱을 다시 열어 주세요';
 export const MAP_MISSING_CLIENT_ID_MESSAGE =
   '지도 키가 설정되지 않았어요. 환경변수 VITE_NAVER_MAP_CLIENT_ID를 확인하세요';
 
@@ -66,7 +68,8 @@ type Props = {
 const DEFAULT_PADDING: MapPadding = { top: 40, right: 40, bottom: 40, left: 40 };
 
 // 설정 화면에서는 MapView가 사라지므로 제공자 전환에만 쓸 카메라를 모듈에 보관한다.
-let lastCamera: { provider: MapProvider; key: string; camera: MapCamera } | null = null;
+let lastCamera: { provider: MapProvider; key: string; path: string; camera: MapCamera } | null =
+  null;
 
 export function MapView(props: Props) {
   const prefs = useAtomValue(prefsAtom);
@@ -112,7 +115,10 @@ export function MapView(props: Props) {
       unsubscribeAuth();
       const key = displayedKey.current;
       const camera = adapter.getCamera();
-      if (key !== null && fittedCache.has(key) && camera) lastCamera = { provider, key, camera };
+      lastCamera =
+        key !== null && fittedCache.has(key) && camera
+          ? { provider, key, path: window.location.pathname, camera }
+          : null;
       adapter.destroy();
     };
     const unavailable = (reason: string) => {
@@ -127,7 +133,7 @@ export function MapView(props: Props) {
     const createAdapter = (): Promise<MapAdapter> => {
       if (import.meta.env.VITE_MAP_ADAPTER === 'fake') return Promise.resolve(new FakeMapAdapter());
       if (provider === 'google') {
-        return import('./GoogleMapAdapter').then(
+        return lazyChunk(() => import('./GoogleMapAdapter'))().then(
           ({ GoogleMapAdapter }) =>
             new GoogleMapAdapter(import.meta.env.VITE_GOOGLE_MAPS_API_KEY!, {
               zoomControl: !touchOnly,
@@ -173,12 +179,18 @@ export function MapView(props: Props) {
           return;
         }
         const key = latest.current.fitKey ?? 'explore';
-        if (lastCamera && lastCamera.provider !== provider && lastCamera.key === key) {
-          created.setCamera(lastCamera.camera);
+        const handoff = lastCamera;
+        lastCamera = null;
+        if (
+          handoff &&
+          handoff.provider !== provider &&
+          handoff.key === key &&
+          handoff.path === window.location.pathname
+        ) {
+          created.setCamera(handoff.camera);
           fittedCache.add(key);
           displayedKey.current = key;
           appliedFocus.current = latest.current.focus?.seq ?? null;
-          lastCamera = null;
         }
         adapterRef.current = created;
         setMountedAdapter(created);
@@ -188,7 +200,7 @@ export function MapView(props: Props) {
         cancelled = true;
         dispose();
         console.warn('지도를 불러오지 못했어요', e);
-        unavailable(MAP_UNAVAILABLE_MESSAGE);
+        unavailable(isChunkLoadError(e) ? MAP_CHUNK_ERROR_MESSAGE : MAP_UNAVAILABLE_MESSAGE);
       });
     return () => {
       cancelled = true;

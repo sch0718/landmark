@@ -1,6 +1,6 @@
 /** Maps JavaScript API 로더. 스크립트 로드가 아니라 SDK의 전역 콜백을 기다린다. */
 type GoogleWindow = {
-  google?: { maps?: { Map?: unknown } };
+  google?: { maps?: { Map?: unknown; importLibrary?: (name: string) => Promise<unknown> } };
   gm_authFailure?: () => void;
 };
 export const GOOGLE_AUTH_FAILURE_MESSAGE = '구글 지도 인증 실패(도메인 미등록 등)';
@@ -55,10 +55,20 @@ export function loadGoogleSdk(apiKey: string, timeoutMs = 10000): Promise<void> 
     const timer = setTimeout(() => fail('구글 지도 SDK 로드 시간 초과'), timeoutMs);
     globals[callback] = () => {
       if (settled) return;
-      if ((window as GoogleWindow).google?.maps?.Map) {
-        settle();
-        resolve();
-      } else fail('구글 지도 SDK가 초기화되지 않았어요');
+      const finish = () => {
+        if (settled) return;
+        if ((window as GoogleWindow).google?.maps?.Map) {
+          settle();
+          resolve();
+        } else fail('구글 지도 SDK가 초기화되지 않았어요');
+      };
+      // loading=async에서는 importLibrary('maps')가 끝나야 레거시 이름공간이 채워진다.
+      const importLibrary = (window as GoogleWindow).google?.maps?.importLibrary;
+      if (typeof importLibrary === 'function') {
+        importLibrary
+          .call((window as GoogleWindow).google!.maps, 'maps')
+          .then(finish, () => fail('구글 지도 SDK가 초기화되지 않았어요'));
+      } else finish();
     };
     script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&loading=async&callback=${callback}&v=weekly`;
     script.async = true;

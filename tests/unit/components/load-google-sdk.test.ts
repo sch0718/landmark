@@ -75,4 +75,20 @@ describe('loadGoogleSdk', () => {
     complete();
     await expect(retry).resolves.toBeUndefined();
   });
+  it('importLibrary가 있으면 그 Promise가 끝난 뒤 resolve한다', async () => {
+    const { loadGoogleSdk } = await freshModule();
+    const pending = loadGoogleSdk('key');
+    let release!: () => void;
+    const importLibrary = vi.fn(() => new Promise<void>((r) => (release = r)));
+    (window as unknown as { google: unknown }).google = { maps: { Map: class {}, importLibrary } };
+    const callback = new URL(scripts()[0]!.src).searchParams.get('callback')!;
+    (window as unknown as Record<string, () => void>)[callback]!();
+    const done = vi.fn();
+    void pending.then(done);
+    await Promise.resolve();
+    expect(importLibrary).toHaveBeenCalledWith('maps');
+    expect(done).not.toHaveBeenCalled();
+    release();
+    await expect(pending).resolves.toBeUndefined();
+  });
 });

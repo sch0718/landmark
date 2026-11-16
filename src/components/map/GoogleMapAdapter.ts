@@ -237,7 +237,7 @@ export class GoogleMapAdapter implements MapAdapter {
             ? {
                 icons: [
                   {
-                    icon: { path: 'M 0,-1 0,1', strokeOpacity: 0.85, scale: 2 },
+                    icon: { path: 'M 0,-1 0,1', strokeOpacity: 0.85, strokeWeight: 4, scale: 2 },
                     offset: '0',
                     repeat: '12px',
                   },
@@ -296,6 +296,10 @@ export class GoogleMapAdapter implements MapAdapter {
     this.boundsCb = null;
     for (const listener of this.listeners) listener.remove();
     this.listeners = [];
+    // onRemove 호출 시점이 보장되지 않으므로 직접 정리한다(onRemove가 또 불려도 안전).
+    this.clearElements();
+    this.container?.remove();
+    this.container = null;
     this.layer?.setMap(null);
     this.layer = null;
     for (const overlay of this.lineOverlays) overlay.setMap(null);
