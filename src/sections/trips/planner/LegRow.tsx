@@ -6,7 +6,10 @@ import { useState } from 'react';
 import { CarIcon, FootprintsIcon } from 'src/components/icons';
 import { useLayout } from 'src/sections/shell/use-layout';
 import { formatDistance, formatDuration } from 'src/sections/trips/planner/format';
-import { naverDirectionsUrl } from 'src/sections/trips/planner/naver-directions';
+import {
+  googleDirectionsUrl,
+  naverDirectionsUrl,
+} from 'src/sections/trips/planner/naver-directions';
 import type { PlannedLeg } from 'src/sections/trips/planner/use-day-plan';
 
 const MODE_LABEL = { car: '자동차', walk: '도보' } as const;
@@ -14,6 +17,7 @@ const MODE_LABEL = { car: '자동차', walk: '도보' } as const;
 /** 구간 상태 문구(스펙 §6). 받은 경로는 문구가 없다. */
 const STATUS_TEXT: Record<PlannedLeg['status'], string | null> = {
   routed: null,
+  abroad: '이동 시간은 구글맵에서 확인',
   estimated: '직선 추정',
   'no-route': '경로 없음 · 직선 추정',
   failed: '경로를 못 가져왔어요',
@@ -32,16 +36,17 @@ type Props = {
 export function LegRow({ leg, onMode, onRetry }: Props) {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const status = STATUS_TEXT[leg.status];
-  // 좁은 화면은 네이버 지도 앱 주소, 그 밖은 웹 길찾기. 주소를 못 만들면 링크를 숨긴다.
+  // 해외는 구글 웹, 국내는 좁은 화면에서 네이버 앱, 그 밖은 웹 길찾기. 주소를 못 만들면 링크를 숨긴다.
   const layout = useLayout();
-  const directionsUrl = naverDirectionsUrl(
-    {
-      from: { name: leg.from.name.value, lng: leg.from.lng, lat: leg.from.lat },
-      to: { name: leg.to.name.value, lng: leg.to.lng, lat: leg.to.lat },
-      mode: leg.mode,
-    },
-    layout === 'compact' ? 'app' : 'web',
-  );
+  const abroad = leg.status === 'abroad';
+  const directions = {
+    from: { name: leg.from.name.value, lng: leg.from.lng, lat: leg.from.lat },
+    to: { name: leg.to.name.value, lng: leg.to.lng, lat: leg.to.lat },
+    mode: leg.mode,
+  };
+  const directionsUrl = abroad
+    ? googleDirectionsUrl(directions)
+    : naverDirectionsUrl(directions, layout === 'compact' ? 'app' : 'web');
   const isWebUrl = directionsUrl?.startsWith('https://') ?? false;
   const choose = (mode: 'car' | 'walk') => {
     setAnchor(null);
@@ -97,7 +102,11 @@ export function LegRow({ leg, onMode, onRetry }: Props) {
         )}
         <span>{MODE_LABEL[leg.mode]}</span>
       </Box>
-      <span>{`${formatDuration(leg.time.durationS)} · ${formatDistance(leg.time.distanceM)}`}</span>
+      <span>
+        {abroad
+          ? `직선 ${formatDistance(leg.time.distanceM)}`
+          : `${formatDuration(leg.time.durationS)} · ${formatDistance(leg.time.distanceM)}`}
+      </span>
       {status !== null && (
         <Box
           component="span"
@@ -131,7 +140,7 @@ export function LegRow({ leg, onMode, onRetry }: Props) {
             '&:focus-visible': { outlineOffset: -2 },
           }}
         >
-          네이버 지도로 길찾기
+          {abroad ? '구글맵에서 길찾기' : '네이버 지도로 길찾기'}
         </Box>
       )}
       <Menu anchorEl={anchor} open={anchor !== null} onClose={() => setAnchor(null)}>

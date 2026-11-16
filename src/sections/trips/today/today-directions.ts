@@ -1,7 +1,11 @@
 import { autoMode, haversineM } from 'src/domain/trips/geo';
 import type { Place } from 'src/schema/library';
 import type { GeoFix } from 'src/services/geolocation';
-import { naverDirectionsUrl } from 'src/sections/trips/planner/naver-directions';
+import { isAbroadLeg } from 'src/lib/korea';
+import {
+  googleDirectionsUrl,
+  naverDirectionsUrl,
+} from 'src/sections/trips/planner/naver-directions';
 import type { PlannedLeg } from 'src/sections/trips/planner/use-day-plan';
 import type { TodayModel } from 'src/sections/trips/today/use-today';
 
@@ -18,7 +22,7 @@ const pointOf = (place: Place): DirectionsFrom => ({
 });
 
 /**
- * 다음 장소(고른 장소 포함)로 가는 길찾기 주소(스펙 §4.8). 좁은 화면은 앱(`nmap://`), 그 밖은 웹.
+ * 다음 장소(고른 장소 포함)로 가는 길찾기 주소(스펙 §4.8). 해외는 구글 웹, 국내는 좁은 화면에서 앱(`nmap://`), 그 밖은 웹.
  * 출발점과 구간은 `directionsFrom`이 함께 정한 것(`origin`)을 받는다. 수단은 그 구간 수단, 구간이 없으면
  * 직선거리로 `autoMode`(800m 이하 도보, 그 밖 자동차). 출발점을 모르거나 주소를 만들 수 없으면 null.
  */
@@ -31,7 +35,10 @@ export function todayDirections(args: {
   if (origin === null) return null;
   const { from, leg } = origin;
   const mode = leg?.mode ?? autoMode(haversineM([from.lng, from.lat], [to.lng, to.lat]));
-  return naverDirectionsUrl({ from, to: pointOf(to), mode }, platform);
+  const directions = { from, to: pointOf(to), mode };
+  return isAbroadLeg(from, to)
+    ? googleDirectionsUrl(directions)
+    : naverDirectionsUrl(directions, platform);
 }
 
 /** 길찾기 출발점의 이름(쓸 수 있는 내 위치에서 나설 때). */

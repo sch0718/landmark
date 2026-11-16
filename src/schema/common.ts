@@ -40,8 +40,8 @@ export const HHmm = Schema.String.check(
   Schema.isPattern(/^([01]\d|2[0-3]):[0-5]\d$/, { message: 'HH:mm 형식이어야 합니다' }),
 );
 
-export const Lng = Schema.Finite.check(Schema.isBetween({ minimum: 124.0, maximum: 132.0 }));
-export const Lat = Schema.Finite.check(Schema.isBetween({ minimum: 33.0, maximum: 39.0 }));
+export const Lng = Schema.Finite.check(Schema.isBetween({ minimum: -180, maximum: 180 }));
+export const Lat = Schema.Finite.check(Schema.isBetween({ minimum: -90, maximum: 90 }));
 
 export const PlaceKey = Schema.String.check(
   Schema.isPattern(/^(n:\d+|c:[A-Za-z0-9_-]+)$/, { message: 'PlaceKey 형식이 아닙니다' }),

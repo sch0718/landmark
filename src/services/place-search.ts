@@ -1,3 +1,4 @@
+import { isInKorea } from 'src/lib/korea';
 import { Context, Deferred, Effect, Layer } from 'effect';
 import { parseSearchInputKey, searchInputKey, type SearchResult } from 'src/server/search';
 import { readApiErrorCode } from 'src/services/api-response';
@@ -22,9 +23,8 @@ function resultsOf(body: unknown): SearchResult[] | null {
       typeof p.address !== 'string' ||
       typeof p.category !== 'string' ||
       typeof p.lng !== 'number' ||
-      !(p.lng >= 124 && p.lng <= 132) ||
       typeof p.lat !== 'number' ||
-      !(p.lat >= 33 && p.lat <= 39)
+      !isInKorea(p.lng, p.lat)
     )
       return null;
     results.push({

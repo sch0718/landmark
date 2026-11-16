@@ -9,6 +9,19 @@ const f = <T>(value: T) => ({ value, updatedAt: meeting.createdAt });
 const lib = (m = meeting) => ({ ...emptyLibrary(), meetings: { [m.id]: m } });
 
 describe('약속 저장 형식', () => {
+  it.each([
+    [-180, -90],
+    [180, 90],
+  ])('출발지와 후보의 전 세계 경계 %s,%s를 허용한다', (lng, lat) => {
+    expect(
+      safeParse(MeetingSchema, {
+        ...meeting,
+        participants: f([{ id: 'person01', name: '나', origin: { name: '집', lng, lat } }]),
+        candidates: f([{ ...meeting.candidates.value[0]!, lng, lat }]),
+      }).success,
+    ).toBe(true);
+  });
+
   it('정상 약속과 보관함을 읽는다', () => {
     expect(safeParse(MeetingSchema, meeting).success).toBe(true);
     expect(safeParse(LibrarySchema, lib()).success).toBe(true);
@@ -45,10 +58,10 @@ describe('약속 저장 형식', () => {
     );
   });
   it.each([
-    [123.9, 37],
-    [132.1, 37],
-    [127, 32.9],
-    [127, 39.1],
+    [-180.01, 37],
+    [180.01, 37],
+    [127, -90.01],
+    [127, 90.01],
     [Infinity, 37],
     [127, NaN],
   ])('범위 밖 좌표 %s,%s 거부', (lng, lat) => {

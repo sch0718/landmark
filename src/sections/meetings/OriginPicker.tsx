@@ -13,6 +13,7 @@ import { useEffect, useId, useState } from 'react';
 import { MapView } from 'src/components/map/MapView';
 import { searchPlaces } from 'src/domain/library/query';
 import { fitMeetingText } from 'src/domain/meeting/limits';
+import { isInKorea } from 'src/lib/korea';
 import { startEffect } from 'src/lib/effect/runtime';
 import { LIBRARY_LIMITS } from 'src/schema/library';
 import { OriginSchema, type Origin } from 'src/schema/meeting';
@@ -60,8 +61,10 @@ function PickerContent({ origin, onPick, onClose, id }: Omit<Props, 'open'> & { 
         (found) => {
           if (!active) return;
           setResults(
-            found.filter((place) =>
-              validOrigin(fitOrigin({ name: place.name, lng: place.lng, lat: place.lat })),
+            found.filter(
+              (place) =>
+                isInKorea(place.lng, place.lat) &&
+                validOrigin(fitOrigin({ name: place.name, lng: place.lng, lat: place.lat })),
             ),
           );
           setLoading(false);
@@ -82,10 +85,13 @@ function PickerContent({ origin, onPick, onClose, id }: Omit<Props, 'open'> & { 
     const fitted = fitOrigin(value);
     if (validOrigin(fitted)) onPick(fitted);
   };
-  const places = searchPlaces(library, mineQuery).filter((place) =>
-    validOrigin(
-      fitOrigin({ name: place.name.value, lng: place.lng, lat: place.lat, placeId: place.id }),
-    ),
+  // 약속은 네이버 경로에 기대므로 한국 장소만 출발지로 고른다.
+  const places = searchPlaces(library, mineQuery).filter(
+    (place) =>
+      isInKorea(place.lng, place.lat) &&
+      validOrigin(
+        fitOrigin({ name: place.name.value, lng: place.lng, lat: place.lat, placeId: place.id }),
+      ),
   );
   return (
     <>

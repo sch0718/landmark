@@ -121,3 +121,84 @@ describe('directionsFrom·legInto·pointBefore', () => {
     expect(legInto(model(HOUSE, null, [P1, P2]), 'end')).toBeNull();
   });
 });
+
+describe('해외 당일 길찾기', () => {
+  const paris = { ...places[P2]!, lng: 2.2945, lat: 48.8584 };
+  it.each(['app', 'web'] as const)(
+    '%s는 실제 출발점·도착점 중 하나라도 해외면 구글 주소를 쓴다',
+    (platform) => {
+      for (const [from, to] of [
+        [fromOf(P1), paris],
+        [{ name: '파리', lng: 2.2945, lat: 48.8584 }, places[P2]!],
+      ] as const) {
+        const url = new URL(
+          todayDirections({ to, origin: { from, leg: legWith('walk') }, platform })!,
+        );
+        expect(url.origin).toBe('https://www.google.com');
+        expect(url.searchParams.get('origin')).toBe(`${from.lat},${from.lng}`);
+        expect(url.searchParams.get('destination')).toBe(`${to.lat},${to.lng}`);
+        expect(url.searchParams.get('travelmode')).toBe('walking');
+      }
+      expect(
+        todayDirections({
+          to: places[P2]!,
+          origin: { from: fromOf(P1), leg: legWith('car') },
+          platform,
+        }),
+      ).toMatch(platform === 'app' ? /^nmap:/ : /^https:\/\/map.naver.com/);
+    },
+  );
+  it.each(['app', 'web'] as const)(
+    '%s는 계획 구간 대신 내 위치로 해외 여부와 자동 수단을 정한다',
+    (platform) => {
+      const model = {
+        start: places[P1]!,
+        end: null,
+        stops: [{ place: places[P2]! }],
+        plan: { legs: [legWith('walk')] },
+      } as unknown as TodayModel;
+      const fix = { lng: paris.lng, lat: paris.lat, accuracyM: 30, at: 0 };
+      const url = new URL(
+        todayDirections({ to: places[P2]!, origin: directionsFrom(model, 0, fix), platform })!,
+      );
+      expect(url.origin).toBe('https://www.google.com');
+      expect(url.searchParams.get('origin')).toBe('48.8584,2.2945');
+      expect(url.searchParams.get('destination')).toBe(`${places[P2]!.lat},${places[P2]!.lng}`);
+      expect(url.searchParams.get('travelmode')).toBe('driving');
+      const domesticFix = { ...fix, lng: places[P2]!.lng, lat: places[P2]!.lat + 0.0045 };
+      const domesticModel = { ...model, start: paris };
+      expect(
+        todayDirections({
+          to: places[P2]!,
+          origin: directionsFrom(domesticModel, 0, domesticFix),
+          platform,
+        }),
+      ).toMatch(platform === 'app' ? /^nmap:\/\/route\/walk/ : /\/-\/walk$/);
+      const nearbyParis = { ...fix, lat: fix.lat + 0.0045 };
+      expect(
+        new URL(
+          todayDirections({ to: paris, origin: directionsFrom(model, 0, nearbyParis), platform })!,
+        ).searchParams.get('travelmode'),
+      ).toBe('walking');
+    },
+  );
+  it.each(['app', 'web'] as const)(
+    '%s는 출발점 없음과 유효하지 않은 좌표에 null을 돌려준다',
+    (platform) => {
+      expect(todayDirections({ to: paris, origin: null, platform })).toBeNull();
+      for (const from of [
+        { name: '오류', lng: NaN, lat: 0 },
+        { name: '오류', lng: 180.01, lat: 0 },
+      ]) {
+        expect(todayDirections({ to: paris, origin: { from, leg: null }, platform })).toBeNull();
+      }
+      expect(
+        todayDirections({
+          to: { ...paris, lat: 90.01 },
+          origin: { from: fromOf(P1), leg: null },
+          platform,
+        }),
+      ).toBeNull();
+    },
+  );
+});

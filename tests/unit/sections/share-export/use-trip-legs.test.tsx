@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { dayLegs, type Leg } from 'src/domain/trips/query';
 import { setAppRuntimeForTest } from 'src/lib/effect/runtime';
-import { useTripLegs } from 'src/sections/share-export/use-trip-legs';
+import { legStatus, useTripLegs } from 'src/sections/share-export/use-trip-legs';
 import { routeKeyOf } from 'src/sections/trips/planner/use-day-plan';
 import { libraryAtom } from 'src/stores/library-state';
 import { routeStatesAtom } from 'src/stores/trip-planner';
@@ -213,4 +213,42 @@ describe('useTripLegs', () => {
     expect(routes.calls).toHaveLength(4);
     expect(hook.result.current.estimated).toBe(4);
   });
+});
+
+it('해외만 있는 일정과 섞인 일정은 해외를 묻지 않고 국내 답을 받으면 집계를 마친다', async () => {
+  const routes = fakeRoutes(() => route(12, 1100));
+  const base = withTrip(plannerLibrary(), makeTrip({ stops: [[P3, P1, P2, P5]] }));
+  const lib = {
+    ...base,
+    places: { ...base.places, [P3]: { ...base.places[P3]!, lng: 2.2945, lat: 48.8584 } },
+  };
+  const { store } = await open(lib, { routes, path: '/trips' });
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <Provider store={store}>{children}</Provider>
+  );
+  const hook = renderHook(() => useTripLegs(TRIP, true), { wrapper });
+  // 해외 구간이 맨 앞이어도 국내 구간 둘이 조회되어 집계가 끝난다(거름이 빠지면 여기서 멈춘다).
+  await waitFor(() => expect(hook.result.current.answered).toBe(3));
+  expect(hook.result.current.total).toBe(3);
+  expect(routes.calls).toHaveLength(2);
+  expect(hook.result.current.estimated).toBe(0);
+  expect(legStatus(hook.result.current)).not.toContain('받는 중');
+  const abroad = dayLegs(lib, lib.trips[TRIP]!, 0)[0]!;
+  expect(hook.result.current.routeOf(abroad)).toEqual({
+    status: 'estimated',
+    durationS: 0,
+    distanceM: Math.round(abroad.straightM),
+    tollFare: null,
+    queriedAt: null,
+    path: [],
+  });
+
+  act(() => {
+    const current = store.get(libraryAtom);
+    store.set(libraryAtom, withTrip(current, makeTrip({ stops: [[P2, P3]] })));
+    window.dispatchEvent(new Event('online'));
+  });
+  expect(hook.result.current).toMatchObject({ total: 1, answered: 1, estimated: 0 });
+  expect(legStatus(hook.result.current)).toBeNull();
+  expect(routes.calls).toHaveLength(2);
 });

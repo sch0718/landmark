@@ -63,7 +63,7 @@ describe('약속 링크', () => {
         : what === 'nested'
           ? { ...doc, candidates: [{ ...doc.candidates[0], extra: true }] }
           : what === 'coordinate'
-            ? { ...doc, candidates: [{ ...doc.candidates[0], lng: 0 }] }
+            ? { ...doc, candidates: [{ ...doc.candidates[0], lng: 180.01 }] }
             : what === 'time'
               ? { ...doc, times: { choice01: { person01: -1 } } }
               : what === 'unit'

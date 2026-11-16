@@ -1,3 +1,4 @@
+import { isAbroadLeg } from 'src/lib/korea';
 import type { ShareLegTime } from 'src/domain/share/build-trip-share';
 import { estimateLeg, SAME_POINT_M } from 'src/domain/trips/geo';
 import { dayLegs, type Leg } from 'src/domain/trips/query';
@@ -48,7 +49,7 @@ export async function prepareRoutes(
   const pending = new Map<string, { day: number }>();
   trip.days.forEach((_, d) => {
     for (const leg of dayLegs(built.lib, trip, d)) {
-      if (isSamePoint(leg)) continue;
+      if (isSamePoint(leg) || isAbroadLeg(leg.from, leg.to)) continue;
       const query = queryOf(leg);
       const key = routeInputKey(query);
       if (!pending.has(key)) pending.set(key, { day: d });
@@ -88,6 +89,16 @@ export async function prepareRoutes(
         distanceM: 0,
         tollFare: null,
         status: 'same-point',
+        queriedAt: null,
+        path: [],
+      };
+    }
+    if (isAbroadLeg(leg.from, leg.to)) {
+      return {
+        durationS: 0,
+        distanceM: Math.round(leg.straightM),
+        tollFare: null,
+        status: 'estimated',
         queriedAt: null,
         path: [],
       };

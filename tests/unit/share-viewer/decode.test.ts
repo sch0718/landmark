@@ -31,7 +31,7 @@ describe('보기 화면 해시 풀기', () => {
     (d: ReturnType<typeof makeShareV2Doc>) => ({ ...d, labels: [...d.labels, d.labels[0]] }),
     (d: ReturnType<typeof makeShareV2Doc>) => ({ ...d, version: 3 }),
     (d: ReturnType<typeof makeShareV2Doc>) => ({ ...d, createdAt: '어제' }),
-    (d: ReturnType<typeof makeShareV2Doc>) => ({ ...d, places: [{ ...d.places[0], lat: 90 }] }),
+    (d: ReturnType<typeof makeShareV2Doc>) => ({ ...d, places: [{ ...d.places[0], lat: 91 }] }),
     (d: ReturnType<typeof makeShareV2Doc>) => ({ ...d, trips: [{ ...d.trips[0], extra: true }] }),
   ])('앱이 거절하는 문서는 보기 화면도 거절한다', async (change) => {
     const value = await encodeCompressedJson(change(makeShareV2Doc()));
@@ -57,7 +57,7 @@ describe('보기 화면 해시 풀기', () => {
     expect(await decodeShareHash(value)).toEqual(doc);
     for (const invalid of [
       { ...doc, createdAt: '어제' },
-      { ...doc, places: [{ ...doc.places[0], lat: 90 }] },
+      { ...doc, places: [{ ...doc.places[0], lat: 91 }] },
       { ...doc, places: [{ ...doc.places[0], review: '모르는 필드' }] },
       {
         ...doc,

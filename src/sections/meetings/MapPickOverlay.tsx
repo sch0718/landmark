@@ -1,3 +1,4 @@
+import { isInKorea } from 'src/lib/korea';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 
@@ -9,14 +10,7 @@ type Props = {
 
 /** 장소 추가 흐름과 별개인 약속 출발지 조준점. 지도 조작은 막지 않는다. */
 export function MapPickOverlay({ center, onPick, onCancel }: Props) {
-  const valid =
-    center !== null &&
-    Number.isFinite(center[0]) &&
-    Number.isFinite(center[1]) &&
-    center[0] >= 124 &&
-    center[0] <= 132 &&
-    center[1] >= 33 &&
-    center[1] <= 39;
+  const valid = center !== null && isInKorea(center[0], center[1]);
   return (
     <Box sx={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 1 }}>
       <Box

@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { naverDirectionsUrl } from 'src/sections/trips/planner/naver-directions';
+import {
+  googleDirectionsUrl,
+  naverDirectionsUrl,
+} from 'src/sections/trips/planner/naver-directions';
 
 const leg = {
   from: { name: '중앙시장 닭강정', lng: 128.8961, lat: 37.7953 },
@@ -52,5 +55,30 @@ describe('naverDirectionsUrl', () => {
   it('좌표가 유한하지 않으면 null', () => {
     expect(naverDirectionsUrl({ ...leg, to: { ...leg.to, lat: Number.NaN } }, 'app')).toBeNull();
     expect(naverDirectionsUrl({ ...leg, from: { ...leg.from, lng: Infinity } }, 'web')).toBeNull();
+  });
+});
+
+describe('googleDirectionsUrl', () => {
+  it.each([
+    ['car', 'driving'],
+    ['walk', 'walking'],
+    ['transit', 'transit'],
+  ] as const)('%s 수단과 위도·경도 순서로 구글 길찾기 주소를 만든다', (mode, travelmode) => {
+    const url = new URL(
+      googleDirectionsUrl({ ...leg, mode, from: { name: '에펠탑', lng: 2.2945, lat: 48.8584 } })!,
+    );
+    expect(url.origin + url.pathname).toBe('https://www.google.com/maps/dir/');
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      api: '1',
+      origin: '48.8584,2.2945',
+      destination: '37.7715,128.9506',
+      travelmode,
+    });
+  });
+  it.each([NaN, Infinity, -Infinity, 180.01, -180.01])('경도 %s는 거절한다', (lng) => {
+    expect(googleDirectionsUrl({ ...leg, from: { ...leg.from, lng } })).toBeNull();
+  });
+  it.each([NaN, Infinity, -Infinity, 90.01, -90.01])('위도 %s는 거절한다', (lat) => {
+    expect(googleDirectionsUrl({ ...leg, to: { ...leg.to, lat } })).toBeNull();
   });
 });

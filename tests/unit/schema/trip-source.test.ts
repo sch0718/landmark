@@ -67,37 +67,37 @@ const cases: { name: string; mutate: (s: Src) => void; ok: boolean }[] = [
     ok: false,
   },
   {
-    name: 'lng 123.99 거부',
+    name: 'lng -180.01 거부',
     mutate: (s) => {
-      s.customPlaces[0]!.lng = 123.99;
+      s.customPlaces[0]!.lng = -180.01;
     },
     ok: false,
   },
   {
-    name: 'lng 124.0 통과',
+    name: 'lng -180 통과',
     mutate: (s) => {
-      s.customPlaces[0]!.lng = 124.0;
+      s.customPlaces[0]!.lng = -180;
     },
     ok: true,
   },
   {
-    name: 'lng 132.0 통과',
+    name: 'lng 180 통과',
     mutate: (s) => {
-      s.customPlaces[0]!.lng = 132.0;
+      s.customPlaces[0]!.lng = 180;
     },
     ok: true,
   },
   {
-    name: 'lng 132.01 거부',
+    name: 'lng 180.01 거부',
     mutate: (s) => {
-      s.customPlaces[0]!.lng = 132.01;
+      s.customPlaces[0]!.lng = 180.01;
     },
     ok: false,
   },
   {
-    name: 'lat 32.99 거부',
+    name: 'lat 90.01 거부',
     mutate: (s) => {
-      s.customPlaces[0]!.lat = 32.99;
+      s.customPlaces[0]!.lat = 90.01;
     },
     ok: false,
   },
@@ -125,6 +125,12 @@ const cases: { name: string; mutate: (s: Src) => void; ok: boolean }[] = [
 ];
 
 describe('TripSourceSchema', () => {
+  it.each([-90, 90])('위도 경계 %s를 허용한다', (lat) => {
+    const input = base();
+    input.customPlaces[0]!.lat = lat;
+    expect(safeParse(TripSourceSchema, input).success).toBe(true);
+  });
+
   it.each(cases)('$name', ({ mutate, ok }) => {
     const s = base();
     mutate(s);

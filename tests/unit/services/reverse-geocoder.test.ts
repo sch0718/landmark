@@ -142,6 +142,27 @@ describe('formatReverseGeocode', () => {
 });
 
 describe('ReverseGeocoder.layerWith', () => {
+  effectIt.effect('해외 좌표는 주입한 변환 함수를 부르지 않고 null을 돌려준다', () =>
+    Effect.gen(function* () {
+      let calls = 0;
+      const result = yield* Effect.gen(function* () {
+        const geocoder = yield* ReverseGeocoder;
+        return yield* geocoder.reverse(2.2945, 48.8584);
+      }).pipe(
+        Effect.provide(
+          ReverseGeocoder.layerWith({
+            reverse: async () => {
+              calls += 1;
+              return '주소';
+            },
+          }),
+        ),
+      );
+      expect(result).toBeNull();
+      expect(calls).toBe(0);
+    }),
+  );
+
   effectIt.effect('reverse 함수를 (lng, lat) 순서로 부르고 결과를 돌려준다', () =>
     Effect.gen(function* () {
       const calls: Array<readonly [number, number]> = [];
@@ -167,7 +188,7 @@ describe('ReverseGeocoder.layerWith', () => {
     Effect.gen(function* () {
       const result = yield* Effect.gen(function* () {
         const geocoder = yield* ReverseGeocoder;
-        return yield* geocoder.reverse(1, 2);
+        return yield* geocoder.reverse(126.9833092, 37.5494047);
       }).pipe(
         Effect.provide(
           ReverseGeocoder.layerWith({ reverse: () => Promise.reject(new Error('boom')) }),
@@ -181,7 +202,7 @@ describe('ReverseGeocoder.layerWith', () => {
     Effect.gen(function* () {
       const fiber = yield* Effect.gen(function* () {
         const geocoder = yield* ReverseGeocoder;
-        return yield* geocoder.reverse(1, 2);
+        return yield* geocoder.reverse(126.9833092, 37.5494047);
       }).pipe(
         Effect.provide(ReverseGeocoder.layerWith({ reverse: () => new Promise(() => {}) })),
         Effect.forkChild,

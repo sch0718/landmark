@@ -339,7 +339,7 @@ it.each([
   [],
   { bad: { name: '집', lng: 127, lat: 37.5 } },
   { person01: null },
-  { person01: { name: '집', lng: 0, lat: 37.5 } },
+  { person01: { name: '집', lng: 180.01, lat: 37.5 } },
   Object.fromEntries(
     Array.from({ length: 11 }, (_, i) => [
       `person${String(i).padStart(2, '0')}`,

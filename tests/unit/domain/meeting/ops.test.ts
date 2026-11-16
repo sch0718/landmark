@@ -187,7 +187,12 @@ describe('약속 연산', () => {
           : key === 'name'
             ? ops.addParticipant(before, m.id, { name: '', origin: null }, ctx())
             : key === 'coordinate'
-              ? ops.addCandidate(before, m.id, { kind: 'hub', name: '역', lng: 0, lat: 0 }, ctx())
+              ? ops.addCandidate(
+                  before,
+                  m.id,
+                  { kind: 'hub', name: '역', lng: 180.01, lat: 0 },
+                  ctx(),
+                )
               : ops.decide(before, m.id, 'missing1', ctx());
       error(r, 'invalid');
       expect(before).toEqual(lib());

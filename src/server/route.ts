@@ -1,5 +1,6 @@
 // 네이버 자동차·도보·대중교통 길찾기를 앱이 쓰기 좋은 모양으로 정리한다(스펙 §4.1).
 // Cloudflare 서버 함수에서도 쓰므로 상대 경로 import만 쓰고 브라우저·React 코드를 끌어오지 않는다.
+import { isInKorea } from '../lib/korea';
 import { haversineM } from '../domain/trips/geo';
 import { ApiError } from './http';
 import { BROWSER_USER_AGENT, makeRequester, type Deps } from './request';
@@ -27,8 +28,6 @@ export type RouteResult = {
 
 const MAX_PATH_POINTS = 200;
 const WALK_MAX_STRAIGHT_M = 50_000;
-const LNG_RANGE = [124, 132] as const;
-const LAT_RANGE = [33, 39] as const;
 const COORDINATE = /^-?\d+(?:\.\d+)?$/;
 const INPUT_KEY =
   /^(car|walk|transit):(?:(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}):)?(-?\d+\.\d{5}),(-?\d+\.\d{5})>(-?\d+\.\d{5}),(-?\d+\.\d{5})$/;
@@ -44,7 +43,7 @@ export function parseCoordinate(raw: string | null, name: string): [number, numb
   }
   const lng = Number(parts[0]);
   const lat = Number(parts[1]);
-  if (lng < LNG_RANGE[0] || lng > LNG_RANGE[1] || lat < LAT_RANGE[0] || lat > LAT_RANGE[1]) {
+  if (!isInKorea(lng, lat)) {
     throw badRequest(`${name} 좌표가 한국 범위 밖`);
   }
   return [lng, lat];
