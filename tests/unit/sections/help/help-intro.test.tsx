@@ -33,7 +33,8 @@ describe('처음 안내 대화상자', () => {
     const opener = screen.getByRole('button', { name: '원래 단추' });
     opener.focus();
     view.rerender(intro());
-    const start = await screen.findByRole('button', { name: '시작하기' });
+    // 안내 본문은 지연 로드라 느린 빌드 서버(Cloudflare Pages)에서는 1초를 넘길 수 있다.
+    const start = await screen.findByRole('button', { name: '시작하기' }, { timeout: 5000 });
     expect(screen.getByRole('dialog', { name: '보관함' })).toContainElement(
       document.activeElement as HTMLElement,
     );
@@ -44,7 +45,7 @@ describe('처음 안내 대화상자', () => {
     const user = userEvent.setup();
     const view = render(intro());
     expect(await screen.findByRole('dialog', { name: '보관함' })).toBeInTheDocument();
-    await user.click(await screen.findByRole('button', { name: '시작하기' }));
+    await user.click(await screen.findByRole('button', { name: '시작하기' }, { timeout: 5000 }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(helpSeen.read().has('library')).toBe(true);
     view.unmount();
