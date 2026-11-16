@@ -1,10 +1,14 @@
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
+import { reloadWithFreshChunks } from 'src/lib/lazy-chunk';
 
-/** 나눠 받기가 실패했을 때(새 버전이 배포된 경우) 보여 주는 안내와 새로고침 버튼. 자동 새로고침은 하지 않는다. */
+/**
+ * 나눠 받기가 실패했을 때(새 버전이 배포된 경우) 보여 주는 안내와 새로고침 버튼. 자동 새로고침은 하지 않는다.
+ * 새로고침은 받은 파일을 캐시 없이 다시 받은 뒤 한다(`reloadWithFreshChunks`).
+ */
 export function ChunkErrorNotice({ fullScreen = false }: { fullScreen?: boolean }) {
-  const reload = () => window.location.reload();
+  const reload = () => void reloadWithFreshChunks();
   if (fullScreen) {
     return (
       <Box

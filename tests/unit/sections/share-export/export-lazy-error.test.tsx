@@ -45,7 +45,7 @@ describe('내보내기 대화상자 받기 실패', () => {
     const user = userEvent.setup();
     const dialog = await openExport(user);
     fireEvent.click(within(dialog).getByRole('button', { name: '새로고침' }));
-    expect(reload).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
   });
 
   it('닫기는 그대로 된다', async () => {
