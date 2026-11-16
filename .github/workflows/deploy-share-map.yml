@@ -11,7 +11,7 @@ on:
       - 'src/share-protocol.ts'
       - 'src/schema/label-colors.ts'
       - 'src/theme/tokens/**'
-      # 지도 페이지가 앱의 지도 어댑터(네이버·가짜)·카메라 계산·마커 만들기를 그대로 쓴다.
+      # 지도 페이지가 앱의 지도 어댑터(네이버·구글·가짜)·카메라 계산·마커 만들기를 그대로 쓴다.
       - 'src/components/map/**'
       - 'src/sections/map/markers.ts'
       - 'vite.map.config.ts'
@@ -59,6 +59,7 @@ jobs:
       - name: Build (build:map)
         env:
           VITE_NAVER_MAP_CLIENT_ID: ${{ vars.NAVER_MAP_CLIENT_ID }}
+          VITE_GOOGLE_MAPS_API_KEY: ${{ vars.GOOGLE_MAPS_API_KEY }}
         run: |
           if [ -z "$VITE_NAVER_MAP_CLIENT_ID" ]; then
             echo "::error::저장소 변수 NAVER_MAP_CLIENT_ID가 비어 있습니다(Settings → Secrets and variables → Actions → Variables)."

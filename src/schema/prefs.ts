@@ -30,6 +30,9 @@ export const PrefsSchema = Schema.Struct({
   ]),
   mode: Schema.Literals(['system', 'light', 'dark']),
   libraryView: Schema.Literals(['bento', 'cards', 'tiles', 'list']),
+  mapProvider: Schema.Literals(['naver', 'google']).pipe(
+    Schema.withDecodingDefault(Effect.succeed('naver' as const)),
+  ),
   query: LibraryQuerySchema,
 });
 
@@ -39,5 +42,6 @@ export const DEFAULT_PREFS: Prefs = {
   theme: 'pastel',
   mode: 'system',
   libraryView: 'bento',
+  mapProvider: 'naver',
   query: DEFAULT_QUERY,
 };
