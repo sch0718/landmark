@@ -83,22 +83,22 @@ export async function prepareRoutes(
   }
 
   const routeOf = (leg: Leg): ShareLegTime => {
-    if (isAbroadLeg(leg.from, leg.to)) {
-      return {
-        durationS: 0,
-        distanceM: Math.round(leg.straightM),
-        tollFare: null,
-        status: 'estimated',
-        queriedAt: null,
-        path: [],
-      };
-    }
     if (isSamePoint(leg)) {
       return {
         durationS: 0,
         distanceM: 0,
         tollFare: null,
         status: 'same-point',
+        queriedAt: null,
+        path: [],
+      };
+    }
+    if (isAbroadLeg(leg.from, leg.to)) {
+      return {
+        durationS: 0,
+        distanceM: Math.round(leg.straightM),
+        tollFare: null,
+        status: 'estimated',
         queriedAt: null,
         path: [],
       };

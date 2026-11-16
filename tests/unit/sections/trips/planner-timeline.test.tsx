@@ -1070,10 +1070,10 @@ describe('검토 반영', () => {
 
 describe('해외 구간', () => {
   const overseasLibrary = () => {
-    const lib = withTrip(plannerLibrary(), makeTrip({ stops: [[P1, P2]] }));
+    const lib = withTrip(plannerLibrary(), makeTrip({ stops: [[P3, P1, P2]] }));
     return {
       ...lib,
-      places: { ...lib.places, [P2]: { ...lib.places[P2]!, lng: 2.2945, lat: 48.8584 } },
+      places: { ...lib.places, [P3]: { ...lib.places[P3]!, lng: 2.2945, lat: 48.8584 } },
     };
   };
   it('planLeg는 해외 구간을 시간 0과 반올림한 직선거리로 만든다', () => {
@@ -1084,24 +1084,30 @@ describe('해외 구간', () => {
       queriedAt: null,
       time: { durationS: 0, distanceM: Math.round(leg.straightM), tollFare: null, estimated: true },
       path: [
-        [leg.from.lng, leg.from.lat],
         [2.2945, 48.8584],
+        [leg.to.lng, leg.to.lat],
       ],
     });
   });
-  it('해외 구간은 처음·다시 계산·다시 시도·연결 복구에도 요청하지 않는다', async () => {
+  it('해외 구간이 앞에 있어도 요청하지 않고 국내 구간은 경로를 받는다', async () => {
     const routes = fakeRoutes(() => route(12, 1100));
-    const { store } = await open(overseasLibrary(), { routes, path: '/trips' });
+    const lib = overseasLibrary();
+    const abroadFrom = lib.places[P3]!.name.value;
+    const { store } = await open(lib, { routes, path: '/trips' });
     const wrapper = ({ children }: { children: ReactNode }) => (
       <Provider store={store}>{children}</Provider>
     );
     const hook = renderHook(() => useDayPlan(TRIP, 0), { wrapper });
     expect(hook.result.current.legs[0]?.status).toBe('abroad');
+    await waitFor(() => expect(hook.result.current.legs[1]?.status).toBe('routed'));
     await act(async () => {
       hook.result.current.refresh();
       hook.result.current.retryLeg(hook.result.current.legs[0]!.key);
       window.dispatchEvent(new Event('online'));
     });
-    expect(routes.calls).toHaveLength(0);
+    expect(hook.result.current.legs[0]?.status).toBe('abroad');
+    expect(hook.result.current.legs[1]?.status).toBe('routed');
+    expect(routes.calls.length).toBeGreaterThan(0);
+    expect(routes.calls.every((c) => c.from !== abroadFrom)).toBe(true);
   });
 });

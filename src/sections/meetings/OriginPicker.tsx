@@ -85,10 +85,13 @@ function PickerContent({ origin, onPick, onClose, id }: Omit<Props, 'open'> & { 
     const fitted = fitOrigin(value);
     if (validOrigin(fitted)) onPick(fitted);
   };
-  const places = searchPlaces(library, mineQuery).filter((place) =>
-    validOrigin(
-      fitOrigin({ name: place.name.value, lng: place.lng, lat: place.lat, placeId: place.id }),
-    ),
+  // 약속은 네이버 경로에 기대므로 한국 장소만 출발지로 고른다.
+  const places = searchPlaces(library, mineQuery).filter(
+    (place) =>
+      isInKorea(place.lng, place.lat) &&
+      validOrigin(
+        fitOrigin({ name: place.name.value, lng: place.lng, lat: place.lat, placeId: place.id }),
+      ),
   );
   return (
     <>

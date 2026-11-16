@@ -152,20 +152,20 @@ const straightPath = (leg: Leg): [number, number][] => [
 
 /** 구간에 시간을 붙인다. 경로가 없으면(요청 전·실패) 직선 추정이다. */
 export function planLeg(leg: Leg, state: RouteState | undefined): PlannedLeg {
-  if (isAbroadLeg(leg.from, leg.to)) {
-    return {
-      ...leg,
-      time: { durationS: 0, distanceM: Math.round(leg.straightM), tollFare: null, estimated: true },
-      status: 'abroad',
-      queriedAt: null,
-      path: straightPath(leg),
-    };
-  }
   if (isSamePointLeg(leg)) {
     return {
       ...leg,
       time: { durationS: 0, distanceM: 0, tollFare: null, estimated: false },
       status: 'routed',
+      queriedAt: null,
+      path: straightPath(leg),
+    };
+  }
+  if (isAbroadLeg(leg.from, leg.to)) {
+    return {
+      ...leg,
+      time: { durationS: 0, distanceM: Math.round(leg.straightM), tollFare: null, estimated: true },
+      status: 'abroad',
       queriedAt: null,
       path: straightPath(leg),
     };

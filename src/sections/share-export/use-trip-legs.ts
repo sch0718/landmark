@@ -70,7 +70,7 @@ export function useTripLegs(tripId: string, active: boolean): TripLegs {
 
   const routeOf = useCallback(
     (leg: Leg): ShareLegTime => {
-      if (!isAbroadLeg(leg.from, leg.to) && isSamePointLeg(leg)) return SAME_POINT;
+      if (isSamePointLeg(leg)) return SAME_POINT;
       const planned = planLeg(leg, states[routeKeyOf(leg)]);
       const routed = planned.status === 'routed';
       return {
