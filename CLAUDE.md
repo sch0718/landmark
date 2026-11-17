@@ -18,6 +18,8 @@ HTML·CSS·브라우저 JS를 만들거나 고칠 때는 Chrome·Edge·Firefox·
   DISABLE_TELEMETRY=1 npx -y modern-web-guidance@latest legacy-scan <경로> --json
   ```
 
+  배포 검사(`build:ci`)는 `yarn legacy-scan`으로 `src/`를 스캔하고, 검토를 마친 후보 목록 `legacy-scan-baseline.json`에 없는 새 후보가 나오면 실패합니다(GitHub CI와 Cloudflare Pages 배포가 함께 멈춤). CLI는 `modern-web-guidance`를 정확한 버전의 devDependency로 고정해 씁니다. 새 후보는 위 규칙대로 확인해 고치거나, 고치지 않을 이유(`reason`)를 적어 목록에 더합니다. 더는 나오지 않는 항목은 스크립트가 알려 주니 목록에서 뺍니다.
+
 - **브라우저 지원:** Baseline Widely available 기능은 대체 코드 없이 씁니다. 그보다 새 기능은 가이드의 대체 방법을 따르되, 폴리필 패키지보다 기능 감지와 짧은 대체 코드를 먼저 고릅니다. 휴대폰 사용자가 많으므로 iOS Safari 지원을 꼭 확인합니다. Origin Trial·변동성 기능(`.mwgrc`의 `allowOriginTrials`·`allowVolatileFeatures`)은 켜지 않습니다.
 - **한글 입력:** Enter로 저장·제출하는 입력은 IME 조합 중(`event.isComposing`)이면 무시합니다(가이드 `ime-safe-enter-submit`). 조합 중 Enter를 처리하면 마지막 글자가 빠지거나 두 번 저장됩니다.
 - **텔레메트리:** 이 CLI는 기본으로 검색어와 가이드 ID를 Google에 보냅니다. 명령 앞에 늘 `DISABLE_TELEMETRY=1`을 붙이고, 검색어에는 일반적인 UI 기능 이름만 쓰며 저장소 내용을 넣지 않습니다.

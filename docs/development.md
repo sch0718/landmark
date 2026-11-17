@@ -793,7 +793,8 @@ npx wrangler pages dev --d1 DB --port 8788 --proxy 4180 -- npx vite --port 4180 
 | `yarn demo:video` | 휴대폰 화면 조작 녹화와 Edge TTS 한국어 내레이션으로 데모 영상(`final.mp4`·`final-phone.mp4`·`title.txt`·`desc.txt`)을 만듭니다. 대본은 `scripts/demo-videos/story.mjs`입니다. 필요: narrated-video 스킬의 `tts.mjs`·`finish.sh`(경로는 `NARRATED_VIDEO_TTS`), ffmpeg, uvx. 출력은 `DEMO_OUT`(기본 `.cache/demo-video/`). 실제 지도는 `VITE_NAVER_MAP_CLIENT_ID`를 **셸 환경 변수로** 줘야 나오고(`.env.local`만으로는 가짜 지도), 그래서 포트는 Client ID 허용 주소인 8788(`DEMO_PORT`)이라 `yarn dev:full`을 끄고 돌립니다. `DEMO_SCENES=6,7`처럼 일부 장면만 내레이션 속도로 녹화할 수 있습니다 |
 | `yarn build`         | 보기 화면 틀 + 타입 검사 + Vite 빌드 → `dist`                                                                                                                     |
 | `yarn size`          | 첫 화면 JS·전체 JS 크기(원본·gzip)를 재고 `perf-budget.json` 예산을 넘으면 실패(`docs/ui-performance.md`)                                                         |
-| `yarn build:ci`      | `validate → typecheck → test → build → size → build:map` (배포 빌드 명령)                                                                                         |
+| `yarn legacy-scan` | Modern Web Guidance `legacy-scan`으로 `src/`의 옛 웹 패턴을 찾고, `legacy-scan-baseline.json`(검토를 마친 후보)에 없는 새 후보가 있으면 실패. 고치거나 이유를 적어 목록에 더한다(CLAUDE.md 「웹 플랫폼 가이드」) |
+| `yarn build:ci`      | `validate → legacy-scan → typecheck → test → build → size → build:map` (배포 빌드 명령)                                                                                         |
 
 ### E2E
 
