@@ -50,6 +50,19 @@ it('메아리는 참조를 유지하고 새 항목과 묘비를 추가한다', (
       ?.deletedAt,
   ).toBe(now);
 });
+it('refresh면 같은 rev의 깨끗한 항목을 서버 문서로 바꾸고 수정 중인 항목은 그대로 둔다', () => {
+  const server = { ...p, visitedOn: f('2026-10-03', later), review: f('좋음', later) };
+  const refreshed = applyRemote(lib, base, [remote(server, 1)], { ...opts, refresh: true });
+  expect(refreshed.lib.places[p.id]).toEqual(server);
+  expect(refreshed.base['place:place00001']?.hash).toBe(hashItem(server));
+  expect(dirtyItems(refreshed.lib, refreshed.base, [])).toEqual([]);
+
+  const local = { ...lib, places: { [p.id]: { ...p, memo: f('수정 중', now) } } };
+  const dirty = applyRemote(local, base, [remote(server, 1)], { ...opts, refresh: true });
+  expect(dirty.lib).toBe(local);
+  expect(dirty.base).toEqual(base);
+  expect(dirtyItems(dirty.lib, dirty.base, [])).toHaveLength(1);
+});
 it('바꾸지 않은 항목을 교체하고 양쪽 수정의 base는 서버 해시다', () => {
   const server = { ...p, memo: f('서버', now) };
   expect(applyRemote(lib, base, [remote(server)], opts).lib.places[p.id]).toEqual(server);

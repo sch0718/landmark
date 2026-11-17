@@ -47,6 +47,7 @@ export type ApplyOptions = {
   lastSyncAt: string | null;
   sinceFor?: (key: string) => string | null;
   fullResync: boolean;
+  refresh?: boolean;
   conflictId: () => string;
   skip?: ReadonlySet<string>;
 };
@@ -180,8 +181,16 @@ export function applyRemote(
   for (const r of remote) {
     const key = itemKey(r.kind, r.id);
     const b = base[key];
+    const mine = getItem(next, r.kind, r.id);
     // 복원으로 로컬 항목만 사라졌으면 같은 revision도 다시 넣어 전체 받기를 끝낸다.
-    if (b && b.rev >= r.rev && getItem(next, r.kind, r.id)) continue;
+    // 선택 필드 재수신은 같은 revision의 미변경 항목만 바꾼다.
+    if (
+      b &&
+      b.rev >= r.rev &&
+      mine &&
+      (b.rev !== r.rev || !opts.refresh || hashItem(mine) !== b.hash)
+    )
+      continue;
     if (opts.skip?.has(key)) {
       nextBase[key] = { rev: r.rev, hash: hashItem(r.doc), deleted: r.deleted };
       continue;
@@ -192,7 +201,6 @@ export function applyRemote(
       continue;
     }
     const server = decoded.doc;
-    const mine = getItem(next, r.kind, r.id);
     if (!opts.skip?.has(key)) {
       let doc = server;
       if (mine && (!b || hashItem(mine) !== b.hash)) {

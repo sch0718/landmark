@@ -8,6 +8,7 @@ import {
   type ItemKind,
 } from '../../domain/library-sync/items';
 import { stampChangedFields } from '../../domain/library-sync/stamp';
+import { OPTIONAL_FIELD_EMPTY } from '../../domain/library-sync/merge';
 import type { Trip } from '../../schema/trip';
 import { idPattern, LIBRARY_QUOTA, pushItems, type PushItem } from '../library-sync/library';
 import { SyncHttpError } from '../library-sync/http';
@@ -315,6 +316,12 @@ export async function undoChanges(
         change.before_doc === null
           ? { ...now0, deletedAt: at }
           : stampChangedFields(now0, JSON.parse(change.before_doc) as AnyItem, at);
+      if (change.before_doc !== null) {
+        for (const [key, value] of Object.entries(OPTIONAL_FIELD_EMPTY[change.kind])) {
+          if (Object.hasOwn(now0, key) && !Object.hasOwn(doc, key))
+            (doc as Record<string, unknown>)[key] = { value, updatedAt: at };
+        }
+      }
       return {
         kind: change.kind,
         id: change.item_id,

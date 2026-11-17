@@ -193,6 +193,27 @@ const named = <K extends ItemKind>(name: string, kind: K): { a: ItemDocOf[K]; b:
   return { a: pair.a as ItemDocOf[K], b: pair.b as ItemDocOf[K] };
 };
 
+it('관계 검증 실패로 문서를 통째로 골라도 다른 쪽의 선택 필드는 남긴다', () => {
+  const { a, b } = named('여행 관계 위반 전체 선택', 'trip');
+  const optional = {
+    ...a,
+    legTransit: f(['place00001>place00002'], T1),
+    legMinutes: f({ 'place00001>place00002': 50 }, T1),
+  };
+  for (const [left, right] of [
+    [optional, b],
+    [b, optional],
+  ] as const) {
+    const result = mergeItem('trip', left, right);
+    expect(result.whole).toBeDefined();
+    expect(result.doc).toEqual({
+      ...b,
+      legTransit: optional.legTransit,
+      legMinutes: optional.legMinutes,
+    });
+  }
+});
+
 describe('필드 병합', () => {
   it('늦은 메모와 진 쪽 경로/시각을 남긴다', () => {
     const { a, b } = named('메모 시각', 'place');

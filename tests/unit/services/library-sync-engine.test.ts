@@ -16,6 +16,7 @@ import {
   writeSession,
   readSession,
   readBase,
+  writeBase,
   readConflicts,
 } from 'src/services/library-sync/storage';
 import { createMemoryStorage } from 'src/repositories/edit-layer-repo';
@@ -126,6 +127,40 @@ async function device(
   };
   return { storage, api, engine, state, deps, runtime, edit };
 }
+it('선택 필드는 업데이트 뒤 한 번 다시 받고 실패한 회차는 완료로 기록하지 않는다', async () => {
+  const server = createSyncMemoryServer();
+  disposers.push(() => server.db.close());
+  const saved = { ...p, review: f('좋음') };
+  const a = await device(server, { ...emptyLibrary(), places: { [p.id]: saved } });
+  await a.engine.connect('upload');
+  await a.engine.runNow('manual');
+  expect(readSyncMeta(a.storage).cursor!.rev).toBeGreaterThan(0);
+  await a.runtime.runPromise(
+    Effect.flatMap(LibraryStore, (store) =>
+      store.update((current) => Effect.succeed({ ...current, places: { [p.id]: p } })),
+    ),
+  );
+  const base = readBase(a.storage);
+  writeBase(a.storage, base.userId!, {
+    ...base.items,
+    'place:place00001': { ...base.items['place:place00001']!, hash: hashItem(p) },
+  });
+  writeSyncMeta(a.storage, { ...readSyncMeta(a.storage), fieldsRefresh: undefined });
+  const changes = vi
+    .spyOn(a.api, 'changes')
+    .mockResolvedValueOnce({ ok: false, kind: 'server', status: 500 });
+  await a.engine.runNow('manual');
+  expect(readSyncMeta(a.storage).fieldsRefresh).toBeUndefined();
+  expect((await a.engine.runNow('manual')).phase).toBe('synced');
+  expect(changes.mock.calls[1]?.[0]).toMatchObject({ since: 0, after: '' });
+  expect(a.state.lib.places[p.id]).toEqual(saved);
+  expect(readSyncMeta(a.storage).fieldsRefresh).toBe(1);
+  const cursor = readSyncMeta(a.storage).cursor!;
+  changes.mockClear();
+  await a.engine.runNow('manual');
+  expect(changes.mock.calls[0]?.[0]).toMatchObject({ since: cursor.rev, after: cursor.key });
+});
+
 it('두 기기의 올리기·받기·충돌 복원과 연결 해제를 끝까지 처리한다', async () => {
   const server = createSyncMemoryServer();
   disposers.push(() => server.db.close());

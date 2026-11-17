@@ -60,7 +60,7 @@ const stored = async () =>
     (await db.prepare('SELECT doc FROM library_items').first<{ doc: string }>())!.doc,
   ) as Trip;
 const oldClient = (doc: Trip): Trip => {
-  const rest: Trip = { ...doc, title: f('이베리아 여행', t2) };
+  const rest = { ...doc, title: f('이베리아 여행', t2) };
   delete rest.legTransit;
   delete rest.legMinutes;
   return rest;

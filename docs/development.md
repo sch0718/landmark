@@ -197,6 +197,9 @@ curl -H 'Origin: http://localhost:8788' 'http://localhost:8788/api/place?url=htt
 
 본인이 설정에서 켠 기기끼리 장소·라벨·여행·약속·폴더 연결을 D1으로 맞춥니다. 서버에는 암호화하지 않고 저장하므로 운영자가 내용을 볼 수 있습니다. 화면 설정과 약속 주최자 연결은 기기별입니다. [설계서](superpowers/specs/2026-10-29-library-sync-design.md)의 「사용자가 할 일」에 Firebase·카카오·네이버 앱 등록, 허용 계정 등록 및 미리보기 확인 절차가 있습니다. 외부 계정·키 생성과 Pages 변수 등록은 사용자가 직접 합니다.
 
+선택 필드는 키를 생략해도 서버의 기존 값을 남기며, 지울 때는 `OPTIONAL_FIELD_EMPTY`의 빈 값과 새 `updatedAt`을 보냅니다. AI 되돌리기도 같은 규칙을 따릅니다.
+선택 필드를 더하면 `src/domain/library-sync/merge.ts`의 표에 등록하고 `sync-engine.ts`의 `FIELDS_REFRESH`를 1 올립니다. 기기마다 한 번 커서 0부터 다시 받아 같은 rev의 미변경 항목과 기준 해시를 갱신하며, 받지 못한 항목을 묘비로 만들지는 않습니다.
+
 Pages 대시보드의 Variables and Secrets에서 Production과 Preview에 각각 등록합니다. 실제 값과 시크릿은 저장소에 기록하지 않습니다.
 
 | 이름 | 종류 | 값 |

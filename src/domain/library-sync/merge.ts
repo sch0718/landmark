@@ -14,6 +14,29 @@ import {
 export type Loser = { path: string; side: 'a' | 'b'; value: unknown; updatedAt: string };
 export type MergeResult<T> = { doc: T; losers: Loser[]; whole?: 'a' | 'b' };
 
+/** 선택 필드는 키 생략으로 지우지 않고 빈 값과 새 시각을 남긴다. */
+export const OPTIONAL_FIELD_EMPTY: Record<ItemKind, Record<string, unknown>> = {
+  place: { visitedOn: null, review: '' },
+  label: { emoji: null },
+  trip: { legTransit: [], legMinutes: {} },
+  folder: {},
+  meeting: {},
+};
+
+/** 옛 클라이언트가 모르는 선택 필드를 빠뜨려도 저장된 값은 남긴다. */
+export function keepMissingFields<K extends ItemKind>(
+  kind: K,
+  from: ItemDocOf[K],
+  doc: ItemDocOf[K],
+): ItemDocOf[K] {
+  let result = doc;
+  for (const key of Object.keys(OPTIONAL_FIELD_EMPTY[kind])) {
+    if (!Object.hasOwn(doc, key) && Object.hasOwn(from, key))
+      result = { ...result, [key]: (from as Record<string, unknown>)[key] };
+  }
+  return result;
+}
+
 export function mergeDeletion(a: AnyItem, b: AnyItem, baseDeleted?: boolean): string | null {
   const aDeleted = isDeleted(a);
   const bDeleted = isDeleted(b);
@@ -185,7 +208,13 @@ export function mergeItem<K extends ItemKind>(
     const at = lastTouched(a);
     const bt = lastTouched(b);
     const winner = at > bt || (at === bt && stableStringify(a) >= stableStringify(b)) ? 'a' : 'b';
-    doc = orderDoc(a, { ...(winner === 'a' ? a : b), deletedAt: result.deletedAt } as ItemDocOf[K]);
+    doc = orderDoc(
+      a,
+      keepMissingFields(kind, winner === 'a' ? b : a, {
+        ...(winner === 'a' ? a : b),
+        deletedAt: result.deletedAt,
+      } as ItemDocOf[K]),
+    );
     return { doc, losers: [], whole: winner === 'a' ? 'b' : 'a' };
   }
   return { doc, losers };
