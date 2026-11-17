@@ -397,3 +397,8 @@ yarn size --require-lazy TripsPage --require-lazy TripPlannerPage --require-lazy
 첫 화면에 남은 여행 기능(스펙 §2 경계, source map으로 어림한 원본 약 27KB): 보관함 화면(`LibraryPage`)이 직접 쓰는 `여행에 넣기`(`TripPickerDialog`)·`이 지역으로 여행 만들기`(`TripFormDialog`와 그 안의 `PlacePickerDialog`)·후보 안내(`candidate-notice`)와 이들이 쓰는 여행 조작이다. 추가 흐름의 여행 대상(`add-place/trip-target`)은 추가 칸 단계와 함께 나눠 받는다. 모듈로는 `src/sections/trips/`의 `TripPickerDialog`·`TripFormDialog`·`PlacePickerDialog`·`trip-dates`·`candidate-notice`·`planner/use-trip-undo`, `src/domain/trips/`의 `ops`·`query`·`undo`·`geo`, `src/schema/trip.ts`다. 여행 목록·계획 화면(`TripsPage`·`TripPlannerPage`)과 계획 화면의 나머지(`use-trip-undo` 밖의 `planner/*`, `domain/trips/optimize`·`schedule`, @dnd-kit)는 나눠 받는다. 이 경계를 맞추려고 기능을 바꾸지 않았다.
 
 예산: `perf-budget.json`은 `{ "initialJsGzipMax": 327680, "measuredAt": "2026-10-14", "measuredInitialJsGzip": 297769 }`이다. 상한은 잰 첫 화면 JS gzip × 1.10(327545.9)을 1024바이트 단위로 올린 값이다. 이 상한을 넘으면 `yarn build:ci`(CI·배포 빌드)가 실패한다. 상한을 올려야 하면 `perf-budget.json`을 고치고 그 이유를 이 절에 적는다(스크립트가 자동으로 고치지 않는다).
+
+- 2026-11-17 상한을 327,680에서 328,704(+1 KiB)로 올렸다. 이유:
+  - 운영(Cloudflare Pages Production) 빌드가 327,844로 예산을 164바이트 넘어 배포가 두 번 멈췄다(#119 새 버전 안내 +52, #118 나눠 받기 실패 안내 +84).
+  - 같은 커밋을 로컬·미리보기에서 재면 326,812다. 운영에는 그보다 약 1 KiB가 더 붙는다(운영 환경변수 값). 그래서 로컬·PR 검사로는 넘는 것을 미리 잡지 못했다.
+  - 이번에 올린 1 KiB는 이 운영 쪽 차이만큼이다. 새 기능의 여유로 쓰지 않는다.
