@@ -1,4 +1,9 @@
 /* 지도 페이지는 iframe을 꽉 채운다. 마커 색은 map.ts가 파스텔 토큰으로 칠한다(지도·로고는 네이버 SDK가 그린다). */
+/* 스크롤바·기본 배경도 다크 모드를 따르게 한다. 띄우는 share-viewer도 light dark다. */
+:root {
+  color-scheme: light dark;
+}
+
 html,
 body {
   margin: 0;
