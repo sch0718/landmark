@@ -1,0 +1,107 @@
+{
+  "$comment": "legacy-scan(modern-web-guidance) 후보 중 검토를 마친 것. scripts/legacy-scan-check.mjs가 여기 없는 새 후보만 실패로 본다. 줄 번호 대신 규칙·파일·줄 내용으로 알아본다.",
+  "reviewed": [
+    {
+      "rule": "ime-safe-enter-submit",
+      "file": "sections/trips/planner/MapCard.tsx",
+      "lineContent": "if (event.key === 'Enter') commitStay();",
+      "reason": "type=\"number\" 입력이라 한글 조합으로 잃을 글자가 없고, blur에서도 같은 값이면 저장하지 않음(#124 검토, drop)"
+    },
+    {
+      "rule": "js/copying-array-methods",
+      "file": "domain/library/import-share.ts",
+      "lineContent": "return [...doc.labels]",
+      "reason": "toSorted로 바꿔도 동작이 같음. 그 파일을 다른 이유로 고칠 때 함께 바꿈(#124 검토, 보류)"
+    },
+    {
+      "rule": "js/copying-array-methods",
+      "file": "domain/library/legacy-import.ts",
+      "lineContent": "[...items].sort((a, b) => (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0));",
+      "reason": "toSorted로 바꿔도 동작이 같음. 그 파일을 다른 이유로 고칠 때 함께 바꿈(#124 검토, 보류)"
+    },
+    {
+      "rule": "js/copying-array-methods",
+      "file": "domain/library/legacy-import.ts",
+      "lineContent": "[...p.labelNames].sort(),",
+      "reason": "toSorted로 바꿔도 동작이 같음. 그 파일을 다른 이유로 고칠 때 함께 바꿈(#124 검토, 보류)"
+    },
+    {
+      "rule": "js/copying-array-methods",
+      "file": "domain/library/query.ts",
+      "lineContent": "return [...places].sort((a, b) => {",
+      "reason": "toSorted로 바꿔도 동작이 같음. 그 파일을 다른 이유로 고칠 때 함께 바꿈(#124 검토, 보류)"
+    },
+    {
+      "rule": "js/copying-array-methods",
+      "file": "domain/trip-collab/merge.ts",
+      "lineContent": "while (previous !== JSON.stringify(groups.map((g) => [...g].sort()).sort())) {",
+      "reason": "[...g]는 Set을 펼치는 코드라 toSorted로 바꿀 수 없음(#124 검토, drop)"
+    },
+    {
+      "rule": "js/copying-array-methods",
+      "file": "domain/trip-collab/merge.ts",
+      "lineContent": "previous = JSON.stringify(groups.map((g) => [...g].sort()).sort());",
+      "reason": "[...g]는 Set을 펼치는 코드라 toSorted로 바꿀 수 없음(#124 검토, drop)"
+    },
+    {
+      "rule": "js/copying-array-methods",
+      "file": "domain/trips/hours.ts",
+      "lineContent": "const sorted = [...segments].sort((a, b) => a.start.min - b.start.min);",
+      "reason": "toSorted로 바꿔도 동작이 같음. 그 파일을 다른 이유로 고칠 때 함께 바꿈(#124 검토, 보류)"
+    },
+    {
+      "rule": "js/copying-array-methods",
+      "file": "domain/trips/optimize.ts",
+      "lineContent": "const byId = [...points].sort((a, b) => compareId(a.id, b.id));",
+      "reason": "toSorted로 바꿔도 동작이 같음. 그 파일을 다른 이유로 고칠 때 함께 바꿈(#124 검토, 보류)"
+    },
+    {
+      "rule": "js/copying-array-methods",
+      "file": "sections/place/label-picker-order.ts",
+      "lineContent": "return [...labels]",
+      "reason": "toSorted로 바꿔도 동작이 같음. 그 파일을 다른 이유로 고칠 때 함께 바꿈(#124 검토, 보류)"
+    },
+    {
+      "rule": "js/copying-array-methods",
+      "file": "sections/place/label-picker-order.ts",
+      "lineContent": "return [...labels].sort((x, y) => (rank.get(x.id) ?? -1) - (rank.get(y.id) ?? -1));",
+      "reason": "toSorted로 바꿔도 동작이 같음. 그 파일을 다른 이유로 고칠 때 함께 바꿈(#124 검토, 보류)"
+    },
+    {
+      "rule": "js/copying-array-methods",
+      "file": "services/folder-watch/folder-watch.ts",
+      "lineContent": "return hashItem([[...freshSids].sort(), [...missingSids].sort()]);",
+      "reason": "toSorted로 바꿔도 동작이 같음. 그 파일을 다른 이유로 고칠 때 함께 바꿈(#124 검토, 보류)"
+    },
+    {
+      "rule": "js/copying-array-methods",
+      "file": "services/library-sync/storage.ts",
+      "lineContent": "const latest = [...items].sort((a, b) => a.at.localeCompare(b.at)).slice(-50);",
+      "reason": "toSorted로 바꿔도 동작이 같음. 그 파일을 다른 이유로 고칠 때 함께 바꿈(#124 검토, 보류)"
+    },
+    {
+      "rule": "js/copying-array-methods",
+      "file": "services/trip-collab/store.ts",
+      "lineContent": "const sorted = [...records].sort((a, b) => b.syncedAt.localeCompare(a.syncedAt));",
+      "reason": "toSorted로 바꿔도 동작이 같음. 그 파일을 다른 이유로 고칠 때 함께 바꿈(#124 검토, 보류)"
+    },
+    {
+      "rule": "js/copying-array-methods",
+      "file": "services/trip-live/store.ts",
+      "lineContent": "return [...records]",
+      "reason": "toSorted로 바꿔도 동작이 같음. 그 파일을 다른 이유로 고칠 때 함께 바꿈(#124 검토, 보류)"
+    },
+    {
+      "rule": "js/copying-array-methods",
+      "file": "share-viewer/render.ts",
+      "lineContent": "const labels = [...doc.labels].sort((a, b) => a.order - b.order);",
+      "reason": "toSorted로 바꿔도 동작이 같음. 그 파일을 다른 이유로 고칠 때 함께 바꿈(#124 검토, 보류)"
+    },
+    {
+      "rule": "js/promise-with-resolvers",
+      "file": "sections/meetings/use-online-meeting.ts",
+      "lineContent": "const flight = new Promise<void>((resolve) => {",
+      "reason": "tsconfig lib가 ES2023이라 올려야 하는데 이득이 없음(#124 검토, drop)"
+    }
+  ]
+}

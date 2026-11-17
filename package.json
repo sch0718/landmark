@@ -33,7 +33,8 @@
     "effect:source": "node scripts/effect-source.mjs",
     "orphans": "node scripts/find-orphans.mjs",
     "size": "node scripts/check-bundle-size.mjs",
-    "build:ci": "yarn validate && yarn typecheck && yarn test && yarn build && yarn size --require-lazy MeetingsPage --require-lazy MeetingEditorPage --require-lazy MeetLinkPage --require-lazy TripsPage --require-lazy TripPlannerPage --require-lazy SettingsPage --require-lazy LabelsPage --require-lazy LegacyImportPage --require-lazy LinkInputPanel --require-lazy CandidateCard --require-lazy FolderPreview --require-lazy PinCard --require-lazy SharePickPanel --require-lazy SharePreview --require-lazy ExportHtmlDialog --require-lazy RestoreDialog --require-lazy TripTodayPage --require-lazy TripShareDialog --require-lazy TripCollabDialog --require-lazy CollabConflictDialog --require-lazy TripCollabJoinPage --require-lazy TripLiveShareDialog --require-lazy TripLiveLinkPage --require-lazy LabelPickerDialog --require-lazy LabelFilterDialog --require-lazy ChipScrollButton --require-lazy TripPickerDialog --require-lazy TripFormDialog --require-lazy label-create --require-lazy HelpIndexPage --require-lazy HelpPage --require-lazy HelpIntroDialog --require-lazy PrivacyPage --require-lazy SyncSection --require-lazy AuthCallbackPage --require-lazy sync-engine --require-lazy firebaseImpl --require-lazy AgentSection --require-lazy AgentInboxDialog --require-lazy inbox-check --require-lazy ServerBackupSection --require-lazy auto-backup --require-lazy folder-watch --require-lazy app-update && yarn build:map",
+    "legacy-scan": "node scripts/legacy-scan-check.mjs",
+    "build:ci": "yarn validate && yarn legacy-scan && yarn typecheck && yarn test && yarn build && yarn size --require-lazy MeetingsPage --require-lazy MeetingEditorPage --require-lazy MeetLinkPage --require-lazy TripsPage --require-lazy TripPlannerPage --require-lazy SettingsPage --require-lazy LabelsPage --require-lazy LegacyImportPage --require-lazy LinkInputPanel --require-lazy CandidateCard --require-lazy FolderPreview --require-lazy PinCard --require-lazy SharePickPanel --require-lazy SharePreview --require-lazy ExportHtmlDialog --require-lazy RestoreDialog --require-lazy TripTodayPage --require-lazy TripShareDialog --require-lazy TripCollabDialog --require-lazy CollabConflictDialog --require-lazy TripCollabJoinPage --require-lazy TripLiveShareDialog --require-lazy TripLiveLinkPage --require-lazy LabelPickerDialog --require-lazy LabelFilterDialog --require-lazy ChipScrollButton --require-lazy TripPickerDialog --require-lazy TripFormDialog --require-lazy label-create --require-lazy HelpIndexPage --require-lazy HelpPage --require-lazy HelpIntroDialog --require-lazy PrivacyPage --require-lazy SyncSection --require-lazy AuthCallbackPage --require-lazy sync-engine --require-lazy firebaseImpl --require-lazy AgentSection --require-lazy AgentInboxDialog --require-lazy inbox-check --require-lazy ServerBackupSection --require-lazy auto-backup --require-lazy folder-watch --require-lazy app-update && yarn build:map",
     "prepare": "husky"
   },
   "lint-staged": {
@@ -98,6 +99,7 @@
     "husky": "^9.1.7",
     "jsdom": "^30.1.1",
     "lint-staged": "^17.6.0",
+    "modern-web-guidance": "1.0.1",
     "prettier": "^3.9.9",
     "tsx": "^4.23.15",
     "typescript": "~6.0",
