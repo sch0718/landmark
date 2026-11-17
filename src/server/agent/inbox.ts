@@ -71,7 +71,7 @@ export async function checkInboxDoc(
   const result = validateShareValue(json, AGENT_INBOX_LIMITS.places);
   if (!result.ok) throw new SyncHttpError(422, 'invalid', { reason: result.error });
   const doc = result.doc;
-  if (doc.version !== 2) throw new SyncHttpError(422, 'invalid', { reason: 'not-trip' });
+  if (doc.version === 1) throw new SyncHttpError(422, 'invalid', { reason: 'not-trip' });
   const problem = agentDocProblem(doc);
   if (problem) throw new SyncHttpError(422, 'invalid', { reason: problem });
 
@@ -83,7 +83,11 @@ export async function checkInboxDoc(
       actualLegs.add(legKey(points[i]!, points[i + 1]!));
     }
   });
-  if (Object.keys(trip.legModes).some((key) => !actualLegs.has(key))) {
+  if (
+    [...Object.keys(trip.legModes), ...Object.keys(trip.legMinutes ?? {})].some(
+      (key) => !actualLegs.has(key),
+    )
+  ) {
     throw new SyncHttpError(422, 'invalid', { reason: 'leg-modes' });
   }
   const importProblem = importedItemProblem(doc);

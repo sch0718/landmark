@@ -104,3 +104,19 @@ describe('공동 계획 투영', () => {
     }
   });
 });
+
+it('대중교통·분을 투영하고 빈 분은 옛 지문에서 생략한다', () => {
+  const trip = buildLiveLibrary().trips.trip000001!;
+  const key = 'place00001>place00002';
+  const f = <T>(value: T) => ({ value, updatedAt: trip.createdAt });
+  const p = projectLocalTrip(
+    { ...trip, legTransit: f([key]), legMinutes: f({ [key]: 30 }) },
+    (s) => s,
+    ['day00001', 'day00002'],
+  );
+  expect(p.legModes[key]).toBe('transit');
+  expect(p.legMinutes).toEqual({ [key]: 30 });
+  const old = mkPlan({ days: [['a']] });
+  expect(planKey({ ...old, legMinutes: {} })).toBe(planKey(old));
+  expect(checkPlan({ ...old, legMinutes: { bad: 0 } }).length).toBeGreaterThan(0);
+});

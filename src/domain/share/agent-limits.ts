@@ -1,4 +1,4 @@
-import type { ShareDocV2 } from 'src/schema/share';
+import type { ShareTripDoc } from 'src/schema/share';
 import { SHARE_TRIP_LIMITS } from './check-share-trip';
 
 export const AGENT_INBOX_LIMITS = {
@@ -66,9 +66,12 @@ export function agentRawProblem(
   if (json.places.length > AGENT_INBOX_LIMITS.places) return 'too-many';
   if (hasLabels) return 'labels';
   if (hasPath) return 'path';
-  let count = 0;
-  for (const key in trip.legModes) {
-    if (Object.hasOwn(trip.legModes, key) && ++count > maxLegModes) return 'leg-modes';
+  if ('legMinutes' in trip && !isRecord(trip.legMinutes)) return 'corrupt';
+  for (const settings of [trip.legModes, trip.legMinutes ?? {}]) {
+    let count = 0;
+    for (const key in settings) {
+      if (Object.hasOwn(settings, key) && ++count > maxLegModes) return 'leg-modes';
+    }
   }
   return null;
 }
@@ -87,7 +90,7 @@ export const AGENT_PLACE_LIMITS = {
  * 에이전트 문서는 장소 라벨을 싣지 않는다(설계 「하지 않는 것」). 라벨 수를 묶지 않으면
  * 서버의 모의 가져오기가 라벨마다 보관함을 복사해 작은 요청으로도 CPU를 오래 쓴다.
  */
-export function agentDocProblem(doc: ShareDocV2): 'title' | 'labels' | 'place-too-long' | null {
+export function agentDocProblem(doc: ShareTripDoc): 'title' | 'labels' | 'place-too-long' | null {
   const limits = AGENT_PLACE_LIMITS;
   if (doc.title.length > limits.titleChars || doc.trips[0]!.title.length > limits.titleChars)
     return 'title';

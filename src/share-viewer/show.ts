@@ -29,7 +29,7 @@ export function showShareDoc(
   };
   const app = opts.app;
   let handle: ReturnType<typeof renderViewer>;
-  if (doc.version === 2) {
+  if (doc.version !== 1) {
     // 길찾기 링크는 좁은 화면(767px 이하)에서 앱 주소를 쓴다. 폭이 바뀌면 지금 링크도 바꾼다(스펙 §4.4).
     const narrow = window.matchMedia('(max-width: 767px)');
     const trip = renderTripViewer(root, doc, port, {

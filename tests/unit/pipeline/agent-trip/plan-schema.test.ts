@@ -443,7 +443,7 @@ describe('계획 오류 경로와 JSON Schema', () => {
     expect(bounds[1]).toMatchObject({ minimum: 33, maximum: 39 });
     const modes = resolve(root.properties.legModes);
     expect(modes.type).toBe('object');
-    expect(resolve(modes.additionalProperties).enum).toEqual(['car', 'walk']);
+    expect(resolve(modes.additionalProperties).enum).toEqual(['car', 'walk', 'transit']);
     expect(parsePlan({ ...plan(), legModes: { 'tofu>beach': 'car' } }).legModes).toEqual({
       'tofu>beach': 'car',
     });

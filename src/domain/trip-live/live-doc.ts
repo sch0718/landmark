@@ -1,5 +1,5 @@
 import { parseLinkDoc } from '../../share-viewer/parse';
-import type { ShareDocV2 } from '../../schema/share';
+import type { ShareTripDoc } from '../../schema/share';
 
 export const LIVE_DOC_LATEST = 2 as const;
 export const LIVE_ID_PATTERN = /^[a-z0-9]{10}$/;
@@ -15,7 +15,7 @@ export type LiveTripOptions = { includeMemo: boolean; includeCandidates: boolean
 export type LiveTripDoc = {
   format: 'landmark-trip-live';
   v: 1 | 2;
-  share: ShareDocV2;
+  share: ShareTripDoc;
   ids: { days: string[]; stops: string[][] };
   options: LiveTripOptions;
 };
@@ -52,7 +52,13 @@ export function parseLiveDoc(value: unknown): LiveTripDoc | null {
     const { includeMemo, includeCandidates } = value.options;
     if (typeof includeMemo !== 'boolean' || typeof includeCandidates !== 'boolean') return null;
     const share = parseLinkDoc(value.share);
-    if (share?.version !== 2 || share.trips.length !== 1 || share.places.length === 0) return null;
+    if (
+      share === null ||
+      share.version === 1 ||
+      share.trips.length !== 1 ||
+      share.places.length === 0
+    )
+      return null;
     if (value.v === 2 && share.places.some((place) => !LIVE_ID_PATTERN.test(place.id))) return null;
     const days = share.trips[0]!.days;
     const { days: dayIds, stops } = value.ids;

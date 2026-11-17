@@ -1,6 +1,7 @@
 import { Schema } from 'effect';
 import { LABEL_COLORS, type LabelColorName } from 'src/schema/label-colors';
 import { CalendarDate, HHmm, IsoDateTime, Lat, Lng } from 'src/schema/common';
+import { LegMinutes } from 'src/schema/trip';
 import { LIBRARY_LIMITS } from 'src/schema/library-base';
 
 /**
@@ -23,7 +24,7 @@ export type SharePlace = {
   kakaoId?: string;
   /** 구글 장소일 때만 있다. */
   googleId?: string;
-  /** v2 문서에만 있다. 메모 포함을 켰고 한 줄 평이 있을 때만 있다. */
+  /** v2·v3 문서에만 있다. 메모 포함을 켰고 한 줄 평이 있을 때만 있다. */
   review?: string;
 };
 export type ShareStop = {
@@ -33,11 +34,11 @@ export type ShareStop = {
   /** 비면 뺀다. */
   note?: string;
 };
-export type ShareLegStatus = 'routed' | 'estimated' | 'no-route' | 'same-point';
+export type ShareLegStatus = 'routed' | 'estimated' | 'no-route' | 'same-point' | 'manual';
 export type ShareLeg = {
   from: string;
   to: string;
-  mode: 'car' | 'walk';
+  mode: 'car' | 'walk' | 'transit';
   durationS: number;
   distanceM: number;
   tollFare: number | null;
@@ -60,7 +61,8 @@ export type ShareTrip = {
   originId: string | null;
   candidateIds: string[];
   days: ShareDay[];
-  legModes: Record<string, 'car' | 'walk'>;
+  legModes: Record<string, 'car' | 'walk' | 'transit'>;
+  legMinutes?: Record<string, number>;
 };
 export type ShareDocV1 = {
   format: 'tripmap-share';
@@ -71,7 +73,9 @@ export type ShareDocV1 = {
   places: SharePlace[];
 };
 export type ShareDocV2 = Omit<ShareDocV1, 'version'> & { version: 2; trips: ShareTrip[] };
-export type ShareDoc = ShareDocV1 | ShareDocV2;
+export type ShareDocV3 = Omit<ShareDocV2, 'version'> & { version: 3 };
+export type ShareTripDoc = ShareDocV2 | ShareDocV3;
+export type ShareDoc = ShareDocV1 | ShareTripDoc;
 
 const ShareLabelSchema = Schema.Struct({
   id: Schema.String,
@@ -163,6 +167,31 @@ export const ShareDocV2Schema = Schema.Struct({
   labels: Schema.mutable(Schema.Array(ShareLabelSchema)),
   places: Schema.mutable(Schema.Array(SharePlaceV2Schema)),
   trips: Schema.mutable(Schema.Array(ShareTripSchema)).check(
+    Schema.isMinLength(1),
+    Schema.isMaxLength(1),
+  ),
+});
+
+/** v3에서만 대중교통·직접 입력 시간을 허용한다. v2 스키마는 그대로 둔다. */
+const ShareLegV3Schema = Schema.Struct({
+  ...ShareLegSchema.fields,
+  mode: Schema.Literals(['car', 'walk', 'transit']),
+  status: Schema.Literals(['routed', 'estimated', 'no-route', 'same-point', 'manual']),
+});
+const ShareDayV3Schema = Schema.Struct({
+  ...ShareDaySchema.fields,
+  legs: Schema.mutable(Schema.Array(ShareLegV3Schema)),
+});
+const ShareTripV3Schema = Schema.Struct({
+  ...ShareTripSchema.fields,
+  days: Schema.mutable(Schema.Array(ShareDayV3Schema)),
+  legModes: Schema.Record(Schema.String, Schema.Literals(['car', 'walk', 'transit'])),
+  legMinutes: Schema.optionalKey(Schema.Record(Schema.String, LegMinutes)),
+});
+export const ShareDocV3Schema = Schema.Struct({
+  ...ShareDocV2Schema.fields,
+  version: Schema.Literal(3),
+  trips: Schema.mutable(Schema.Array(ShareTripV3Schema)).check(
     Schema.isMinLength(1),
     Schema.isMaxLength(1),
   ),

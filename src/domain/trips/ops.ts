@@ -1,7 +1,7 @@
-import { setField, type Field } from 'src/domain/library/lww';
+import { setField, setOptionalField, type Field } from 'src/domain/library/lww';
 import type { OpCtx, OpResult } from 'src/domain/library/ops';
 import { autoMode, haversineM, WALK_MAX_M } from 'src/domain/trips/geo';
-import { legKey, locatePlace, type TripLocation } from 'src/domain/trips/query';
+import { legBetween, legKey, locatePlace, type TripLocation } from 'src/domain/trips/query';
 import { LIBRARY_LIMITS, type Library } from 'src/schema/library';
 import { daysBetween, type Day, type Stop, type Trip } from 'src/schema/trip';
 
@@ -12,6 +12,7 @@ import { daysBetween, type Day, type Stop, type Trip } from 'src/schema/trip';
 export type TripOpError =
   | { _tag: 'TripTitleInvalid'; reason: 'empty' | 'too-long' }
   | { _tag: 'TripDatesInvalid'; reason: 'order' | 'too-many-days' }
+  | { _tag: 'LegMinutesInvalid'; minutes: number }
   | { _tag: 'AlreadyInTrip'; location: TripLocation }
   | { _tag: 'NotFound'; id: string }
   /** 미리보기(자동 나누기)를 만든 뒤 여행이 바뀌어 그 결과를 적용할 수 없다. */
@@ -491,7 +492,7 @@ export function setLegMode(
   tripId: string,
   fromId: string,
   toId: string,
-  mode: 'car' | 'walk',
+  mode: 'car' | 'walk' | 'transit',
   ctx: OpCtx,
 ): OpResult {
   return updateTrip(lib, tripId, (trip) => {
@@ -502,13 +503,68 @@ export function setLegMode(
     const straightM = haversineM([from.lng, from.lat], [to.lng, to.lat]);
     if (mode === 'walk' && straightM > WALK_MAX_M) return trip;
     const key = legKey(fromId, toId);
-    const current = trip.legModes.value;
-    // 이미 있던 키를 덮어쓰면 자리가 그대로라 직렬화 비교가 불필요한 갱신을 만들지 않는다.
-    const next =
-      mode === autoMode(straightM)
-        ? Object.fromEntries(Object.entries(current).filter(([k]) => k !== key))
-        : { ...current, [key]: mode };
-    return withField(trip, 'legModes', next, ctx.now);
+    const changedMode = legBetween(trip, from, to).mode !== mode;
+    let next = trip;
+    const transit = new Set(trip.legTransit?.value ?? []);
+    if (mode === 'transit') transit.add(key);
+    else transit.delete(key);
+    next = withOptionalField(next, 'legTransit', [...transit].sort(), [], ctx.now);
+    if (mode !== 'transit') {
+      const current = trip.legModes.value;
+      const modes =
+        mode === autoMode(straightM)
+          ? Object.fromEntries(Object.entries(current).filter(([k]) => k !== key))
+          : { ...current, [key]: mode };
+      next = withField(next, 'legModes', modes, ctx.now);
+    }
+    return changedMode ? withoutLegMinutes(next, key, ctx.now) : next;
+  });
+}
+
+/** 아직 쓰지 않은 빈 선택 필드는 만들지 않는다. */
+function withOptionalField<K extends 'legTransit' | 'legMinutes'>(
+  trip: Trip,
+  key: K,
+  value: NonNullable<Trip[K]>['value'],
+  empty: NonNullable<Trip[K]>['value'],
+  now: string,
+): Trip {
+  const current = trip[key] as Field<NonNullable<Trip[K]>['value']> | undefined;
+  const field = setOptionalField(current, value, empty, now);
+  return field === current ? trip : { ...trip, [key]: field };
+}
+
+function withoutLegMinutes(trip: Trip, key: string, now: string): Trip {
+  const rest = Object.fromEntries(
+    Object.entries(trip.legMinutes?.value ?? {}).filter(([k]) => k !== key),
+  );
+  return withOptionalField(trip, 'legMinutes', rest, {}, now);
+}
+
+/** 구간 시간(분). null은 직접 입력 해제, 1~1440 정수 이외에는 오류다. */
+export function setLegMinutes(
+  lib: Library,
+  tripId: string,
+  fromId: string,
+  toId: string,
+  minutes: number | null,
+  ctx: OpCtx,
+): OpResult {
+  if (minutes !== null && (!Number.isInteger(minutes) || minutes < 1 || minutes > 1440)) {
+    return fail({ _tag: 'LegMinutesInvalid', minutes });
+  }
+  return updateTrip(lib, tripId, (trip) => {
+    if (lib.places[fromId] === undefined) return notFound(fromId);
+    if (lib.places[toId] === undefined) return notFound(toId);
+    const key = legKey(fromId, toId);
+    if (minutes === null) return withoutLegMinutes(trip, key, ctx.now);
+    return withOptionalField(
+      trip,
+      'legMinutes',
+      { ...trip.legMinutes?.value, [key]: minutes },
+      {},
+      ctx.now,
+    );
   });
 }
 

@@ -252,3 +252,30 @@ it('해외만 있는 일정과 섞인 일정은 해외를 묻지 않고 국내 �
   expect(legStatus(hook.result.current)).toBeNull();
   expect(routes.calls).toHaveLength(2);
 });
+
+it('대중교통과 직접 입력 구간은 바로 답한 것으로 세고 조회 없이 공유 시간을 준다', async () => {
+  const routes = fakeRoutes(() => route(12, 1100));
+  const trip = {
+    ...makeTrip({ stops: [[P1, P2, P5]] }),
+    legTransit: { value: [`${P1}>${P2}`], updatedAt: '2026-10-13T00:00:00.000Z' },
+    legMinutes: { value: { [`${P2}>${P5}`]: 30 }, updatedAt: '2026-10-13T00:00:00.000Z' },
+  };
+  const lib = withTrip(plannerLibrary(), trip);
+  const { store } = await open(lib, { routes, path: '/trips' });
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <Provider store={store}>{children}</Provider>
+  );
+  const hook = renderHook(() => useTripLegs(TRIP, true), { wrapper });
+  expect(hook.result.current).toMatchObject({ total: 2, answered: 2 });
+  expect(legStatus(hook.result.current)).toBeNull();
+  const legs = dayLegs(lib, trip, 0);
+  expect(hook.result.current.routeOf(legs[0]!).status).toBe('estimated');
+  expect(hook.result.current.routeOf(legs[1]!)).toMatchObject({
+    status: 'manual',
+    durationS: 1800,
+  });
+  act(() => {
+    window.dispatchEvent(new Event('online'));
+  });
+  expect(routes.calls).toHaveLength(0);
+});

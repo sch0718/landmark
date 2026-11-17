@@ -1,8 +1,8 @@
 import { daysBetween } from 'src/lib/calendar';
-import type { ShareDocV2, ShareTrip } from 'src/schema/share';
+import type { ShareTripDoc, ShareTrip } from 'src/schema/share';
 
 /**
- * 공유 파일 v2의 관계 규칙(스펙 §5.2). Effect 없는 순수 함수라 보기 화면도 import한다.
+ * 공유 파일 v2·v3의 관계 규칙(스펙 §5.2). Effect 없는 순수 함수라 보기 화면도 import한다.
  * `src/schema/*`는 `import type`만 쓴다.
  */
 export const SHARE_TRIP_LIMITS = {
@@ -40,7 +40,7 @@ export function dayPoints(trip: ShareTrip, dayIndex: number): string[] {
 }
 
 /** 스펙 §5.2 표의 관계 규칙. 문제마다 한국어 한 줄, 없으면 []. */
-export function checkShareTrip(doc: ShareDocV2): string[] {
+export function checkShareTrip(doc: ShareTripDoc): string[] {
   const problems: string[] = [];
   const ids = new Set(doc.places.map((p) => p.id));
   if (ids.size !== doc.places.length) problems.push('장소 id가 겹쳐요');
@@ -111,10 +111,14 @@ export function checkShareTrip(doc: ShareDocV2): string[] {
       });
     });
 
-    for (const key of Object.keys(trip.legModes)) {
+    for (const key of new Set([
+      ...Object.keys(trip.legModes),
+      ...Object.keys(trip.legMinutes ?? {}),
+    ])) {
       const parts = key.split('>');
       if (parts.length !== 2 || !ids.has(parts[0]!) || !ids.has(parts[1]!)) {
-        problems.push(`${at}: legModes 키가 올바르지 않아요 (${key})`);
+        const field = Object.hasOwn(trip.legModes, key) ? 'legModes' : 'legMinutes';
+        problems.push(`${at}: ${field} 키가 올바르지 않아요 (${key})`);
       }
     }
   });

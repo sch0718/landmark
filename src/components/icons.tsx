@@ -39,6 +39,7 @@ import PanelLeftOpenIcon from '~icons/lucide/panel-left-open';
 import AlertIcon from '~icons/lucide/triangle-alert';
 
 import BedIcon from '~icons/lucide/bed';
+import BusIcon from '~icons/lucide/bus';
 import CarIcon from '~icons/lucide/car';
 import FootprintsIcon from '~icons/lucide/footprints';
 
@@ -47,6 +48,7 @@ export {
   HelpIcon,
   BedIcon,
   CarIcon,
+  BusIcon,
   FootprintsIcon,
   MapIcon,
   RouteIcon,

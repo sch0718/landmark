@@ -38,7 +38,7 @@ function fieldLabel(c: FieldConflict, name: (id: string) => string): string {
               ? `‘${place}’ 도착 시각 고정`
               : c.field === 'note'
                 ? `‘${place}’ 메모`
-                : `‘${name(c.legKey?.split('>')[0] ?? '')}’→‘${name(c.legKey?.split('>')[1] ?? '')}’ 이동 수단`;
+                : `‘${name(c.legKey?.split('>')[0] ?? '')}’→‘${name(c.legKey?.split('>')[1] ?? '')}’ ${c.legValues ? '이동 수단·구간 시간' : '이동 수단'}`;
 }
 export function CollabConflictDialog({
   open,
@@ -91,6 +91,18 @@ export function CollabConflictDialog({
             : `${listLabel(c.lists[0]!)} 장소 순서`
           : `${c.lists.map(listLabel).join('·')} 장소 배치`;
   const value = (c: FieldConflict, side: CollabSide) => {
+    if (c.field === 'legMode' && c.legValues) {
+      const { mode, minutes } = c.legValues[side];
+      const modeText =
+        mode === 'transit'
+          ? '대중교통'
+          : mode === 'walk'
+            ? '도보'
+            : mode === 'car'
+              ? '자동차'
+              : '자동';
+      return `${modeText} · ${minutes === undefined ? '구간 시간 지움' : `${minutes}분`}`;
+    }
     const v = c[side];
     return v === null || v === undefined || v === ''
       ? '없음'
@@ -99,9 +111,11 @@ export function CollabConflictDialog({
         : c.field === 'stayMin'
           ? `${v}분`
           : c.field === 'legMode'
-            ? v === 'walk'
-              ? '도보'
-              : '자동차'
+            ? v === 'transit'
+              ? '대중교통'
+              : v === 'walk'
+                ? '도보'
+                : '자동차'
             : String(v);
   };
   const chooseAll = (side: CollabSide) =>

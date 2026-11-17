@@ -1,6 +1,10 @@
 import { daysBetween } from '../../lib/calendar';
 import { checkPlan, NEW_DAY_START, type CollabDay, type CollabPlan, type CollabStop } from './plan';
 
+export type CollabLegValue = {
+  mode: CollabPlan['legModes'][string] | undefined;
+  minutes: number | undefined;
+};
 export type CollabSide = 'mine' | 'theirs';
 export type ListId = 'c' | `d${number}`;
 export type FieldConflict = {
@@ -12,6 +16,7 @@ export type FieldConflict = {
   stopId?: string;
   placeId?: string;
   legKey?: string;
+  legValues?: { mine: CollabLegValue; theirs: CollabLegValue };
   mine: unknown;
   theirs: unknown;
 };
@@ -256,21 +261,40 @@ function analyze(
   }
   const title = field({ id: 'title', field: 'title' }, base?.title, mine.title, theirs.title);
   const origin = field({ id: 'origin', field: 'origin' }, base?.origin, mine.origin, theirs.origin);
-  const legModes: CollabPlan['legModes'] = {};
+  const legModes: CollabPlan['legModes'] = {},
+    legMinutes: Record<string, number> = {};
+  const legValue = (p: CollabPlan | null, key: string): CollabLegValue => ({
+    mode: p?.legModes[key],
+    minutes: p?.legMinutes?.[key],
+  });
   for (const key of [
-    ...new Set([
-      ...Object.keys(base?.legModes ?? {}),
-      ...Object.keys(mine.legModes),
-      ...Object.keys(theirs.legModes),
-    ]),
+    ...new Set(
+      [base, mine, theirs].flatMap((p) => [
+        ...Object.keys(p?.legModes ?? {}),
+        ...Object.keys(p?.legMinutes ?? {}),
+      ]),
+    ),
   ].sort()) {
-    const mode = field(
-      { id: `legMode.${key}`, field: 'legMode', legKey: key },
-      base?.legModes[key],
-      mine.legModes[key],
-      theirs.legModes[key],
-    );
-    if (mode !== undefined) legModes[key] = mode;
+    const b = legValue(base, key),
+      m = legValue(mine, key),
+      t = legValue(theirs, key);
+    const result = pick(b, m, t, base !== null),
+      id = `legMode.${key}`;
+    if (result.conflict)
+      fields.push({
+        kind: 'field',
+        id,
+        field: 'legMode',
+        legKey: key,
+        mine: m.mode,
+        theirs: t.mode,
+        ...([b, m, t].some((v) => v.minutes !== undefined)
+          ? { legValues: { mine: m, theirs: t } }
+          : {}),
+      });
+    const value = result.conflict && choices[id] === 'theirs' ? t : result.value;
+    if (value.mode !== undefined) legModes[key] = value.mode;
+    if (value.minutes !== undefined) legMinutes[key] = value.minutes;
   }
   const days: CollabDay[] = [];
   const span = daysBetween(chosenPeriod.startDate, chosenPeriod.endDate);
@@ -328,6 +352,7 @@ function analyze(
       origin,
       candidates: [...(chosenLists.get('c')!.value ?? [])],
       legModes,
+      ...(Object.keys(legMinutes).length ? { legMinutes } : {}),
       days,
     },
     conflicts: [...placements, ...fields].sort((a, b) => a.id.localeCompare(b.id)),

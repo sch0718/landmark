@@ -21,7 +21,8 @@ export type CollabPlan = {
   endDate: string;
   origin: string | null;
   candidates: string[];
-  legModes: Record<string, 'car' | 'walk'>;
+  legModes: Record<string, 'car' | 'walk' | 'transit'>;
+  legMinutes?: Record<string, number>;
   days: CollabDay[];
 };
 export const NEW_DAY_START = '09:00';
@@ -34,6 +35,9 @@ export function planFromDoc(doc: LiveTripDoc): CollabPlan {
     origin: t.originId,
     candidates: [...t.candidateIds],
     legModes: { ...t.legModes },
+    ...(t.legMinutes && Object.keys(t.legMinutes).length
+      ? { legMinutes: { ...t.legMinutes } }
+      : {}),
     days: t.days.map((day, i) => ({
       id: doc.ids.days[i]!,
       startTime: day.startTime,
@@ -54,19 +58,16 @@ export function projectLocalTrip(
   dayIds: readonly string[],
 ): CollabPlan {
   if (dayIds.length !== trip.days.length) throw new Error('dayIds 길이가 Day 수와 다릅니다');
-  const legModes: CollabPlan['legModes'] = {};
-  for (const [key, mode] of Object.entries(trip.legModes.value)) {
-    const [a, b] = key.split('>');
-    const mapped = `${toServer(a!)}>${toServer(b!)}`;
-    if (!Object.hasOwn(legModes, mapped)) legModes[mapped] = mode;
-  }
+  const sourceModes: CollabPlan['legModes'] = { ...trip.legModes.value };
+  for (const key of trip.legTransit?.value ?? []) sourceModes[key] = 'transit';
+  const settings = mapLegSettings(sourceModes, trip.legMinutes?.value, toServer);
   return {
     title: trip.title.value,
     startDate: trip.startDate.value,
     endDate: trip.endDate.value,
     origin: trip.origin.value === null ? null : toServer(trip.origin.value),
     candidates: trip.candidates.value.map(toServer),
-    legModes,
+    ...settings,
     days: trip.days.map((day, i) => ({
       id: dayIds[i]!,
       startTime: day.startTime.value,
@@ -86,7 +87,10 @@ function sorted(value: unknown): unknown {
   return value;
 }
 export function planKey(plan: CollabPlan): string {
-  return JSON.stringify(sorted(plan));
+  const { legMinutes, ...rest } = plan;
+  return JSON.stringify(
+    sorted({ ...rest, ...(legMinutes && Object.keys(legMinutes).length ? { legMinutes } : {}) }),
+  );
 }
 export function samePlan(a: CollabPlan, b: CollabPlan): boolean {
   return planKey(a) === planKey(b);
@@ -115,8 +119,31 @@ export function checkPlan(plan: CollabPlan): string[] {
       place(s.placeId);
     }
   }
-  for (const key of Object.keys(plan.legModes))
+  for (const key of new Set([...Object.keys(plan.legModes), ...Object.keys(plan.legMinutes ?? {})]))
     if (!/^[a-z0-9]{10}>[a-z0-9]{10}$/.test(key))
       errors.push(`구간 키가 올바르지 않습니다: ${key}`);
+  for (const minutes of Object.values(plan.legMinutes ?? {}))
+    if (!Number.isInteger(minutes) || minutes < 1 || minutes > 1440)
+      errors.push('구간 시간이 올바르지 않습니다');
   return errors;
+}
+
+/** 같은 키로 합쳐진 장소는 첫 원본의 수단·시간을 함께 보존한다. */
+export function mapLegSettings(
+  modes: CollabPlan['legModes'],
+  minutes: CollabPlan['legMinutes'],
+  toPlace: (id: string) => string,
+): Pick<CollabPlan, 'legModes' | 'legMinutes'> {
+  const legModes: CollabPlan['legModes'] = {},
+    legMinutes: Record<string, number> = {},
+    seen = new Set<string>();
+  for (const key of new Set([...Object.keys(modes), ...Object.keys(minutes ?? {})])) {
+    const [a, b] = key.split('>');
+    const mapped = `${toPlace(a!)}>${toPlace(b!)}`;
+    if (seen.has(mapped)) continue;
+    seen.add(mapped);
+    if (modes[key] !== undefined) legModes[mapped] = modes[key];
+    if (minutes?.[key] !== undefined) legMinutes[mapped] = minutes[key];
+  }
+  return { legModes, ...(Object.keys(legMinutes).length ? { legMinutes } : {}) };
 }

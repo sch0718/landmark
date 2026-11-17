@@ -9,7 +9,7 @@ import { readShareHash } from 'src/domain/share/read-share';
 import type { Leg } from 'src/domain/trips/query';
 import { emptyLibrary, type Place } from 'src/schema/library';
 import { safeParse } from 'src/schema/parse';
-import { ShareDocV2Schema, type ShareDocV2 } from 'src/schema/share';
+import { ShareDocV2Schema, ShareDocV3Schema, type ShareTripDoc } from 'src/schema/share';
 import { randomId } from 'src/services/id-gen';
 import { hashDoc, importLink, viewLink } from 'src/share-viewer/encode';
 import type { BuiltLibrary } from './build-library';
@@ -19,7 +19,7 @@ import type { TripPlan } from './plan-schema';
 export { oversizedItems } from 'src/domain/share/agent-import-check';
 
 export type BuiltDoc = {
-  doc: ShareDocV2;
+  doc: ShareTripDoc;
   view: string;
   importHref: string;
   importHash: string;
@@ -68,7 +68,7 @@ function mergedIssues(
 /** 가져온 새 장소의 원본 이름·좌표로 문서 id를 찾고, 계획의 장소 경로로 되짚는다. */
 function oversizedPlacePath(
   place: Place,
-  doc: ShareDocV2,
+  doc: ShareTripDoc,
   built: BuiltLibrary,
   plan: TripPlan,
 ): string {
@@ -95,7 +95,9 @@ export async function buildDoc(
       includeCandidates: true,
     });
     if (doc === null) fail('internal', 'days', '공유할 여행을 찾지 못했어요');
-    const parsed = safeParse(ShareDocV2Schema, doc, { onExcessProperty: 'error' });
+    const parsed = safeParse(doc.version === 3 ? ShareDocV3Schema : ShareDocV2Schema, doc, {
+      onExcessProperty: 'error',
+    });
     if (!parsed.success) {
       throw new TripFailure(
         parsed.issues.map((issue) => ({
@@ -114,7 +116,7 @@ export async function buildDoc(
       );
     }
 
-    const stripped = hashDoc(doc) as ShareDocV2;
+    const stripped = hashDoc(doc) as ShareTripDoc;
     const input = { titleLabel: defaultTitleLabel(doc.title), appendMemo: true };
     const ctx = {
       now: opts.now.toISOString(),
@@ -127,6 +129,26 @@ export async function buildDoc(
       imported.createdId === undefined ? undefined : imported.lib.trips[imported.createdId];
     if (trip === undefined) fail('internal', 'days', '모의 가져오기가 새 여행을 만들지 못했어요');
     const received = doc.trips[0]!;
+    // 출발점·숙소가 Stop과 합쳐지면 Stop 개수가 같아도 자기 구간이 사라질 수 있다.
+    // 구간 키 병합·삭제로 대중교통 또는 직접 입력 시간을 잃는 문서는 보내지 않는다.
+    const transitCount = Object.values(received.legModes).filter(
+      (mode) => mode === 'transit',
+    ).length;
+    const minutesCount = Object.keys(received.legMinutes ?? {}).length;
+    if ((trip.legTransit?.value.length ?? 0) !== transitCount) {
+      fail(
+        'merged-places',
+        'legModes',
+        '가져올 때 장소가 합쳐져 대중교통 구간이 사라져요. 한 key로 합쳐 주세요',
+      );
+    }
+    if (Object.keys(trip.legMinutes?.value ?? {}).length !== minutesCount) {
+      fail(
+        'merged-places',
+        'legMinutes',
+        '가져올 때 장소가 합쳐져 직접 입력 시간이 사라져요. 한 key로 합쳐 주세요',
+      );
+    }
     if (
       trip.days.some((day, d) => day.stops.value.length !== received.days[d]!.stops.length) ||
       trip.candidates.value.length !== received.candidateIds.length

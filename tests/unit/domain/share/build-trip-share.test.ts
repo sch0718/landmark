@@ -414,3 +414,68 @@ it('이모지는 장소 공유 v1과 여행 공유 v2에 넣지 않는다', () =
     expect(JSON.stringify(doc)).not.toContain('🍽️');
   }
 });
+
+describe('대중교통·직접 입력 공유 형식', () => {
+  it('대중교통과 분을 담을 때 v3를 쓰고 고정 시간을 우선한다', () => {
+    const key = `${HOME}>${A}`;
+    const lib = makeLib({ legTransit: f([key]), legMinutes: f({ [key]: 30 }) });
+    const doc = buildTripShareDoc(lib, TRIP_ID, routed, opts)!;
+    expect(doc.version).toBe(3);
+    expect(doc.trips[0]!.legModes[key]).toBe('transit');
+    expect(doc.trips[0]!.legMinutes).toEqual({ [key]: 30 });
+    expect(doc.trips[0]!.days[0]!.legs[0]).toMatchObject({
+      mode: 'transit',
+      status: 'manual',
+      durationS: 1800,
+      path: [],
+      queriedAt: null,
+      tollFare: null,
+    });
+  });
+  it('담기지 않은 장소의 새 필드만 있으면 v2를 유지한다', () => {
+    const key = `${E}>${A}`;
+    const doc = buildTripShareDoc(
+      makeLib({ legTransit: f([key]), legMinutes: f({ [key]: 30 }) }),
+      TRIP_ID,
+      routed,
+      opts,
+    )!;
+    expect(doc.version).toBe(2);
+    expect(doc.trips[0]).not.toHaveProperty('legMinutes');
+  });
+});
+
+it.each(['transit', 'minutes'] as const)(
+  '새 %s 설정 하나만 있어도 경로 조회 없이 v3로 공유한다',
+  (setting) => {
+    const key = `${HOME}>${A}`;
+    const lib = makeLib(
+      setting === 'transit' ? { legTransit: f([key]) } : { legMinutes: f({ [key]: 12 }) },
+    );
+    const doc = buildTripShareDoc(
+      lib,
+      TRIP_ID,
+      (leg) => {
+        if (`${leg.from.id}>${leg.to.id}` === key) throw new Error('고정 시간은 조회하면 안 됨');
+        return routed(leg);
+      },
+      opts,
+    )!;
+    expect(doc.version).toBe(3);
+    expect(doc.trips[0]!.days[0]!.legs[0]!.status).toBe(
+      setting === 'transit' ? 'estimated' : 'manual',
+    );
+    if (setting === 'transit') expect(doc.trips[0]).not.toHaveProperty('legMinutes');
+  },
+);
+
+it('빈 선택 필드가 있어도 v2를 유지하고 빈 분 필드는 싣지 않는다', () => {
+  const doc = buildTripShareDoc(
+    makeLib({ legTransit: f([]), legMinutes: f({}) }),
+    TRIP_ID,
+    routed,
+    opts,
+  )!;
+  expect(doc.version).toBe(2);
+  expect(doc.trips[0]).not.toHaveProperty('legMinutes');
+});

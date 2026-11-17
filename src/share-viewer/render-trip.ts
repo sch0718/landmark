@@ -1,6 +1,6 @@
 import { formatClock, formatSlack, formatSpan } from 'src/domain/trips/schedule';
 import { NO_CATEGORY_COLOR, dayColor } from 'src/components/map/map-colors';
-import type { ShareDocV2, ShareLabel, ShareLeg, SharePlace } from 'src/schema/share';
+import type { ShareTripDoc, ShareLabel, ShareLeg, SharePlace } from 'src/schema/share';
 import {
   formatDistance,
   formatDuration,
@@ -23,7 +23,7 @@ import { dayView, placeIdOfPin, tripPins, type DayRow, type TripTab } from './tr
  * 시각은 `dayView`(앱과 같은 `computeSchedule`)가 계산하고, 지도는 `MapPort`로만 알린다.
  */
 
-const MODE_LABEL = { car: '자동차', walk: '도보' } as const;
+const MODE_LABEL = { car: '자동차', walk: '도보', transit: '대중교통' } as const;
 
 const START_PREFIX = 'start:';
 const END_PREFIX = 'end:';
@@ -31,6 +31,7 @@ const END_PREFIX = 'end:';
 /** 구간 문구 뒤에 붙는 상태(`routed`는 없음). */
 const STATUS_TEXT: Record<ShareLeg['status'], string | null> = {
   routed: null,
+  manual: '직접 입력',
   estimated: '직선 추정',
   'no-route': '경로 없음 · 직선 추정',
   'same-point': null,
@@ -41,7 +42,7 @@ const PANEL_ID = 'trip-panel';
 
 export function renderTripViewer(
   root: HTMLElement,
-  doc: ShareDocV2,
+  doc: ShareTripDoc,
   map: MapPort,
   opts: { app: string; compact(): boolean; initialTab?: TripTab },
 ): {
@@ -246,11 +247,11 @@ export function renderTripViewer(
     const to = placeById.get(leg.to);
     const abroad = from !== undefined && to !== undefined && isAbroadLeg(from, to);
     const parts = [
-      abroad
+      abroad && leg.status !== 'manual'
         ? `${MODE_LABEL[leg.mode]} 직선 ${formatDistance(leg.distanceM)} · 이동 시간은 구글맵에서 확인`
         : `${MODE_LABEL[leg.mode]} ${formatDuration(leg.durationS)} · ${formatDistance(leg.distanceM)}`,
     ];
-    const status = abroad ? null : STATUS_TEXT[leg.status];
+    const status = abroad && leg.status !== 'manual' ? null : STATUS_TEXT[leg.status];
     if (status !== null) parts.push(status);
     if (leg.tollFare !== null && leg.tollFare > 0) {
       parts.push(`통행료 ${leg.tollFare.toLocaleString('ko-KR')}원`);

@@ -22,7 +22,7 @@ import {
 import { fieldSx } from 'src/components/field-style';
 import { localDate } from 'src/lib/local-date';
 import { labelNameIssue } from 'src/schema/library';
-import type { ShareDoc, ShareDocV2 } from 'src/schema/share';
+import type { ShareDoc, ShareTripDoc } from 'src/schema/share';
 import { resultMessage } from 'src/sections/add-place/shared';
 import { useLibraryQuery } from 'src/sections/library/use-library-query';
 import { ShareLabelRows } from 'src/sections/share-import/ShareLabelRows';
@@ -71,10 +71,10 @@ export function SharePreview({
       ),
   );
   // v2 문서면 여행 칸을 보이고(기본 켬), 켜져 있으면 모든 장소를 가져온다.
-  const trip = doc.version === 2 ? doc.trips[0] : undefined;
+  const trip = doc.version !== 1 ? doc.trips[0] : undefined;
   const [tripSwitchOn, setTripSwitchOn] = useState(true);
-  const tripDoc: ShareDocV2 | null =
-    doc.version === 2 && trip !== undefined && tripSwitchOn ? doc : null;
+  const tripDoc: ShareTripDoc | null =
+    doc.version !== 1 && trip !== undefined && tripSwitchOn ? doc : null;
   const duplicateTrip = useMemo(
     () => trip !== undefined && sameTripExists(library, trip),
     [library, trip],

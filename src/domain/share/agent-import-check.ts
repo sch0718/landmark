@@ -2,7 +2,7 @@ import { defaultTitleLabel } from 'src/domain/library/import-share';
 import { importSharedTrip } from 'src/domain/library/import-share-trip';
 import { ITEM_DOC_MAX_CHARS } from 'src/domain/library-sync/items';
 import { emptyLibrary, type Library } from 'src/schema/library';
-import type { ShareDocV2 } from 'src/schema/share';
+import type { ShareTripDoc } from 'src/schema/share';
 
 /** 키 정렬은 JSON 길이를 바꾸지 않으므로, 정렬 없이 동기화 항목 상한을 비교한다. */
 export function oversizedItems(lib: Library, max: number): string[] {
@@ -20,7 +20,7 @@ export function oversizedItems(lib: Library, max: number): string[] {
 }
 
 /** 기본 미리보기 설정으로 가져온 항목이 다른 기기에도 동기화될 수 있는지 본다. */
-export function importedItemProblem(doc: ShareDocV2): 'import' | 'item-too-large' | null {
+export function importedItemProblem(doc: ShareTripDoc): 'import' | 'item-too-large' | null {
   let sequence = 0;
   const imported = importSharedTrip(
     emptyLibrary(),

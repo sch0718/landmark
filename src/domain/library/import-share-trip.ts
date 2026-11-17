@@ -3,7 +3,7 @@ import { cutPrefix } from 'src/domain/library/legacy-import';
 import type { OpCtx, OpResult } from 'src/domain/library/ops';
 import { legKey } from 'src/domain/trips/query';
 import { LIBRARY_LIMITS, normalizeLabelName, type Library } from 'src/schema/library';
-import type { ShareDocV2, ShareTrip } from 'src/schema/share';
+import type { ShareTripDoc, ShareTrip } from 'src/schema/share';
 import { checkTrip, daysBetween, type Day, type Stop, type Trip } from 'src/schema/trip';
 
 // 받은 v2 일정 파일을 새 여행으로 가져오는 연산(스펙 §8). 장소는 v1 규칙(`importSharePlaces`)으로 먼저 합치고,
@@ -35,7 +35,7 @@ export function sameTripExists(lib: Library, trip: ShareTrip): boolean {
  */
 export function importSharedTrip(
   lib: Library,
-  doc: ShareDocV2,
+  doc: ShareTripDoc,
   input: { titleLabel: string | null; appendMemo: boolean },
   ctx: OpCtx,
 ): OpResult {
@@ -83,11 +83,25 @@ export function importSharedTrip(
   }
 
   const legModes: Record<string, 'car' | 'walk'> = {};
-  for (const [key, mode] of Object.entries(received.legModes)) {
+  const legTransit = new Set<string>();
+  const legMinutes: Record<string, number> = {};
+  // 장소 병합으로 키가 겹치면 먼저 나온 구간의 수단·분을 함께 남긴다.
+  const mappedKeys = new Set<string>();
+  const settingKeys = new Set([
+    ...Object.keys(received.legModes),
+    ...Object.keys(received.legMinutes ?? {}),
+  ]);
+  for (const key of settingKeys) {
     const [from, to] = key.split('>') as [string, string];
     const [a, b] = [mine(from), mine(to)];
     const mapped = legKey(a, b);
-    if (a !== b && !Object.hasOwn(legModes, mapped)) legModes[mapped] = mode;
+    if (a === b || mappedKeys.has(mapped)) continue;
+    mappedKeys.add(mapped);
+    const mode = received.legModes[key];
+    if (mode === 'transit') legTransit.add(mapped);
+    else if (mode !== undefined) legModes[mapped] = mode;
+    const minutes = received.legMinutes?.[key];
+    if (minutes !== undefined) legMinutes[mapped] = minutes;
   }
 
   const id = ctx.newId('trip');
@@ -100,6 +114,8 @@ export function importSharedTrip(
     candidates: field(candidates),
     days,
     legModes: field(legModes),
+    ...(legTransit.size > 0 ? { legTransit: field([...legTransit].sort()) } : {}),
+    ...(Object.keys(legMinutes).length > 0 ? { legMinutes: field(legMinutes) } : {}),
     createdAt: ctx.now,
     deletedAt: null,
   };

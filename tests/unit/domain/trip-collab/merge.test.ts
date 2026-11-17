@@ -261,3 +261,35 @@ it('배치 묶음에 딸린 Day·Stop 값은 서명에 포함하고 다른 Day�
   t.days[0]!.lodging = pid('e');
   expect(signature()).not.toBe(withNote);
 });
+
+it('수단과 시간을 한 쌍으로 골라 교차 수정과 지움을 충돌로 다룬다', () => {
+  const k = `${pid('a')}>${pid('b')}`;
+  const b = { ...base(), legModes: { [k]: 'walk' as const }, legMinutes: { [k]: 12 } };
+  const m = { ...copy(b), legModes: { [k]: 'transit' as const }, legMinutes: {} };
+  const t = { ...copy(b), legMinutes: { [k]: 30 } };
+  const merge = mergeCollabPlan(b, m, t);
+  expect(merge.plan).toBeNull();
+  expect(merge.conflicts).toMatchObject([
+    {
+      id: `legMode.${k}`,
+      legValues: {
+        mine: { mode: 'transit', minutes: undefined },
+        theirs: { mode: 'walk', minutes: 30 },
+      },
+    },
+  ]);
+  const mine = resolveCollabMerge(merge, { [`legMode.${k}`]: 'mine' });
+  expect(mine.ok && mine.plan.legModes[k]).toBe('transit');
+  expect(mine.ok && mine.plan.legMinutes).toBeUndefined();
+  const theirs = resolveCollabMerge(merge, { [`legMode.${k}`]: 'theirs' });
+  expect(theirs.ok && theirs.plan.legMinutes).toEqual({ [k]: 30 });
+});
+it('분만 있는 구간도 키별 병합하고 같은 분은 충돌 없이 합친다', () => {
+  const k = `${pid('a')}>${pid('b')}`,
+    other = `${pid('b')}>${pid('c')}`;
+  const b = base(),
+    m = { ...copy(b), legMinutes: { [k]: 12 } },
+    t = { ...copy(b), legMinutes: { [other]: 30 } };
+  expect(mergeCollabPlan(b, m, t).plan?.legMinutes).toEqual({ [k]: 12, [other]: 30 });
+  expect(mergeCollabPlan(b, m, copy(m)).conflicts).toEqual([]);
+});

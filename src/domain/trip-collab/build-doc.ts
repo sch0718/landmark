@@ -1,3 +1,5 @@
+import { fixedLegTime } from '../trips/leg-time';
+import { autoMode, estimateLeg, haversineM, WALK_MAX_M } from '../trips/geo';
 import { toShareLabels, toSharePlace } from '../share/build-share';
 import { thinPaths, type ShareLegTime } from '../share/build-trip-share';
 import { dayPoints, SHARE_TRIP_LIMITS } from '../share/check-share-trip';
@@ -14,7 +16,7 @@ import type { PlaceMap } from './places';
 export type CollabRouteOf = (
   fromServerId: string,
   toServerId: string,
-) => { mode: 'car' | 'walk'; time: ShareLegTime };
+) => { mode: 'car' | 'walk' | 'transit'; time: ShareLegTime };
 export function buildCollabDoc(input: {
   plan: CollabPlan;
   previous: LiveTripDoc | null;
@@ -55,6 +57,11 @@ export function buildCollabDoc(input: {
   ])
     if (!labels.has(label.id)) labels.set(label.id, { ...label });
   for (const p of places) p.labelIds = p.labelIds.filter((id) => labels.has(id));
+  const legMinutes = Object.fromEntries(
+    Object.entries(plan.legMinutes ?? {}).filter(([key]) =>
+      key.split('>').every((id) => order.includes(id)),
+    ),
+  );
   const trip: ShareTrip = {
     title: plan.title,
     startDate: plan.startDate,
@@ -66,6 +73,7 @@ export function buildCollabDoc(input: {
         key.split('>').every((id) => order.includes(id)),
       ),
     ),
+    ...(Object.keys(legMinutes).length ? { legMinutes } : {}),
     days: plan.days.map((d) => ({
       startTime: d.startTime,
       lodgingId: d.lodging,
@@ -78,6 +86,21 @@ export function buildCollabDoc(input: {
       legs: [],
     })),
   };
+  // 대중교통·직접 입력 시간은 지금 이웃한 구간의 것만 담는다. 순서가 바뀌어 쓰이지 않는 옛 키로
+  // 문서가 v3가 되면 옛 버전 기기가 공동본을 읽지 못한다.
+  const adjacent = new Set(
+    trip.days.flatMap((_, i) => {
+      const points = dayPoints(trip, i);
+      return points.slice(1).map((to, j) => `${points[j]!}>${to}`);
+    }),
+  );
+  for (const [key, mode] of Object.entries(trip.legModes))
+    if (mode === 'transit' && !adjacent.has(key)) delete trip.legModes[key];
+  if (trip.legMinutes) {
+    for (const key of Object.keys(trip.legMinutes))
+      if (!adjacent.has(key)) delete trip.legMinutes[key];
+    if (Object.keys(trip.legMinutes).length === 0) delete trip.legMinutes;
+  }
   trip.days = thinPaths(
     trip.days.map((day, i) => {
       const points = dayPoints(trip, i);
@@ -85,7 +108,46 @@ export function buildCollabDoc(input: {
         ...day,
         legs: points.slice(1).map((to, j) => {
           const from = points[j]!,
-            { mode, time } = routeOf(from, to);
+            key = `${from}>${to}`;
+          const chosen = trip.legModes[key],
+            minutes = trip.legMinutes?.[key] ?? null;
+          const a = places.find((p) => p.id === from)!,
+            b = places.find((p) => p.id === to)!;
+          const straightM = haversineM([a.lng, a.lat], [b.lng, b.lat]);
+          // 앱의 legBetween과 같다: 직선 50km를 넘는 도보는 자동 규칙으로.
+          const effectiveMode =
+            chosen === undefined || (chosen === 'walk' && straightM > WALK_MAX_M)
+              ? autoMode(straightM)
+              : chosen;
+          const planLeg = {
+            key,
+            from: { ...lib.places[placeMap[from]!]!, id: from, lng: a.lng, lat: a.lat },
+            to: { ...lib.places[placeMap[to]!]!, id: to, lng: b.lng, lat: b.lat },
+            mode: effectiveMode,
+            minutes,
+            straightM,
+            walkAllowed: straightM <= WALK_MAX_M,
+            modeSource: effectiveMode === chosen ? ('user' as const) : ('auto' as const),
+          };
+          let route: ReturnType<CollabRouteOf>;
+          if (effectiveMode === 'transit' || minutes !== null)
+            route = { mode: effectiveMode, time: fixedLegTime(planLeg)! };
+          else {
+            route = routeOf(from, to);
+            // 콜백은 아직 병합 전 로컬 계획을 볼 수 있다. 다른 수단·옛 직접 입력 시간은 버린다.
+            if (route.mode !== effectiveMode || route.time.status === 'manual')
+              route = {
+                mode: effectiveMode,
+                time: fixedLegTime(planLeg) ?? {
+                  status: 'estimated',
+                  ...estimateLeg(effectiveMode, straightM),
+                  tollFare: null,
+                  queriedAt: null,
+                  path: [],
+                },
+              };
+          }
+          const { mode, time } = route;
           const leg = {
             from,
             to,
@@ -106,7 +168,11 @@ export function buildCollabDoc(input: {
     v: 2,
     share: {
       format: 'tripmap-share',
-      version: 2,
+      version:
+        Object.values(trip.legModes).includes('transit') ||
+        Object.keys(trip.legMinutes ?? {}).length
+          ? 3
+          : 2,
       title: plan.title,
       createdAt,
       labels: [...labels.values()].sort((a, b) => a.order - b.order),

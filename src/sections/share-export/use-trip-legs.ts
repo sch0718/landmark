@@ -1,4 +1,4 @@
-import { isAbroadLeg } from 'src/lib/korea';
+import { fixedLegTime } from 'src/domain/trips/leg-time';
 import { queriedLabel } from 'src/sections/trips/planner/format';
 import { useAtomValue, useStore } from 'jotai';
 import { useCallback, useEffect, useMemo } from 'react';
@@ -27,15 +27,6 @@ export type TripLegs = {
   oldestQueriedAt: string | null;
 };
 
-const SAME_POINT: ShareLegTime = {
-  durationS: 0,
-  distanceM: 0,
-  tollFare: null,
-  status: 'same-point',
-  queriedAt: null,
-  path: [],
-};
-
 /**
  * 여행 하나의 모든 구간 시간(일정 공유 창, 스펙 §3.2). `active`인 동안 계획 화면과 같은 방식으로 묻는다:
  * 상태가 없는 구간과 연결 실패였던 구간을 열 때 묻고, 인터넷이 돌아오면(`online`) 연결 실패 구간을 다시
@@ -56,8 +47,7 @@ export function useTripLegs(tripId: string, active: boolean): TripLegs {
 
   // 요청할 구간 키. 문자열 하나로 만들어 내용이 같으면 효과가 다시 돌지 않게 한다.
   const requestKeys = useMemo(
-    () =>
-      [...new Set(legs.filter((leg) => !isAbroadLeg(leg.from, leg.to)).map(routeKeyOf))].join('\n'),
+    () => [...new Set(legs.filter((leg) => fixedLegTime(leg) === null).map(routeKeyOf))].join('\n'),
     [legs],
   );
 
@@ -70,7 +60,8 @@ export function useTripLegs(tripId: string, active: boolean): TripLegs {
 
   const routeOf = useCallback(
     (leg: Leg): ShareLegTime => {
-      if (isSamePointLeg(leg)) return SAME_POINT;
+      const fixed = fixedLegTime(leg);
+      if (fixed !== null) return fixed;
       const planned = planLeg(leg, states[routeKeyOf(leg)]);
       const routed = planned.status === 'routed';
       return {
@@ -91,7 +82,7 @@ export function useTripLegs(tripId: string, active: boolean): TripLegs {
     let estimated = 0;
     let oldestQueriedAt: string | null = null;
     for (const leg of legs) {
-      if (isAbroadLeg(leg.from, leg.to)) {
+      if (fixedLegTime(leg) !== null) {
         answered += 1;
         continue;
       }

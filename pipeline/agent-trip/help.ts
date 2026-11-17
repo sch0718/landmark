@@ -127,6 +127,19 @@ export function helpText(command?: CommandName): string {
       '             build·share는 --memo를 쓸 때만 넣습니다.',
     );
   }
+  if (!command || command === 'build' || command === 'send' || command === 'share') {
+    lines.push(
+      '',
+      '구간 수단·시간:',
+      '  legModes는 car(자동차)·walk(도보)·transit(대중교통)을 지정합니다.',
+      '  legMinutes는 1~1440 정수 분이며, 수단을 생략하면 자동 수단에 적용합니다.',
+      '  키는 그날 이웃한 places key 둘을 >로 잇습니다.',
+      '  직접 입력 시간이 어림값보다 우선합니다.',
+      '  예시(JSON 일부):',
+      '  { "legModes": { "lodging>notredame": "transit" },',
+      '    "legMinutes": { "lodging>notredame": 30 } }',
+    );
+  }
   lines.push(
     '',
     '끝 코드:',

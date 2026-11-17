@@ -289,7 +289,7 @@ describe('받은함 문서', () => {
     const doc = tripDoc();
     let d: string;
     if (reason === 'corrupt') d = '손상';
-    else if (reason === 'newer') d = await encodeCompressedJson({ ...doc, version: 3 });
+    else if (reason === 'newer') d = await encodeCompressedJson({ ...doc, version: 4 });
     // 장소 없이 Stop·후보가 남으면 원시 모양의 필요조건부터 어긴다.
     else if (reason === 'empty') d = await encode({ ...doc, places: [] });
     else {
@@ -326,7 +326,7 @@ describe('받은함 문서', () => {
     doc.places[0]!.name = '정상';
     await expect(checkInboxDoc(await encode(doc))).rejects.toMatchObject(invalid('leg-modes'));
     await expect(
-      checkInboxDoc(await encodeCompressedJson({ ...doc, version: 3 })),
+      checkInboxDoc(await encodeCompressedJson({ ...doc, version: 4 })),
     ).rejects.toMatchObject(invalid('newer'));
   });
 });

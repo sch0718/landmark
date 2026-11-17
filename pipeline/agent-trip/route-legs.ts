@@ -1,6 +1,6 @@
-import { isAbroadLeg } from 'src/lib/korea';
 import type { ShareLegTime } from 'src/domain/share/build-trip-share';
-import { estimateLeg, SAME_POINT_M } from 'src/domain/trips/geo';
+import { estimateLeg } from 'src/domain/trips/geo';
+import { fixedLegTime } from 'src/domain/trips/leg-time';
 import { dayLegs, type Leg } from 'src/domain/trips/query';
 import { ApiError } from 'src/server/http';
 import {
@@ -20,6 +20,8 @@ export type RouteStats = {
   estimated: number;
   noRoute: number;
   samePoint: number;
+  /** 계획의 `legMinutes`로 시간을 직접 적은 구간. */
+  manual: number;
   oldestQueriedAt: string | null;
 };
 export type RouteDeps = {
@@ -36,7 +38,6 @@ const queryOf = (leg: Leg): RouteQuery => ({
   from: [leg.from.lng, leg.from.lat],
   to: [leg.to.lng, leg.to.lat],
 });
-const isSamePoint = (leg: Leg) => !(leg.straightM >= SAME_POINT_M);
 
 /** 모든 구간을 한 번씩 묻고 앱 공유 창과 같은 동기 구간 함수를 돌려준다. */
 export async function prepareRoutes(
@@ -49,7 +50,7 @@ export async function prepareRoutes(
   const pending = new Map<string, { day: number }>();
   trip.days.forEach((_, d) => {
     for (const leg of dayLegs(built.lib, trip, d)) {
-      if (isSamePoint(leg) || isAbroadLeg(leg.from, leg.to)) continue;
+      if (fixedLegTime(leg) !== null) continue;
       const query = queryOf(leg);
       const key = routeInputKey(query);
       if (!pending.has(key)) pending.set(key, { day: d });
@@ -83,26 +84,8 @@ export async function prepareRoutes(
   }
 
   const routeOf = (leg: Leg): ShareLegTime => {
-    if (isSamePoint(leg)) {
-      return {
-        durationS: 0,
-        distanceM: 0,
-        tollFare: null,
-        status: 'same-point',
-        queriedAt: null,
-        path: [],
-      };
-    }
-    if (isAbroadLeg(leg.from, leg.to)) {
-      return {
-        durationS: 0,
-        distanceM: Math.round(leg.straightM),
-        tollFare: null,
-        status: 'estimated',
-        queriedAt: null,
-        path: [],
-      };
-    }
+    const fixed = fixedLegTime(leg);
+    if (fixed !== null) return fixed;
     const answer = answers.get(routeInputKey(queryOf(leg)));
     if (answer?.status === 'routed') {
       const { durationS, distanceM, tollFare, queriedAt, path } = answer.result;
@@ -123,15 +106,17 @@ export async function prepareRoutes(
     estimated: 0,
     noRoute: 0,
     samePoint: 0,
+    manual: 0,
     oldestQueriedAt: null,
   };
   // 상태별 구간 수라 no-route는 estimated와 따로 센다. 중복 입력도 실제 구간마다 센다.
   for (const leg of legs) {
     const time = routeOf(leg);
     if (time.status === 'same-point') stats.samePoint++;
+    else if (time.status === 'manual') stats.manual++;
     else if (time.status === 'no-route') stats.noRoute++;
     else if (time.status === 'estimated') stats.estimated++;
-    else {
+    else if (time.status === 'routed') {
       stats.routed++;
       if (
         time.queriedAt !== null &&

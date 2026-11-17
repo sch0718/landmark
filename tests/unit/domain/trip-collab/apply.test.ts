@@ -71,3 +71,23 @@ describe('공동 계획 보관함 반영', () => {
     expect(safeParse(LibrarySchema, r.lib).success).toBe(true);
   });
 });
+
+it('대중교통·분 선택 필드를 늦게 만들고 지움은 빈 timestamped 필드로 남긴다', () => {
+  const lib = buildLiveLibrary(),
+    p = planFromDoc(buildLiveDoc()),
+    key = 'place00001>place00002';
+  p.legModes[key] = 'transit';
+  p.legMinutes = { [key]: 30 };
+  const r = applyCollabPlan(lib, 'trip000001', p, map, ctx);
+  expect(r.ok).toBe(true);
+  if (!r.ok) return;
+  const trip = r.lib.trips.trip000001!;
+  expect(trip.legTransit).toEqual({ value: [key], updatedAt: ctx.now });
+  expect(trip.legMinutes).toEqual({ value: { [key]: 30 }, updatedAt: ctx.now });
+  expect(trip.legModes.value[key]).toBeUndefined();
+  delete p.legMinutes;
+  p.legModes = {};
+  const cleared = applyCollabPlan(r.lib, 'trip000001', p, map, ctx);
+  expect(cleared.ok && cleared.lib.trips.trip000001!.legTransit?.value).toEqual([]);
+  expect(cleared.ok && cleared.lib.trips.trip000001!.legMinutes?.value).toEqual({});
+});

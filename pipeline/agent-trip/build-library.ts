@@ -6,6 +6,7 @@ import {
   insertStop,
   setDayStartTime,
   setLegMode,
+  setLegMinutes,
   setLodging,
   setStopFixedTime,
   setStopNote,
@@ -65,6 +66,15 @@ export function checkLegModes(plan: TripPlan, places: ResolvedPlace[]): TripIssu
         path,
         code: 'walk-too-far',
         message: '직선 50km를 넘는 구간은 도보로 지정할 수 없어요',
+      });
+    }
+  }
+  for (const key of Object.keys(plan.legMinutes ?? {})) {
+    if (!adjacent.has(key)) {
+      issues.push({
+        path: `legMinutes[${JSON.stringify(key)}]`,
+        code: 'leg-modes',
+        message: '그날 이웃한 두 장소의 구간만 지정할 수 있어요',
       });
     }
   }
@@ -169,6 +179,12 @@ export function buildLibrary(
     const [from, to] = key.split('>');
     const path = `legModes[${JSON.stringify(key)}]`;
     apply(setLegMode(lib, tripId, idOf(from!, path), idOf(to!, path), mode, ctx), path);
+  }
+
+  for (const [key, minutes] of Object.entries(plan.legMinutes ?? {})) {
+    const [from, to] = key.split('>');
+    const path = `legMinutes[${JSON.stringify(key)}]`;
+    apply(setLegMinutes(lib, tripId, idOf(from!, path), idOf(to!, path), minutes, ctx), path);
   }
 
   const checked = safeParse(LibrarySchema, lib);

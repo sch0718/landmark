@@ -1,11 +1,11 @@
 import { receivedTripTitle } from '../library/import-share-trip';
-import { setField } from '../library/lww';
+import { setField, setOptionalField } from '../library/lww';
 import type { OpCtx, OpError, OpResult } from '../library/ops';
 import type { Library } from '../../schema/library';
 import { checkTrip, type Day, type Trip } from '../../schema/trip';
 import type { LiveTripDoc } from '../trip-live/live-doc';
 import { mapServerPlaces, type PlaceMap } from './places';
-import { planFromDoc, type CollabPlan } from './plan';
+import { mapLegSettings, planFromDoc, type CollabPlan } from './plan';
 
 function mappedTrip(
   trip: Trip,
@@ -21,14 +21,18 @@ function mappedTrip(
   for (const id of refs) if (id !== null && !Object.hasOwn(map, id)) return { missing: id };
   const local = (id: string) => map[id]!;
   const optional = (id: string | null) => (id === null ? null : local(id));
-  const modes: Record<string, 'car' | 'walk'> = {};
-  for (const [k, mode] of Object.entries(plan.legModes)) {
-    const [a, b] = k.split('>');
-    if (!Object.hasOwn(map, a!)) return { missing: a! };
-    if (!Object.hasOwn(map, b!)) return { missing: b! };
-    const key = `${local(a!)}>${local(b!)}`;
-    if (!Object.hasOwn(modes, key)) modes[key] = mode;
+  for (const k of new Set([...Object.keys(plan.legModes), ...Object.keys(plan.legMinutes ?? {})])) {
+    for (const id of k.split('>')) if (!Object.hasOwn(map, id)) return { missing: id };
   }
+  const settings = mapLegSettings(plan.legModes, plan.legMinutes, local);
+  const modes: Record<string, 'car' | 'walk'> = {},
+    transit: string[] = [];
+  for (const [key, mode] of Object.entries(settings.legModes)) {
+    if (mode === 'transit') transit.push(key);
+    else modes[key] = mode;
+  }
+  const legTransit = setOptionalField(trip.legTransit, transit.sort(), [], ctx.now);
+  const legMinutes = setOptionalField(trip.legMinutes, settings.legMinutes ?? {}, {}, ctx.now);
   const f = <T>(value: T) => ({ value, updatedAt: ctx.now });
   const days: Day[] = plan.days.map((d, i) => {
     const before = trip.days[i],
@@ -54,6 +58,8 @@ function mappedTrip(
     origin: setField(trip.origin, optional(plan.origin), ctx.now),
     candidates: setField(trip.candidates, plan.candidates.map(local), ctx.now),
     legModes: setField(trip.legModes, modes, ctx.now),
+    ...(legTransit ? { legTransit } : {}),
+    ...(legMinutes ? { legMinutes } : {}),
     days:
       days.length === trip.days.length && days.every((d, i) => d === trip.days[i])
         ? trip.days

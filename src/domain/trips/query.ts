@@ -92,7 +92,8 @@ export type Leg = {
   key: string;
   from: Place;
   to: Place;
-  mode: 'car' | 'walk';
+  mode: 'car' | 'walk' | 'transit';
+  minutes: number | null;
   modeSource: 'auto' | 'user';
   straightM: number;
   walkAllowed: boolean;
@@ -104,16 +105,28 @@ export function legBetween(trip: Trip, from: Place, to: Place): Leg {
   const straightM = haversineM([from.lng, from.lat], [to.lng, to.lat]);
   const walkAllowed = straightM <= WALK_MAX_M;
   const chosen = trip.legModes.value[key];
-  let mode: 'car' | 'walk';
+  let mode: Leg['mode'];
   let modeSource: 'auto' | 'user';
-  if (chosen === 'car' || (chosen === 'walk' && walkAllowed)) {
+  if (trip.legTransit?.value.includes(key)) {
+    mode = 'transit';
+    modeSource = 'user';
+  } else if (chosen === 'car' || (chosen === 'walk' && walkAllowed)) {
     mode = chosen;
     modeSource = 'user';
   } else {
     mode = walkAllowed ? autoMode(straightM) : 'car';
     modeSource = 'auto';
   }
-  return { key, from, to, mode, modeSource, straightM, walkAllowed };
+  return {
+    key,
+    from,
+    to,
+    mode,
+    minutes: trip.legMinutes?.value[key] ?? null,
+    modeSource,
+    straightM,
+    walkAllowed,
+  };
 }
 
 /**
