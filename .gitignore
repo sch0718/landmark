@@ -5,7 +5,8 @@ dist
 playwright-report/
 test-results/
 .env*.local
-.claude/
+.claude/*
+!.claude/settings.json
 .superpowers/
 .DS_Store
 *.tsbuildinfo
