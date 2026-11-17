@@ -1,3 +1,4 @@
+import { fixedLegTime } from 'src/domain/trips/leg-time';
 import { toShareLabels, toSharePlace } from 'src/domain/share/build-share';
 import { SHARE_TRIP_LIMITS } from 'src/domain/share/check-share-trip';
 import {
@@ -10,7 +11,7 @@ import {
 import type { Library } from 'src/schema/library';
 import type {
   ShareDay,
-  ShareDocV2,
+  ShareTripDoc,
   ShareLeg,
   SharePlace,
   ShareStop,
@@ -31,7 +32,7 @@ export type BuildTripShareOptions = {
 };
 
 /**
- * 보관함의 여행 하나로 v2 공유 문서를 만든다(스펙 §3.3). 여행이 없거나 지웠으면 null.
+ * 보관함의 여행 하나로 v2·v3 공유 문서를 만든다(스펙 §3.3). 여행이 없거나 지웠으면 null.
  *
  * - 장소 순서: 출발지 → Day마다 [Stop → 숙소] → 후보. 같은 장소는 처음 나온 자리 하나만.
  *   지운 장소(묘비)는 빠지고, 지운 출발지·숙소는 `null`이다(계획 화면의 `dayEndpoints` 규칙).
@@ -44,7 +45,7 @@ export function buildTripShareDoc(
   tripId: string,
   routeOf: (leg: Leg) => ShareLegTime,
   opts: BuildTripShareOptions,
-): ShareDocV2 | null {
+): ShareTripDoc | null {
   const trip = lib.trips[tripId];
   if (trip === undefined || trip.deletedAt !== null) return null;
 
@@ -73,7 +74,12 @@ export function buildTripShareDoc(
     });
     add(end?.id ?? null);
 
-    const legs = dayLegs(lib, trip, di).map((leg) => toShareLeg(leg, routeOf(leg)));
+    const legs = dayLegs(lib, trip, di).map((leg) =>
+      toShareLeg(
+        leg,
+        (leg.minutes !== null || leg.mode === 'transit' ? fixedLegTime(leg) : null) ?? routeOf(leg),
+      ),
+    );
     return { startTime: day.startTime.value, lodgingId: end?.id ?? null, stops, legs };
   });
   for (const place of candidates) add(place.id);
@@ -93,6 +99,16 @@ export function buildTripShareDoc(
     if (parts.length === 2 && seen.has(parts[0]!) && seen.has(parts[1]!)) legModes[key] = mode;
   }
 
+  // 대중교통·직접 입력 시간은 지금 이웃한 구간의 것만 담는다. 순서가 바뀌어 쓰이지 않는 옛 키로
+  // 문서가 v3가 되면 옛 버전이 가져오기를 거절한다.
+  const legKeys = new Set(trip.days.flatMap((_, di) => dayLegs(lib, trip, di).map((l) => l.key)));
+  const retained = (key: string) => legKeys.has(key);
+  for (const key of trip.legTransit?.value ?? []) {
+    if (retained(key)) legModes[key] = 'transit';
+  }
+  const legMinutes = Object.fromEntries(
+    Object.entries(trip.legMinutes?.value ?? {}).filter(([key]) => retained(key)),
+  );
   const shareTrip: ShareTrip = {
     title: trip.title.value,
     startDate: trip.startDate.value,
@@ -101,11 +117,13 @@ export function buildTripShareDoc(
     candidateIds: candidates.map((place) => place.id),
     days: thinPaths(days, SHARE_TRIP_LIMITS.pathPointsTotal),
     legModes,
+    ...(Object.keys(legMinutes).length > 0 ? { legMinutes } : {}),
   };
 
   return {
     format: 'tripmap-share',
-    version: 2,
+    version:
+      Object.values(legModes).includes('transit') || Object.keys(legMinutes).length > 0 ? 3 : 2,
     title: opts.title.trim(),
     createdAt: opts.now.toISOString(),
     labels: toShareLabels(lib, usedLabelIds),

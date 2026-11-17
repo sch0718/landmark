@@ -6,6 +6,7 @@ import { CalendarDate, HHmm, Lat, Lng } from 'src/schema/common';
 import { LIBRARY_LIMITS } from 'src/schema/library-base';
 import { MutableArray, MutableRecord, MutableStruct } from 'src/schema/mutable';
 import { safeParse } from 'src/schema/parse';
+import { LegMinutes } from 'src/schema/trip';
 import { EXIT, TripFailure, type TripIssue } from './errors';
 
 export type PlanPlace = {
@@ -39,7 +40,8 @@ export type TripPlan = {
   places: PlanPlace[];
   days: PlanDay[];
   candidates?: string[];
-  legModes?: Record<string, 'car' | 'walk'>;
+  legModes?: Record<string, 'car' | 'walk' | 'transit'>;
+  legMinutes?: Record<string, number>;
 };
 
 const text = (minimum: number, maximum: number) =>
@@ -128,13 +130,18 @@ export const TripPlanSchema = MutableStruct({
   ),
   days: MutableArray(PlanDaySchema),
   candidates: Schema.optionalKey(MutableArray(Schema.String)),
-  legModes: Schema.optionalKey(MutableRecord(Schema.String, Schema.Literals(['car', 'walk']))),
+  legModes: Schema.optionalKey(
+    MutableRecord(Schema.String, Schema.Literals(['car', 'walk', 'transit'])),
+  ),
+  legMinutes: Schema.optionalKey(MutableRecord(Schema.String, LegMinutes)),
 }) satisfies Schema.Codec<TripPlan, unknown>;
 
 /** Effect의 점 경로를 계획 파일의 배열·레코드 경로로 바꾼다. */
 export function toPlanPath(path: string): string {
-  if (path.startsWith('legModes.'))
-    return `legModes[${JSON.stringify(path.slice('legModes.'.length))}]`;
+  for (const field of ['legModes', 'legMinutes']) {
+    if (path.startsWith(`${field}.`))
+      return `${field}[${JSON.stringify(path.slice(field.length + 1))}]`;
+  }
   return path.replace(/\.(\d+)(?=\.|$)/g, '[$1]');
 }
 
@@ -221,14 +228,16 @@ export function parsePlan(value: unknown): TripPlan {
   plan.candidates?.forEach((key, i) => reference(key, `candidates[${i}]`, true));
   if (used.size === 0) add('days', 'no-places', '여행이 참조하는 장소가 하나도 없어요');
 
-  for (const key of Object.keys(plan.legModes ?? {})) {
-    const [from, to] = key.split('>');
-    if (!/^[^>]+>[^>]+$/.test(key) || !keys.has(from!) || !keys.has(to!)) {
-      add(
-        `legModes[${JSON.stringify(key)}]`,
-        'leg-modes',
-        'legModes 키는 places에 있는 두 key를 >로 이어야 해요',
-      );
+  for (const field of ['legModes', 'legMinutes'] as const) {
+    for (const key of Object.keys(plan[field] ?? {})) {
+      const [from, to] = key.split('>');
+      if (!/^[^>]+>[^>]+$/.test(key) || !keys.has(from!) || !keys.has(to!)) {
+        add(
+          `${field}[${JSON.stringify(key)}]`,
+          'leg-modes',
+          `${field} 키는 places에 있는 두 key를 >로 이어야 해요`,
+        );
+      }
     }
   }
   if (issues.length > 0) throw new TripFailure(issues, EXIT.input);

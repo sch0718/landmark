@@ -1,3 +1,4 @@
+import { fixedLegTime } from 'src/domain/trips/leg-time';
 import type { ShareLegTime } from 'src/domain/share/build-trip-share';
 import { dayEndpoints, dayLegs, tripDates, visibleStops, type Leg } from 'src/domain/trips/query';
 import { computeSchedule, formatClock } from 'src/domain/trips/schedule';
@@ -30,7 +31,7 @@ export function summarize(
   return trip.days.map((day, d) => {
     const { start, end } = dayEndpoints(lib, trip, d);
     const stops = visibleStops(lib, day);
-    const legs = dayLegs(lib, trip, d).map(routeOf);
+    const legs = dayLegs(lib, trip, d).map((leg) => fixedLegTime(leg) ?? routeOf(leg));
     const estimated = (leg: ShareLegTime) =>
       leg.status === 'estimated' || leg.status === 'no-route';
     const schedule = computeSchedule({

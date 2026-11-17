@@ -341,10 +341,10 @@ describe('parseShareDoc v2', () => {
     ).toBeNull();
   });
 
-  it('version 3은 null', () => {
+  it('version 4는 null', () => {
     expect(
       mutate((d) => {
-        (d as unknown as { version: number }).version = 3;
+        (d as unknown as { version: number }).version = 4;
       }),
     ).toBeNull();
   });

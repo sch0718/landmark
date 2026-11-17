@@ -1111,3 +1111,110 @@ describe('해외 구간', () => {
     expect(routes.calls.every((c) => c.from !== abroadFrom)).toBe(true);
   });
 });
+
+describe('구간 시간 직접 입력', () => {
+  it('조합 Enter를 무시하고 저장·수정·지움 직후 뒤 장소 시각을 바꾼다', async () => {
+    const routes = fakeRoutes(() => route(12, 1100));
+    const { store } = await open(withTrip(plannerLibrary(), makeTrip({ stops: [[P1, P2]] })), {
+      routes,
+    });
+    const user = userEvent.setup();
+    const edit = async () => {
+      await user.click(
+        within(legRow('중앙시장 닭강정', '안목 카페거리')).getByRole('button', {
+          name: /이동 수단 바꾸기/,
+        }),
+      );
+      await user.click(screen.getByRole('menuitem', { name: '시간 직접 입력' }));
+      return screen.getByRole('textbox', { name: '구간 시간(분)' });
+    };
+    let input = await edit();
+    await user.clear(input);
+    await user.type(input, '30');
+    fireEvent.keyDown(input, { key: 'Enter', isComposing: true });
+    fireEvent.keyDown(input, { key: 'Enter', keyCode: 229 });
+    expect(store.get(libraryAtom).trips[TRIP]!.legMinutes).toBeUndefined();
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() =>
+      expect(store.get(libraryAtom).trips[TRIP]!.legMinutes?.value[`${P1}>${P2}`]).toBe(30),
+    );
+    expect(legRow('중앙시장 닭강정', '안목 카페거리')).toHaveTextContent('30분 · 직접 입력');
+    expect(stopRow('안목 카페거리')).toHaveTextContent('09:30');
+    input = await edit();
+    await user.clear(input);
+    await user.type(input, '20');
+    await user.click(screen.getByRole('button', { name: '저장' }));
+    await waitFor(() => expect(stopRow('안목 카페거리')).toHaveTextContent('09:20'));
+    input = await edit();
+    await user.clear(input);
+    await user.click(screen.getByRole('button', { name: '저장' }));
+    await waitFor(() =>
+      expect(store.get(libraryAtom).trips[TRIP]!.legMinutes?.value[`${P1}>${P2}`]).toBeUndefined(),
+    );
+    await waitFor(() => expect(stopRow('안목 카페거리')).toHaveTextContent('09:12'));
+  });
+
+  it('대중교통·직접 입력 구간은 렌더·다시 계산·다시 시도·online에서 묻지 않는다', async () => {
+    const routes = fakeRoutes(() => route(12, 1100));
+    const trip = {
+      ...makeTrip({ stops: [[P1, P2, P5]] }),
+      legTransit: { value: [`${P1}>${P2}`], updatedAt: T0 },
+      legMinutes: { value: { [`${P2}>${P5}`]: 30 }, updatedAt: T0 },
+    };
+    const { store } = await open(withTrip(plannerLibrary(), trip), { routes, path: '/trips' });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <Provider store={store}>{children}</Provider>
+    );
+    const hook = renderHook(() => useDayPlan(TRIP, 0), { wrapper });
+    expect(hook.result.current.legs.map((l) => l.status)).toEqual(['estimated', 'manual']);
+    act(() => {
+      hook.result.current.refresh();
+      for (const leg of hook.result.current.legs) hook.result.current.retryLeg(leg.key);
+      window.dispatchEvent(new Event('online'));
+    });
+    expect(routes.calls).toHaveLength(0);
+  });
+});
+
+it('해외 직접 입력은 시간과 구글 대중교통 길찾기를 보여 준다', async () => {
+  const trip = {
+    ...makeTrip({ stops: [[P1, P2]] }),
+    legTransit: { value: [`${P1}>${P2}`], updatedAt: T0 },
+    legMinutes: { value: { [`${P1}>${P2}`]: 30 }, updatedAt: T0 },
+  };
+  const base = withTrip(plannerLibrary(), trip);
+  const lib = {
+    ...base,
+    places: { ...base.places, [P1]: { ...base.places[P1]!, lng: 2.2945, lat: 48.8584 } },
+  };
+  const routes = fakeRoutes(() => route(12, 1100));
+  await open(lib, { routes });
+  const row = legRow('중앙시장 닭강정', '안목 카페거리');
+  expect(row).toHaveTextContent('30분 · 직접 입력');
+  expect(within(row).getByRole('link', { name: '구글맵에서 길찾기' })).toHaveAttribute(
+    'href',
+    expect.stringContaining('travelmode=transit'),
+  );
+  expect(routes.calls).toHaveLength(0);
+});
+
+it('수단 메뉴에서 대중교통을 고르면 저장하고 네이버 대중교통 길찾기를 쓴다', async () => {
+  const { store } = await open(withTrip(plannerLibrary(), makeTrip({ stops: [[P1, P2]] })), {
+    routes: fakeRoutes(() => route(12, 1100)),
+  });
+  const user = userEvent.setup();
+  await user.click(
+    within(legRow('중앙시장 닭강정', '안목 카페거리')).getByRole('button', {
+      name: /이동 수단 바꾸기/,
+    }),
+  );
+  await user.click(screen.getByRole('menuitem', { name: '대중교통' }));
+  await waitFor(() =>
+    expect(store.get(libraryAtom).trips[TRIP]!.legTransit?.value).toContain(`${P1}>${P2}`),
+  );
+  const row = legRow('중앙시장 닭강정', '안목 카페거리');
+  expect(row).toHaveTextContent('약 ');
+  expect(
+    within(row).getByRole('link', { name: '네이버 지도로 길찾기' }).getAttribute('href'),
+  ).toMatch(/transit|route\/public/);
+});

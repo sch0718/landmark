@@ -26,7 +26,7 @@ export const SHORT_FAILED: Record<ShortLinkError | 'turnstile-load', string> = {
 };
 
 export function shortMetaOf(doc: ShareDoc): ShortMeta {
-  return doc.version === 2
+  return doc.version !== 1
     ? { kind: 'trip', keepUntil: shortKeepUntil(doc.trips.map((trip) => trip.endDate)) }
     : { kind: 'places', keepUntil: null };
 }

@@ -1,7 +1,12 @@
 import { decodeCompressedJson } from 'src/domain/codec';
 import { safeParse } from 'src/schema/parse';
 import { checkShareTrip } from 'src/domain/share/check-share-trip';
-import { ShareDocSchema, ShareDocV2Schema, type ShareDoc } from 'src/schema/share';
+import {
+  ShareDocSchema,
+  ShareDocV2Schema,
+  ShareDocV3Schema,
+  type ShareDoc,
+} from 'src/schema/share';
 
 /** 받은 공유 파일·링크를 읽을 때의 한도. */
 export const SHARE_IMPORT_LIMITS = {
@@ -34,7 +39,7 @@ const fail = (error: ShareReadError): ShareReadResult => ({ ok: false, error });
 const hasDuplicateId = (items: readonly { id: string }[]): boolean =>
   new Set(items.map((item) => item.id)).size !== items.length;
 
-/** 이 앱이 모르는 더 새 형식(version 3 이상)인지. 다른 검사보다 먼저 본다. */
+/** 이 앱이 모르는 더 새 형식(version 4 이상)인지. 다른 검사보다 먼저 본다. */
 const isNewerVersion = (value: unknown): boolean => {
   if (typeof value !== 'object' || value === null) return false;
   const { format, version } = value as { format?: unknown; version?: unknown };
@@ -42,13 +47,13 @@ const isNewerVersion = (value: unknown): boolean => {
     format === 'tripmap-share' &&
     typeof version === 'number' &&
     Number.isFinite(version) &&
-    version >= 3
+    version >= 4
   );
 };
 
 /**
  * 파일·해시 공통 검사. 더 새 버전(newer) → 장소 한도 초과 → 스키마(모르는 필드 거절)
- * → 장소·라벨 id 겹침 → 장소 0곳 → (v2만) 여행 관계 검사.
+ * → 장소·라벨 id 겹침 → 장소 0곳 → (v2·v3) 여행 관계 검사.
  * 내보내기는 id가 겹치는 파일을 만들지 않으므로, 겹치면 손상된 파일로 본다.
  */
 export function validateShareValue(
@@ -59,14 +64,17 @@ export function validateShareValue(
   const rawPlaces = (value as { places?: unknown } | null)?.places;
   if (Array.isArray(rawPlaces) && rawPlaces.length > places) return fail('too-many');
   const isV2 = (value as { version?: unknown } | null)?.version === 2;
-  const parsed = isV2
-    ? safeParse(ShareDocV2Schema, value, { onExcessProperty: 'error' })
-    : safeParse(ShareDocSchema, value, { onExcessProperty: 'error' });
+  const parsed =
+    (value as { version?: unknown } | null)?.version === 3
+      ? safeParse(ShareDocV3Schema, value, { onExcessProperty: 'error' })
+      : isV2
+        ? safeParse(ShareDocV2Schema, value, { onExcessProperty: 'error' })
+        : safeParse(ShareDocSchema, value, { onExcessProperty: 'error' });
   if (!parsed.success) return fail('corrupt');
   const doc: ShareDoc = parsed.data;
   if (hasDuplicateId(doc.places) || hasDuplicateId(doc.labels)) return fail('corrupt');
   if (doc.places.length === 0) return fail('empty');
-  if (doc.version === 2 && checkShareTrip(doc).length > 0) return fail('corrupt');
+  if (doc.version !== 1 && checkShareTrip(doc).length > 0) return fail('corrupt');
   return { ok: true, doc };
 }
 

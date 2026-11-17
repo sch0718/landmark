@@ -77,6 +77,7 @@ const stats = (overrides = {}) => ({
   estimated: 0,
   noRoute: 0,
   samePoint: 0,
+  manual: 0,
   oldestQueriedAt: null,
   ...overrides,
 });

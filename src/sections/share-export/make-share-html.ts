@@ -11,7 +11,7 @@ import { SHARE_IMPORT_LIMITS } from 'src/domain/share/read-share';
 import type { Leg } from 'src/domain/trips/query';
 import type { Library } from 'src/schema/library';
 import { safeParse } from 'src/schema/parse';
-import { ShareDocSchema, ShareDocV2Schema } from 'src/schema/share';
+import { ShareDocSchema, ShareDocV2Schema, ShareDocV3Schema } from 'src/schema/share';
 import { ShareDocInvalid } from 'src/services/errors';
 
 export type ShareHtml = { html: string; fileName: string; count: number };
@@ -59,7 +59,9 @@ export function renderTripShareHtml(
 ): Result.Result<ShareHtml, ShareDocInvalid> {
   const doc = buildTripShareDoc(lib, tripId, routeOf, opts);
   if (doc === null) return Result.fail(new ShareDocInvalid({ message: '여행을 찾지 못했어요' }));
-  const parsed = safeParse(ShareDocV2Schema, doc, { onExcessProperty: 'error' });
+  const parsed = safeParse(doc.version === 3 ? ShareDocV3Schema : ShareDocV2Schema, doc, {
+    onExcessProperty: 'error',
+  });
   if (!parsed.success) {
     const first = parsed.issues[0];
     return Result.fail(

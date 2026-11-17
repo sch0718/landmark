@@ -13,6 +13,8 @@ export type TripFieldPath =
   | 'origin'
   | 'candidates'
   | 'legModes'
+  | 'legTransit'
+  | 'legMinutes'
   | { day: number; field: 'stops' | 'lodging' | 'startTime' };
 
 /** 기간 단위: 날짜 두 필드(값·updatedAt)와 Day 배열 전체. */
@@ -20,8 +22,8 @@ export type TripPeriod = { startDate: Field<string>; endDate: Field<string>; day
 
 export type TripFieldChange = {
   path: TripFieldPath;
-  before: Field<unknown>;
-  after: Field<unknown>;
+  before: Field<unknown> | undefined;
+  after: Field<unknown> | undefined;
 };
 
 export type TripChange = {
@@ -30,11 +32,22 @@ export type TripChange = {
   period?: { before: TripPeriod; after: TripPeriod };
 };
 
-const TOP_FIELDS = ['title', 'origin', 'candidates', 'legModes'] as const;
+const TOP_FIELDS = [
+  'title',
+  'origin',
+  'candidates',
+  'legModes',
+  'legTransit',
+  'legMinutes',
+] as const;
 const DAY_FIELDS = ['stops', 'lodging', 'startTime'] as const;
 
-const sameField = (a: Field<unknown>, b: Field<unknown>): boolean =>
-  a === b || (a.updatedAt === b.updatedAt && JSON.stringify(a.value) === JSON.stringify(b.value));
+const sameField = (a: Field<unknown> | undefined, b: Field<unknown> | undefined): boolean =>
+  a === b ||
+  (a !== undefined &&
+    b !== undefined &&
+    a.updatedAt === b.updatedAt &&
+    JSON.stringify(a.value) === JSON.stringify(b.value));
 
 const periodOf = (trip: Trip): TripPeriod => ({
   startDate: trip.startDate,
@@ -85,9 +98,17 @@ function getField(trip: Trip, path: TripFieldPath): Field<unknown> | undefined {
 }
 
 // 기록의 값은 같은 경로에서 꺼낸 것이라 형이 맞는다. `Field<unknown>`을 제자리에 다시 넣는다.
-function putField(trip: Trip, path: TripFieldPath, field: Field<unknown>): Trip {
+function putField(trip: Trip, path: TripFieldPath, field: Field<unknown> | undefined): Trip {
   if (getField(trip, path) === field) return trip;
-  if (typeof path === 'string') return { ...trip, [path]: field } as Trip;
+  if (typeof path === 'string') {
+    if (field === undefined) {
+      const next = { ...trip };
+      // 없음으로 되돌릴 수 있는 필드는 선택 필드 둘뿐이다.
+      if (path === 'legTransit' || path === 'legMinutes') delete next[path];
+      return next;
+    }
+    return { ...trip, [path]: field } as Trip;
+  }
   const days = trip.days.slice();
   days[path.day] = { ...days[path.day]!, [path.field]: field } as Day;
   return { ...trip, days };
@@ -136,7 +157,7 @@ const dayKey = (d: number) => `day:${d}`;
 /** 중간에 새 객체를 만들었어도 모든 필드·Day가 같은 참조면 바뀐 것이 없다. */
 function sameRefs(a: Trip, b: Trip): boolean {
   if (a === b) return true;
-  const keys = Object.keys(b) as (keyof Trip)[];
+  const keys = [...new Set([...Object.keys(a), ...Object.keys(b)])] as (keyof Trip)[];
   return (
     keys.every((k) => k === 'days' || a[k] === b[k]) &&
     a.days.length === b.days.length &&
@@ -195,9 +216,9 @@ function placesBefore(change: TripChange): Set<string> {
   const ids = new Set<string>();
   const addStops = (stops: readonly Stop[]) => stops.forEach((s) => ids.add(s.placeId));
   for (const fc of change.fields) {
-    if (fc.path === 'candidates') (fc.before.value as string[]).forEach((p) => ids.add(p));
+    if (fc.path === 'candidates') (fc.before!.value as string[]).forEach((p) => ids.add(p));
     else if (typeof fc.path === 'object' && fc.path.field === 'stops') {
-      addStops(fc.before.value as Stop[]);
+      addStops(fc.before!.value as Stop[]);
     }
   }
   change.period?.before.days.forEach((d) => addStops(d.stops.value));
@@ -224,11 +245,24 @@ export function revertTrip(lib: Library, change: TripChange, ctx: OpCtx): OpResu
 
   for (const fc of change.fields) {
     const current = getField(next, fc.path);
-    if (current === undefined || current.updatedAt !== fc.after.updatedAt) {
+    if (current?.updatedAt !== fc.after?.updatedAt) {
       skipped++;
       continue;
     }
-    next = putField(next, fc.path, setField(current, fc.before.value, ctx.now));
+    next = putField(
+      next,
+      fc.path,
+      fc.before === undefined
+        ? // 선택 필드를 지우면 동기화가 이전 기기의 값을 되살리므로 빈 값을 새 시각으로 남긴다.
+          fc.path === 'legTransit'
+          ? { value: [], updatedAt: ctx.now }
+          : fc.path === 'legMinutes'
+            ? { value: {}, updatedAt: ctx.now }
+            : undefined
+        : current === undefined
+          ? { value: fc.before.value, updatedAt: ctx.now }
+          : setField(current, fc.before.value, ctx.now),
+    );
     if (fc.path === 'candidates') reverted.add('candidates');
     else if (typeof fc.path === 'object' && fc.path.field === 'stops') {
       reverted.add(dayKey(fc.path.day));

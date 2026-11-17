@@ -10,7 +10,7 @@ export const SAME_POINT_M = 10;
 const EARTH_RADIUS_M = 6_371_008.8;
 /** 직선거리를 도로·보행 거리로 늘리는 계수. */
 const DETOUR = 1.3;
-const SPEED_MPS = { car: 40_000 / 3600, walk: 4000 / 3600 } as const;
+const SPEED_MPS = { car: 40_000 / 3600, walk: 4000 / 3600, transit: 20_000 / 3600 } as const;
 
 const toRad = (deg: number): number => (deg * Math.PI) / 180;
 
@@ -30,12 +30,15 @@ export function autoMode(straightM: number): 'car' | 'walk' {
   return straightM <= WALK_AUTO_MAX_M ? 'walk' : 'car';
 }
 
-/** 경로를 얻지 못했을 때의 직선 추정: 거리 = 직선 × 1.3, 자동차 시속 40km, 도보 시속 4km. */
+/** 경로를 얻지 못했을 때의 직선 추정: 거리 = 직선 × 1.3, 자동차 시속 40km, 도보 시속 4km. 대중교통은 시속 20km와 대기 10분. */
 export function estimateLeg(
-  mode: 'car' | 'walk',
+  mode: 'car' | 'walk' | 'transit',
   straightM: number,
 ): { distanceM: number; durationS: number } {
   if (!(straightM >= SAME_POINT_M)) return { distanceM: 0, durationS: 0 };
   const distance = straightM * DETOUR;
-  return { distanceM: Math.round(distance), durationS: Math.round(distance / SPEED_MPS[mode]) };
+  return {
+    distanceM: Math.round(distance),
+    durationS: Math.round(distance / SPEED_MPS[mode]) + (mode === 'transit' ? 600 : 0),
+  };
 }

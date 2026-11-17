@@ -1,6 +1,6 @@
 import { dayEndId, dayPoints, dayStartId } from 'src/domain/share/check-share-trip';
 import { computeSchedule } from 'src/domain/trips/schedule';
-import type { ShareDocV2, ShareLeg, SharePlace, ShareStop, ShareTrip } from 'src/schema/share';
+import type { ShareTripDoc, ShareLeg, SharePlace, ShareStop, ShareTrip } from 'src/schema/share';
 import type { MapLine, MapPin } from 'src/share-protocol';
 import { addDays } from 'src/sections/trips/trip-dates';
 
@@ -136,7 +136,7 @@ export function placeIdOfPin(id: string): string {
  * 지도 페이지로 보낼 핀과 경로선(`draw`). 앱 계획 화면의 `trip-map-layers.ts`와 같은 규칙이다.
  * 같은 id의 핀은 한 번만 낸다(지도 페이지는 id를 걸러 주지 않는다).
  */
-export function tripPins(doc: ShareDocV2, tab: TripTab): { pins: MapPin[]; lines: MapLine[] } {
+export function tripPins(doc: ShareTripDoc, tab: TripTab): { pins: MapPin[]; lines: MapLine[] } {
   const trip = doc.trips[0];
   if (trip === undefined) return { pins: [], lines: [] };
   const places = new Map<string, SharePlace>(doc.places.map((p) => [p.id, p]));

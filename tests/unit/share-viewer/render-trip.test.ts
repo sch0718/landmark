@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { dayColor } from 'src/components/map/map-colors';
-import type { ShareDocV2 } from 'src/schema/share';
+import type { ShareTripDoc } from 'src/schema/share';
 import type { MapPort } from 'src/share-viewer/map-frame';
 import { renderTripViewer } from 'src/share-viewer/render-trip';
 import { tripPins } from 'src/share-viewer/trip-view';
@@ -25,7 +25,7 @@ beforeEach(() => {
   Element.prototype.scrollIntoView = vi.fn();
 });
 
-function mount(doc: ShareDocV2 = makeShareV2Doc(), compact = false) {
+function mount(doc: ShareTripDoc = makeShareV2Doc(), compact = false) {
   return renderTripViewer(root, doc, map as unknown as MapPort, {
     app: APP,
     compact: () => compact,
@@ -550,4 +550,28 @@ it('initialTab을 유지하고 없어진 Day는 Day 1로 돌아가며 현재 탭
     initialTab: { kind: 'day', dayIndex: 99 },
   });
   expect(fallback.currentTab()).toEqual({ kind: 'day', dayIndex: 0 });
+});
+
+describe('v3 대중교통·직접 입력', () => {
+  it('해외에서 적은 분과 대중교통·구글 길찾기를 보인다', () => {
+    const doc: ShareTripDoc = { ...makeShareV2Doc(), version: 3 };
+    doc.places.forEach((place, i) => {
+      place.lng = 2.3 + i / 100;
+      place.lat = 48.8;
+    });
+    Object.assign(doc.trips[0]!.days[0]!.legs[0]!, {
+      mode: 'transit',
+      status: 'manual',
+      durationS: 1800,
+      tollFare: null,
+      path: [],
+      queriedAt: null,
+    });
+    mount(doc);
+    expect(root.querySelector('.leg-text')!.textContent).toContain('대중교통 30분');
+    expect(root.querySelector('.leg-text')!.textContent).toContain('직접 입력');
+    const href = root.querySelector<HTMLAnchorElement>('.directions')!.href;
+    expect(href).toContain('travelmode=transit');
+    expect(href).toContain('google.com');
+  });
 });

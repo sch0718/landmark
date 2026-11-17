@@ -100,3 +100,15 @@ describe('함께 편집 기기 기록', () => {
     off();
   });
 });
+
+it('대중교통·분 공동 기준을 새 저장소에서 읽고 잘못된 분은 거절한다', () => {
+  const b = base(),
+    key = 'a000000000>b000000000';
+  b.plan.legModes[key] = 'transit';
+  b.plan.legMinutes = { [key]: 30 };
+  createTripCollabStore().writeBase('trip000001', b);
+  expect(createTripCollabStore().readBase('trip000001')).toEqual(b);
+  b.plan.legMinutes[key] = 0;
+  createTripCollabStore().writeBase('trip000001', b);
+  expect(createTripCollabStore().readBase('trip000001')).toBeNull();
+});

@@ -1,6 +1,7 @@
 import { Cause, ErrorReporter } from 'effect';
 import { useAtomValue, useStore } from 'jotai';
 import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
+import { fixedLegTime } from 'src/domain/trips/leg-time';
 import { legBetween } from 'src/domain/trips/query';
 import { ESTIMATE_ONLY } from 'src/domain/trip-live/build-live-doc';
 import { startEffect } from 'src/lib/effect/runtime';
@@ -53,7 +54,7 @@ export function useCollabDeps(tripId: string, active: boolean): CollabEngineDeps
           b = lib.places[map[to] ?? to];
         if (!trip || !a || !b) return { mode: 'car', time: ESTIMATE_ONLY({} as never) };
         const leg = legBetween(trip, a, b);
-        return { mode: leg.mode, time: latestLegs.current.routeOf(leg) };
+        return { mode: leg.mode, time: fixedLegTime(leg) ?? latestLegs.current.routeOf(leg) };
       },
       now: () => new Date(),
       newPlaceId: newLiveId,

@@ -146,3 +146,20 @@ it('바뀐 겹침만 선택을 비우고 그대로인 겹침은 남긴다', asyn
   ).not.toBeChecked();
   expect(screen.getByRole('alert')).toBeVisible();
 });
+
+it('구간 충돌은 대중교통과 분·지움을 함께 보여 준다', () => {
+  const base = planFromDoc(buildLiveDoc());
+  base.days[0]!.stops.push(base.days[1]!.stops.shift()!);
+  const mine = structuredClone(base);
+  const theirs = structuredClone(base);
+  const key = `${base.days[0]!.stops[0]!.placeId}>${base.days[0]!.stops[1]!.placeId}`;
+  base.legMinutes = { [key]: 15 };
+  mine.legModes[key] = 'transit';
+  mine.legMinutes = { [key]: 30 };
+  delete theirs.legMinutes;
+  mocked.view = { ...mocked.view, merge: mergeCollabPlan(base, mine, theirs) };
+  mount();
+  expect(screen.getByRole('heading', { name: /구간 시간/ })).toBeVisible();
+  expect(screen.getByText('대중교통 · 30분')).toBeVisible();
+  expect(screen.getByText(/구간 시간 지움/)).toBeVisible();
+});

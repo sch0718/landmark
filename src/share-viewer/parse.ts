@@ -4,7 +4,7 @@ import type {
   ShareDay,
   ShareDoc,
   ShareDocV1,
-  ShareDocV2,
+  ShareTripDoc,
   ShareLabel,
   ShareLeg,
   SharePlace,
@@ -97,7 +97,8 @@ function isCalendarDate(x: unknown): x is string {
 const isStringArray = (x: unknown): x is string[] =>
   Array.isArray(x) && x.every((v) => typeof v === 'string');
 
-const isMode = (x: unknown): x is 'car' | 'walk' => x === 'car' || x === 'walk';
+const isMode = (x: unknown, v3 = false): x is ShareLeg['mode'] =>
+  x === 'car' || x === 'walk' || (v3 && x === 'transit');
 
 function parseStop(x: unknown): ShareStop | null {
   if (!isRecord(x)) return null;
@@ -139,13 +140,14 @@ function parsePoint(x: unknown): [number, number] | null {
 
 const LEG_STATUSES: readonly string[] = ['routed', 'estimated', 'no-route', 'same-point'];
 
-function parseLeg(x: unknown): ShareLeg | null {
+function parseLeg(x: unknown, v3: boolean): ShareLeg | null {
   if (!isRecord(x)) return null;
   const { from, to, mode, durationS, distanceM, tollFare, status, queriedAt, path } = x;
-  if (typeof from !== 'string' || typeof to !== 'string' || !isMode(mode)) return null;
+  if (typeof from !== 'string' || typeof to !== 'string' || !isMode(mode, v3)) return null;
   if (!isFiniteNumber(durationS) || !isFiniteNumber(distanceM)) return null;
   if (tollFare !== null && !isFiniteNumber(tollFare)) return null;
-  if (typeof status !== 'string' || !LEG_STATUSES.includes(status)) return null;
+  if (typeof status !== 'string' || !(LEG_STATUSES.includes(status) || (v3 && status === 'manual')))
+    return null;
   if (queriedAt !== null && !isIsoDateTime(queriedAt)) return null;
   if (!Array.isArray(path)) return null;
   const points: [number, number][] = [];
@@ -167,7 +169,7 @@ function parseLeg(x: unknown): ShareLeg | null {
   };
 }
 
-function parseDay(x: unknown): ShareDay | null {
+function parseDay(x: unknown, v3: boolean): ShareDay | null {
   if (!isRecord(x)) return null;
   const { startTime, lodgingId, stops, legs } = x;
   if (typeof startTime !== 'string' || !HHMM.test(startTime)) return null;
@@ -181,14 +183,14 @@ function parseDay(x: unknown): ShareDay | null {
   }
   const parsedLegs: ShareLeg[] = [];
   for (const raw of legs as unknown[]) {
-    const leg = parseLeg(raw);
+    const leg = parseLeg(raw, v3);
     if (leg === null) return null;
     parsedLegs.push(leg);
   }
   return { startTime, lodgingId: lodgingId as string | null, stops: parsedStops, legs: parsedLegs };
 }
 
-function parseTrip(x: unknown): ShareTrip | null {
+function parseTrip(x: unknown, v3: boolean): ShareTrip | null {
   if (!isRecord(x)) return null;
   const { title, startDate, endDate, originId, candidateIds, days, legModes } = x;
   if (typeof title !== 'string') return null;
@@ -196,14 +198,23 @@ function parseTrip(x: unknown): ShareTrip | null {
   if (originId !== null && typeof originId !== 'string') return null;
   if (!isStringArray(candidateIds) || !Array.isArray(days)) return null;
   if (!isRecord(legModes)) return null;
-  const modes: Record<string, 'car' | 'walk'> = {};
+  const modes: ShareTrip['legModes'] = {};
   for (const [key, mode] of Object.entries(legModes)) {
-    if (!isMode(mode)) return null;
+    if (!isMode(mode, v3)) return null;
     modes[key] = mode;
+  }
+  const minutes: Record<string, number> = {};
+  if ('legMinutes' in x) {
+    if (!v3 || !isRecord(x.legMinutes)) return null;
+    for (const [key, value] of Object.entries(x.legMinutes)) {
+      if (typeof value !== 'number' || !Number.isInteger(value) || value < 1 || value > 1440)
+        return null;
+      minutes[key] = value;
+    }
   }
   const parsedDays: ShareDay[] = [];
   for (const raw of days as unknown[]) {
-    const day = parseDay(raw);
+    const day = parseDay(raw, v3);
     if (day === null) return null;
     parsedDays.push(day);
   }
@@ -215,6 +226,7 @@ function parseTrip(x: unknown): ShareTrip | null {
     candidateIds: [...candidateIds],
     days: parsedDays,
     legModes: modes,
+    ...('legMinutes' in x ? { legMinutes: minutes } : {}),
   };
 }
 
@@ -243,18 +255,23 @@ function parseCommon(
   return { title, createdAt: createdAt as string, labels: parsedLabels, places: parsedPlaces };
 }
 
-function parseV2(value: Rec): ShareDocV2 | null {
+function parseV2(value: Rec): ShareTripDoc | null {
   const head = parseCommon(value, true);
   if (head === null) return null;
   const { trips } = value;
   if (!Array.isArray(trips) || trips.length !== SHARE_TRIP_LIMITS.trips) return null;
   const parsedTrips: ShareTrip[] = [];
   for (const raw of trips as unknown[]) {
-    const trip = parseTrip(raw);
+    const trip = parseTrip(raw, value.version === 3);
     if (trip === null) return null;
     parsedTrips.push(trip);
   }
-  const doc: ShareDocV2 = { format: 'tripmap-share', version: 2, ...head, trips: parsedTrips };
+  const doc: ShareTripDoc = {
+    format: 'tripmap-share',
+    version: value.version === 3 ? 3 : 2,
+    ...head,
+    trips: parsedTrips,
+  };
   if (doc.places.length < 1) return null;
   if (checkShareTrip(doc).length > 0) return null;
   return doc;
@@ -270,7 +287,7 @@ function parseV1(value: Rec): ShareDocV1 | null {
 export function parseShareDoc(value: unknown): ShareDoc | null {
   if (!isRecord(value) || value.format !== 'tripmap-share') return null;
   if (value.version === 1) return parseV1(value);
-  if (value.version === 2) return parseV2(value);
+  if (value.version === 2 || value.version === 3) return parseV2(value);
   return null;
 }
 
@@ -290,7 +307,7 @@ export function parseLinkDoc(value: unknown): ShareDoc | null {
   const keys = (x: unknown, allowed: string): x is Rec =>
     isRecord(x) && Object.keys(x).every((key) => allowed.split(' ').includes(key));
   if (!keys(value, 'format version title createdAt labels places trips')) return null;
-  const v2 = value.version === 2;
+  const v2 = value.version === 2 || value.version === 3;
   if (!v2 && 'trips' in value) return null;
   if (!isIsoDateTime(value.createdAt)) return null;
   if (!Array.isArray(value.places) || value.places.length < 1 || value.places.length > 1000)
@@ -313,7 +330,10 @@ export function parseLinkDoc(value: unknown): ShareDoc | null {
     if (!Array.isArray(value.trips)) return null;
     for (const t of value.trips) {
       if (
-        !keys(t, 'title startDate endDate originId candidateIds days legModes') ||
+        !keys(
+          t,
+          `title startDate endDate originId candidateIds days legModes${value.version === 3 ? ' legMinutes' : ''}`,
+        ) ||
         !Array.isArray(t.days)
       )
         return null;

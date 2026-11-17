@@ -32,6 +32,12 @@ export const DaySchema = Schema.Struct({
   startTime: FieldSchema(HHmm),
 });
 
+/** 구간에 직접 입력하는 시간(분). */
+export const LegMinutes = Schema.Number.check(
+  Schema.isInt(),
+  Schema.isBetween({ minimum: 1, maximum: 1440 }),
+);
+
 export const TripSchema = Schema.Struct({
   id: TripId,
   title: FieldSchema(
@@ -47,6 +53,9 @@ export const TripSchema = Schema.Struct({
   // 키 형식("<출발 PlaceId>><도착 PlaceId>")은 `checkTrip`이 검사한다.
   // 키에 패턴을 걸면 Effect가 틀린 항목을 오류 없이 버리기 때문이다(library.ts 참고).
   legModes: FieldSchema(Schema.Record(Schema.String, Schema.Literals(['car', 'walk']))),
+  /** 옛 버전이 legModes를 읽을 수 있도록 대중교통은 따로 둔다. */
+  legTransit: Schema.optional(FieldSchema(Schema.Array(Schema.String))),
+  legMinutes: Schema.optional(FieldSchema(Schema.Record(Schema.String, LegMinutes))),
   createdAt: IsoDateTime,
   deletedAt: Schema.NullOr(IsoDateTime),
 });
@@ -111,6 +120,12 @@ export function checkTrip(
 
   for (const key of Object.keys(trip.legModes.value)) {
     if (!LEG_KEY.test(key)) add(['legModes', key], `구간 키가 올바르지 않습니다: ${key}`);
+  }
+  for (const key of trip.legTransit?.value ?? []) {
+    if (!LEG_KEY.test(key)) add(['legTransit', key], `구간 키가 올바르지 않습니다: ${key}`);
+  }
+  for (const key of Object.keys(trip.legMinutes?.value ?? {})) {
+    if (!LEG_KEY.test(key)) add(['legMinutes', key], `구간 키가 올바르지 않습니다: ${key}`);
   }
   return issues;
 }

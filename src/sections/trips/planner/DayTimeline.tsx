@@ -5,7 +5,7 @@ import { useAtomValue, useSetAtom } from 'jotai';
 import { Fragment, useState } from 'react';
 import { LockIcon } from 'src/components/icons';
 import { checkVisit, visitOf } from 'src/domain/trips/hours';
-import { setDayStartTime, setLegMode } from 'src/domain/trips/ops';
+import { setDayStartTime, setLegMinutes, setLegMode } from 'src/domain/trips/ops';
 import { dayEndpoints, tripDates, visibleStops } from 'src/domain/trips/query';
 import { formatClock, formatSlack, formatSpan, type PointTime } from 'src/domain/trips/schedule';
 import type { Place } from 'src/schema/library';
@@ -311,6 +311,9 @@ export function DayTimeline({
         leg={leg}
         onMode={(mode) =>
           void run((lib, ctx) => setLegMode(lib, trip.id, leg.from.id, leg.to.id, mode, ctx))
+        }
+        onMinutes={(minutes) =>
+          void run((lib, ctx) => setLegMinutes(lib, trip.id, leg.from.id, leg.to.id, minutes, ctx))
         }
         onRetry={() => plan.retryLeg(leg.key)}
       />

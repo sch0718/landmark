@@ -6,14 +6,14 @@ import {
   SHARE_IMPORT_LIMITS,
   type ShareReadLimits,
 } from 'src/domain/share/read-share';
-import type { ShareDocV2 } from 'src/schema/share';
+import type { ShareTripDoc } from 'src/schema/share';
 import { encodeShareHash } from 'src/share-viewer/encode';
 import { buildLiveLibrary } from '../../../fixtures/builders';
 
 const a: ShareReadLimits = SHARE_IMPORT_LIMITS;
 const b: ShareReadLimits = AGENT_INBOX_LIMITS;
 
-function makeDoc(count = 2): ShareDocV2 {
+function makeDoc(count = 2): ShareTripDoc {
   const base = buildLiveLibrary();
   const sample = base.places.place00001!;
   const places = Object.fromEntries(

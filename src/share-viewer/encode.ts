@@ -55,7 +55,7 @@ export async function encodeShareHash(doc: ShareDoc): Promise<string> {
  * 시간·조회 시각은 남겨 문서 검사가 같게 한다. v1은 그대로 돌려준다.
  */
 export function hashDoc(doc: ShareDoc): ShareDoc {
-  if (doc.version !== 2) return doc;
+  if (doc.version === 1) return doc;
   return {
     ...doc,
     trips: doc.trips.map((trip) => ({
@@ -99,7 +99,7 @@ export async function viewLink(doc: ShareDoc, app: string): Promise<ImportLink> 
     let value = await encodeShareHash(candidate);
     const decodedTooBig = (data: ShareDoc) =>
       new TextEncoder().encode(JSON.stringify(data)).byteLength > 5_242_880;
-    if ((value.length > MAX_HASH_CHARS || decodedTooBig(candidate)) && doc.version === 2) {
+    if ((value.length > MAX_HASH_CHARS || decodedTooBig(candidate)) && doc.version !== 1) {
       candidate = hashDoc(doc);
       value = await encodeShareHash(candidate);
     }

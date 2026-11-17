@@ -1,6 +1,6 @@
 import { OWNER_LABEL } from 'src/domain/trip-collab/constants';
 import { mapServerPlaces, assignServerPlaceIds, serverIdOf } from 'src/domain/trip-collab/places';
-import { planFromDoc } from 'src/domain/trip-collab/plan';
+import { mapLegSettings, planFromDoc } from 'src/domain/trip-collab/plan';
 import {
   buildLiveTripDoc,
   ESTIMATE_ONLY,
@@ -94,12 +94,7 @@ export async function joinCollabAsOwner(deps: CollabEngineDeps, live: LiveState)
       ...plan,
       origin: plan.origin === null ? null : toServer(plan.origin),
       candidates: plan.candidates.map(toServer),
-      legModes: Object.fromEntries(
-        Object.entries(plan.legModes).map(([key, mode]) => {
-          const [a, b] = key.split('>');
-          return [`${toServer(a!)}>${toServer(b!)}`, mode];
-        }),
-      ),
+      ...mapLegSettings(plan.legModes, plan.legMinutes, toServer),
       days: plan.days.map((day, i) => ({
         ...day,
         id: dayIds[i]!,

@@ -7,6 +7,14 @@ import type { ReleaseNote } from '@sch0718/app-update';
  */
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: 'v0.37.0',
+    date: '2026-11-18',
+    items: [
+      '여행 구간에서 대중교통을 고르고, 이동 시간을 분으로 직접 적어요. 뒤 정류장 도착 시각에도 바로 반영돼요.',
+      '직접 적은 시간과 대중교통은 일정 공유·함께 편집·AI CLI에서도 이어져요.',
+    ],
+  },
+  {
     version: 'v0.36.0',
     date: '2026-11-17',
     items: [

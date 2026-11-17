@@ -1,6 +1,7 @@
 import { Effect, Result } from 'effect';
 import { useAtomValue, useStore } from 'jotai';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { fixedLegTime } from 'src/domain/trips/leg-time';
 import { estimateLeg, SAME_POINT_M } from 'src/domain/trips/geo';
 import { dayEndpoints, dayLegs, visibleStops, type Leg } from 'src/domain/trips/query';
 import {
@@ -20,7 +21,7 @@ import { routeStatesAtom, type RouteState } from 'src/stores/trip-planner';
 
 export type PlannedLeg = Leg & {
   time: LegTime;
-  status: 'routed' | 'estimated' | 'no-route' | 'failed' | 'abroad';
+  status: 'routed' | 'estimated' | 'no-route' | 'failed' | 'abroad' | 'manual';
   queriedAt: string | null;
   path: [number, number][];
 };
@@ -152,20 +153,24 @@ const straightPath = (leg: Leg): [number, number][] => [
 
 /** 구간에 시간을 붙인다. 경로가 없으면(요청 전·실패) 직선 추정이다. */
 export function planLeg(leg: Leg, state: RouteState | undefined): PlannedLeg {
-  if (isSamePointLeg(leg)) {
+  const fixed = fixedLegTime(leg);
+  if (fixed !== null) {
     return {
       ...leg,
-      time: { durationS: 0, distanceM: 0, tollFare: null, estimated: false },
-      status: 'routed',
-      queriedAt: null,
-      path: straightPath(leg),
-    };
-  }
-  if (isAbroadLeg(leg.from, leg.to)) {
-    return {
-      ...leg,
-      time: { durationS: 0, distanceM: Math.round(leg.straightM), tollFare: null, estimated: true },
-      status: 'abroad',
+      time: {
+        durationS: fixed.durationS,
+        distanceM: fixed.distanceM,
+        tollFare: null,
+        estimated: fixed.status === 'estimated',
+      },
+      status:
+        fixed.status === 'same-point'
+          ? 'routed'
+          : fixed.status === 'manual'
+            ? 'manual'
+            : isAbroadLeg(leg.from, leg.to)
+              ? 'abroad'
+              : 'estimated',
       queriedAt: null,
       path: straightPath(leg),
     };
@@ -198,6 +203,7 @@ const sameLeg = (a: Leg, b: Leg): boolean =>
   a.from === b.from &&
   a.to === b.to &&
   a.mode === b.mode &&
+  a.minutes === b.minutes &&
   a.modeSource === b.modeSource &&
   a.walkAllowed === b.walkAllowed &&
   a.straightM === b.straightM;
@@ -228,7 +234,9 @@ export function useDayPlan(tripId: string, dayIndex: number): DayPlan {
   // 문서가 바뀌어도 이 Day의 구간(장소 참조·수단)이 같으면 이전 배열을 그대로 쓴다.
   const legs = useStableArray(trip === null ? [] : dayLegs(library, trip, dayIndex), sameLeg);
   // 이 Day 구간의 조회 결과만. 다른 Day의 결과가 와도 참조가 바뀌지 않는다.
-  const dayStates = useStableArray(legs.map((leg) => states[routeKeyOf(leg)]));
+  const dayStates = useStableArray(
+    legs.map((leg) => (fixedLegTime(leg) === null ? states[routeKeyOf(leg)] : undefined)),
+  );
   const day = trip?.days[dayIndex];
   const stops = useStableArray(day === undefined ? [] : visibleStops(library, day));
   const { start, end } =
@@ -244,7 +252,7 @@ export function useDayPlan(tripId: string, dayIndex: number): DayPlan {
     const keys = new Set<string>();
     for (const d of order) {
       for (const leg of dayLegs(library, trip, d)) {
-        if (!isSamePointLeg(leg) && !isAbroadLeg(leg.from, leg.to)) keys.add(routeKeyOf(leg));
+        if (fixedLegTime(leg) === null) keys.add(routeKeyOf(leg));
       }
     }
     return [...keys].join('\n');
@@ -280,21 +288,20 @@ export function useDayPlan(tripId: string, dayIndex: number): DayPlan {
     }
   }
   const offline = legs.some(
-    (leg, i) =>
-      !isSamePointLeg(leg) && !isAbroadLeg(leg.from, leg.to) && dayStates[i]?.status === 'offline',
+    (leg, i) => fixedLegTime(leg) === null && dayStates[i]?.status === 'offline',
   );
 
   // 다시 요청은 화면이 사라져도 끝까지 돌게 둔다(결과는 공용 atom에 남아 다음에 쓴다).
   const refresh = useCallback(() => {
     const requests = legs
-      .filter((leg) => !isSamePointLeg(leg) && !isAbroadLeg(leg.from, leg.to))
+      .filter((leg) => fixedLegTime(leg) === null)
       .map((leg) => ({ key: routeKeyOf(leg), refresh: true }));
     if (requests.length > 0) forkEffect(lookupAll(store, requests));
   }, [legs, store]);
   const retryLeg = useCallback(
     (key: string) => {
       const leg = legs.find((l) => l.key === key);
-      if (leg === undefined || isSamePointLeg(leg) || isAbroadLeg(leg.from, leg.to)) return;
+      if (leg === undefined || fixedLegTime(leg) !== null) return;
       forkEffect(lookupAll(store, [{ key: routeKeyOf(leg), refresh: true }]));
     },
     [legs, store],

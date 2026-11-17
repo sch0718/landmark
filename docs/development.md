@@ -430,7 +430,19 @@ Node 24와 설치된 의존성이 필요합니다. JSON을 다른 도구에서 �
 | `days[]` | 기간의 날 수와 같은 개수입니다. `startTime`은 `HH:mm`(기본 `09:00`), `lodging`은 장소 key 또는 `null`입니다 |
 | `days[].stops[]` | `place`는 장소 key, `stayMin`은 0~1440 정수 또는 `null`, `fixedTime`은 `HH:mm` 또는 `null`, `note`는 500자까지입니다 |
 | `origin`·`candidates` | 첫날 출발지 key 또는 `null`·아직 Day에 넣지 않은 후보 key 목록입니다. Stop·후보 전체에서 장소를 두 번 넣을 수 없으며 출발지·숙소는 겹쳐도 됩니다 |
-| `legModes` | `"출발key>도착key": "car"` 또는 `"walk"`입니다. 그날 실제 이웃한 두 점만 허용하며 도보는 직선 50km까지입니다 |
+| `legModes` | `"출발key>도착key": "car"`, `"walk"`, `"transit"`(대중교통)입니다. 그날 실제 이웃한 두 점만 허용하며 도보는 직선 50km까지입니다. 수단을 생략하면 자동으로 고릅니다 |
+| `legMinutes` | `"출발key>도착key": 30`처럼 1~1440 정수 분을 적습니다. 키 규칙은 `legModes`와 같고 수단을 생략한 구간에도 적을 수 있습니다. 경로 조회·어림 대신 적은 시간을 쓰며 뒤 정류장 도착 시각에도 반영합니다 |
+
+대중교통과 직접 입력 시간 예시입니다. 키는 `places[].key`를 `>`로 잇습니다.
+
+```json
+{
+  "legModes": { "lodging>notredame": "transit", "notredame>louvre": "walk" },
+  "legMinutes": { "lodging>notredame": 30 }
+}
+```
+
+국내 대중교통은 경로를 조회하지 않고 직선×1.3 거리·시속 20km에 대기 10분을 더한 어림값을 씁니다. 해외 구간은 분을 적지 않으면 수단과 관계없이 0분이므로 구글맵에서 확인해 적습니다. `--no-routes`로 조회를 생략해도 직접 적은 분은 그대로 씁니다. 대중교통·분이 실제 공유 내용에 있으면 공유 v3, 없으면 기존 v2를 만듭니다.
 
 #### 출력과 끝 코드
 
@@ -440,7 +452,7 @@ Node 24와 설치된 의존성이 필요합니다. JSON을 다른 도구에서 �
 | --- | --- |
 | `trip` | `{ title, startDate, endDate, places }` |
 | `days` | Day별 `{ date, stops, travelMin, estimatedLegs }`. Stop은 `{ key, name, arrive, depart, fixedTime, slackMin }`입니다 |
-| `routes` | `{ legs, routed, estimated, noRoute, samePoint, oldestQueriedAt }` |
+| `routes` | `{ legs, routed, estimated, noRoute, samePoint, manual, oldestQueriedAt }`. `manual`은 `legMinutes`로 시간을 직접 적은 구간 수입니다 |
 | `links` | `{ view, import }` 데이터 링크입니다. `share`는 아래 형식으로 덮어씁니다 |
 | `warnings` | `{ path, code, message }` 목록입니다 |
 

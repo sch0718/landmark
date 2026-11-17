@@ -235,8 +235,8 @@ describe('v2 (일정 공유)', () => {
     expect(await readShareHash(await encodeCompressedJson(doc))).toEqual({ ok: true, doc });
   });
 
-  it('version 3 이상은 newer (다른 검사보다 먼저)', async () => {
-    expect(await readShareFile(htmlBlob({ ...makeShareV2Doc(), version: 3 }))).toEqual({
+  it('version 4 이상은 newer (다른 검사보다 먼저)', async () => {
+    expect(await readShareFile(htmlBlob({ ...makeShareV2Doc(), version: 4 }))).toEqual({
       ok: false,
       error: 'newer',
     });
@@ -245,7 +245,7 @@ describe('v2 (일정 공유)', () => {
       await readShareFile(htmlBlob({ format: 'tripmap-share', version: 99, anything: 1 })),
     ).toEqual({ ok: false, error: 'newer' });
     expect(
-      await readShareHash(await encodeCompressedJson({ ...makeShareV2Doc(), version: 3 })),
+      await readShareHash(await encodeCompressedJson({ ...makeShareV2Doc(), version: 4 })),
     ).toEqual({
       ok: false,
       error: 'newer',
@@ -258,7 +258,7 @@ describe('v2 (일정 공유)', () => {
       { format: 'tripmap-share', version: null },
       { format: 'tripmap-share', version: 2.5 },
       { format: 'tripmap-share', version: 0 },
-      { format: 'other', version: 3 },
+      { format: 'other', version: 4 },
     ];
     for (const value of odd) {
       expect(await readShareFile(htmlBlob(value))).toEqual({ ok: false, error: 'corrupt' });

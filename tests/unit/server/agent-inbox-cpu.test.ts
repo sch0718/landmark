@@ -90,7 +90,7 @@ describe('받은함 CPU 회귀 방지', () => {
   it('앱도 장소 한도를 스키마보다 먼저 검사하되 newer가 우선한다', async () => {
     const doc = { ...fixture(), places: Array.from({ length: 1001 }, () => null) };
     const d = await codec.encodeCompressedJson(doc);
-    const newer = await codec.encodeCompressedJson({ ...doc, version: 3 });
+    const newer = await codec.encodeCompressedJson({ ...doc, version: 4 });
     const schema = vi.spyOn(parse, 'safeParse');
     expect(await readShareHash(d)).toEqual({ ok: false, error: 'too-many' });
     expect(await readShareHash(newer)).toEqual({ ok: false, error: 'newer' });

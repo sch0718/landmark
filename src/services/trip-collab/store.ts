@@ -12,6 +12,7 @@ import {
   LIVE_TOKEN_PATTERN,
   LIVE_DAY_ID_PATTERN,
 } from 'src/domain/trip-live/live-doc';
+import { LegMinutes } from 'src/schema/trip';
 import { safeParse } from 'src/schema/parse';
 import { sharedProgressSchema } from './client';
 export const TRIP_COLLAB_KEY = 'tripmap:trip-collab:v1';
@@ -40,7 +41,7 @@ const id = pattern(LIVE_ID_PATTERN),
   stopId = pattern(COLLAB_STOP_ID_PATTERN);
 const integer = Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0));
 const list = <S extends Schema.Top>(schema: S) => Schema.mutable(Schema.Array(schema));
-const mode = Schema.Literals(['car', 'walk']);
+const mode = Schema.Literals(['car', 'walk', 'transit']);
 const planSchema = Schema.Struct({
   title: Schema.String,
   startDate: Schema.String,
@@ -48,6 +49,7 @@ const planSchema = Schema.Struct({
   origin: Schema.NullOr(id),
   candidates: list(id),
   legModes: Schema.Record(Schema.String, mode),
+  legMinutes: Schema.optional(Schema.Record(Schema.String, LegMinutes)),
   days: list(
     Schema.Struct({
       id: dayId,

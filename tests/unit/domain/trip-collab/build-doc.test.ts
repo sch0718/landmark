@@ -77,3 +77,89 @@ describe('공동본 만들기', () => {
     expect(buildCollabDoc(input)).toBeNull();
   });
 });
+
+it('병합 계획의 대중교통·분을 우선하여 경로 조회 없이 v3를 만든다', () => {
+  const input = make();
+  input.plan.origin = 'place00002';
+  input.plan.legModes['place00002>place00001'] = 'transit';
+  input.plan.legMinutes = { 'place00002>place00001': 30 };
+  const doc = buildCollabDoc(input)!;
+  expect(doc.share.version).toBe(3);
+  expect(doc.share.trips[0]!.days[0]!.legs[0]).toMatchObject({
+    mode: 'transit',
+    status: 'manual',
+    durationS: 1800,
+  });
+  expect(input.routeOf.mock.calls).not.toContainEqual(['place00002', 'place00001']);
+  expect(planFromDoc(doc).legMinutes).toEqual(input.plan.legMinutes);
+});
+
+it('선택된 자동차 수단에 옛 대중교통 콜백의 시간과 수단을 붙이지 않는다', () => {
+  const input = make();
+  input.plan.origin = 'place00002';
+  input.plan.legModes['place00002>place00001'] = 'car';
+  const result = buildCollabDoc({
+    ...input,
+    routeOf: () => ({
+      mode: 'transit',
+      time: {
+        status: 'estimated',
+        durationS: 99999,
+        distanceM: 5,
+        tollFare: null,
+        queriedAt: null,
+        path: [],
+      },
+    }),
+  })!;
+  expect(result.share.trips[0]!.days[0]!.legs[0]!.mode).toBe('car');
+  expect(result.share.trips[0]!.days[0]!.legs[0]!.durationS).not.toBe(99999);
+});
+
+it('제외된 장소의 마지막 분은 빈 필드 없이 v2로 만든다', () => {
+  const input = make();
+  input.plan.legMinutes = { 'removed000>place00001': 30 };
+  const result = buildCollabDoc(input)!;
+  expect(result.share.version).toBe(2);
+  expect(result.share.trips[0]).not.toHaveProperty('legMinutes');
+});
+it('문서에 있지만 이웃하지 않은 구간의 대중교통·분은 빼고 v2로 만든다', () => {
+  const input = make();
+  input.plan.origin = 'place00002';
+  // 이웃 구간은 place00002>place00001이다. 뒤집은 키는 쓰이지 않는 옛 키다.
+  input.plan.legModes['place00001>place00002'] = 'transit';
+  input.plan.legMinutes = { 'place00001>place00002': 30 };
+  const result = buildCollabDoc(input)!;
+  expect(result.share.version).toBe(2);
+  expect(result.share.trips[0]).not.toHaveProperty('legMinutes');
+  expect(Object.values(result.share.trips[0]!.legModes)).not.toContain('transit');
+});
+it('분 지움 뒤 콜백의 옛 직접 입력 시간을 다시 쓰지 않는다', () => {
+  const input = make();
+  input.plan.origin = 'place00002';
+  const result = buildCollabDoc({
+    ...input,
+    routeOf: () => ({
+      mode: 'car',
+      time: {
+        status: 'manual',
+        durationS: 99999,
+        distanceM: 5,
+        tollFare: null,
+        queriedAt: null,
+        path: [],
+      },
+    }),
+  })!;
+  expect(result.share.version).toBe(2);
+  expect(result.share.trips[0]!.days[0]!.legs[0]!.status).toBe('estimated');
+});
+
+it('수단 지움은 옛 자동차 콜백 대신 가까운 구간의 자동 도보를 쓴다', () => {
+  const input = make();
+  input.plan.origin = 'place00002';
+  input.previous.share.places[1]!.lng = input.previous.share.places[0]!.lng + 0.001;
+  input.previous.share.places[1]!.lat = input.previous.share.places[0]!.lat;
+  const doc = buildCollabDoc(input)!;
+  expect(doc.share.trips[0]!.days[0]!.legs[0]!.mode).toBe('walk');
+});
