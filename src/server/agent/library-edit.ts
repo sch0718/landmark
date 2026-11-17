@@ -19,6 +19,17 @@ export const EDIT_MAX_OPS = 50;
 /** 되돌리기 한 번에 처리하는 변경 수. 한 번의 pushItems로 묶어 50건이어도 D1 쿼리가 10개 안팎이다(Workers Free 호출당 50). */
 export const UNDO_MAX_PER_CALL = 50;
 const LABEL_MAX_CHARS = 80;
+
+/**
+ * 동기화 서버는 같은 rev에서 빠진 선택 필드를 남긴다(옛 클라이언트 보호). AI 편집·되돌리기에서
+ * 키가 빠진 것은 지우려는 뜻이므로, `from`에 있던 선택 필드를 빈 값과 새 시각으로 채운다.
+ */
+function emptyMissingFields(kind: ItemKind, from: object, doc: object, at: string): void {
+  for (const [key, value] of Object.entries(OPTIONAL_FIELD_EMPTY[kind])) {
+    if (Object.hasOwn(from, key) && !Object.hasOwn(doc, key))
+      (doc as Record<string, unknown>)[key] = { value, updatedAt: at };
+  }
+}
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export type EditOp = {
@@ -170,7 +181,9 @@ export async function editItems(
         done('invalid');
         continue;
       }
-      const decoded = decodeItem(op.kind, op.id, stampChangedFields(before, op.doc, at));
+      const stamped = stampChangedFields(before, op.doc, at);
+      if (before) emptyMissingFields(op.kind, before, stamped, at);
+      const decoded = decodeItem(op.kind, op.id, stamped);
       if (!decoded.ok) {
         done(decoded.reason);
         continue;
@@ -316,12 +329,7 @@ export async function undoChanges(
         change.before_doc === null
           ? { ...now0, deletedAt: at }
           : stampChangedFields(now0, JSON.parse(change.before_doc) as AnyItem, at);
-      if (change.before_doc !== null) {
-        for (const [key, value] of Object.entries(OPTIONAL_FIELD_EMPTY[change.kind])) {
-          if (Object.hasOwn(now0, key) && !Object.hasOwn(doc, key))
-            (doc as Record<string, unknown>)[key] = { value, updatedAt: at };
-        }
-      }
+      if (change.before_doc !== null) emptyMissingFields(change.kind, now0, doc, at);
       return {
         kind: change.kind,
         id: change.item_id,
