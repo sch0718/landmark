@@ -7,6 +7,19 @@ import type { ReleaseNote } from '@sch0718/app-update';
  */
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: 'v0.36.0',
+    date: '2026-11-17',
+    items: [
+      '새 버전이 배포되면 `새 버전이 나왔어요` 안내가 떠요. 누르면 새로고침해요.',
+      '도움말 목록에서 `최근 바뀐 점`을 볼 수 있어요.',
+    ],
+  },
+  {
+    version: 'v0.35.2',
+    date: '2026-11-17',
+    items: ['`새 버전이 나왔어요` 화면에서 새로고침해도 같은 화면이 되풀이되던 문제를 고쳤어요.'],
+  },
+  {
     version: 'v0.35.0',
     date: '2026-11-16',
     items: [
