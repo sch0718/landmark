@@ -120,6 +120,38 @@ const markerSx = (marker: 'before' | 'after' | null) =>
     ? {}
     : { boxShadow: `inset 0 ${marker === 'before' ? 2 : -2}px 0 var(--tm-accent-main)` };
 
+function StopNote({ note }: { note: string }) {
+  if (note.trim() === '') return null;
+  return (
+    <Box
+      component="details"
+      sx={{
+        fontSize: 13,
+        lineHeight: 1.5,
+        color: 'var(--tm-text-secondary)',
+        overflowWrap: 'anywhere',
+        '& > summary': {
+          display: '-webkit-box',
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: 'vertical',
+          overflow: 'hidden',
+          listStyle: 'none',
+          cursor: 'pointer',
+          '&::-webkit-details-marker': { display: 'none' },
+        },
+        '&[open] > summary': {
+          display: 'block',
+          WebkitLineClamp: 'unset',
+          overflow: 'visible',
+          whiteSpace: 'pre-wrap',
+        },
+      }}
+    >
+      <summary>{note}</summary>
+    </Box>
+  );
+}
+
 function StopRow({
   trip,
   dayIndex,
@@ -196,66 +228,67 @@ function StopRow({
       >
         {number}
       </Box>
-      <Box
-        component="button"
-        type="button"
-        onClick={onOpen}
-        sx={{
-          flex: 1,
-          minWidth: 0,
-          minHeight: 44,
-          display: 'block',
-          p: 0,
-          border: 0,
-          background: 'transparent',
-          color: 'inherit',
-          font: 'inherit',
-          textAlign: 'left',
-          cursor: 'pointer',
-          borderRadius: 'var(--tm-radius-sm)',
-        }}
-      >
-        <Box component="span" sx={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
-          {point !== undefined && (
-            <Box
-              component="span"
-              sx={{ flex: 'none', fontSize: 13, fontVariantNumeric: 'tabular-nums' }}
-            >
-              {formatClock(point.arriveMin)}
-            </Box>
-          )}
-          <Box component="span" sx={{ fontWeight: 700, overflowWrap: 'anywhere' }}>
-            {name}
-          </Box>
-        </Box>
+      <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
         <Box
-          component="span"
+          component="button"
+          type="button"
+          onClick={onOpen}
           sx={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            alignItems: 'center',
-            columnGap: 1,
-            fontSize: 12,
-            color: 'var(--tm-text-secondary)',
+            minHeight: 44,
+            display: 'block',
+            p: 0,
+            border: 0,
+            background: 'transparent',
+            color: 'inherit',
+            font: 'inherit',
+            textAlign: 'left',
+            cursor: 'pointer',
+            borderRadius: 'var(--tm-radius-sm)',
           }}
         >
-          {stop.stayMin !== null && <span>{`체류 ${formatSpan(stop.stayMin)}`}</span>}
-          {stop.fixedTime !== null && (
-            <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
-              <LockIcon aria-hidden="true" width={12} height={12} />
-              <span>{`${stop.fixedTime} 고정`}</span>
-              {point?.slackMin !== null && point?.slackMin !== undefined && (
-                <Box
-                  component="span"
-                  sx={{ color: late ? 'error.main' : 'inherit', fontWeight: late ? 700 : 400 }}
-                >
-                  {formatSlack(point.slackMin)}
-                </Box>
-              )}
+          <Box component="span" sx={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
+            {point !== undefined && (
+              <Box
+                component="span"
+                sx={{ flex: 'none', fontSize: 13, fontVariantNumeric: 'tabular-nums' }}
+              >
+                {formatClock(point.arriveMin)}
+              </Box>
+            )}
+            <Box component="span" sx={{ fontWeight: 700, overflowWrap: 'anywhere' }}>
+              {name}
             </Box>
-          )}
+          </Box>
+          <Box
+            component="span"
+            sx={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              alignItems: 'center',
+              columnGap: 1,
+              fontSize: 12,
+              color: 'var(--tm-text-secondary)',
+            }}
+          >
+            {stop.stayMin !== null && <span>{`체류 ${formatSpan(stop.stayMin)}`}</span>}
+            {stop.fixedTime !== null && (
+              <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+                <LockIcon aria-hidden="true" width={12} height={12} />
+                <span>{`${stop.fixedTime} 고정`}</span>
+                {point?.slackMin !== null && point?.slackMin !== undefined && (
+                  <Box
+                    component="span"
+                    sx={{ color: late ? 'error.main' : 'inherit', fontWeight: late ? 700 : 400 }}
+                  >
+                    {formatSlack(point.slackMin)}
+                  </Box>
+                )}
+              </Box>
+            )}
+          </Box>
+          {notice !== null && <HoursNotice notice={notice} />}
         </Box>
-        {notice !== null && <HoursNotice notice={notice} />}
+        <StopNote note={stop.note} />
       </Box>
       <StopMenu
         trip={trip}

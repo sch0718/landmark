@@ -80,6 +80,31 @@ async function undoLast(message: string) {
 
 // ---------- 테스트 ----------
 
+describe('정류장 메모', () => {
+  it('메모는 지도 카드 버튼 밖 요약에 보이고 빈 메모는 펼침 요소가 없다', async () => {
+    const base = makeTrip({ stops: [[P1, P2]] });
+    const note = '가는 길: 버스를 타고 시장 입구에서 내려요';
+    const [day, ...rest] = base.days;
+    const [first, ...others] = day!.stops.value;
+    const trip = {
+      ...base,
+      days: [
+        { ...day!, stops: { ...day!.stops, value: [{ ...first!, note }, ...others] } },
+        ...rest,
+      ],
+    };
+    await open(withTrip(plannerLibrary(), trip));
+
+    const summary = within(stopRow('중앙시장 닭강정')).getByText(note, {
+      selector: 'summary',
+    });
+    expect(summary).toBeVisible();
+    expect(summary.closest('details')).toBeInTheDocument();
+    expect(summary.closest('button')).toBeNull();
+    expect(stopRow('안목 카페거리').querySelector('details')).toBeNull();
+  });
+});
+
 describe('후보 칸', () => {
   it('＋를 누르면 지금 Day 끝에 들어가고 시간표에 도착 시각이 보인다', async () => {
     const routes = fakeRoutes(() => route(12, 1100));
