@@ -95,12 +95,12 @@ describe('정류장 메모', () => {
     };
     await open(withTrip(plannerLibrary(), trip));
 
-    const summary = within(stopRow('중앙시장 닭강정')).getByText(note, {
-      selector: 'summary',
+    const text = within(stopRow('중앙시장 닭강정')).getByText(note, {
+      selector: 'summary > span',
     });
-    expect(summary).toBeVisible();
-    expect(summary.closest('details')).toBeInTheDocument();
-    expect(summary.closest('button')).toBeNull();
+    expect(text).toBeVisible();
+    expect(text.closest('details')).toBeInTheDocument();
+    expect(text.closest('button')).toBeNull();
     expect(stopRow('안목 카페거리').querySelector('details')).toBeNull();
   });
 });

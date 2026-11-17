@@ -131,15 +131,18 @@ function StopNote({ note }: { note: string }) {
         color: 'var(--tm-text-secondary)',
         overflowWrap: 'anywhere',
         '& > summary': {
-          display: '-webkit-box',
-          WebkitLineClamp: 2,
-          WebkitBoxOrient: 'vertical',
-          overflow: 'hidden',
           listStyle: 'none',
           cursor: 'pointer',
           '&::-webkit-details-marker': { display: 'none' },
         },
-        '&[open] > summary': {
+        // 줄임은 summary 안쪽 span에 건다. WebKit은 summary 자체의 display 변경을 무시한 적이 있다.
+        '& > summary > span': {
+          display: '-webkit-box',
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: 'vertical',
+          overflow: 'hidden',
+        },
+        '&[open] > summary > span': {
           display: 'block',
           WebkitLineClamp: 'unset',
           overflow: 'visible',
@@ -147,7 +150,9 @@ function StopNote({ note }: { note: string }) {
         },
       }}
     >
-      <summary>{note}</summary>
+      <summary>
+        <span>{note}</span>
+      </summary>
     </Box>
   );
 }
@@ -180,6 +185,7 @@ function StopRow({
 }) {
   const late = point?.slackMin !== null && point?.slackMin !== undefined && point.slackMin < 0;
   const name = place.name.value;
+  const hasNote = stop.note.trim() !== '';
   // 요청은 계획 화면이 여행 단위로 한 번 한다(`useTripHoursRequests`). 행은 상태만 읽는다.
   const { view } = usePlaceHours(place);
   const notice =
@@ -234,7 +240,8 @@ function StopRow({
           type="button"
           onClick={onOpen}
           sx={{
-            minHeight: 44,
+            // 메모가 있으면 버튼과 메모를 합쳐 누를 자리가 된다. 이름과 메모 사이에 빈칸이 생기지 않게 최소 높이를 뺀다(행 li가 44px을 지킨다).
+            minHeight: hasNote ? 0 : 44,
             display: 'block',
             p: 0,
             border: 0,
