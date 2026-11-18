@@ -7,6 +7,14 @@ import type { ReleaseNote } from '@sch0718/app-update';
  */
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: 'v0.37.1',
+    date: '2026-11-18',
+    items: [
+      '여행 화면의 장소 줄에 일정 메모가 보여요. 길면 눌러서 펼쳐요.',
+      '다른 기기가 옛 버전일 때 동기화로 대중교통·직접 적은 시간이 지워지던 문제를 고쳤어요.',
+    ],
+  },
+  {
     version: 'v0.37.0',
     date: '2026-11-18',
     items: [
