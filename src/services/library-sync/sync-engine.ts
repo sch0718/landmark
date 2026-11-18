@@ -87,6 +87,8 @@ export const RETRY_STEPS_MS = [30_000, 120_000, 600_000] as const;
 export const SYNC_LOCK = 'tripmap:library-sync';
 export const PUSH_CHUNK_ITEMS = 100;
 export const PUSH_CHUNK_BYTES = 900_000;
+/** 선택 필드를 더하면 올려서 기기마다 한 번 전체를 다시 받는다. */
+const FIELDS_REFRESH = 1;
 
 /** 엔진이 직접 판단한, 사용자에게 보여도 되는 원인만 담는다. */
 class SyncEngineError extends Error {}
@@ -256,7 +258,8 @@ export function createLibrarySyncEngine(deps: EngineDeps): LibrarySyncEngine {
     if (loaded.persistence !== 'local')
       throw new SyncEngineError('이 브라우저의 저장소를 쓸 수 없어 동기화를 켤 수 없어요');
     let fullResync = missingFromLocal(initial.library, base.items);
-    let cursor = fullResync ? { rev: 0, key: '' } : (meta.cursor ?? { rev: 0, key: '' });
+    const refresh = (meta.fieldsRefresh ?? 0) < FIELDS_REFRESH;
+    let cursor = fullResync || refresh ? { rev: 0, key: '' } : (meta.cursor ?? { rev: 0, key: '' });
     let restarted = false;
     const remote: RemoteItem[] = [];
     let conflicts = readConflicts(storage);
@@ -296,6 +299,7 @@ export function createLibrarySyncEngine(deps: EngineDeps): LibrarySyncEngine {
       lastSyncAt: meta.lastSyncAt,
       sinceFor: (key) => meta.skippedAt?.[key] ?? null,
       fullResync,
+      refresh,
       conflictId: deps.newConflictId,
       skip: new Set(meta.skipped),
     });
@@ -420,6 +424,7 @@ export function createLibrarySyncEngine(deps: EngineDeps): LibrarySyncEngine {
     ).length;
     // 아직 확인받지 않은 수정은 이전 동기화 뒤의 변경으로 계속 남긴다.
     if (remaining === 0) meta = { ...meta, lastSyncAt: new Date(deps.now()).toISOString() };
+    if (refresh && meta.held.length === 0) meta = { ...meta, fieldsRefresh: FIELDS_REFRESH };
     save(meta, base.items, conflicts);
     retry = 0;
     cancelTimer();

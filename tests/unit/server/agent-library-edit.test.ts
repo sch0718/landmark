@@ -457,6 +457,26 @@ it('되돌리기: 수정을 복원하고 바뀐 필드에 시각을 찍으며 �
   expect(await undo({ ids: [id] }, later)).toEqual({ results: [{ id, status: 'already' }] });
 });
 
+it('되돌리기: AI가 처음 만든 선택 필드는 빈 값과 새 시각이 된다', async () => {
+  await seed([['place', place()]]);
+  await edit([put('place', { ...place(), visitedOn: f('2026-11-06'), review: f('좋음') }, 1)]);
+  const id = (await db.prepare('SELECT id FROM agent_changes').first<{ id: string }>())!.id;
+  const later = now + 1000;
+  expect((await undo({ ids: [id] }, later)).results[0]?.status).toBe('undone');
+  const doc = JSON.parse((await row('place', 'place00001'))!.doc) as Place;
+  expect(doc.visitedOn).toEqual(f(null, new Date(later).toISOString()));
+  expect(doc.review).toEqual(f('', new Date(later).toISOString()));
+  expect(doc.memo).toEqual(place().memo);
+});
+
+it('put에서 선택 필드 키를 빼면 빈 값과 새 시각으로 지운다', async () => {
+  const reviewed: Place = { ...place(), review: f('좋음') };
+  await seed([['place', reviewed]]);
+  expect((await edit([put('place', place(), 1)])).results[0]?.status).toBe('ok');
+  const doc = JSON.parse((await row('place', 'place00001'))!.doc) as Place;
+  expect(doc.review).toEqual(f('', iso));
+});
+
 it('되돌리기: AI가 새로 만든 항목은 묘비가 된다', async () => {
   await edit([put('place', place())]);
   const id = (await changeIds())[0]!;

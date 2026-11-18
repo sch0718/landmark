@@ -16,6 +16,7 @@ export type SyncMeta = {
   deviceId: string;
   cursor: SyncCursor | null;
   lastSyncAt: string | null;
+  fieldsRefresh?: number;
   held: HeldItem[];
   skipped: string[];
   skippedAt?: Record<string, string>;
@@ -91,6 +92,10 @@ export function readSyncMeta(storage: Storage = localStorage): SyncMeta {
     typeof v.deviceId !== 'string' ||
     !/^[a-z0-9]{16}$/.test(v.deviceId) ||
     !nullableString(v.lastSyncAt) ||
+    !(
+      v.fieldsRefresh === undefined ||
+      (Number.isSafeInteger(v.fieldsRefresh) && Number(v.fieldsRefresh) >= 0)
+    ) ||
     !(
       v.cursor === null ||
       (record(v.cursor) &&

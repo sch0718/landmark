@@ -9,7 +9,7 @@ import {
   type AnyItem,
   type ItemKind,
 } from '../../domain/library-sync/items';
-import { mergeItem } from '../../domain/library-sync/merge';
+import { keepMissingFields, mergeItem } from '../../domain/library-sync/merge';
 import type { Trip } from '../../schema/trip';
 import type { MeetDb } from '../meet/db';
 import type { SyncUser } from './auth';
@@ -276,9 +276,10 @@ export async function pushItems(
       });
     const evaluated = pending.map((a) => {
       const stored = byKey.get(itemKey(a.item.kind, a.item.id));
-      const doc =
-        !stored || stored.rev === a.item.baseRev
-          ? a.doc
+      const doc = !stored
+        ? a.doc
+        : stored.rev === a.item.baseRev
+          ? keepMissingFields(a.item.kind, JSON.parse(stored.doc) as AnyItem, a.doc)
           : mergeItem(a.item.kind, JSON.parse(stored.doc) as AnyItem, a.doc, {
               baseDeleted: a.item.baseDeleted ?? undefined,
             }).doc;
