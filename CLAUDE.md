@@ -1,26 +1,28 @@
-# landmark 작업 규칙
+# 랜드마크
 
-## 웹 플랫폼 가이드 (Modern Web Guidance)
+평소에 장소를 모아 두고 여행 때 꺼내 쓰는 장소 보관함(https://landmark.sch0718.dev). React PWA(`src/`) + Cloudflare Pages Functions·D1(`functions/`) + 장소 수집 파이프라인(`pipeline/`). 로그인 없이 보관함은 기기 localStorage에 두고, 동기화·약속 집계만 서버를 씁니다. 구조·환경변수·배포는 `docs/development.md`, 코드 작성 규칙은 `docs/convention.md`에 있습니다.
 
-HTML·CSS·브라우저 JS를 만들거나 고칠 때는 Chrome·Edge·Firefox·MDN 팀이 관리하는 [Modern Web Guidance](https://github.com/GoogleChrome/modern-web-guidance) 스킬을 씁니다. `.claude/settings.json`이 플러그인 `modern-web-guidance@googlechrome`을 켭니다(처음 열 때 마켓플레이스 신뢰를 묻습니다). 서버·파이프라인·빌드 설정·시험 코드 작업에는 쓰지 않습니다.
+## 명령
 
-- **대상:** `src/`(React PWA), `index.html`. `functions/`(Pages Functions), `pipeline/`, `scripts/`는 대상이 아닙니다.
-- **개발:** 화면·CSS·클라이언트 JS 작업을 시작할 때 먼저 가이드를 찾아 읽고 구현합니다. 직접 만들거나 라이브러리를 더하기 전에 같은 일을 하는 웹 표준 기능(`<dialog>`, popover, anchor positioning, `light-dark()`, `field-sizing` 등)이 있는지 확인합니다. 가이드는 바닐라 HTML/CSS/JS 기준이므로 React에 맞게 옮기되 최신 기능은 버리지 않습니다. 검색어는 기능을 뜻하는 영어 2~5단어로 쓰고, 기능이 여럿이면 나눠 찾습니다.
+```bash
+yarn dev            # http://localhost:5173 (네이버 지도, .env.local 필요). 가짜 지도는 VITE_MAP_ADAPTER=fake yarn dev
+yarn dev:full       # Vite + 서버 함수(/api/*), http://localhost:8788
+yarn typecheck && yarn lint && yarn test
+yarn test:e2e       # Playwright
+yarn build:ci       # 배포와 같은 검사: validate → legacy-scan → typecheck → test → build → size
+```
 
-  ```sh
-  DISABLE_TELEMETRY=1 npx -y modern-web-guidance@latest search "light dismiss dialog"
-  DISABLE_TELEMETRY=1 npx -y modern-web-guidance@latest retrieve "<id>[,<id>...]"
-  ```
+- 끝내기 전에 `yarn build:ci`를 돌립니다. GitHub CI와 Cloudflare Pages 배포가 이 명령으로 막히기 때문입니다.
+- 공용 `@sch0718/*` 패키지는 GitHub Packages에서 받습니다. 토큰은 환경변수 `GITHUB_PACKAGES_TOKEN`으로만 넘기고 파일에 쓰지 않습니다.
 
-- **점검:** 화면을 넓게 바꾼 PR, 릴리스 전, 정기 점검 때 `legacy-scan`으로 옛 패턴을 찾습니다. 결과는 후보일 뿐이므로 항목마다 규칙의 `keepWhen`/`dropWhen`으로 확인하고, 일부러 둔 대체 코드·외부(vendor) 코드·비슷해 보이기만 하는 코드는 고치지 않습니다. 확인한 것만 고치고 같은 경로를 다시 스캔합니다. 스캔 규칙은 전체 가이드의 약 20%에만 있으므로 0건이 곧 최신이라는 뜻은 아닙니다. 기능 하나를 고칠 때는 스캔하지 않고 위 「개발」 순서를 따릅니다.
+## 지켜야 할 것
 
-  ```sh
-  DISABLE_TELEMETRY=1 npx -y modern-web-guidance@latest legacy-scan <경로> --json
-  ```
+- Effect API는 `.reference/effect/`(없으면 `node_modules/effect/ai-docs`)로 확인하고 기억으로 쓰지 않습니다. v4에서 이름이 바뀐 API가 많습니다(`docs/convention.md`).
+- 첫 로딩 예산: 의존성·대체 코드·폴리필을 더하면 `perf-budget.json`의 `initialJsGzipMax`를 넘지 않는지 확인합니다(`yarn size`). 넘으면 기능 감지 뒤 `import()`로 나눕니다. toolkit-web 패키지도 이 값을 기준으로 씁니다.
 
-  배포 검사(`build:ci`)는 `yarn legacy-scan`으로 `src/`를 스캔하고, 검토를 마친 후보 목록 `legacy-scan-baseline.json`에 없는 새 후보가 나오면 실패합니다(GitHub CI와 Cloudflare Pages 배포가 함께 멈춤). CLI는 `modern-web-guidance`를 정확한 버전의 devDependency로 고정해 씁니다. 새 후보는 위 규칙대로 확인해 고치거나, 고치지 않을 이유(`reason`)를 적어 목록에 더합니다. 더는 나오지 않는 항목은 스크립트가 알려 주니 목록에서 뺍니다.
+## 웹 화면
 
-- **브라우저 지원:** Baseline Widely available 기능은 대체 코드 없이 씁니다. 그보다 새 기능은 가이드의 대체 방법을 따르되, 폴리필 패키지보다 기능 감지와 짧은 대체 코드를 먼저 고릅니다. 휴대폰 사용자가 많으므로 iOS Safari 지원을 꼭 확인합니다. Origin Trial·변동성 기능(`.mwgrc`의 `allowOriginTrials`·`allowVolatileFeatures`)은 켜지 않습니다.
-- **한글 입력:** Enter로 저장·제출하는 입력은 IME 조합 중(`event.isComposing`)이면 무시합니다(가이드 `ime-safe-enter-submit`). 조합 중 Enter를 처리하면 마지막 글자가 빠지거나 두 번 저장됩니다.
-- **텔레메트리:** 이 CLI는 기본으로 검색어와 가이드 ID를 Google에 보냅니다. 명령 앞에 늘 `DISABLE_TELEMETRY=1`을 붙이고, 검색어에는 일반적인 UI 기능 이름만 쓰며 저장소 내용을 넣지 않습니다.
-- **첫 로딩 예산:** 대체 코드나 폴리필을 더하면 `perf-budget.json`의 `initialJsGzipMax`를 넘지 않는지 확인합니다. 필요하면 기능 감지 뒤 `import()`로 나눠 받습니다.
+화면 작업 규칙은 `~/.claude/rules/modern-web.md`(웹 파일을 다룰 때 자동으로 실림)를 따르고, 이 저장소에서는 아래를 더합니다.
+
+- 대상: `src/`, `index.html`. `functions/`, `pipeline/`, `scripts/`는 대상이 아닙니다.
+- `yarn legacy-scan`은 검토를 마친 후보 목록 `legacy-scan-baseline.json`에 없는 새 후보가 나오면 실패합니다. 새 후보는 확인해 고치거나, 고치지 않을 이유(`reason`)를 적어 목록에 더합니다. 더는 나오지 않는 항목은 스크립트가 알려 주니 목록에서 뺍니다. CLI는 정확한 버전의 devDependency로 고정해 씁니다.
