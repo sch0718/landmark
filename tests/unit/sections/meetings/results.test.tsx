@@ -1,5 +1,6 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
 import { HubResults } from 'src/sections/meetings/HubResults';
 import { NearbyPlaces } from 'src/sections/meetings/NearbyPlaces';
@@ -97,6 +98,49 @@ describe('약속 결과', () => {
     expect(onLike).toHaveBeenCalledWith('choice01');
     await userEvent.click(screen.getByRole('button', { name: '강남역 확정' }));
     expect(onDecide).toHaveBeenCalledWith('choice01');
+  });
+  it('보관함 장소 후보에 라벨·메모·네이버 지도 링크를 보인다', () => {
+    const base = sampleLibrary();
+    const place = makePlace(10, {
+      name: '단골 카페',
+      labelIds: ['label002'],
+      memo: '창가 자리 좋음',
+    });
+    const lib = { ...base, places: { ...base.places, [place.id]: place } };
+    const meeting = buildMeeting({
+      candidates: f([
+        {
+          id: 'choice01',
+          kind: 'place',
+          name: '단골 카페',
+          lng: 127,
+          lat: 37.5,
+          placeId: place.id,
+        },
+      ]),
+    });
+    render(
+      <MemoryRouter>
+        <CandidateTally
+          meeting={meeting}
+          library={lib}
+          times={{}}
+          errors={{}}
+          unit="min"
+          onLike={vi.fn()}
+          onRetry={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.getByText('창가 자리 좋음')).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('list', { name: '단골 카페 라벨' })).getByText('카페'),
+    ).toBeTruthy();
+    expect(screen.getByRole('link', { name: '단골 카페 네이버 지도에서 열기' })).toHaveAttribute(
+      'href',
+      'https://m.place.naver.com/place/1010',
+    );
+    expect(screen.getByRole('button', { name: '단골 카페 상세' })).toBeInTheDocument();
   });
 });
 

@@ -116,7 +116,13 @@ export function mergeOnline(
       at: field(state.doc.at),
       mode: field(state.doc.mode),
       participants: field(state.doc.participants.filter((p) => !locallyRemoved.has(p.id))),
-      candidates: field(state.doc.candidates),
+      // 서버 본문에는 보관함 장소 id가 없다(친구에게 보내지 않음). 같은 후보면 이 기기의 연결을 남긴다.
+      candidates: field(
+        state.doc.candidates.map((c) => {
+          const placeId = meeting.candidates.value.find((local) => local.id === c.id)?.placeId;
+          return placeId === undefined ? c : { ...c, placeId };
+        }),
+      ),
       decided: field(state.doc.decided),
     };
   }

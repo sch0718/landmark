@@ -283,6 +283,7 @@ export function MeetingResults({
       {online?.mode === 'ended' && <Box role="status">공유가 끝난 약속이에요</Box>}
       <CandidateTally
         meeting={meeting}
+        library={library}
         times={displayTimes}
         errors={displayErrors}
         unit={candidateCompute.unit}
