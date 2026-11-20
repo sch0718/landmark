@@ -701,6 +701,22 @@ describe('온라인 상태를 보관한 약속에 합친다', () => {
     }
   });
 
+  it('다른 기기 본문을 받아도 같은 후보의 보관함 장소 연결은 남긴다', () => {
+    const local = {
+      ...meeting,
+      candidates: {
+        ...meeting.candidates,
+        value: [{ ...meeting.candidates.value[0]!, kind: 'place' as const, placeId: 'pl01abcdef' }],
+      },
+    };
+    const synced = docFromMeeting(local, {}, 'min');
+    expect(synced.candidates[0]).not.toHaveProperty('placeId');
+    const remote = { ...state([]), doc: { ...synced, title: '다른 기기 제목' } };
+    const next = mergedMeeting(merge(library(local), remote, synced, null));
+    expect(next.title.value).toBe('다른 기기 제목');
+    expect(next.candidates.value[0]?.placeId).toBe('pl01abcdef');
+  });
+
   it('서버 본문의 제목·참석자 출발지·후보는 로컬 본문을 바꾸지 않는다', () => {
     const current = state([]);
     const online = {
