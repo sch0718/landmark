@@ -2,7 +2,8 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
-import { useState } from 'react';
+import { useEffect, useId, useRef } from 'react';
+import { useLocation, useNavigate } from 'react-router';
 import { ExternalLinkIcon } from 'src/components/icons';
 import { naverPlaceUrlOf } from 'src/domain/library/links';
 import { liveLabels } from 'src/domain/library/query';
@@ -36,7 +37,26 @@ export function CandidatePlaceInfo({
   library: Library;
 }) {
   // 약속 화면을 그대로 두고 상세를 위에 띄운다: 닫으면 찾은 중간 지점 목록과 함께 보던 후보로 돌아온다.
-  const [detailOpen, setDetailOpen] = useState(false);
+  // 열 때 기록을 하나 쌓아 휴대폰 뒤로 가기가 대화상자만 닫게 한다.
+  const location = useLocation();
+  const navigate = useNavigate();
+  const titleId = useId();
+  const detailOpen =
+    (location.state as { candidateDetail?: string } | null)?.candidateDetail === placeId;
+  const openDetail = () =>
+    void navigate(
+      { pathname: location.pathname, search: location.search, hash: location.hash },
+      { state: { candidateDetail: placeId } },
+    );
+  const closeDetail = () => void navigate(-1);
+  // 삭제 저장이 끝나기 전에 뒤로 가기로 이미 닫았으면 한 번 더 뒤로 가지 않는다.
+  const openRef = useRef(detailOpen);
+  useEffect(() => {
+    openRef.current = detailOpen;
+  });
+  const closeAfterDelete = () => {
+    if (openRef.current) closeDetail();
+  };
   const place = library.places[placeId];
   if (place === undefined || place.deletedAt !== null) return null;
   const labelsById = new Map(liveLabels(library).map((label) => [label.id, label]));
@@ -105,7 +125,7 @@ export function CandidatePlaceInfo({
           component="button"
           type="button"
           aria-label={`${name} 상세`}
-          onClick={() => setDetailOpen(true)}
+          onClick={openDetail}
           sx={BUTTON_SX}
         >
           상세
@@ -113,14 +133,15 @@ export function CandidatePlaceInfo({
       </Box>
       <Dialog
         open={detailOpen}
-        onClose={() => setDetailOpen(false)}
-        aria-label={`${name} 상세`}
+        onClose={closeDetail}
+        aria-labelledby={titleId}
         fullWidth
         maxWidth="sm"
       >
-        <PlaceDetail placeId={place.id} headingLevel={2} />
+        <span id={titleId} hidden>{`${place.name.value} 상세`}</span>
+        <PlaceDetail placeId={place.id} headingLevel={2} onDeleted={closeAfterDelete} />
         <DialogActions>
-          <Button onClick={() => setDetailOpen(false)} sx={{ minHeight: 44 }}>
+          <Button onClick={closeDetail} sx={{ minHeight: 44 }}>
             닫기
           </Button>
         </DialogActions>
