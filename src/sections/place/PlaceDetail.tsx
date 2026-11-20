@@ -74,7 +74,15 @@ function NotFound({ level }: { level: HeadingLevel }) {
 }
 
 /** 장소 하나의 편집 화면. 장소가 바뀌면 `key`로 새로 만들어 이전 장소의 입력 상태를 이어받지 않는다. */
-function PlaceBody({ place, level }: { place: Place; level: HeadingLevel }) {
+function PlaceBody({
+  place,
+  level,
+  onDeleted,
+}: {
+  place: Place;
+  level: HeadingLevel;
+  onDeleted?: () => void;
+}) {
   const library = useAtomValue(libraryAtom);
   const { run } = useLibraryAction();
   const navigate = useNavigate();
@@ -127,8 +135,9 @@ function PlaceBody({ place, level }: { place: Place; level: HeadingLevel }) {
       return deletePlaces(lib, [id], ctx);
     });
     if (!result.ok) return;
-    // 기록을 교체해서 뒤로 가기가 지운 장소를 다시 열지 않게 한다.
-    void navigate(paths.library, { replace: true });
+    // 기록을 교체해서 뒤로 가기가 지운 장소를 다시 열지 않게 한다. 다른 화면 위에 띄웠으면 그 화면이 닫는다.
+    if (onDeleted) onDeleted();
+    else void navigate(paths.library, { replace: true });
     if (deleted.length === 0) return;
     toast('장소를 지웠어요', {
       duration: UNDO_MS,
@@ -232,12 +241,15 @@ function PlaceBody({ place, level }: { place: Place; level: HeadingLevel }) {
 export function PlaceDetail({
   placeId,
   headingLevel = 1,
+  onDeleted,
 }: {
   placeId: string;
   headingLevel?: HeadingLevel;
+  /** 주면 지운 뒤 보관함으로 가지 않고 이것을 부른다(약속 후보 대화상자). */
+  onDeleted?: () => void;
 }) {
   const library = useAtomValue(libraryAtom);
   const place = library.places[placeId];
   if (place === undefined || place.deletedAt !== null) return <NotFound level={headingLevel} />;
-  return <PlaceBody key={place.id} place={place} level={headingLevel} />;
+  return <PlaceBody key={place.id} place={place} level={headingLevel} onDeleted={onDeleted} />;
 }

@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitForElementToBeRemoved, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
@@ -99,7 +99,7 @@ describe('약속 결과', () => {
     await userEvent.click(screen.getByRole('button', { name: '강남역 확정' }));
     expect(onDecide).toHaveBeenCalledWith('choice01');
   });
-  it('보관함 장소 후보에 라벨·메모·네이버 지도 링크를 보인다', () => {
+  it('보관함 장소 후보에 라벨·메모·네이버 지도 링크를 보이고 상세를 기록과 함께 연다', async () => {
     const base = sampleLibrary();
     const place = makePlace(10, {
       name: '단골 카페',
@@ -140,7 +140,10 @@ describe('약속 결과', () => {
       'href',
       'https://m.place.naver.com/place/1010',
     );
-    expect(screen.getByRole('button', { name: '단골 카페 상세' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: '단골 카페 상세' }));
+    const dialog = await screen.findByRole('dialog', { name: '단골 카페 상세' });
+    await userEvent.click(within(dialog).getByRole('button', { name: '닫기' }));
+    await waitForElementToBeRemoved(() => screen.queryByRole('dialog'));
   });
 });
 
