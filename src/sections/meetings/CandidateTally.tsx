@@ -1,7 +1,9 @@
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import type { Library } from 'src/schema/library';
 import type { Meeting } from 'src/schema/meeting';
 import type { RouteLookupErrorCode } from 'src/services/errors';
+import { CandidatePlaceInfo } from './CandidatePlaceInfo';
 import { TimeCells } from './TimeCells';
 import type { MeetingTimes } from './use-meeting-compute';
 
@@ -15,12 +17,15 @@ export function CandidateTally({
   onDecide,
   onRetry,
   participantId,
+  library,
 }: {
   meeting: Meeting;
   times: MeetingTimes;
   errors: Record<string, Record<string, RouteLookupErrorCode>>;
   unit: 'm' | 'min';
   participantId?: string | null;
+  /** 주어지면 보관함 장소 후보에 라벨·메모·네이버 지도 링크를 보인다(주최자 화면). */
+  library?: Library;
   onLike(cid: string): void;
   onRemove?(cid: string): void;
   onDecide?(cid: string | null): void;
@@ -50,6 +55,9 @@ export function CandidateTally({
                 {c.name}
                 {decided && ' · 확정'}
               </Box>
+              {library && c.placeId !== undefined && (
+                <CandidatePlaceInfo placeId={c.placeId} name={c.name} library={library} />
+              )}
               <p>{`좋아요 ${names.length}명${names.length > 0 ? ` · ${names.join(', ')}` : ''}`}</p>
               <TimeCells
                 id={c.id}
