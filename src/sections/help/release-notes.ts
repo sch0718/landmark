@@ -7,6 +7,13 @@ import type { ReleaseNote } from '@sch0718/app-update';
  */
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: 'v0.37.2',
+    date: '2026-11-21',
+    items: [
+      '약속 후보 카드에 보관함에 적어 둔 메모·라벨·한 줄 평이 보여요. 네이버 지도에서 열기와 상세 보기도 돼요.',
+    ],
+  },
+  {
     version: 'v0.37.1',
     date: '2026-11-18',
     items: [
