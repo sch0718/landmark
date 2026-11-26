@@ -94,7 +94,7 @@ describe('library filters', () => {
     const user = userEvent.setup();
     await renderLibrary(sampleLibrary(), { prefs: LIST });
 
-    // regionCounts 순서: 개수 내림차순, 같으면 이름순.
+    // 지역 순서: 개수 내림차순, 같으면 이름순.
     const order = within(screen.getByRole('group', { name: '지역' }))
       .getAllByRole('button')
       .map((b) => b.textContent);

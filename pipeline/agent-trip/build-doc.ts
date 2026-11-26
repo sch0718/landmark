@@ -10,7 +10,7 @@ import type { Leg } from 'src/domain/trips/query';
 import { emptyLibrary, type Place } from 'src/schema/library';
 import { safeParse } from 'src/schema/parse';
 import { ShareDocV2Schema, ShareDocV3Schema, type ShareTripDoc } from 'src/schema/share';
-import { randomId } from 'src/services/id-gen';
+import { randomId } from 'src/lib/random';
 import { hashDoc, importLink, viewLink } from 'src/share-viewer/encode';
 import type { BuiltLibrary } from './build-library';
 import { exitFor, TripFailure, type TripErrorCode, type TripIssue } from './errors';

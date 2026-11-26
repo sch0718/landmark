@@ -21,7 +21,7 @@ type Props = {
   labels: Label[];
   /** `labelCounts` 결과. 라벨 없음은 `'unlabeled'` 키. */
   counts: ReadonlyMap<string, number>;
-  /** `regionCounts` 결과. */
+  /** `regionTreeCounts` 결과. */
   regions: ReadonlyArray<{
     region: string;
     count: number;

@@ -2,11 +2,7 @@
 import { randomBytes } from 'node:crypto';
 import { gzipSync, gunzipSync } from 'node:zlib';
 import { afterEach, expect, it, vi } from 'vitest';
-import {
-  buildSnapshot,
-  readSnapshotData,
-  libraryContentHash,
-} from 'src/services/server-backup/snapshot';
+import { buildSnapshot, readSnapshotData } from 'src/services/server-backup/snapshot';
 import { buildBackupText } from 'src/domain/backup/build-backup';
 import { hashItem } from 'src/domain/library-sync/items';
 import { DEFAULT_PREFS } from 'src/schema/prefs';
@@ -37,9 +33,7 @@ it('백업 원문과 설정을 gzip·base64로 왕복한다', async () => {
     expect(read.backup.library).toEqual(library);
     expect(read.backup.prefs).toEqual(DEFAULT_PREFS);
   }
-  expect(libraryContentHash({ ...library, places: library.places })).toBe(
-    libraryContentHash(library),
-  );
+  expect(hashItem({ ...library, places: library.places })).toBe(hashItem(library));
 });
 it('압축 미지원이면 만들지 않는다', async () => {
   vi.stubGlobal('CompressionStream', undefined);

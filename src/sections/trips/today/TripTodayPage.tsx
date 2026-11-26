@@ -288,8 +288,9 @@ function Today({ trip }: { trip: Trip }) {
         onShowNext={showNext}
         onCheck={(item) => void check(item, true, { from: 'card' })}
         onSetNext={(item) => {
-          collab.engine?.setNext(item.stop.id, model.date);
-          toast('모두에게 다음 장소로 보여요');
+          void collab.engine?.setNext(item.stop.id, model.date).then((saved) => {
+            if (saved) toast('모두에게 다음 장소로 보여요');
+          });
         }}
         pending={visit.pending}
         cardRef={cardRef}

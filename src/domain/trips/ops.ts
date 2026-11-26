@@ -2,7 +2,9 @@ import { setField, setOptionalField, type Field } from 'src/domain/library/lww';
 import type { OpCtx, OpResult } from 'src/domain/library/ops';
 import { autoMode, haversineM, WALK_MAX_M } from 'src/domain/trips/geo';
 import { legBetween, legKey, locatePlace, type TripLocation } from 'src/domain/trips/query';
+import { HHmm } from 'src/schema/common';
 import { LIBRARY_LIMITS, type Library } from 'src/schema/library';
+import { is } from 'src/schema/parse';
 import { daysBetween, type Day, type Stop, type Trip } from 'src/schema/trip';
 
 // 여행을 바꾸는 연산(스펙 §3.4). 보관함 연산(library/ops.ts)과 같은 규칙을 따른다 —
@@ -34,7 +36,6 @@ const notFound = (id: string): TripOpError => ({ _tag: 'NotFound', id });
 const dayId = (tripId: string, dayIndex: number) => `${tripId}/days/${dayIndex}`;
 
 const DEFAULT_START_TIME = '09:00';
-const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 // ---------- 공통 ----------
 
@@ -425,7 +426,7 @@ export function setStopFixedTime(
 ): OpResult {
   const value = fixedTime === '' ? null : fixedTime;
   return updateStop(lib, tripId, stopId, ctx, (s) =>
-    s.fixedTime === value || (value !== null && !HHMM.test(value)) ? s : { ...s, fixedTime: value },
+    s.fixedTime === value || (value !== null && !is(HHmm, value)) ? s : { ...s, fixedTime: value },
   );
 }
 
@@ -477,7 +478,7 @@ export function setDayStartTime(
 ): OpResult {
   return updateTrip(lib, tripId, (trip) => {
     if (!hasDay(trip, dayIndex)) return notFound(dayId(tripId, dayIndex));
-    if (!HHMM.test(startTime)) return trip;
+    if (!is(HHmm, startTime)) return trip;
     return withDayField(trip, dayIndex, 'startTime', startTime, ctx.now);
   });
 }

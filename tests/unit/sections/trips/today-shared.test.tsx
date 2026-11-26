@@ -109,13 +109,15 @@ it('내가 정한 다음 장소에는 내 기기 이름을 붙이지 않는다',
   expect(within(nextCard()).getByRole('heading')).toHaveTextContent('안목 카페거리');
   expect(within(nextCard()).queryByText(/에서 정함/)).toBeNull();
 });
-it('고른 장소를 모두의 다음 장소로 정한다', async () => {
+it.each([true, false])('다음 장소가 서버에 반영된 경우에만 알린다 (%s)', async (saved) => {
+  mocks.setNext.mockResolvedValueOnce(saved);
   await renderToday(lib());
   const user = userEvent.setup();
   await user.click(within(remainingList()).getByRole('button', { name: '2. 안목 카페거리' }));
   await user.click(screen.getByRole('button', { name: '다음 장소로 정하기' }));
   expect(mocks.setNext).toHaveBeenCalledWith(stopId(1), '2026-10-24');
-  expect(mocks.toast).toHaveBeenCalledWith('모두에게 다음 장소로 보여요');
+  if (saved) expect(mocks.toast).toHaveBeenCalledWith('모두에게 다음 장소로 보여요');
+  else expect(mocks.toast).not.toHaveBeenCalled();
 });
 it('공동 진행을 아직 못 받았으면 개인 표시로 보인다', async () => {
   progress = null;

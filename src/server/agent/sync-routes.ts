@@ -2,7 +2,7 @@ import { readJson } from '@sch0718/firebase-session/worker';
 import { requireBackupUser } from '../library-sync/backup';
 import type { SyncContext, SyncDeps } from '../library-sync/env';
 import { SyncHttpError, syncJson } from '../library-sync/http';
-import { consumeCounter, counterKey } from '../library-sync/limits';
+import { requireCounter } from '../library-sync/limits';
 import type { SyncRoute } from '../library-sync/router';
 import { listChanges } from './changes';
 import { parseUndoBody, undoChanges } from './library-edit';
@@ -20,15 +20,7 @@ import {
 async function inboxReader(ctx: SyncContext, deps: SyncDeps) {
   const user = await requireBackupUser(ctx, deps);
   const now = deps.now();
-  if (
-    !(await consumeCounter(
-      ctx.env.DB!,
-      counterKey('agent-inbox-read', user.userId, now),
-      1,
-      AGENT_LIMITS.inboxRead,
-    ))
-  )
-    throw new SyncHttpError(429, 'rate-limited');
+  await requireCounter(ctx.env.DB!, 'agent-inbox-read', user.userId, now, AGENT_LIMITS.inboxRead);
   return { user, now };
 }
 
@@ -57,15 +49,13 @@ export const AGENT_SYNC_ROUTES: SyncRoute[] = [
       if (ctx.env.AGENT_API === 'off') throw new SyncHttpError(503, 'off');
       const user = await requireBackupUser(ctx, deps);
       const now = deps.now();
-      if (
-        !(await consumeCounter(
-          ctx.env.DB!,
-          counterKey('agent-token-create', user.userId, now),
-          1,
-          AGENT_LIMITS.tokenCreate,
-        ))
-      )
-        throw new SyncHttpError(429, 'rate-limited');
+      await requireCounter(
+        ctx.env.DB!,
+        'agent-token-create',
+        user.userId,
+        now,
+        AGENT_LIMITS.tokenCreate,
+      );
       const input = parseIssueBody(await readJson(ctx.request, 4096));
       const { token, row } = await issueAgentToken(ctx.env.DB!, user.userId, input, deps);
       ctx.waitUntil(pruneAgentTokens(ctx.env.DB!, user.userId, now).catch(() => undefined));

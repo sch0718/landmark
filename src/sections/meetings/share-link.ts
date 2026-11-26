@@ -1,31 +1,24 @@
+import { shareOrCopy } from '@sch0718/kakao-share';
 import { toast } from 'sonner';
 import { meetLink, type MeetDoc } from 'src/domain/meeting/link';
 import { appUrl } from 'src/share-viewer/encode';
 import { prepareKakaoLink } from '../share-export/kakao';
 
-/** 공유가 지원되지 않거나 거절되면 같은 주소를 복사한다. */
+/** 공유가 지원되지 않거나 실패하면 같은 주소를 복사한다. 사용자가 공유를 취소하면 복사하지 않는다. */
 export async function shareLink(
   url: string,
   title: string,
   options: { quietFailure?: boolean } = {},
-): Promise<'shared' | 'copied' | 'failed'> {
-  try {
-    if (typeof navigator.share === 'function') {
-      await navigator.share({ title, url });
-      toast('링크를 보냈어요');
-      return 'shared';
-    }
-  } catch {
-    /* 복사를 이어서 시도한다. */
-  }
-  try {
-    await navigator.clipboard.writeText(url);
-    toast('링크를 복사했어요');
-    return 'copied';
-  } catch {
-    if (!options.quietFailure) toast.error('링크를 보내지 못했어요. 다시 시도해 주세요');
-    return 'failed';
-  }
+): Promise<'shared' | 'copied' | 'cancelled' | 'failed'> {
+  const result = await shareOrCopy(url, title, {
+    share: typeof navigator.share === 'function' ? (data) => navigator.share(data) : undefined,
+    copy: navigator.clipboard ? (text) => navigator.clipboard.writeText(text) : undefined,
+  });
+  if (result === 'shared') toast('링크를 보냈어요');
+  else if (result === 'copied') toast('링크를 복사했어요');
+  else if (result === 'failed' && !options.quietFailure)
+    toast.error('링크를 보내지 못했어요. 다시 시도해 주세요');
+  return result;
 }
 
 export async function shareMeetingDoc(

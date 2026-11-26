@@ -18,8 +18,7 @@ export type InboxRef = { id: string; from: string | null; owner: string | null }
  * - `candidate`: 링크로 찾은 장소의 확인 카드.
  * - `folder`: 네이버 공유 폴더 미리보기. `seq`는 `openFolderSyncAtom`이 열 때마다 새로 매기는 번호다
  *   (같은 폴더를 다시 열어도 화면을 새로 만들어 다시 읽게 한다). 링크로 연 폴더에는 없다.
- * - `pin`: 지도에서 위치를 고르는 핀 모드. `name`은 미리 채울 이름, `start`는 시작 좌표(경도, 위도).
- *   `start`는 스펙 §2.4.4(대략적인 위치를 아는 실패 경로)를 위해 남겨 둔 값이라 아직 채우는 호출이 없다.
+ * - `pin`: 지도에서 위치를 고르는 핀 모드. `name`은 미리 채울 이름.
  * - `pin-card`: 핀으로 고른 위치의 입력 카드.
  * - `share-pick`: 받은 공유 파일 고르기(`/import`).
  * - `share`: 읽은 공유 문서의 미리보기.
@@ -29,7 +28,7 @@ export type AddFlow =
   | { step: 'link'; hint: 'place' | 'folder' }
   | { step: 'candidate'; candidate: PlaceCandidate }
   | { step: 'folder'; shareId: string; seq?: number }
-  | { step: 'pin'; name: string; start: [number, number] | null }
+  | { step: 'pin'; name: string }
   | { step: 'pin-card'; name: string; lng: number; lat: number }
   | { step: 'share-pick' }
   | {

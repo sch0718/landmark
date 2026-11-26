@@ -4,13 +4,14 @@ import Typography from '@mui/material/Typography';
 import { Effect } from 'effect';
 import { useSetAtom } from 'jotai';
 import { useEffect, useRef, useState } from 'react';
+import { useAliveRef } from 'src/lib/use-alive-ref';
 import { toast } from 'sonner';
 import { fieldSx } from 'src/components/field-style';
 import { addPlace } from 'src/domain/library/add-place';
 import { forkEffect } from 'src/lib/effect/runtime';
 import { useOpenPlace } from 'src/sections/library/use-open-place';
 import { LIBRARY_LIMITS } from 'src/schema/library';
-import { CardSection, useAliveRef, useCardLabels } from 'src/sections/add-place/card-parts';
+import { CardSection, useCardLabels } from 'src/sections/add-place/card-parts';
 import {
   SaveToLibraryOption,
   thenAddCandidates,

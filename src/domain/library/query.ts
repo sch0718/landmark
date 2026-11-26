@@ -244,33 +244,6 @@ export function labelCounts(lib: Library, q: LibraryQuery): Map<string | 'unlabe
 }
 
 /**
- * 지역 칩 숫자. 텍스트·라벨·방문 필터를 적용하고 지역 필터는 빼고 센다.
- * 개수 내림차순, 같으면 이름순, `기타`는 마지막.
- */
-export function regionCounts(
-  lib: Library,
-  q: LibraryQuery,
-): Array<{ region: string; count: number }> {
-  const ctx = contextOf(lib, q);
-  const counts = new Map<string, number>();
-  for (const p of livePlaces(lib)) {
-    const labels = labelsOf(p, ctx.byId);
-    if (!matchesText(p, labels, ctx.needle) || !matchesLabels(labels, q) || !matchesVisit(p, q))
-      continue;
-    const region = ctx.regionOf.get(p.id) ?? OTHER_REGION;
-    counts.set(region, (counts.get(region) ?? 0) + 1);
-  }
-  return [...counts.entries()]
-    .map(([region, count]) => ({ region, count }))
-    .sort((a, b) => {
-      if ((a.region === OTHER_REGION) !== (b.region === OTHER_REGION)) {
-        return a.region === OTHER_REGION ? 1 : -1;
-      }
-      return b.count - a.count || compareKo(a.region, b.region);
-    });
-}
-
-/**
  * 그 지역의 보관함 장소 id(지역 칩과 같은 `regionsByPlace` 기준). 검색·라벨 필터와 상관없이 살아 있는
  * `saved: true` 장소 전부다. `이 지역으로 여행 만들기`의 처음 후보.
  */

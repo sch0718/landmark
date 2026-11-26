@@ -50,8 +50,3 @@ class MemoryStorage implements Storage {
 export function createMemoryStorage(): Storage {
   return new MemoryStorage();
 }
-
-/** 스키마 마이그레이션 체인의 자리(§5.1). PoC에는 v1만 있으므로 그대로 반환한다. */
-export function migrateEditLayer(raw: unknown): unknown {
-  return raw;
-}

@@ -13,23 +13,12 @@ type Props = {
   onClose(): void;
   heading: string;
   dialogKind?: string;
+  closeLabel?: string;
   children: ReactNode;
 };
 
 /** 실제 대화상자가 오기 전에 보이는 틀: 같은 제목과 닫기 버튼 안에 `children`(기다림·새 버전 안내)을 넣는다. */
-function ShellDialog({
-  open,
-  onClose,
-  heading,
-  dialogKind,
-  children,
-}: {
-  open: boolean;
-  onClose(): void;
-  heading: string;
-  dialogKind?: string;
-  children: ReactNode;
-}) {
+function ShellDialog({ open, onClose, heading, dialogKind, closeLabel, children }: Props) {
   const titleId = useId();
   return (
     <Dialog
@@ -44,7 +33,7 @@ function ShellDialog({
       <DialogContent>{children}</DialogContent>
       <DialogActions>
         <Button onClick={onClose} sx={{ minHeight: 44 }}>
-          닫기
+          {closeLabel}
         </Button>
       </DialogActions>
     </Dialog>
@@ -57,7 +46,14 @@ function ShellDialog({
  * 닫을 때 마운트를 지우면 닫은 창의 저장이 이어진다. 파일을 받는 동안은 같은 제목(`heading`)의 대화상자 안에
  * 기다림 표시와 닫기 버튼을 보이고, 받지 못하면(새 배포 뒤 옛 파일 없음) 그 안에 새 버전 안내를 보인다.
  */
-export function LazyDialogHost({ open, onClose, heading, dialogKind, children }: Props) {
+export function LazyDialogHost({
+  open,
+  onClose,
+  heading,
+  dialogKind,
+  closeLabel = '닫기',
+  children,
+}: Props) {
   // 렌더 중 상태 갱신으로, 처음 열리는 그 렌더부터 마운트한다.
   const [everOpened, setEverOpened] = useState(open);
   if (open && !everOpened) setEverOpened(true);
@@ -65,14 +61,26 @@ export function LazyDialogHost({ open, onClose, heading, dialogKind, children }:
   return (
     <ChunkErrorBoundary
       fallback={
-        <ShellDialog open={open} onClose={onClose} heading={heading} dialogKind={dialogKind}>
+        <ShellDialog
+          open={open}
+          onClose={onClose}
+          heading={heading}
+          dialogKind={dialogKind}
+          closeLabel={closeLabel}
+        >
           <ChunkErrorNotice />
         </ShellDialog>
       }
     >
       <Suspense
         fallback={
-          <ShellDialog open={open} onClose={onClose} heading={heading} dialogKind={dialogKind}>
+          <ShellDialog
+            open={open}
+            onClose={onClose}
+            heading={heading}
+            dialogKind={dialogKind}
+            closeLabel={closeLabel}
+          >
             <LoadingNotice />
           </ShellDialog>
         }

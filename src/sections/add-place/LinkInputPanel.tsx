@@ -104,7 +104,7 @@ export function LinkInputPanel({ hint }: { hint: 'place' | 'folder' }) {
     if (error.reason === 'no-location') {
       // 위치를 모르는 구글 링크: 아는 이름을 채운 채 바로 핀 모드로 간다.
       toast(error.userMessage);
-      setFlow({ step: 'pin', name: error.placeName ?? '', start: null });
+      setFlow({ step: 'pin', name: error.placeName ?? '' });
       return;
     }
     setStatus({ kind: 'error', error });
@@ -167,7 +167,7 @@ export function LinkInputPanel({ hint }: { hint: 'place' | 'folder' }) {
               {PIN_CODES.includes(error.code) && (
                 <Button
                   variant="outlined"
-                  onClick={() => setFlow({ step: 'pin', name: '', start: null })}
+                  onClick={() => setFlow({ step: 'pin', name: '' })}
                   sx={{ minHeight: 44 }}
                 >
                   지도에서 핀으로 추가

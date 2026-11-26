@@ -1,26 +1,21 @@
-import { addLabels, type OpCtx, type OpResult, type OpError } from 'src/domain/library/ops';
+import {
+  addLabels,
+  findLiveLabelByName,
+  type OpCtx,
+  type OpResult,
+  type OpError,
+} from 'src/domain/library/ops';
 import { liveLabels } from 'src/domain/library/query';
 import { suggestLabelEmoji } from 'src/domain/library/label-emoji';
-import {
-  LABEL_COLORS,
-  LIBRARY_LIMITS,
-  normalizeLabelName,
-  type Label,
-  type Library,
-} from 'src/schema/library';
+import { LABEL_COLORS, labelNameIssue, type Label, type Library } from 'src/schema/library';
 
 const fail = (error: OpError): OpResult => ({ ok: false, error });
 
-function findLiveLabelByName(lib: Library, name: string): Label | undefined {
-  const wanted = normalizeLabelName(name);
-  return liveLabels(lib).find((label) => normalizeLabelName(label.name.value) === wanted);
-}
-
 export function createLabel(lib: Library, name: string, ctx: OpCtx): OpResult {
-  const trimmed = name.trim();
-  if (trimmed.length < 1 || trimmed.length > LIBRARY_LIMITS.labelNameChars) {
+  if (labelNameIssue(name) !== null) {
     return fail({ _tag: 'LabelNameInvalid', name });
   }
+  const trimmed = name.trim();
   if (findLiveLabelByName(lib, trimmed) !== undefined) {
     return fail({ _tag: 'LabelNameTaken', name: trimmed });
   }
@@ -54,10 +49,10 @@ export function createAndAttachLabel(
   ctx: OpCtx,
 ): OpResult {
   if (lib.places[placeId] === undefined) return fail({ _tag: 'NotFound', id: placeId });
-  const trimmed = name.trim();
-  if (trimmed.length < 1 || trimmed.length > LIBRARY_LIMITS.labelNameChars) {
+  if (labelNameIssue(name) !== null) {
     return fail({ _tag: 'LabelNameInvalid', name });
   }
+  const trimmed = name.trim();
   const existing = findLiveLabelByName(lib, trimmed);
   if (existing !== undefined) {
     return { ok: true, lib: addLabels(lib, [placeId], [existing.id], ctx) };

@@ -1,3 +1,4 @@
+import { randomId } from '../../lib/random';
 import { Schema } from 'effect';
 import {
   COLLAB_LIMITS,
@@ -251,16 +252,6 @@ export function handleCollabInvitePreview(ctx: MeetContext, deps: MeetDeps): Pro
     return reply({ ...info, expiresAt: invited.expires_at });
   });
 }
-function newDeviceId(): string {
-  const alphabet = 'abcdefghijklmnopqrstuvwxyz0123456789';
-  let result = '';
-  while (result.length < 8)
-    for (const n of crypto.getRandomValues(new Uint8Array(16))) {
-      if (n < 252) result += alphabet[n % 36];
-      if (result.length === 8) break;
-    }
-  return result;
-}
 export function handleCollabAccept(ctx: MeetContext, deps: MeetDeps): Promise<Response> {
   return withRequest(ctx, async () => {
     switchesOff(ctx);
@@ -296,7 +287,7 @@ export function handleCollabAccept(ctx: MeetContext, deps: MeetDeps): Promise<Re
       throw full();
     let deviceId: string;
     do {
-      deviceId = newDeviceId();
+      deviceId = randomId(8);
     } while (
       await db
         .prepare('SELECT device_id FROM trip_collab_devices WHERE share_id = ? AND device_id = ?')

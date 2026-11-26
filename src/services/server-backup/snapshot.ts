@@ -77,9 +77,6 @@ export function fromBase64(text: string): Uint8Array | null {
     return null;
   }
 }
-export function libraryContentHash(lib: Library): string {
-  return hashItem(lib);
-}
 export async function buildSnapshot(
   input: SnapshotInput,
 ): Promise<{ ok: true; snapshot: BuiltSnapshot } | { ok: false; reason: BuildFailure }> {
@@ -95,7 +92,7 @@ export async function buildSnapshot(
       data: toBase64(bytes),
       storedBytes: bytes.length,
       rawBytes,
-      contentHash: libraryContentHash(input.library),
+      contentHash: hashItem(input.library),
       counts: libraryCounts(input.library),
       exportedAt: input.now.toISOString(),
     },

@@ -5,7 +5,7 @@ import { safeParse } from '../../schema/parse';
 import { ApiError } from '../http';
 import type { SyncContext, SyncDeps } from '../library-sync/env';
 import { syncError, SyncHttpError, syncJson } from '../library-sync/http';
-import { consumeCounter, counterKey } from '../library-sync/limits';
+import { requireCounter } from '../library-sync/limits';
 import { parsePullQuery, pullChanges, PUSH_MAX_BYTES } from '../library-sync/library';
 import { ensureSchema } from '../meet/db';
 import { hashToken } from '../meet/tokens';
@@ -36,18 +36,6 @@ export type AgentRoute = {
 
 const shareSchema = Schema.Struct({ ...SHARE_CREATE_FIELDS, kind: Schema.Literal('trip') });
 
-async function consume(
-  ctx: SyncContext,
-  who: AgentPrincipal,
-  action: string,
-  max: number,
-  now: number,
-  amount = 1,
-): Promise<void> {
-  if (!(await consumeCounter(ctx.env.DB!, counterKey(action, who.userId, now), amount, max)))
-    throw new SyncHttpError(429, 'rate-limited');
-}
-
 export const AGENT_ROUTES: AgentRoute[] = [
   {
     method: 'GET',
@@ -55,7 +43,13 @@ export const AGENT_ROUTES: AgentRoute[] = [
     pattern: '/v1/whoami',
     scope: null,
     async run(ctx, deps, who) {
-      await consume(ctx, who, 'agent-whoami', AGENT_LIMITS.whoami, deps.now());
+      await requireCounter(
+        ctx.env.DB!,
+        'agent-whoami',
+        who.userId,
+        deps.now(),
+        AGENT_LIMITS.whoami,
+      );
       return syncJson(200, {
         name: who.tokenName,
         scopes: who.scopes,
@@ -71,7 +65,7 @@ export const AGENT_ROUTES: AgentRoute[] = [
     scope: 'inbox:write',
     async run(ctx, deps, who) {
       const now = deps.now();
-      await consume(ctx, who, 'agent-inbox', AGENT_LIMITS.inbox, now);
+      await requireCounter(ctx.env.DB!, 'agent-inbox', who.userId, now, AGENT_LIMITS.inbox);
       const body = parseInboxBody(await readLimitedJson(ctx.request, SHARE_REQUEST_MAX_BYTES));
       const existing = await findPendingInbox(ctx.env.DB!, who.userId, body.key, now);
       if (existing) return syncJson(200, existing);
@@ -89,7 +83,7 @@ export const AGENT_ROUTES: AgentRoute[] = [
     async run(ctx, deps, who) {
       if (ctx.env.SHARE_SHORT === 'off') throw new SyncHttpError(503, 'off');
       const now = deps.now();
-      await consume(ctx, who, 'agent-share', AGENT_LIMITS.share, now);
+      await requireCounter(ctx.env.DB!, 'agent-share', who.userId, now, AGENT_LIMITS.share);
       const parsed = safeParse(
         shareSchema,
         await readLimitedJson(ctx.request, SHARE_REQUEST_MAX_BYTES),
@@ -114,7 +108,13 @@ export const AGENT_ROUTES: AgentRoute[] = [
     scope: 'share:create',
     allowWhenOff: true,
     async run(ctx, deps, who, params) {
-      await consume(ctx, who, 'agent-share-delete', AGENT_LIMITS.shareDelete, deps.now());
+      await requireCounter(
+        ctx.env.DB!,
+        'agent-share-delete',
+        who.userId,
+        deps.now(),
+        AGENT_LIMITS.shareDelete,
+      );
       const id = params[0]!;
       if (!SHORT_ID_PATTERN.test(id)) throw new SyncHttpError(404, 'not-found');
       const deleteToken = ctx.request.headers.get('X-Delete-Token');
@@ -138,7 +138,13 @@ export const AGENT_ROUTES: AgentRoute[] = [
       if (url.searchParams.has('device'))
         throw new SyncHttpError(422, 'invalid', { path: 'device' });
       const query = parsePullQuery(url);
-      await consume(ctx, who, 'agent-library-read', AGENT_LIMITS.libraryRead, now);
+      await requireCounter(
+        ctx.env.DB!,
+        'agent-library-read',
+        who.userId,
+        now,
+        AGENT_LIMITS.libraryRead,
+      );
       const result = await pullChanges(ctx.env.DB!, who, { ...query, deviceId: null }, now);
       if ('resync' in result) return syncJson(410, { error: 'resync', purgedRev: result.resync });
       return new Response(result.body, {
@@ -156,7 +162,13 @@ export const AGENT_ROUTES: AgentRoute[] = [
     scope: 'library:read',
     async run(ctx, deps, who) {
       const now = deps.now();
-      await consume(ctx, who, 'agent-library-read', AGENT_LIMITS.libraryRead, now);
+      await requireCounter(
+        ctx.env.DB!,
+        'agent-library-read',
+        who.userId,
+        now,
+        AGENT_LIMITS.libraryRead,
+      );
       return syncJson(200, { changes: await listChanges(ctx.env.DB!, who.userId, now) });
     },
   },
@@ -169,7 +181,14 @@ export const AGENT_ROUTES: AgentRoute[] = [
     async run(ctx, deps, who) {
       const now = deps.now();
       const body = parseEditBody(await readLimitedJson(ctx.request, PUSH_MAX_BYTES));
-      await consume(ctx, who, 'agent-edit', AGENT_LIMITS.edit, now, body.ops.length);
+      await requireCounter(
+        ctx.env.DB!,
+        'agent-edit',
+        who.userId,
+        now,
+        AGENT_LIMITS.edit,
+        body.ops.length,
+      );
       const reply = await editItems(ctx.env.DB!, who, body, now);
       ctx.waitUntil(pruneChanges(ctx.env.DB!, who.userId, now).catch(() => undefined));
       return syncJson(200, reply);
@@ -184,7 +203,13 @@ export const AGENT_ROUTES: AgentRoute[] = [
     async run(ctx, deps, who) {
       const now = deps.now();
       const target = parseUndoBody(await readLimitedJson(ctx.request, SHARE_REQUEST_MAX_BYTES));
-      await consume(ctx, who, 'agent-library-read', AGENT_LIMITS.libraryRead, now);
+      await requireCounter(
+        ctx.env.DB!,
+        'agent-library-read',
+        who.userId,
+        now,
+        AGENT_LIMITS.libraryRead,
+      );
       return syncJson(200, await undoChanges(ctx.env.DB!, who, target, now));
     },
   },

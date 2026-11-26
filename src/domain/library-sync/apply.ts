@@ -201,15 +201,13 @@ export function applyRemote(
       continue;
     }
     const server = decoded.doc;
-    if (!opts.skip?.has(key)) {
-      let doc = server;
-      if (mine && (!b || hashItem(mine) !== b.hash)) {
-        const result = mergeItem(r.kind, mine, server, { baseDeleted: b?.deleted });
-        doc = result.doc;
-        conflicts.push(...conflictsFor(r.kind, r.id, mine, result, opts));
-      }
-      next = putItems(next, [{ kind: r.kind, id: r.id, doc }]);
+    let doc = server;
+    if (mine && (!b || hashItem(mine) !== b.hash)) {
+      const result = mergeItem(r.kind, mine, server, { baseDeleted: b?.deleted });
+      doc = result.doc;
+      conflicts.push(...conflictsFor(r.kind, r.id, mine, result, opts));
     }
+    next = putItems(next, [{ kind: r.kind, id: r.id, doc }]);
     nextBase[key] = { rev: r.rev, hash: hashItem(server), deleted: isDeleted(server) };
   }
   if (opts.fullResync) {

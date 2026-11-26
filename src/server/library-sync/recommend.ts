@@ -8,7 +8,7 @@ import { CACHE_ORIGIN } from '../cache-key';
 import { requireSyncUser, type SyncUser } from './auth';
 import type { SyncContext, SyncDeps, SyncEnv } from './env';
 import { SyncHttpError, syncJson } from './http';
-import { consumeCounter, counterKey } from './limits';
+import { requireCounter } from './limits';
 import type { SyncRoute } from './router';
 
 export const RECOMMEND_LIMITS = {
@@ -28,7 +28,6 @@ export type RecommendationMeta = {
   createdAt: number;
   updatedAt: number;
 };
-export type RecommendationPublic = RecommendationMeta & { doc: ShareDocV1 };
 type RecommendBody = {
   title: string;
   description: string;
@@ -181,15 +180,7 @@ export const RECOMMEND_ROUTES: SyncRoute[] = [
       const body = parseRecommendBody(await readJson(c.request, RECOMMEND_LIMITS.bodyBytes));
       const db = c.env.DB!;
       const now = d.now();
-      if (
-        !(await consumeCounter(
-          db,
-          counterKey('recommend-write', user.userId, now),
-          1,
-          RECOMMEND_LIMITS.writes,
-        ))
-      )
-        throw new SyncHttpError(429, 'rate-limited');
+      await requireCounter(db, 'recommend-write', user.userId, now, RECOMMEND_LIMITS.writes);
       const old = await db
         .prepare(`SELECT ${META_COLUMNS}, doc FROM recommendations WHERE id = ?1`)
         .bind(id)

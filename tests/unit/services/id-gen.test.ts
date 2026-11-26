@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { Effect } from 'effect';
+import { randomId, randomToken } from 'src/lib/random';
 import { LabelId, PlaceId } from 'src/schema/library';
 import { safeParse } from 'src/schema/parse';
-import { IdGen, randomId } from 'src/services/id-gen';
+import { IdGen } from 'src/services/id-gen';
 
 const run = <A>(use: (gen: IdGen['Service']) => A, layer = IdGen.layer) =>
   Effect.runSync(
@@ -13,8 +14,11 @@ const run = <A>(use: (gen: IdGen['Service']) => A, layer = IdGen.layer) =>
 const next = (kind: 'place' | 'label' | 'trip' | 'stop') => run((g) => g.next(kind));
 
 describe('IdGen', () => {
-  it('내보낸 randomId는 10자 영숫자 소문자를 만든다', () => {
-    expect(randomId(10)).toMatch(/^[a-z0-9]{10}$/);
+  it('무작위 ID는 지정한 길이의 영숫자 소문자이고 토큰은 43자 base64url이다', () => {
+    for (const length of [8, 10, 16]) {
+      expect(randomId(length)).toMatch(new RegExp(`^[a-z0-9]{${length}}$`));
+    }
+    expect(randomToken()).toMatch(/^[A-Za-z0-9_-]{43}$/);
   });
 
   it('makes lowercase alphanumeric ids of length 10 (place) and 8 (label)', () => {

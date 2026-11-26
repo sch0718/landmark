@@ -115,7 +115,6 @@ function readStored(storage: Storage): StoredRead {
   return readText(storage.getItem(LIBRARY_KEY));
 }
 
-/** 사본을 봉투 → 보관함 순서로 읽는다. 없거나 읽지 못하면 `null`(지우지 않는다). */
 /** 사본을 읽는다. `json`은 사본에 담긴 원문 값(모르는 필드 포함)이고 `library`는 검증으로 해석한 값이다. */
 function readPreviousRaw(storage: Storage): (PreviousCopy & { json: unknown }) | null {
   const text = storage.getItem(PREVIOUS_KEY);

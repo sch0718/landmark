@@ -1,6 +1,8 @@
 // 짧은 링크의 본문 암호화. 해시(base64url)를 압축 바이트로 되돌려 암호화해야 base64url이 두 번 늘지 않는다.
 // 링크마다 새 키를 만들어 IV를 다시 쓰지 않는다. 키는 링크의 `#k=`에만 싣는다.
 
+import { randomToken } from 'src/lib/random';
+
 function toBase64Url(bytes: Uint8Array): string {
   let bin = '';
   for (const b of bytes) bin += String.fromCharCode(b);
@@ -31,6 +33,4 @@ export async function encryptShareHash(hash: string): Promise<{ body: string; ke
 }
 
 /** 삭제 토큰(43자 base64url). */
-export function newDeleteToken(): string {
-  return toBase64Url(crypto.getRandomValues(new Uint8Array(32)));
-}
+export const newDeleteToken = randomToken;

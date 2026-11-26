@@ -1,3 +1,4 @@
+import { randomId } from 'src/lib/random';
 import type { BaseEntry, BaseMap, Conflict, HeldItem } from 'src/domain/library-sync/apply';
 export const SYNC_META_KEY = 'tripmap:sync:v1';
 export const SYNC_BASE_KEY = 'tripmap:sync-base:v1';
@@ -57,13 +58,6 @@ const itemKeyValid = (v: unknown): v is string =>
   typeof v === 'string' && /^(label|place|folder|trip|meeting):[A-Za-z0-9]{1,64}$/.test(v);
 const nullableString = (v: unknown) => v === null || typeof v === 'string';
 export function newDeviceMeta(): SyncMeta {
-  let deviceId = '';
-  const alphabet = 'abcdefghijklmnopqrstuvwxyz0123456789';
-  while (deviceId.length < 16)
-    for (const byte of crypto.getRandomValues(new Uint8Array(32))) {
-      if (byte < 252) deviceId += alphabet[byte % 36];
-      if (deviceId.length === 16) break;
-    }
   return {
     v: 1,
     enabled: false,
@@ -71,7 +65,7 @@ export function newDeviceMeta(): SyncMeta {
     userId: null,
     provider: null,
     accountLabel: null,
-    deviceId,
+    deviceId: randomId(16),
     cursor: null,
     lastSyncAt: null,
     held: [],

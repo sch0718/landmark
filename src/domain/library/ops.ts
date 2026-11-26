@@ -3,6 +3,7 @@ import { liveLabels } from 'src/domain/library/query';
 import { localDateOf, normalizeReview, visitedOnOf } from 'src/domain/library/visit';
 import {
   LIBRARY_LIMITS,
+  labelNameIssue,
   normalizeLabelName,
   type FolderLink,
   type Label,
@@ -90,13 +91,11 @@ function withLabelIds(place: Place, ids: readonly string[], now: string): Place 
   return labelIds === place.labelIds ? place : { ...place, labelIds };
 }
 
-/** 이름을 다듬고 길이를 검사한다. 검사는 다듬은 값 기준이다. */
-function validName(name: string): string | null {
-  const trimmed = name.trim();
-  return trimmed.length >= 1 && trimmed.length <= LIBRARY_LIMITS.labelNameChars ? trimmed : null;
-}
-
-function findLiveLabelByName(lib: Library, name: string, exceptId?: string): Label | undefined {
+export function findLiveLabelByName(
+  lib: Library,
+  name: string,
+  exceptId?: string,
+): Label | undefined {
   const wanted = normalizeLabelName(name);
   return liveLabels(lib).find(
     (l) => l.id !== exceptId && normalizeLabelName(l.name.value) === wanted,
@@ -280,8 +279,8 @@ export function renameLabel(lib: Library, labelId: string, name: string, ctx: Op
   if (label === undefined || label.deletedAt !== null) {
     return fail({ _tag: 'NotFound', id: labelId });
   }
-  const trimmed = validName(name);
-  if (trimmed === null) return fail({ _tag: 'LabelNameInvalid', name });
+  if (labelNameIssue(name) !== null) return fail({ _tag: 'LabelNameInvalid', name });
+  const trimmed = name.trim();
   if (findLiveLabelByName(lib, trimmed, labelId) !== undefined) {
     return fail({ _tag: 'LabelNameTaken', name: trimmed });
   }

@@ -12,7 +12,7 @@ import {
   writeServerBackupLocal,
   EMPTY_SERVER_BACKUP_LOCAL,
 } from 'src/services/server-backup/storage';
-import { libraryContentHash } from 'src/services/server-backup/snapshot';
+import { hashItem } from 'src/domain/library-sync/items';
 import { OFF_STATUS, type SyncStatus } from 'src/stores/sync-status';
 import { makeLibrary, place } from '../domain/backup/fixtures';
 const now = 200000000;
@@ -97,7 +97,7 @@ it('다른 사용자의 기한과 결과를 비우고 서버에 없는 백업을
 it.each([
   ['off', { writable: false }, 86400000],
   ['recent', { backup: { ...meta, createdAt: now - 1000 } }, 86400000 - 1000],
-  ['unchanged', { backup: { ...meta, contentHash: libraryContentHash(library) } }, 86400000],
+  ['unchanged', { backup: { ...meta, contentHash: hashItem(library) } }, 86400000],
   ['skipped-shrunk', { backup: { ...meta, counts } }, 86400000],
 ] as const)('%s이면 올리지 않고 기한을 기록한다', async (step, over, wait) => {
   const d = deps();

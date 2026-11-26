@@ -1,3 +1,4 @@
+import { randomId } from '../../lib/random';
 import { Schema } from 'effect';
 import {
   MeetingDocSchema,
@@ -462,19 +463,6 @@ const releaseSchema = Schema.Union([
 const normalizeName = (name: string) => name.normalize('NFC').trim().replace(/\s+/g, ' ');
 const revisionGuard = 'EXISTS (SELECT 1 FROM meetings WHERE id = ? AND rev = ?)';
 
-function newParticipantId(): string {
-  const alphabet = 'abcdefghijklmnopqrstuvwxyz0123456789';
-  let id = '';
-  while (id.length < 8) {
-    for (const byte of crypto.getRandomValues(new Uint8Array(16))) {
-      if (byte >= 252) continue;
-      id += alphabet[byte % alphabet.length];
-      if (id.length === 8) break;
-    }
-  }
-  return id;
-}
-
 // 읽었던 버전일 때만 한 배치로 쓴다. 충돌하면 권한과 인원도 다시 확인한다.
 async function changeMeeting(
   ctx: MeetContext,
@@ -571,7 +559,7 @@ export function handleClaim(ctx: MeetContext, deps: MeetDeps): Promise<Response>
             throw new MeetError('CONFLICT', '참석자는 10명까지예요', { reason: 'full' });
           }
           do {
-            participantId = newParticipantId();
+            participantId = randomId(8);
           } while (ids.has(participantId));
           isNew = true;
         }

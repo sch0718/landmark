@@ -1,3 +1,4 @@
+import { randomToken } from 'src/lib/random';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import TextField from '@mui/material/TextField';
@@ -21,13 +22,6 @@ import {
 } from './meet-drafts';
 import { useMeetingCompute, type MeetingTimes } from './use-meeting-compute';
 import { useOnlinePoll } from './use-online-poll';
-
-function newGuestToken(): string {
-  return btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '');
-}
 
 const MODE_LABEL = { transit: '대중교통', car: '자동차', straight: '직선거리' };
 function message(error: OnlineError) {
@@ -344,7 +338,7 @@ export function OnlineInviteView({ id }: { id: string }) {
       ('participantId' in who
         ? pending.participantId === who.participantId
         : pending.newName === who.newName);
-    const guestToken = sameChoice ? pending.token : newGuestToken();
+    const guestToken = sameChoice ? pending.token : randomToken();
     await updateOnline(id, (fresh) => ({ ...fresh, pendingGuest: { ...who, token: guestToken } }));
     const result = await meetApi.claim(id, who, guestToken);
     if (!active.current) return;

@@ -21,7 +21,7 @@ import {
 } from './auth';
 import type { SyncContext, SyncDeps } from './env';
 import { isSyncOrigin, syncError, SyncHttpError, syncJson } from './http';
-import { consumeLoginLimit, consumeCounter, counterKey, SYNC_LIMITS } from './limits';
+import { consumeLoginLimit, requireCounter, SYNC_LIMITS } from './limits';
 import {
   readMe,
   pullChanges,
@@ -56,15 +56,7 @@ export const SYNC_ROUTES: SyncRoute[] = [
     async run(c, d, _p, url) {
       const user = await requireSyncUser(c, d);
       const now = d.now();
-      if (
-        !(await consumeCounter(
-          c.env.DB!,
-          counterKey('sync-pull', user.userId, now),
-          1,
-          SYNC_LIMITS.pull,
-        ))
-      )
-        throw new SyncHttpError(429, 'rate-limited');
+      await requireCounter(c.env.DB!, 'sync-pull', user.userId, now, SYNC_LIMITS.pull);
       const result = await pullChanges(c.env.DB!, user, parsePullQuery(url), now);
       if ('resync' in result) return syncJson(410, { error: 'resync', purgedRev: result.resync });
       if (result.purgedAt <= now - PURGE_INTERVAL_MS)
@@ -89,8 +81,7 @@ export const SYNC_ROUTES: SyncRoute[] = [
         ['sync-push', 1, SYNC_LIMITS.push],
         ['sync-items', body.items.length, SYNC_LIMITS.items],
       ] as const)
-        if (!(await consumeCounter(c.env.DB!, counterKey(action, user.userId, now), amount, max)))
-          throw new SyncHttpError(429, 'rate-limited');
+        await requireCounter(c.env.DB!, action, user.userId, now, max, amount);
       return syncJson(200, await pushItems(c.env.DB!, user, body, now));
     },
   },

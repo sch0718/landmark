@@ -107,8 +107,6 @@ export function LibraryMap() {
   const flow = useAtomValue(addFlowAtom);
   const candidate = flow.step === 'candidate' ? flow.candidate : null;
   const pinning = flow.step === 'pin';
-  // `start`는 스펙 §2.4.4용으로 남겨 둔 값이다. 아직 채우는 호출이 없어 지금은 항상 null이다.
-  const pinStart = flow.step === 'pin' ? flow.start : null;
   // 임시 마커 자리: 확인 카드의 후보나 핀 입력 카드의 위치.
   const tempPoint = useMemo(() => {
     if (flow.step === 'candidate') return flow.candidate;
@@ -248,13 +246,6 @@ export function LibraryMap() {
     if (candidate !== null) {
       setFocus({ point: [candidate.lng, candidate.lat], seq: (focus?.seq ?? 0) + 1 });
     }
-  }
-
-  // 핀 모드가 시작 좌표와 함께 열리면 그리로 옮긴다(렌더 중 상태 갱신).
-  const [seenStart, setSeenStart] = useState<typeof pinStart>(null);
-  if (seenStart !== pinStart) {
-    setSeenStart(pinStart);
-    if (pinStart !== null) setFocus({ point: pinStart, seq: (focus?.seq ?? 0) + 1 });
   }
 
   const [unavailable, setUnavailable] = useState<string | null>(null);

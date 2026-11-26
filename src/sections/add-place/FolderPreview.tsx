@@ -4,6 +4,7 @@ import Typography from '@mui/material/Typography';
 import { Effect, Result } from 'effect';
 import { useAtomValue, useSetAtom, useStore } from 'jotai';
 import { useEffect, useRef, useState } from 'react';
+import { useAliveRef } from 'src/lib/use-alive-ref';
 import { toast } from 'sonner';
 import { uniqueBySid } from 'src/domain/library/add-place';
 import { liveFolderLink, unlinkFolder } from 'src/domain/library/folder-links';
@@ -64,13 +65,7 @@ export function FolderPreview({ shareId }: { shareId: string }) {
   // 같은 이벤트 루프 안의 두 번째 클릭은 아직 `unlinking`을 못 본다.
   const unlinkingRef = useRef(false);
   // 끊는 사이 창이 닫혔다면(취소) 늦은 결과로 흐름을 건드리지 않는다. 새로 연 흐름을 닫을 수 있다.
-  const aliveRef = useRef(true);
-  useEffect(() => {
-    aliveRef.current = true;
-    return () => {
-      aliveRef.current = false;
-    };
-  }, []);
+  const aliveRef = useAliveRef();
   // 실행 번호. 다시 조회하거나 창이 닫히면 올려서 지난 조회의 결과가 끼어들지 않게 한다.
   const runSeq = useRef(0);
 

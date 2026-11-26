@@ -30,7 +30,7 @@ describe('useAddFlowRoute', () => {
   it('지도로 옮기는 이동이 끝나기 전에 효과가 다시 돌아도 한 번만 옮긴다(뒤로 두 번 가지 않게)', () => {
     mockViewport(390);
     const store = createStore();
-    store.set(addFlowAtom, { step: 'pin', name: '', start: null });
+    store.set(addFlowAtom, { step: 'pin', name: '' });
     const router = createMemoryRouter([{ path: '*', element: <Probe /> }], {
       initialEntries: [
         {

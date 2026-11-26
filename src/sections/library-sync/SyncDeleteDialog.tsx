@@ -11,6 +11,10 @@ import {
 import { useState } from 'react';
 import { loadSyncEngine } from 'src/services/library-sync/boot';
 export function SyncDeleteDialog({ open, onClose }: { open: boolean; onClose(): void }) {
+  return open ? <DeleteDialogContent onClose={onClose} /> : null;
+}
+
+function DeleteDialogContent({ onClose }: { onClose(): void }) {
   const [confirm, setConfirm] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -18,7 +22,6 @@ export function SyncDeleteDialog({ open, onClose }: { open: boolean; onClose(): 
     setBusy(true);
     try {
       if (await (await loadSyncEngine()).ensureLibrarySyncEngine().deleteServerData()) {
-        setConfirm('');
         onClose();
       } else setError('서버 자료를 지우지 못했어요. 잠시 뒤 다시 해 주세요');
     } catch {
@@ -29,7 +32,7 @@ export function SyncDeleteDialog({ open, onClose }: { open: boolean; onClose(): 
   };
   return (
     <Dialog
-      open={open}
+      open
       onClose={busy ? undefined : onClose}
       fullWidth
       maxWidth="sm"

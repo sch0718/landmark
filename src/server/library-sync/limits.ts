@@ -23,6 +23,17 @@ export async function consumeCounter(
   if (!row) throw new Error('일 한도 카운터를 읽지 못함');
   return row.count <= max;
 }
+export async function requireCounter(
+  db: MeetDb,
+  action: string,
+  subject: string,
+  now: number,
+  max: number,
+  amount = 1,
+): Promise<void> {
+  if (!(await consumeCounter(db, counterKey(action, subject, now), amount, max)))
+    throw new SyncHttpError(429, 'rate-limited');
+}
 export async function consumeLoginLimit(ctx: SyncContext, now: number): Promise<void> {
   const salt = ctx.env.IP_HASH_SALT ?? (isLocalRequest(ctx.request) ? 'dev-salt' : null);
   if (!salt || !ctx.env.DB) throw new SyncHttpError(503, 'config');

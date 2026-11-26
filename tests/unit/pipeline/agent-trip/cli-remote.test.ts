@@ -11,7 +11,7 @@ import { exitFor } from '../../../../pipeline/agent-trip/errors';
 import { readShareHash } from 'src/domain/share/read-share';
 import { hashToken } from 'src/server/meet/tokens';
 import { handleShareOpen } from 'src/server/share/handlers';
-import * as idGen from 'src/services/id-gen';
+import * as random from 'src/lib/random';
 import { createSyncMemoryServer } from '../../../helpers/sync-memory-server';
 import { main, type CliDeps } from '../../../../pipeline/cli/trip';
 import { runBuild } from '../../../../pipeline/agent-trip/run-build';
@@ -390,7 +390,7 @@ describe('원격 여행 CLI', () => {
       vi.setSystemTime(now);
       deps.now = () => now;
       let nextId = 0;
-      vi.spyOn(idGen, 'randomId').mockImplementation((length) =>
+      vi.spyOn(random, 'randomId').mockImplementation((length) =>
         (++nextId).toString(36).padStart(length, 'a'),
       );
       fetcher.mockImplementation(async (input, init) => {

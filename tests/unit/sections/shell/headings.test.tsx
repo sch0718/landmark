@@ -107,7 +107,7 @@ describe('화면별 제목 구조', () => {
 
   it('중간 폭에서 핀 모드가 상세 오버레이를 내려도 장소 이름 h1 하나가 남는다', async () => {
     const { store } = await renderLibrary(sampleLibrary(), { path: `/place/${P1}`, width: 1024 });
-    act(() => store.set(addFlowAtom, { step: 'pin', name: '', start: null }));
+    act(() => store.set(addFlowAtom, { step: 'pin', name: '' }));
     await vi.waitFor(() =>
       expect(screen.queryByRole('region', { name: '장소 상세' })).not.toBeInTheDocument(),
     );
