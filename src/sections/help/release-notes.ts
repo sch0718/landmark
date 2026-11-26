@@ -7,6 +7,14 @@ import type { ReleaseNote } from '@sch0718/app-update';
  */
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: 'v0.38.0',
+    date: '2026-11-26',
+    items: [
+      '여행 계획에 「전체」 보기가 생겼어요. 모든 Day의 장소를 한 지도에서 보고, 핀을 눌러 메모를 바로 고쳐요.',
+      '서버 자료 지우기 창을 다시 열면 확인 입력이 비워져요. 링크 공유를 취소하면 더는 복사되지 않아요.',
+    ],
+  },
+  {
     version: 'v0.37.2',
     date: '2026-11-21',
     items: [
