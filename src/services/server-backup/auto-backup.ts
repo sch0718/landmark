@@ -1,6 +1,7 @@
 import { Effect } from 'effect';
 import { getDefaultStore } from 'jotai';
 import { hasLiveContent, libraryCounts, type LibraryCounts } from 'src/domain/backup/summary';
+import { hashItem } from 'src/domain/library-sync/items';
 import { startEffect } from 'src/lib/effect/runtime';
 import type { Library } from 'src/schema/library';
 import type { Prefs } from 'src/schema/prefs';
@@ -12,7 +13,7 @@ import { deviceLabel } from 'src/services/library-sync/login';
 import { prefsAtom } from 'src/stores/prefs-state';
 import { syncStatusAtom, type SyncStatus } from 'src/stores/sync-status';
 import { createBackupApi, uploadBody, type BackupApi, type BackupCounts } from './api';
-import { buildSnapshot, libraryContentHash } from './snapshot';
+import { buildSnapshot } from './snapshot';
 import { readServerBackupLocal, writeServerBackupLocal, type AutoOutcome } from './storage';
 export const AUTO_BACKUP_INTERVAL_MS = 86_400_000;
 export const AUTO_RETRY_MS = 3_600_000;
@@ -119,8 +120,7 @@ export async function runAutoBackup(
       const { raw, library } = await deps.readLibrary();
       const afterRead = cancelled();
       if (afterRead) return afterRead;
-      if (backup && libraryContentHash(library) === backup.contentHash)
-        return finish('unchanged', interval);
+      if (backup && hashItem(library) === backup.contentHash) return finish('unchanged', interval);
       if (!hasLiveContent(library)) return finish('skipped-empty', interval, 'skipped-empty');
       if (backup && shrunk(backup.counts, libraryCounts(library)))
         return finish('skipped-shrunk', interval, 'skipped-shrunk');

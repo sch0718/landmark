@@ -1,12 +1,17 @@
 import { createLabel } from 'src/domain/library/label-create';
 import { truncateMemo } from 'src/domain/library/legacy-import';
 import { setField } from 'src/domain/library/lww';
-import { type OpCtx, type OpError, type OpResult, type OpSummary } from 'src/domain/library/ops';
+import {
+  findLiveLabelByName,
+  type OpCtx,
+  type OpError,
+  type OpResult,
+  type OpSummary,
+} from 'src/domain/library/ops';
 import { liveLabels } from 'src/domain/library/query';
 import {
   LABEL_COLORS,
-  LIBRARY_LIMITS,
-  normalizeLabelName,
+  labelNameIssue,
   type Label,
   type Library,
   type Place,
@@ -252,12 +257,6 @@ export function nextLabelColor(lib: Library): Label['color']['value'] {
   return LABEL_COLORS[(LABEL_COLORS.indexOf(last.color.value) + 1) % LABEL_COLORS.length]!;
 }
 
-/** 정규형이 같은 살아 있는 라벨. */
-export function findLiveLabel(lib: Library, name: string): Label | undefined {
-  const wanted = normalizeLabelName(name);
-  return liveLabels(lib).find((l) => normalizeLabelName(l.name.value) === wanted);
-}
-
 /**
  * 이름으로 라벨을 정한다. 정규형이 같은 살아 있는 라벨이 있으면 그것을 쓰고(색·순서 그대로),
  * 없으면 `color`로 맨 뒤에 만든다. 다듬은 이름이 1–30자가 아니면 `LabelNameInvalid`다.
@@ -268,11 +267,11 @@ export function reuseOrCreateLabel(
   color: Label['color']['value'],
   ctx: OpCtx,
 ): { ok: true; lib: Library; labelId: string } | Extract<OpResult, { ok: false }> {
-  const trimmed = name.trim();
-  if (trimmed.length < 1 || trimmed.length > LIBRARY_LIMITS.labelNameChars) {
+  if (labelNameIssue(name) !== null) {
     return fail({ _tag: 'LabelNameInvalid', name });
   }
-  const reused = findLiveLabel(lib, trimmed);
+  const trimmed = name.trim();
+  const reused = findLiveLabelByName(lib, trimmed);
   if (reused !== undefined) return { ok: true, lib, labelId: reused.id };
 
   const created = createLabel(lib, trimmed, ctx);

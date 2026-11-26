@@ -15,7 +15,6 @@ function network(online: boolean) {
 }
 beforeEach(() => {
   vi.useFakeTimers();
-  vi.setSystemTime(0);
   vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
   vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(true);
 });
@@ -25,14 +24,13 @@ afterEach(() => {
 });
 
 describe('온라인 약속 확인 주기', () => {
-  it('보이는 온라인 화면에서 10초마다 확인하고 마지막 성공 시각을 준다', async () => {
+  it('보이는 온라인 화면에서 10초마다 확인한다', async () => {
     const tick = vi.fn(async () => 'ok' as const);
-    const { result } = renderHook(() => useOnlinePoll({ enabled: true, tick }));
-    expect(result.current).toEqual({ lastOkAt: null, failing: false });
+    renderHook(() => useOnlinePoll({ enabled: true, tick }));
     await advance(9_999);
     expect(tick).not.toHaveBeenCalled();
     await advance(1);
-    expect(result.current).toEqual({ lastOkAt: 10_000, failing: false });
+    expect(tick).toHaveBeenCalledTimes(1);
     await advance(10_000);
     expect(tick).toHaveBeenCalledTimes(2);
   });
@@ -80,9 +78,9 @@ describe('온라인 약속 확인 주기', () => {
       .mockResolvedValueOnce('error')
       .mockResolvedValueOnce('error')
       .mockResolvedValue('ok');
-    const { result } = renderHook(() => useOnlinePoll({ enabled: true, tick }));
+    renderHook(() => useOnlinePoll({ enabled: true, tick }));
     await advance(10_000);
-    expect(result.current).toEqual({ lastOkAt: null, failing: true });
+    expect(tick).toHaveBeenCalledTimes(1);
     await advance(9_999);
     expect(tick).toHaveBeenCalledTimes(1);
     await advance(1);
@@ -94,31 +92,21 @@ describe('온라인 약속 확인 주기', () => {
     await advance(59_999);
     expect(tick).toHaveBeenCalledTimes(3);
     await advance(1);
-    expect(result.current).toEqual({ lastOkAt: 110_000, failing: false });
+    expect(tick).toHaveBeenCalledTimes(4);
     await advance(10_000);
     expect(tick).toHaveBeenCalledTimes(5);
   });
 
-  it('실패해도 마지막 성공 시각을 보존한다', async () => {
-    const tick = vi
-      .fn<() => Promise<'ok' | 'error'>>()
-      .mockResolvedValueOnce('ok')
-      .mockResolvedValue('error');
-    const { result } = renderHook(() => useOnlinePoll({ enabled: true, tick }));
-    await advance(20_000);
-    expect(result.current).toEqual({ lastOkAt: 10_000, failing: true });
-  });
-
-  it('tickの例外も失敗として扱い再確認を続ける', async () => {
+  it('tick이 예외를 던져도 실패로 처리하고 다시 확인한다', async () => {
     const tick = vi
       .fn<() => Promise<'ok' | 'error'>>()
       .mockRejectedValueOnce(new Error('실패'))
       .mockResolvedValue('ok');
-    const { result } = renderHook(() => useOnlinePoll({ enabled: true, tick }));
+    renderHook(() => useOnlinePoll({ enabled: true, tick }));
     await advance(10_000);
-    expect(result.current.failing).toBe(true);
+    expect(tick).toHaveBeenCalledTimes(1);
     await advance(10_000);
-    expect(result.current).toEqual({ lastOkAt: 20_000, failing: false });
+    expect(tick).toHaveBeenCalledTimes(2);
   });
 
   it('실행 중에는 타이머·복귀 이벤트가 겹쳐도 호출하지 않는다', async () => {
@@ -179,7 +167,7 @@ describe('온라인 약속 확인 주기', () => {
           finish = resolve;
         }),
     );
-    const { result, rerender } = renderHook(({ enabled }) => useOnlinePoll({ enabled, tick }), {
+    const { rerender } = renderHook(({ enabled }) => useOnlinePoll({ enabled, tick }), {
       initialProps: { enabled: true },
     });
     await advance(10_000);
@@ -188,8 +176,9 @@ describe('온라인 약속 확인 주기', () => {
     await advance(10_000);
     expect(tick).toHaveBeenCalledTimes(1);
     await act(async () => finish('ok'));
-    expect(result.current.lastOkAt).toBeNull();
-    await advance(10_000);
+    await advance(9_999);
+    expect(tick).toHaveBeenCalledTimes(1);
+    await advance(1);
     expect(tick).toHaveBeenCalledTimes(2);
   });
 

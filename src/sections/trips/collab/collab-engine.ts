@@ -595,31 +595,32 @@ export class CollabEngine {
     });
     void this.flushProgress();
   }
-  setNext(stopId: string | null, date: string): void {
-    if (this.disposed) return;
+  async setNext(stopId: string | null, date: string): Promise<boolean> {
+    if (this.disposed) return false;
     const d = this.deps,
       r = d.store.get(d.tripId);
-    if (!r || r.status !== 'live') return;
+    if (!r || r.status !== 'live') return false;
     const token = this.token(r);
-    if (!token) return;
-    void d.api
-      .progress(r.liveId, token, { ops: [], next: { stopId, date, at: d.now().toISOString() } })
-      .then((result) => {
-        if (this.disposed) return;
-        if (!result.ok) {
-          toast.error('다음 장소를 정하지 못했어요. 인터넷 연결을 확인하고 다시 해 주세요');
-          return;
-        }
-        d.store.update(d.tripId, { prev: result.value.prev });
-        const base = d.store.readBase(r.liveId);
-        if (base) d.store.writeBase(r.liveId, { ...base, progress: result.value });
-        this.emit({
-          progress: withLocalOps(result.value, d.store.get(d.tripId)?.pendingProgress ?? [], {
-            device: r.deviceId ?? OWNER_DEVICE,
-            label: r.role === 'owner' ? OWNER_LABEL : r.label,
-          }),
-        });
-      });
+    if (!token) return false;
+    const result = await d.api.progress(r.liveId, token, {
+      ops: [],
+      next: { stopId, date, at: d.now().toISOString() },
+    });
+    if (this.disposed) return false;
+    if (!result.ok) {
+      toast.error('다음 장소를 정하지 못했어요. 인터넷 연결을 확인하고 다시 해 주세요');
+      return false;
+    }
+    d.store.update(d.tripId, { prev: result.value.prev });
+    const base = d.store.readBase(r.liveId);
+    if (base) d.store.writeBase(r.liveId, { ...base, progress: result.value });
+    this.emit({
+      progress: withLocalOps(result.value, d.store.get(d.tripId)?.pendingProgress ?? [], {
+        device: r.deviceId ?? OWNER_DEVICE,
+        label: r.role === 'owner' ? OWNER_LABEL : r.label,
+      }),
+    });
+    return result.value.next?.stopId === stopId && result.value.next.date === date;
   }
   dispose(): void {
     this.disposed = true;

@@ -91,14 +91,12 @@ export function dueFolders(
   lib: Library,
   state: FolderWatchState,
   now: number,
-  opts: { interval?: number; max?: number; ignoreInterval?: boolean } = {},
+  opts: { max?: number; ignoreInterval?: boolean } = {},
 ): string[] {
   const at = (id: string) =>
     Math.max(state.folders[id]?.checkedAt ?? 0, Date.parse(lib.folders![id]!.checkedAt));
   return liveLinkIds(lib)
-    .filter(
-      (id) => opts.ignoreInterval || now - at(id) >= (opts.interval ?? FOLDER_WATCH_INTERVAL_MS),
-    )
+    .filter((id) => opts.ignoreInterval || now - at(id) >= FOLDER_WATCH_INTERVAL_MS)
     .sort((a, b) => at(a) - at(b) || a.localeCompare(b))
     .slice(0, opts.max ?? FOLDER_WATCH_MAX_PER_RUN);
 }

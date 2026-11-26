@@ -1,15 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import {
-  assertEditLayerSize,
-  EDIT_LAYER_PARSE,
-  editLayerByteLength,
-  EditLayerSchema,
-  newEditLayer,
-  serializeEditLayerFile,
-  type EditLayer,
-} from 'src/schema/legacy/edit-layer';
+import { EDIT_LAYER_PARSE, EditLayerSchema, type EditLayer } from 'src/schema/legacy/edit-layer';
 import { safeParse } from 'src/schema/parse';
-import { makeEdit, sid, withBulkyMemos } from '../../fixtures/builders';
+import { makeEdit, sid } from '../../fixtures/builders';
 
 const NOW = '2026-10-03T01:00:00.000Z';
 const stop = (id: string) => ({ id, placeKey: 'n:1' });
@@ -241,39 +233,5 @@ describe('EditLayerSchema', () => {
     expect(r.success && r.data.places['n:1']?.category?.value).toBe('카페');
     e.places['n:1'] = categoryOf('   ');
     expect(safeParse(EditLayerSchema, e, EDIT_LAYER_PARSE).success).toBe(false);
-  });
-
-  it('newEditLayer는 작성자를 authors에 넣고 비어 있는 레이어를 만든다', () => {
-    const e = newEditLayer({
-      publicId: 'k3f9x2a7q1',
-      baseDataVersion: NOW,
-      authorId: 'u1',
-      nickname: '나',
-      now: NOW,
-    });
-    expect(e).toEqual({
-      schemaVersion: 1,
-      publicId: 'k3f9x2a7q1',
-      baseDataVersion: NOW,
-      authorId: 'u1',
-      authors: { u1: { nickname: '나', updatedAt: NOW } },
-      places: {},
-      days: {},
-    });
-    expect(safeParse(EditLayerSchema, e, EDIT_LAYER_PARSE).success).toBe(true);
-  });
-});
-
-describe('editLayerByteLength', () => {
-  it('내보내기 파일(들여쓴 JSON)의 UTF-8 바이트 수를 센다', () => {
-    const e = withBulkyMemos(makeEdit(), 1, 1);
-    const blob = new Blob([serializeEditLayerFile(e)]);
-    expect(editLayerByteLength(e)).toBe(blob.size);
-    expect(editLayerByteLength(e)).toBeGreaterThan(6000);
-  });
-
-  it('assertEditLayerSize는 1MB 이하면 통과, 넘으면 throw', () => {
-    expect(() => assertEditLayerSize(withBulkyMemos(makeEdit(), 1, 90))).not.toThrow();
-    expect(() => assertEditLayerSize(withBulkyMemos(makeEdit(), 1, 180))).toThrow('1MB');
   });
 });

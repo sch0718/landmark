@@ -1,6 +1,6 @@
 import { Context, Effect, Layer } from 'effect';
 import type { LegacySource } from 'src/domain/library/legacy-import';
-import { migrateEditLayer, storageKey } from 'src/repositories/edit-layer-repo';
+import { storageKey } from 'src/repositories/edit-layer-repo';
 import { EDIT_LAYER_PARSE, EditLayerSchema, type EditLayer } from 'src/schema/legacy/edit-layer';
 import { PublicId } from 'src/schema/common';
 import { is, safeParse } from 'src/schema/parse';
@@ -25,7 +25,7 @@ function readEditLayerReadOnly(storage: Storage | undefined, publicId: string): 
       const version = (value as { schemaVersion?: unknown }).schemaVersion;
       if (typeof version === 'number' && version > 1) return null;
     }
-    const parsed = safeParse(EditLayerSchema, migrateEditLayer(value), EDIT_LAYER_PARSE);
+    const parsed = safeParse(EditLayerSchema, value, EDIT_LAYER_PARSE);
     return parsed.success ? parsed.data : null;
   } catch {
     return null;

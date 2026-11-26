@@ -122,7 +122,7 @@ async function openPinCard(
 describe('핀 모드', () => {
   it('＋추가 → 지도에서 핀 찍기는 지도 가운데 조준점과 안내를 보이고 추가 칸은 열지 않는다', async () => {
     const { store } = await enterPinMode();
-    expect(store.get(addFlowAtom)).toEqual({ step: 'pin', name: '', start: null });
+    expect(store.get(addFlowAtom)).toEqual({ step: 'pin', name: '' });
     expect(crosshair()).toBeInTheDocument();
     expect(screen.getByText(GUIDE)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '여기에 추가' })).toBeEnabled();
@@ -169,7 +169,7 @@ describe('핀 모드', () => {
     const sheet = await screen.findByRole('dialog', { name: '장소 추가' });
     await user.keyboard('{Escape}');
     await waitFor(() => expect(sheet).not.toBeInTheDocument());
-    expect(store.get(addFlowAtom)).toEqual({ step: 'pin', name: '', start: null });
+    expect(store.get(addFlowAtom)).toEqual({ step: 'pin', name: '' });
     expect(crosshair()).toBeInTheDocument();
   });
 
@@ -177,7 +177,7 @@ describe('핀 모드', () => {
     const { user, store } = await enterPinMode();
     await user.click(screen.getByRole('searchbox', { name: '장소 검색' }));
     await user.keyboard('{Escape}');
-    expect(store.get(addFlowAtom)).toEqual({ step: 'pin', name: '', start: null });
+    expect(store.get(addFlowAtom)).toEqual({ step: 'pin', name: '' });
     expect(crosshair()).toBeInTheDocument();
   });
 
@@ -203,25 +203,6 @@ describe('핀 모드', () => {
     await act(() => router.navigate('/place/place00002'));
     await waitFor(() => expect(store.get(addFlowAtom)).toEqual({ step: 'closed' }));
     expect(screen.getByRole('region', { name: '장소 상세' })).toBeInTheDocument();
-  });
-
-  it('시작 좌표가 있으면 지도를 그 좌표로 옮기고, 그대로 여기에 추가하면 그 좌표다', async () => {
-    const user = userEvent.setup();
-    const { store } = await renderLibrary(sampleLibrary(), {
-      reverseGeocoder: fakeReverse(null),
-    });
-    await mapReady();
-    act(() => store.set(addFlowAtom, { step: 'pin', name: '콤포트', start: [129.06, 35.15] }));
-    await waitFor(() =>
-      expect(fakeAdapter().getCamera()).toEqual({ center: [129.06, 35.15], zoom: 16 }),
-    );
-    await user.click(screen.getByRole('button', { name: '여기에 추가' }));
-    expect(store.get(addFlowAtom)).toEqual({
-      step: 'pin-card',
-      name: '콤포트',
-      lng: 129.06,
-      lat: 35.15,
-    });
   });
 
   it('핀 모드에서는 마커를 눌러도 상세로 가지 않는다', async () => {

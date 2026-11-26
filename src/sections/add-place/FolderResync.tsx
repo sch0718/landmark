@@ -2,7 +2,8 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import { useAtomValue, useSetAtom } from 'jotai';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { useAliveRef } from 'src/lib/use-alive-ref';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { planFolderSync, syncFolder } from 'src/domain/library/folder-links';
@@ -93,13 +94,7 @@ export function FolderResync({
   // 같은 이벤트 루프 안의 두 번째 클릭은 아직 `saving`을 못 본다.
   const savingRef = useRef(false);
   // 저장하는 사이 칸이 닫혔다면 늦은 결과로 흐름을 건드리지 않는다(토스트는 띄운다).
-  const aliveRef = useRef(true);
-  useEffect(() => {
-    aliveRef.current = true;
-    return () => {
-      aliveRef.current = false;
-    };
-  }, []);
+  const aliveRef = useAliveRef();
 
   const name = folderName.trim() === '' ? '이름 없는 폴더' : folderName;
   const labelName = library.labels[link.labelId.value]?.name.value ?? fallbackLabelName;

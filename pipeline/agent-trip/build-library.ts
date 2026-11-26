@@ -15,7 +15,7 @@ import {
 import { legKey } from 'src/domain/trips/query';
 import { emptyLibrary, LibrarySchema, type Library } from 'src/schema/library';
 import { safeParse } from 'src/schema/parse';
-import { randomId } from 'src/services/id-gen';
+import { randomId } from 'src/lib/random';
 import { EXIT, TripFailure, type TripIssue } from './errors';
 import type { TripPlan } from './plan-schema';
 import type { ResolvedPlace } from './resolve-places';

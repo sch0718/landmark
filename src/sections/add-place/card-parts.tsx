@@ -1,7 +1,7 @@
 import { createLabel } from 'src/domain/library/label-create';
 import Box from '@mui/material/Box';
 import { useAtomValue, useStore } from 'jotai';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 
 import { liveLabels } from 'src/domain/library/query';
 import { normalizeLabelName } from 'src/schema/library';
@@ -78,16 +78,4 @@ export function useCardLabels() {
   };
 
   return { labels, labelIds, shownIds, toggle, createAndSelect, creating: pendingCreates > 0 };
-}
-
-/** 마운트돼 있는 동안 `true`. 저장하는 사이 칸이 닫혔는지 볼 때 쓴다. */
-export function useAliveRef() {
-  const aliveRef = useRef(true);
-  useEffect(() => {
-    aliveRef.current = true;
-    return () => {
-      aliveRef.current = false;
-    };
-  }, []);
-  return aliveRef;
 }

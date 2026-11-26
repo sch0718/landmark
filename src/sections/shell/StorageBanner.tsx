@@ -2,7 +2,7 @@ import Alert from '@mui/material/Alert';
 import { useAtomValue } from 'jotai';
 import { persistenceAtom } from 'src/stores/library-state';
 
-/** localStorage를 쓸 수 없어 메모리에만 두는 중이면 알린다(스펙 §6.3 `StorageUnavailable`). */
+/** localStorage를 쓸 수 없어 메모리에만 두는 중이면 알린다. */
 export function StorageBanner() {
   const persistence = useAtomValue(persistenceAtom);
   if (persistence !== 'memory') return null;

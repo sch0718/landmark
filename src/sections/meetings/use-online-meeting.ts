@@ -1,3 +1,4 @@
+import { randomToken } from 'src/lib/random';
 import { useCallback, useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { finalFromMeeting, inviteFromMeeting } from 'src/domain/meeting/link';
@@ -30,13 +31,6 @@ import { useOnlinePoll } from './use-online-poll';
 export type OnlineCompute = { times: MeetingTimes; unit: 'min' | 'm'; pending: boolean };
 export type OnlineMeetingMode = 'link' | 'local' | 'online' | 'ended';
 export type OnlineMeeting = ReturnType<typeof useOnlineMeeting>;
-
-function newHostToken(): string {
-  return btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '');
-}
 
 function removedReplyOnly(doc: MeetingDoc, record: OnlineRecord): string[] {
   const remaining = new Set(doc.participants.map((p) => p.id));
@@ -648,7 +642,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
       if (creating.current) return;
       creating.current = true;
       try {
-        const hostToken = current?.pendingHostToken ?? newHostToken();
+        const hostToken = current?.pendingHostToken ?? randomToken();
         const pending = { ...current, pendingHostToken: hostToken };
         await save((fresh) =>
           sameHostConnection(fresh, current) ? { ...fresh, pendingHostToken: hostToken } : fresh,
@@ -771,7 +765,7 @@ export function useOnlineMeeting(meeting: Meeting, compute: OnlineCompute) {
     if (reissuing.current) return reissuing.current;
     const current = currentRecord();
     if (!current?.hostToken || current.ended) return false;
-    const hostToken = current.pendingHostToken ?? newHostToken();
+    const hostToken = current.pendingHostToken ?? randomToken();
     const pending = { ...current, pendingHostToken: hostToken };
     reissuing.current = (async () => {
       await save((fresh) =>

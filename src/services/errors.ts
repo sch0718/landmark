@@ -6,16 +6,6 @@ import { MutableArray } from 'src/schema/mutable';
 
 const IssueSchema = Schema.Struct({ path: Schema.String, message: Schema.String });
 
-/** localStorage를 쓸 수 없다. 메모리 저장으로 대체하고 배너를 띄운다. */
-export class StorageUnavailable extends Schema.TaggedError<StorageUnavailable>()(
-  'StorageUnavailable',
-  {},
-) {
-  get userMessage(): string {
-    return '이 브라우저에서는 저장할 수 없어요. 새로고침하면 사라져요';
-  }
-}
-
 /** 쓰기 용량 초과. `bytes`는 쓰려던 문서의 직렬화 길이(`String.length`). */
 export class StorageQuotaExceeded extends Schema.TaggedError<StorageQuotaExceeded>()(
   'StorageQuotaExceeded',
@@ -170,7 +160,6 @@ void _allCodesListed;
 
 /** 서버 오류 코드와 앱 쪽 연결 실패(`OFFLINE`). */
 export const PLACE_LOOKUP_ERROR_CODES = [...API_ERROR_CODES, 'OFFLINE'] as const;
-export type PlaceLookupErrorCode = (typeof PLACE_LOOKUP_ERROR_CODES)[number];
 
 /** 서버가 준 오류 코드가 맞는지. */
 export const isApiErrorCode = (value: unknown): value is ApiErrorCode =>

@@ -198,7 +198,7 @@ describe('링크 입력', () => {
     const user = userEvent.setup();
     const { store } = await renderLibrary(sampleLibrary());
     await openFrom(user, '지도에서 핀 찍기');
-    expect(store.get(addFlowAtom)).toEqual({ step: 'pin', name: '', start: null });
+    expect(store.get(addFlowAtom)).toEqual({ step: 'pin', name: '' });
   });
 
   it('취소하면 흐름을 닫는다', async () => {
@@ -323,7 +323,7 @@ describe('조회 오류', () => {
   it('TIMEOUT의 지도에서 핀으로 추가는 빈 이름으로 핀 단계에 들어간다', async () => {
     const { user, store } = await openCard(failWith(new PlaceLookupError({ code: 'TIMEOUT' })));
     await user.click(await within(panel()).findByRole('button', { name: '지도에서 핀으로 추가' }));
-    expect(store.get(addFlowAtom)).toEqual({ step: 'pin', name: '', start: null });
+    expect(store.get(addFlowAtom)).toEqual({ step: 'pin', name: '' });
   });
 
   it('OFFLINE은 다시 시도만 준다', async () => {
@@ -348,7 +348,7 @@ describe('조회 오류', () => {
       ),
     );
     await waitFor(() =>
-      expect(store.get(addFlowAtom)).toEqual({ step: 'pin', name: '이재모피자 본점', start: null }),
+      expect(store.get(addFlowAtom)).toEqual({ step: 'pin', name: '이재모피자 본점' }),
     );
     expect(toastMock).toHaveBeenCalledWith(
       '위치를 알 수 없는 링크예요. 지도에서 위치를 맞춰 주세요',
@@ -359,9 +359,7 @@ describe('조회 오류', () => {
     const { store } = await openCard(
       failWith(new PlaceLookupError({ code: 'NOT_FOUND', reason: 'no-location' })),
     );
-    await waitFor(() =>
-      expect(store.get(addFlowAtom)).toEqual({ step: 'pin', name: '', start: null }),
-    );
+    await waitFor(() => expect(store.get(addFlowAtom)).toEqual({ step: 'pin', name: '' }));
   });
 });
 

@@ -5,7 +5,6 @@ import { Schema } from 'effect';
 dayjs.extend(customParseFormat);
 
 export const LIMITS = {
-  fileBytes: 1048576,
   memoChars: 2000,
   tagsPerPlace: 20,
   tagChars: 30,

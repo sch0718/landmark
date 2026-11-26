@@ -1,7 +1,6 @@
 import { parseLinkDoc } from '../../share-viewer/parse';
 import type { ShareTripDoc } from '../../schema/share';
 
-export const LIVE_DOC_LATEST = 2 as const;
 export const LIVE_ID_PATTERN = /^[a-z0-9]{10}$/;
 export const LIVE_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 export const LIVE_DAY_ID_PATTERN = /^[a-z0-9]{8}$/;

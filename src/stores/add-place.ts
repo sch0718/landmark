@@ -29,7 +29,7 @@ export type AddFlow =
   | { step: 'link'; hint: 'place' | 'folder' }
   | { step: 'candidate'; candidate: PlaceCandidate }
   | { step: 'folder'; shareId: string; seq?: number }
-  | { step: 'pin'; name: string; start: [number, number] | null }
+  | { step: 'pin'; name: string }
   | { step: 'pin-card'; name: string; lng: number; lat: number }
   | { step: 'share-pick' }
   | {

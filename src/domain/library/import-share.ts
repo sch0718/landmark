@@ -1,5 +1,4 @@
 import {
-  findLiveLabel,
   indexBySource,
   mergeInto,
   newPlace,
@@ -9,7 +8,12 @@ import {
   type PlaceCandidate,
 } from 'src/domain/library/add-place';
 import { cutPrefix } from 'src/domain/library/legacy-import';
-import type { OpCtx, OpResult, OpSummary } from 'src/domain/library/ops';
+import {
+  findLiveLabelByName,
+  type OpCtx,
+  type OpResult,
+  type OpSummary,
+} from 'src/domain/library/ops';
 import { haversineM } from 'src/domain/trips/geo';
 import { is } from 'src/schema/parse';
 import {
@@ -226,7 +230,7 @@ function planLabels(
     const key = normalizeLabelName(name);
     if (seen.has(key)) return [];
     seen.add(key);
-    const reuse = findLiveLabel(lib, name) !== undefined;
+    const reuse = findLiveLabelByName(lib, name) !== undefined;
     return [{ shareLabelId: label.id, name, color: label.color, reuse }];
   });
 }
@@ -247,7 +251,7 @@ export function planShareLabels(
   titleLabel: string | null,
 ): Pick<SharePlan, 'labels' | 'titleReuse'> {
   const labels = planLabels(lib, usedLabels(doc, new Set(selected)), titleLabel);
-  const titleReuse = titleLabel !== null && findLiveLabel(lib, titleLabel) !== undefined;
+  const titleReuse = titleLabel !== null && findLiveLabelByName(lib, titleLabel) !== undefined;
   return { labels, titleReuse };
 }
 

@@ -3,12 +3,13 @@ import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { useRef, useState } from 'react';
+import { useAliveRef } from 'src/lib/use-alive-ref';
 import { toast } from 'sonner';
 import { fieldSx } from 'src/components/field-style';
 import { addPlace, findExisting, type PlaceCandidate } from 'src/domain/library/add-place';
 import { useOpenPlace } from 'src/sections/library/use-open-place';
 import { LIBRARY_LIMITS, type PlaceSource } from 'src/schema/library';
-import { CardSection, useAliveRef, useCardLabels } from 'src/sections/add-place/card-parts';
+import { CardSection, useCardLabels } from 'src/sections/add-place/card-parts';
 import {
   SaveToLibraryOption,
   thenAddCandidates,

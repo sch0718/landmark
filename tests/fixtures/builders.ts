@@ -79,19 +79,6 @@ export function makeTrip(spec: { days: Record<string, string[]>; places?: string
   };
 }
 
-/**
- * 크기 제한 테스트용: `n:<first>`부터 `count`곳에 작성자 본인의 최대 길이 메모(한글 2000자, 6000바이트)를 단다.
- * 90곳이면 약 0.55MB라 단독으로는 1MB 아래, 겹치지 않는 두 레이어를 합치면 1MB를 넘는다.
- */
-export function withBulkyMemos(edit: EditLayer, first: number, count: number): EditLayer {
-  const places: EditLayer['places'] = { ...edit.places };
-  const text = '가'.repeat(2000);
-  for (let i = 0; i < count; i += 1) {
-    places[`n:${first + i}`] = { memos: { [edit.authorId]: { text, updatedAt: FIXED_NOW } } };
-  }
-  return { ...edit, places };
-}
-
 export function makeEdit(overrides: Partial<EditLayer> = {}): EditLayer {
   const authorId = overrides.authorId ?? 'a-local';
   return {

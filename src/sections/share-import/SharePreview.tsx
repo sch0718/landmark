@@ -4,7 +4,8 @@ import FormControlLabel from '@mui/material/FormControlLabel';
 import Switch from '@mui/material/Switch';
 import Typography from '@mui/material/Typography';
 import { useAtomValue, useSetAtom } from 'jotai';
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useId, useMemo, useRef, useState } from 'react';
+import { useAliveRef } from 'src/lib/use-alive-ref';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import {
@@ -86,13 +87,7 @@ export function SharePreview({
   // 같은 이벤트 루프 안의 두 번째 클릭은 아직 `saving`을 못 본다.
   const savingRef = useRef(false);
   // 저장하는 사이 칸이 닫혔다면(칸의 닫기 버튼) 늦은 결과로 흐름·필터를 건드리지 않는다.
-  const aliveRef = useRef(true);
-  useEffect(() => {
-    aliveRef.current = true;
-    return () => {
-      aliveRef.current = false;
-    };
-  }, []);
+  const aliveRef = useAliveRef();
   const nameErrorId = useId();
   const memoNoteId = useId();
 

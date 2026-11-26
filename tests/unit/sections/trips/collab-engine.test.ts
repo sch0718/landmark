@@ -431,8 +431,7 @@ describe('함께 편집 맞추기 엔진', () => {
     };
     s.api.progress.mockResolvedValueOnce({ ok: true, value: { prev: 1, marks: [], next } });
 
-    s.engine.setNext(next.stopId, next.date);
-    await vi.advanceTimersByTimeAsync(0);
+    expect(await s.engine.setNext(next.stopId, next.date)).toBe(true);
 
     expect(s.api.progress).toHaveBeenLastCalledWith(s.record.liveId, s.record.token, {
       ops: [],
@@ -452,6 +451,19 @@ describe('함께 편집 맞추기 엔진', () => {
       ],
     });
     expect(s.store.readBase(s.record.liveId)?.progress).toEqual({ prev: 1, marks: [], next });
+  });
+  it('서버가 다른 다음 장소를 유지하면 화면에는 반영하고 성공을 반환하지 않는다', async () => {
+    const s = setup();
+    const next = {
+      stopId: 'stop0002',
+      date: '2026-11-01',
+      at: new Date().toISOString(),
+      label: '민지 폰',
+    };
+    s.api.progress.mockResolvedValueOnce({ ok: true, value: { prev: 1, marks: [], next } });
+
+    expect(await s.engine.setNext('stop0001', next.date)).toBe(false);
+    expect(s.engine.getSnapshot().progress?.next).toEqual(next);
   });
   it('체크 전송 실패는 대기열에 남고 다음 맞추기에 보낸다', async () => {
     const s = setup();

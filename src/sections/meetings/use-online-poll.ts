@@ -1,15 +1,8 @@
-import { useEffect, useEffectEvent, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useRef } from 'react';
 
 type Options = { enabled: boolean; tick: () => Promise<'ok' | 'error'> };
 
-export function useOnlinePoll({ enabled, tick }: Options): {
-  lastOkAt: number | null;
-  failing: boolean;
-} {
-  const [status, setStatus] = useState<{ lastOkAt: number | null; failing: boolean }>({
-    lastOkAt: null,
-    failing: false,
-  });
+export function useOnlinePoll({ enabled, tick }: Options): void {
   const inFlight = useRef(false);
   const runTick = useEffectEvent(tick);
 
@@ -47,13 +40,9 @@ export function useOnlinePoll({ enabled, tick }: Options): {
       } finally {
         inFlight.current = false;
       }
-      // 이전 활성 구간의 늦은 응답은 현재 화면 상태를 덮지 않는다.
+      // 이전 활성 구간의 늦은 응답은 다음 확인을 예약하지 않는다.
       if (!active) return;
       failures = outcome === 'ok' ? 0 : failures + 1;
-      setStatus((previous) => ({
-        lastOkAt: outcome === 'ok' ? Date.now() : previous.lastOkAt,
-        failing: outcome === 'error',
-      }));
       schedule();
     }
     function wake() {
@@ -72,6 +61,4 @@ export function useOnlinePoll({ enabled, tick }: Options): {
       window.removeEventListener('offline', wake);
     };
   }, [enabled]);
-
-  return status;
 }

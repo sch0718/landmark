@@ -1,6 +1,7 @@
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Provider, createStore } from 'jotai';
+import { useState } from 'react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import SyncSection from 'src/sections/library-sync/SyncSection';
@@ -179,6 +180,35 @@ it('지우기를 입력해야 서버 자료 삭제가 켜진다', async () => {
   await userEvent.setup().click(button);
   await waitFor(() => expect(mock.remove).toHaveBeenCalled());
 });
+function ReopenDeleteDialog() {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button onClick={() => setOpen(true)}>삭제 창 열기</button>
+      <SyncDeleteDialog open={open} onClose={() => setOpen(false)} />
+    </>
+  );
+}
+it.each([false, true])(
+  '삭제 창을 다시 열면 입력과 오류가 초기화된다 (실패 요청: %s)',
+  async (fail) => {
+    mock.remove.mockResolvedValue(false);
+    show(<ReopenDeleteDialog />);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: '삭제 창 열기' }));
+    await user.type(screen.getByLabelText('지우기 입력'), '지우기');
+    if (fail) {
+      await user.click(screen.getByRole('button', { name: '서버 자료 모두 지우기' }));
+      expect(await screen.findByRole('alert')).toHaveTextContent('서버 자료를 지우지 못했어요');
+    }
+    await user.click(screen.getByRole('button', { name: '취소' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await user.click(screen.getByRole('button', { name: '삭제 창 열기' }));
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.getByLabelText('지우기 입력')).toHaveValue('');
+    expect(screen.getByRole('button', { name: '서버 자료 모두 지우기' })).toBeDisabled();
+  },
+);
 it('다른 기기 연결을 철회한다', async () => {
   mock.list.mockResolvedValue({
     ok: true,

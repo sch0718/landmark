@@ -15,7 +15,6 @@ import {
   NoPrevious,
   PreviousNotKept,
   StorageQuotaExceeded,
-  StorageUnavailable,
 } from 'src/services/errors';
 import {
   corruptKey,
@@ -1403,7 +1402,6 @@ describe('constants and errors', () => {
       '파일이 이상해요',
     );
     expect(new LibraryCorrupt({ backupKey: null, issues: [] })._tag).toBe('LibraryCorrupt');
-    expect(new StorageUnavailable().userMessage.length).toBeGreaterThan(0);
   });
 
   vitestIt('PREVIOUS_KEY is not a corrupt-backup key', () => {

@@ -3,10 +3,9 @@ import type { MeetDb } from '../meet/db';
 import { requireSyncUser } from './auth';
 import type { SyncEnv, SyncDeps, SyncContext } from './env';
 import { SyncHttpError, syncJson } from './http';
-import { consumeCounter, counterKey } from './limits';
+import { requireCounter } from './limits';
 import type { SyncRoute } from './router';
 
-export const BACKUP_FORMAT_VERSION = 1;
 export const BACKUP_MAX_STORED_BYTES = 1_048_576;
 export const BACKUP_MAX_DATA_CHARS = 1_398_104;
 export const BACKUP_PART_CHARS = 524_288;
@@ -309,15 +308,7 @@ export const BACKUP_ROUTES: SyncRoute[] = [
     async run(ctx, deps) {
       const now = deps.now();
       const user = await requireBackupUser(ctx, deps);
-      if (
-        !(await consumeCounter(
-          ctx.env.DB!,
-          counterKey('backup-read', user.userId, now),
-          1,
-          BACKUP_LIMITS.read,
-        ))
-      )
-        throw new SyncHttpError(429, 'rate-limited');
+      await requireCounter(ctx.env.DB!, 'backup-read', user.userId, now, BACKUP_LIMITS.read);
       return syncJson(200, {
         now,
         writable: backupWritable(ctx.env),
@@ -335,15 +326,7 @@ export const BACKUP_ROUTES: SyncRoute[] = [
       if (ctx.env.AUTO_BACKUP === 'off') throw new SyncHttpError(503, 'off');
       const user = await requireBackupUser(ctx, deps);
       const body = parseBackupBody(await readJson(ctx.request, BACKUP_MAX_BODY_BYTES));
-      if (
-        !(await consumeCounter(
-          ctx.env.DB!,
-          counterKey('backup-write', user.userId, now),
-          1,
-          BACKUP_LIMITS.write,
-        ))
-      )
-        throw new SyncHttpError(429, 'rate-limited');
+      await requireCounter(ctx.env.DB!, 'backup-write', user.userId, now, BACKUP_LIMITS.write);
       return syncJson(200, {
         now,
         backup: await writeBackup(ctx.env.DB!, user.userId, body, newBackupId(deps), now),
@@ -359,15 +342,7 @@ export const BACKUP_ROUTES: SyncRoute[] = [
       const now = deps.now();
       const { id } = parseDataQuery(url);
       const user = await requireBackupUser(ctx, deps);
-      if (
-        !(await consumeCounter(
-          ctx.env.DB!,
-          counterKey('backup-read', user.userId, now),
-          1,
-          BACKUP_LIMITS.read,
-        ))
-      )
-        throw new SyncHttpError(429, 'rate-limited');
+      await requireCounter(ctx.env.DB!, 'backup-read', user.userId, now, BACKUP_LIMITS.read);
       return new Response(await readBackupData(ctx.env.DB!, user.userId, id), {
         headers: {
           'Content-Type': 'application/json; charset=utf-8',

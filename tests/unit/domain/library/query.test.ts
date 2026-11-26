@@ -5,7 +5,7 @@ import {
   liveLabels,
   livePlaces,
   queryPlaces,
-  regionCounts,
+  regionTreeCounts,
   searchPlaces,
   hasVisited,
   sortByVisited,
@@ -274,7 +274,7 @@ describe('queryPlaces sort', () => {
     const before = JSON.stringify(lib);
     queryPlaces(lib, q({ sort: 'name', text: '가' }));
     labelCounts(lib, q());
-    regionCounts(lib, q());
+    regionTreeCounts(lib, q());
     expect(JSON.stringify(lib)).toBe(before);
   });
 });
@@ -320,42 +320,20 @@ describe('labelCounts', () => {
   });
 });
 
-describe('regionCounts', () => {
-  it('sorts by count desc, then name, with 기타 last', () => {
-    const at = (address: string) => place({ address });
-    // 주소를 해석할 수 없는 장소는 10km 안의 이웃에게서 지역을 빌리므로, 멀리 떨어뜨려 둔다.
-    const far = () => place({ address: 'Seoul', lng: 126.5, lat: 33.5 });
-    const lib = library([
-      far(),
-      far(),
-      far(),
-      at('강원도 양양군 A'),
-      at('강원도 속초시 B'),
-      at('강원특별자치도 강릉시 C'),
-      at('강원특별자치도 강릉시 D'),
-    ]);
-    expect(regionCounts(lib, q())).toEqual([
-      { region: '강릉', count: 2 },
-      { region: '속초', count: 1 },
-      { region: '양양', count: 1 },
-      { region: '기타', count: 3 },
-    ]);
-  });
-
-  it('applies text and label filters but not the region filter', () => {
-    const lib = library(
-      [
-        place({ address: '강원특별자치도 강릉시 A', labels: ['food0001'] }),
-        place({ address: '강원도 양양군 B', labels: ['food0001'] }),
-        place({ address: '강원도 양양군 C', labels: ['cafe0001'] }),
-      ],
-      [FOOD, CAFE],
-    );
-    expect(regionCounts(lib, q({ labelIds: ['food0001'], regions: ['강릉'] }))).toEqual([
-      { region: '강릉', count: 1 },
-      { region: '양양', count: 1 },
-    ]);
-  });
+it('regionTreeCounts는 텍스트·라벨·방문 필터를 함께 적용한다', () => {
+  const visitedOn = f('2026-10-10');
+  const lib = library(
+    [
+      place({ name: '바다 식당', labels: [FOOD.id], visitedOn }),
+      place({ name: '시장 식당', labels: [FOOD.id], visitedOn }),
+      place({ name: '바다 카페', labels: [CAFE.id], visitedOn }),
+      place({ name: '바다 분식', labels: [FOOD.id] }),
+    ],
+    [FOOD, CAFE],
+  );
+  expect(
+    regionTreeCounts(lib, q({ text: '바다', labelIds: [FOOD.id], visited: 'visited' })),
+  ).toEqual([{ region: '강원', count: 1, children: [{ region: '강원/강릉', count: 1 }] }]);
 });
 
 describe('inferred regions', () => {
@@ -373,13 +351,6 @@ describe('inferred regions', () => {
       '주소있음',
     ]);
     expect(names(queryPlaces(lib(), q({ regions: ['기타'] })))).toEqual(['멀리']);
-  });
-
-  it('regionCounts counts the inferred region', () => {
-    expect(regionCounts(lib(), q())).toEqual([
-      { region: '제주', count: 2 },
-      { region: '기타', count: 1 },
-    ]);
   });
 });
 
@@ -437,17 +408,12 @@ describe('방문 필터', () => {
     expect(visitCounts(lib, q({ text: 'A' }))).toEqual({ visited: 1, unvisited: 0 });
   });
 
-  it('labelCounts·regionCounts가 방문 필터를 따른다', () => {
+  it('labelCounts가 방문 필터를 따른다', () => {
     const counts = labelCounts(lib, q({ visited: 'visited' }));
     expect(counts.get('food0001')).toBe(1);
     expect(counts.get('cafe0001')).toBe(1);
     expect(counts.get('unlabeled')).toBe(0);
     expect(labelCounts(lib, q({ visited: 'unvisited' })).get('unlabeled')).toBe(1);
-    expect(regionCounts(lib, q({ visited: 'unvisited' }))).toEqual([
-      { region: '강릉', count: 2 },
-      { region: '양양', count: 1 },
-    ]);
-    expect(regionCounts(lib, q({ visited: 'visited' }))).toEqual([{ region: '강릉', count: 2 }]);
   });
 
   it('한 줄 평도 검색 대상이다', () => {

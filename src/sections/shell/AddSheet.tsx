@@ -32,7 +32,7 @@ const OPTIONS: readonly Option[] = [
     label: '지도에서 핀 찍기',
     description: '지도를 움직여 위치를 고르기',
     Icon: MapPinIcon,
-    flow: { step: 'pin', name: '', start: null },
+    flow: { step: 'pin', name: '' },
   },
   {
     label: '네이버 폴더 가져오기',

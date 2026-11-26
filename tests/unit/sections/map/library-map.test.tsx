@@ -379,7 +379,7 @@ describe('library map', () => {
     await ready();
     await router.navigate(`/place/${id(2)}`);
     await waitFor(() => expect(marker(2)).toHaveAttribute('aria-pressed', 'true'));
-    act(() => store.set(addFlowAtom, { step: 'pin', name: '', start: null }));
+    act(() => store.set(addFlowAtom, { step: 'pin', name: '' }));
 
     fireEvent.click(fakeMap());
 

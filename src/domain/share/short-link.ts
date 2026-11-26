@@ -6,7 +6,6 @@ const DAY = 24 * 60 * 60 * 1000;
 /** 장소는 30일, 일정은 여행 마지막 날 + 7일과 30일 중 늦은 쪽(최대 180일). */
 export const SHORT_LINK_DAYS = { min: 30, max: 180, afterTrip: 7 } as const;
 export const SHORT_ID_PATTERN = /^[A-Za-z0-9_-]{16}$/;
-export const SHORT_KEY_PATTERN = /^[A-Za-z0-9_-]{22}$/;
 /** 압축 24,000바이트(해시 32,000자) + IV 12바이트 + 태그 16바이트 = 24,028바이트 → 32,038자. */
 export const SHORT_BODY_MAX = 32_040;
 

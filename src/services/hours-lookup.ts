@@ -1,6 +1,7 @@
 import { Context, Deferred, Effect, Layer, Semaphore } from 'effect';
 import type { HoursDay, HoursSpan, PlaceHours } from 'src/server/hours';
 import type { ApiErrorCode } from 'src/server/http';
+import { readApiErrorCode } from 'src/services/api-response';
 import { browserStorage } from 'src/services/browser-storage';
 import { HoursLookupError, type HoursLookupErrorCode } from 'src/services/errors';
 
@@ -98,12 +99,6 @@ export type HoursAnswer = { hours: PlaceHours; seq: number };
 
 /** 메모리 캐시 항목. `seq`는 메모리에만 두고 저장하지 않는다(새 페이지의 요청 번호는 다시 1부터다). */
 type CachedHours = { hours: PlaceHours; usedAt: string; seq: number };
-
-/** 서버가 준 오류 본문(`{ error: { code, … } }`)에서 코드를 뽑는다. 알아볼 수 없으면 null. */
-function readApiErrorCode(body: unknown): string | null {
-  if (!isObject(body) || !isObject(body.error) || typeof body.error.code !== 'string') return null;
-  return body.error.code;
-}
 
 const HOURS_ERROR_CODES: readonly string[] = [
   'NOT_FOUND',
