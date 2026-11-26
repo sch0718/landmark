@@ -7,7 +7,7 @@
 지도·장소 정보: 지도 화면은 NAVER Corp.의 네이버 지도 JavaScript API v3를 씁니다. 지도 데이터의 저작권은
 지도 위에 표시되는 저작권자에게 있습니다. 장소 정보는 사용자가 붙여 넣은 네이버·카카오 지도 링크에서 가져옵니다.
 
-패키지 195개
+패키지 194개
 
 ========================================================================
 @babel/code-frame@7.29.7
@@ -5308,25 +5308,6 @@ License: ISC
 Source: github:eemeli/yaml
 ------------------------------------------------------------------------
 Copyright 2018 Eemeli Aro <eemeli@gmail.com>
-
-Permission to use, copy, modify, and/or distribute this software for any purpose
-with or without fee is hereby granted, provided that the above copyright notice
-and this permission notice appear in all copies.
-
-THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
-REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
-FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
-INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS
-OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
-TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF
-THIS SOFTWARE.
-
-========================================================================
-yaml@2.9.1
-License: ISC
-Source: github:eemeli/yaml
-------------------------------------------------------------------------
-Copyright Eemeli Aro <eemeli@gmail.com>
 
 Permission to use, copy, modify, and/or distribute this software for any purpose
 with or without fee is hereby granted, provided that the above copyright notice

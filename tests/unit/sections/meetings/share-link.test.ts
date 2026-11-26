@@ -30,6 +30,15 @@ describe('약속 링크 보내기', () => {
     expect(await shareLink('https://example.test/meet#d=abc', '약속')).toBe('copied');
     expect(writeText).toHaveBeenCalledWith('https://example.test/meet#d=abc');
   });
+  it('사용자가 공유를 취소하면 복사하지 않는다', async () => {
+    vi.stubGlobal('navigator', {
+      share: vi.fn().mockRejectedValue(new DOMException('취소', 'AbortError')),
+      clipboard: { writeText },
+    });
+    expect(await shareLink('https://example.test/meet#d=abc', '약속')).toBe('cancelled');
+    expect(writeText).not.toHaveBeenCalled();
+    expect(toast).not.toHaveBeenCalled();
+  });
   it('클립보드도 사용할 수 없으면 실패를 돌려준다', async () => {
     vi.stubGlobal('navigator', {});
     expect(await shareLink('https://example.test/meet#d=abc', '약속')).toBe('failed');
