@@ -927,10 +927,11 @@ describe('화면 열기', () => {
     await user.click(within(sheet).getByRole('button', { name: 'Day 목록' }));
     const items = screen.getAllByRole('menuitem');
     expect(items.map((item) => item.textContent)).toEqual([
+      '전체',
       expect.stringMatching(/^Day 1.*1곳$/),
       expect.stringMatching(/^Day 2.*0곳$/),
     ]);
-    await user.click(items[1]!);
+    await user.click(items[2]!);
     expect(sheet).toHaveAttribute('data-snap', 'half');
     expect(within(sheet).getByRole('tab', { name: 'Day 2' })).toHaveAttribute(
       'aria-selected',

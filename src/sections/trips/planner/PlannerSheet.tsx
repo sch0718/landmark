@@ -2,6 +2,7 @@ import Box from '@mui/material/Box';
 import IconButton from '@mui/material/IconButton';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
+import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 import { useAtomValue } from 'jotai';
 import { useRef, useState, type MouseEvent, type PointerEvent } from 'react';
@@ -13,6 +14,7 @@ import type { Library } from 'src/schema/library';
 import type { Trip } from 'src/schema/trip';
 import { CandidatePanel } from 'src/sections/trips/planner/CandidatePanel';
 import { DayTimeline } from 'src/sections/trips/planner/DayTimeline';
+import { OverviewList } from 'src/sections/trips/planner/OverviewList';
 import { DropTab } from 'src/sections/trips/planner/PlannerDnd';
 import { TripTitleHeading } from 'src/sections/trips/planner/TripTitleHeading';
 import type { DayPlan } from 'src/sections/trips/planner/use-day-plan';
@@ -35,19 +37,28 @@ type Props = {
   trip: Trip;
   library: Library;
   dayIndex: number;
+  overview: boolean;
   /** 고른 Day의 구간·시각(계획 화면이 지도와 함께 쓴다). */
   plan: DayPlan;
   onSelectDay(dayIndex: number): void;
+  onOverview(): void;
 };
 
 /**
  * 좁은 화면의 일정 시트(스펙 §2.3): 지도 위 아래쪽에서 끌어올린다. 높이는 접힘(탭 줄만)·반쯤·거의 전체.
  * 손잡이를 누르면 접힘 → 반쯤 → 거의 전체 → 접힘으로 돌고, 위아래로 끌면 그 방향으로 한 단계 바뀐다.
- * 탭은 `후보 N`과 지금 고른 `Day N` 둘이고, 옆 `Day 목록`(날짜·장소 수)에서 다른 Day를 고른다.
- * Day가 많아도 탭 줄이 넘치지 않는다. 내용은 넓은 화면의 후보 칸·시간표와 같다.
+ * 탭은 `후보 N`과 지금 고른 `전체` 또는 `Day N` 둘이고, 옆 `Day 목록`에서 전체나 다른 Day를 고른다.
  * 지도 위 카드가 열리면 지도가 보이도록 접는다.
  */
-export function PlannerSheet({ trip, library, dayIndex, plan, onSelectDay }: Props) {
+export function PlannerSheet({
+  trip,
+  library,
+  dayIndex,
+  overview,
+  plan,
+  onSelectDay,
+  onOverview,
+}: Props) {
   const card = useAtomValue(mapCardAtom);
   // 카드가 열린 채 좁은 화면이 되면(창 줄이기) 접힌 채로 시작한다.
   const [snap, setSnap] = useState<SheetSnap>(() =>
@@ -103,12 +114,13 @@ export function PlannerSheet({ trip, library, dayIndex, plan, onSelectDay }: Pro
     setSnap(ORDER[(ORDER.indexOf(snap) + 1) % ORDER.length]!);
   };
 
-  const value = tab === 'candidates' ? 'candidates' : dayIndex;
-  const select = (next: 'candidates' | number) => {
+  const value = tab === 'candidates' ? 'candidates' : overview ? 'all' : dayIndex;
+  const select = (next: 'candidates' | 'all' | number) => {
     if (next === 'candidates') setTab('candidates');
     else {
       setTab('day');
-      onSelectDay(next);
+      if (next === 'all') onOverview();
+      else onSelectDay(next);
     }
     if (snap === 'collapsed') setSnap('half');
   };
@@ -172,7 +184,7 @@ export function PlannerSheet({ trip, library, dayIndex, plan, onSelectDay }: Pro
       >
         <Tabs
           value={value}
-          onChange={(_event, next: 'candidates' | number) => select(next)}
+          onChange={(_event, next: 'candidates' | 'all' | number) => select(next)}
           onClick={() => {
             // 이미 고른 탭을 다시 눌러도 접힌 시트는 연다.
             if (snap === 'collapsed') setSnap('half');
@@ -188,23 +200,26 @@ export function PlannerSheet({ trip, library, dayIndex, plan, onSelectDay }: Pro
             label={`후보 ${candidateCount}`}
             sx={{ textTransform: 'none' }}
           />
-          {/* Day 탭은 지금 고른 Day 하나다. 다른 Day는 옆 `Day 목록`에서 고른다. */}
-          <DropTab
-            key={dayIndex}
-            dropId={`tab:${dayIndex}`}
-            target={{ kind: 'day', dayIndex }}
-            value={dayIndex}
-            label={
-              <span>
-                {`Day ${dayIndex + 1}`}{' '}
-                {/* 날짜는 눈으로만 본다(탭 이름은 `Day N`). 목록에는 날짜가 함께 읽힌다. */}
-                <Box component="span" aria-hidden="true" sx={{ fontSize: 12 }}>
-                  {dates[dayIndex] === undefined ? '' : shortDate(dates[dayIndex])}
-                </Box>
-              </span>
-            }
-            sx={{ textTransform: 'none' }}
-          />
+          {overview ? (
+            <Tab value="all" label="전체" sx={{ textTransform: 'none' }} />
+          ) : (
+            <DropTab
+              key={dayIndex}
+              dropId={`tab:${dayIndex}`}
+              target={{ kind: 'day', dayIndex }}
+              value={dayIndex}
+              label={
+                <span>
+                  {`Day ${dayIndex + 1}`}{' '}
+                  {/* 날짜는 눈으로만 본다(탭 이름은 `Day N`). 목록에는 날짜가 함께 읽힌다. */}
+                  <Box component="span" aria-hidden="true" sx={{ fontSize: 12 }}>
+                    {dates[dayIndex] === undefined ? '' : shortDate(dates[dayIndex])}
+                  </Box>
+                </span>
+              }
+              sx={{ textTransform: 'none' }}
+            />
+          )}
         </Tabs>
         <IconButton
           aria-label="Day 목록"
@@ -216,10 +231,20 @@ export function PlannerSheet({ trip, library, dayIndex, plan, onSelectDay }: Pro
           <ChevronDownIcon aria-hidden="true" width={20} height={20} />
         </IconButton>
         <Menu anchorEl={dayMenu} open={dayMenu !== null} onClose={() => setDayMenu(null)}>
+          <MenuItem
+            selected={overview}
+            onClick={() => {
+              setDayMenu(null);
+              select('all');
+            }}
+            sx={{ minHeight: 44, fontWeight: 800 }}
+          >
+            전체
+          </MenuItem>
           {trip.days.map((day, i) => (
             <MenuItem
               key={i}
-              selected={tab === 'day' && i === dayIndex}
+              selected={tab === 'day' && !overview && i === dayIndex}
               onClick={() => {
                 setDayMenu(null);
                 select(i);
@@ -249,6 +274,8 @@ export function PlannerSheet({ trip, library, dayIndex, plan, onSelectDay }: Pro
         {snap !== 'collapsed' &&
           (tab === 'candidates' ? (
             <CandidatePanel trip={trip} dayIndex={dayIndex} fill={false} />
+          ) : overview ? (
+            <OverviewList trip={trip} />
           ) : (
             <DayTimeline trip={trip} dayIndex={dayIndex} plan={plan} />
           ))}

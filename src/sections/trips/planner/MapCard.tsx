@@ -5,9 +5,11 @@ import { useAtomValue } from 'jotai';
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { fieldSx } from 'src/components/field-style';
 import { XIcon } from 'src/components/icons';
+import { setPlaceMemo } from 'src/domain/library/ops';
 import { setStopFixedTime, setStopStay } from 'src/domain/trips/ops';
 import { visibleStops } from 'src/domain/trips/query';
 import type { Stop, Trip } from 'src/schema/trip';
+import { MemoEditor } from 'src/sections/place/MemoEditor';
 import { HoursSection } from 'src/sections/trips/planner/HoursSection';
 import { OtherDayMenu } from 'src/sections/trips/planner/StopMenu';
 import {
@@ -164,6 +166,7 @@ type Props = {
   trip: Trip;
   /** 고른 Day. 후보의 `Day N에 넣기`와 `숙소로 정하기`의 대상이다. */
   dayIndex: number;
+  overview: boolean;
   /** 고른 Day의 시간표(계획 화면이 한 번 구한 것). `영업시간` 칸이 도착 시각으로 판정한다. */
   plan: DayPlan;
   placeId: string;
@@ -175,9 +178,10 @@ type Props = {
  * 지도 위 카드(스펙 §2.3): 이름·분류·위치(`후보` / `Day 2 · 3번째`). 후보면 `Day N에 넣기`, Day의 장소면
  * 체류 시간·고정 시각·`다른 Day로`·`후보로 빼기`, 공통으로 `숙소로 정하기`(고른 Day)와 `상세`. Day의 장소·후보는
  * 입력과 버튼 사이에 `영업시간` 칸(F6 스펙 §2.2)을 둔다.
+ * 전체 보기에서는 일정 편집 대신 보관함 메모를 고친다.
  * Esc나 카드 밖을 누르면 닫는다(메뉴가 열려 있을 때는 메뉴만 닫힌다). 장소가 바뀌면 부른 쪽이 `key`로 새로 만든다.
  */
-export function MapCard({ trip, dayIndex, plan, placeId, onClose, onDetail }: Props) {
+export function MapCard({ trip, dayIndex, overview, plan, placeId, onClose, onDetail }: Props) {
   const library = useAtomValue(libraryAtom);
   const { run } = useLibraryAction();
   // 넣기·옮기기·빼기·숙소로 정하기는 되돌리기 토스트를 띄운다.
@@ -200,6 +204,7 @@ export function MapCard({ trip, dayIndex, plan, placeId, onClose, onDetail }: Pr
     card?.focus();
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.key !== 'Escape' || menuOpen.current) return;
+      if (event.isComposing || event.keyCode === 229) return;
       latestClose.current();
       if (opener?.isConnected) opener.focus();
     };
@@ -253,6 +258,7 @@ export function MapCard({ trip, dayIndex, plan, placeId, onClose, onDetail }: Pr
         color: 'var(--tm-text-primary)',
         borderRadius: 'var(--tm-radius-lg)',
         boxShadow: 'var(--tm-shadow-2)',
+        ...(overview && { overflowY: 'auto' }),
       }}
     >
       <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
@@ -290,65 +296,80 @@ export function MapCard({ trip, dayIndex, plan, placeId, onClose, onDetail }: Pr
         </IconButton>
       </Box>
 
-      {found !== null && (
-        <StopFields
-          stop={found.stop}
-          onStay={(minutes) =>
-            void run((lib, ctx) => setStopStay(lib, tripId, found.stop.id, minutes, ctx))
-          }
-          onFixedTime={(value) =>
-            void run((lib, ctx) => setStopFixedTime(lib, tripId, found.stop.id, value, ctx))
-          }
-        />
+      {overview ? (
+        <Box sx={{ mt: 1.5 }}>
+          <MemoEditor
+            placeId={placeId}
+            saved={place.memo.value}
+            onSave={(text) => run((lib, ctx) => setPlaceMemo(lib, placeId, text, ctx))}
+          />
+        </Box>
+      ) : (
+        <>
+          {found !== null && (
+            <StopFields
+              stop={found.stop}
+              onStay={(minutes) =>
+                void run((lib, ctx) => setStopStay(lib, tripId, found.stop.id, minutes, ctx))
+              }
+              onFixedTime={(value) =>
+                void run((lib, ctx) => setStopFixedTime(lib, tripId, found.stop.id, value, ctx))
+              }
+            />
+          )}
+          <HoursSection trip={trip} dayIndex={dayIndex} place={place} plan={plan} found={found} />
+        </>
       )}
 
-      <HoursSection trip={trip} dayIndex={dayIndex} place={place} plan={plan} found={found} />
-
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1.5 }}>
-        {isCandidate && (
-          <Button variant="contained" onClick={addToDay} sx={BUTTON_SX}>
-            {`Day ${dayIndex + 1}에 넣기`}
-          </Button>
-        )}
-        {found !== null && (
+        {!overview && (
           <>
+            {isCandidate && (
+              <Button variant="contained" onClick={addToDay} sx={BUTTON_SX}>
+                {`Day ${dayIndex + 1}에 넣기`}
+              </Button>
+            )}
+            {found !== null && (
+              <>
+                <Button
+                  variant="outlined"
+                  aria-haspopup="menu"
+                  aria-expanded={menuAnchor !== null}
+                  disabled={trip.days.length < 2}
+                  onClick={(event) => setMenuAnchor(event.currentTarget)}
+                  sx={BUTTON_SX}
+                >
+                  다른 Day로
+                </Button>
+                <Button
+                  variant="outlined"
+                  onClick={() =>
+                    void runUndoable(unschedule(tripId, found.stop.id), UNSCHEDULED_MESSAGE)
+                  }
+                  sx={BUTTON_SX}
+                >
+                  후보로 빼기
+                </Button>
+              </>
+            )}
             <Button
               variant="outlined"
-              aria-haspopup="menu"
-              aria-expanded={menuAnchor !== null}
-              disabled={trip.days.length < 2}
-              onClick={(event) => setMenuAnchor(event.currentTarget)}
-              sx={BUTTON_SX}
-            >
-              다른 Day로
-            </Button>
-            <Button
-              variant="outlined"
+              disabled={trip.days[dayIndex]?.lodging.value === placeId}
               onClick={() =>
-                void runUndoable(unschedule(tripId, found.stop.id), UNSCHEDULED_MESSAGE)
+                void runUndoable(lodgingOp(tripId, dayIndex, placeId, false), LODGING_SET_MESSAGE)
               }
               sx={BUTTON_SX}
             >
-              후보로 빼기
+              숙소로 정하기
             </Button>
           </>
         )}
-        <Button
-          variant="outlined"
-          disabled={trip.days[dayIndex]?.lodging.value === placeId}
-          onClick={() =>
-            void runUndoable(lodgingOp(tripId, dayIndex, placeId, false), LODGING_SET_MESSAGE)
-          }
-          sx={BUTTON_SX}
-        >
-          숙소로 정하기
-        </Button>
         <Button variant="text" onClick={() => onDetail(placeId)} sx={BUTTON_SX}>
           상세
         </Button>
       </Box>
 
-      {found !== null && (
+      {!overview && found !== null && (
         <OtherDayMenu
           trip={trip}
           exclude={found.dayIndex}

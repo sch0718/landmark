@@ -30,7 +30,7 @@ import { useTripUndo } from 'src/sections/trips/planner/use-trip-undo';
 import { periodLabel } from 'src/sections/trips/trip-dates';
 import { openAddSheetAtom } from 'src/stores/add-place';
 import { libraryAtom } from 'src/stores/library-state';
-import { mapCardAtom } from 'src/stores/trip-planner';
+import { mapCardAtom, overviewAtom } from 'src/stores/trip-planner';
 
 function CandidateRow({
   tripId,
@@ -166,6 +166,7 @@ export function CandidatePanel({ trip, dayIndex, onCollapse, collapseRef, fill =
   const stopOver = isOver && dragging?.kind === 'stop';
   const splitPlan = useSplitPlan(trip);
   const startSplit = useStartAutoSplit(trip);
+  const setOverview = useSetAtom(overviewAtom);
 
   const { candidates, regions, labelById } = useMemo(() => {
     const places = visibleCandidates(library, trip);
@@ -305,7 +306,10 @@ export function CandidatePanel({ trip, dayIndex, onCollapse, collapseRef, fill =
         <Button
           variant="outlined"
           disabled={candidates.length === 0 || splitPlan !== null}
-          onClick={startSplit}
+          onClick={() => {
+            setOverview((prev) => ({ ...prev, [trip.id]: false }));
+            startSplit();
+          }}
           sx={{ minHeight: 44, textTransform: 'none' }}
         >
           Day 자동 나누기

@@ -1,5 +1,6 @@
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import Box from '@mui/material/Box';
+import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { Fragment, useState } from 'react';
@@ -40,17 +41,21 @@ import { mapCardAtom } from 'src/stores/trip-planner';
 export const DAY_RAIL_WIDTH = 104;
 
 /**
- * Day 탭: `Day 1 10.24(금)` …. 행을 끌어 탭에 놓으면 그 Day 끝으로 옮긴다.
+ * `전체`와 Day 탭(`Day 1 10.24(금)` …). 행을 Day 탭에 놓으면 그 Day 끝으로 옮긴다.
  * `vertical`(넓은 화면)이면 시간표 왼쪽의 세로 목록이 되고, 탭마다 그 Day의 장소 수도 보인다.
  */
 export function DayTabs({
   trip,
   dayIndex,
+  overview,
+  onOverview,
   onSelect,
   vertical = false,
 }: {
   trip: Trip;
   dayIndex: number;
+  overview: boolean;
+  onOverview(): void;
   onSelect(dayIndex: number): void;
   vertical?: boolean;
 }) {
@@ -59,8 +64,11 @@ export function DayTabs({
   const date = (i: number) => (dates[i] === undefined ? '' : shortDate(dates[i]));
   return (
     <Tabs
-      value={dayIndex}
-      onChange={(_event, value: number) => onSelect(value)}
+      value={overview ? 'all' : dayIndex}
+      onChange={(_event, value: 'all' | number) => {
+        if (value === 'all') onOverview();
+        else onSelect(value);
+      }}
       orientation={vertical ? 'vertical' : 'horizontal'}
       variant="scrollable"
       // Day가 많아 탭이 넘치면 양옆 화살표로 보이지 않는 Day가 있다는 걸 알린다. 세로 목록은 굴려서 넘긴다.
@@ -73,6 +81,14 @@ export function DayTabs({
           : { flex: 'none', borderBottom: '1px solid var(--tm-border)' }
       }
     >
+      <Tab
+        value="all"
+        label="전체"
+        sx={[
+          { minHeight: 48, textTransform: 'none' },
+          vertical && { alignItems: 'flex-start', minWidth: 0, px: 1.5, py: 1 },
+        ]}
+      />
       {trip.days.map((day, i) => (
         <DropTab
           key={i}

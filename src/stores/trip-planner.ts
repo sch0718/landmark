@@ -10,10 +10,16 @@ export const selectedDayAtom: PrimitiveAtom<Record<string, number>> = atom<Recor
   {},
 );
 
+/** 여행별로 전체 지도를 보고 있는지. */
+export const overviewAtom: PrimitiveAtom<Record<string, boolean>> = atom<Record<string, boolean>>(
+  {},
+);
+
 /** 계획 화면에서 이 여행의 고른 Day를 `dayIndex`로 둔다(당일 모드에서 계획 화면으로 갈 때, 스펙 §3.3). */
 export const selectPlannerDayAtom: WritableAtom<null, [tripId: string, dayIndex: number], void> =
   atom(null, (_get, set, tripId: string, dayIndex: number) => {
     set(selectedDayAtom, (prev) => ({ ...prev, [tripId]: dayIndex }));
+    set(overviewAtom, (prev) => ({ ...prev, [tripId]: false }));
   });
 
 /** 지도 위 카드로 보는 장소(장소 핀·후보 행·시간표 행을 눌렀을 때). */
