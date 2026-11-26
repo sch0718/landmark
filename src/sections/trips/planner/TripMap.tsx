@@ -15,6 +15,7 @@ type MapFocus = { point: [number, number]; seq: number };
 type Props = {
   trip: Trip;
   dayIndex: number;
+  overview: boolean;
   /** 고른 Day의 구간(`useDayPlan`). 경로선을 그린다. */
   legs: PlannedLeg[];
   padding: MapPadding;
@@ -33,10 +34,12 @@ type Props = {
 /**
  * 계획 화면의 지도(스펙 §2.3). 고른 Day의 번호 핀·경로선, 출발지·숙소 핀, 회색 후보 핀, 다른 Day의 흐린 점을
  * 보인다. Day를 바꾸면(`fitKey`) 그 Day에 맞추고, 지도 밖(시간표 행·후보 행)에서 카드를 열면 그 장소로 옮긴다.
+ * 전체 보기(`overview`)면 모든 Day 장소를 그리고 모두에 맞춘다.
  */
 export function TripMap({
   trip,
   dayIndex,
+  overview,
   legs,
   padding,
   cardPlaceId,
@@ -47,8 +50,9 @@ export function TripMap({
   const library = useAtomValue(libraryAtom);
   const [showOtherDays, setShowOtherDays] = useState(true);
   const { markers, polylines } = useMemo(
-    () => tripMapLayers(library, trip, dayIndex, legs, cardPlaceId, splitPlan, showOtherDays),
-    [library, trip, dayIndex, legs, cardPlaceId, splitPlan, showOtherDays],
+    () =>
+      tripMapLayers(library, trip, dayIndex, legs, cardPlaceId, splitPlan, showOtherDays, overview),
+    [library, trip, dayIndex, legs, cardPlaceId, splitPlan, showOtherDays, overview],
   );
 
   // 카드가 새 장소로 열리면 그 장소로 옮긴다(렌더 중 상태 갱신). 방금 핀을 눌러 연 장소는 이미 보이므로 그대로 둔다.
@@ -83,36 +87,38 @@ export function TripMap({
         padding={padding}
         onMarkerClick={onMarkerClick}
         focus={focus}
-        fitKey={`${trip.id}:${dayIndex}`}
+        fitKey={`${trip.id}:${overview ? 'all' : dayIndex}`}
         onUnavailable={setUnavailable}
         controlsRight={controlsRight}
         controls={
-          <Button
-            aria-label="다른 Day 장소"
-            aria-pressed={showOtherDays}
-            title={
-              showOtherDays ? '다른 Day 장소 보이는 중(점 색은 해당 Day)' : '다른 Day 장소 숨김'
-            }
-            onClick={() => setShowOtherDays((shown) => !shown)}
-            sx={{
-              // 다른 지도 단추(확대·축소·내 위치)와 같은 44px 정사각형이라, 위쪽 가운데 오프라인 안내가 비워 둔
-              // 양옆 자리 안에 들어간다.
-              minWidth: 44,
-              width: 44,
-              height: 44,
-              p: 0,
-              bgcolor: showOtherDays ? 'var(--tm-accent-main)' : 'var(--tm-bg-surface)',
-              color: showOtherDays ? 'var(--tm-accent-contrast)' : 'var(--tm-text-primary)',
-              border: '1px solid var(--tm-border-strong, var(--tm-border))',
-              borderRadius: 'var(--tm-radius-md)',
-              boxShadow: 'var(--tm-shadow-1)',
-              '&:hover': {
-                bgcolor: showOtherDays ? 'var(--tm-accent-main)' : 'var(--tm-bg-raised)',
-              },
-            }}
-          >
-            <LayersIcon aria-hidden="true" width={20} height={20} />
-          </Button>
+          !overview && (
+            <Button
+              aria-label="다른 Day 장소"
+              aria-pressed={showOtherDays}
+              title={
+                showOtherDays ? '다른 Day 장소 보이는 중(점 색은 해당 Day)' : '다른 Day 장소 숨김'
+              }
+              onClick={() => setShowOtherDays((shown) => !shown)}
+              sx={{
+                // 다른 지도 단추(확대·축소·내 위치)와 같은 44px 정사각형이라, 위쪽 가운데 오프라인 안내가 비워 둔
+                // 양옆 자리 안에 들어간다.
+                minWidth: 44,
+                width: 44,
+                height: 44,
+                p: 0,
+                bgcolor: showOtherDays ? 'var(--tm-accent-main)' : 'var(--tm-bg-surface)',
+                color: showOtherDays ? 'var(--tm-accent-contrast)' : 'var(--tm-text-primary)',
+                border: '1px solid var(--tm-border-strong, var(--tm-border))',
+                borderRadius: 'var(--tm-radius-md)',
+                boxShadow: 'var(--tm-shadow-1)',
+                '&:hover': {
+                  bgcolor: showOtherDays ? 'var(--tm-accent-main)' : 'var(--tm-bg-raised)',
+                },
+              }}
+            >
+              <LayersIcon aria-hidden="true" width={20} height={20} />
+            </Button>
+          )
         }
       />
       {unavailable !== null && (

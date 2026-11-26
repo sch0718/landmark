@@ -82,6 +82,28 @@ async function mapReady() {
   await waitFor(() => expect(screen.queryAllByTestId(/^marker-/).length).toBeGreaterThan(0));
 }
 
+it('전체 보기의 Day별 장소 목록에서 카드를 열어 보관함 메모를 저장한다', async () => {
+  const trip = makeTrip({ stops: [[P1], [P5]] });
+  const { store } = await open(withTrip(mapLibrary(), trip), { width: 1280 });
+  const user = userEvent.setup();
+
+  await user.click(screen.getByRole('tab', { name: '전체' }));
+  const overview = screen.getByRole('region', { name: 'Day별 장소' });
+  await user.click(within(overview).getByRole('button', { name: /창가 자리/ }));
+  const placeCard = card('창가 자리');
+  const memo = within(placeCard).getByRole('textbox', { name: '메모' });
+  expect(within(placeCard).getByText('Day 2 · 1번째')).toBeInTheDocument();
+  await user.clear(memo);
+  fireEvent.keyDown(memo, { key: 'Escape', isComposing: true });
+  fireEvent.keyDown(memo, { key: 'Escape', keyCode: 229 });
+  expect(placeCard).toBeInTheDocument();
+
+  await user.type(memo, '오후에 창가 자리를 예약해요.');
+  await waitFor(() =>
+    expect(store.get(libraryAtom).places[P5]!.memo.value).toBe('오후에 창가 자리를 예약해요.'),
+  );
+});
+
 function walkingPath(): RouteResult {
   return {
     ...route(6, 450, { mode: 'walk', toll: null }),

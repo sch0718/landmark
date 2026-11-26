@@ -6,7 +6,7 @@ import type { Trip } from 'src/schema/trip';
 import { firstPlaceLabel, placeMarkerName } from 'src/sections/map/markers';
 import { isSamePointLeg, type PlannedLeg } from 'src/sections/trips/planner/use-day-plan';
 
-/** 출발점·숙소 마커 id의 머리. 같은 장소가 Day의 Stop이기도 하면 마커가 따로 있어야 해서 구분한다. */
+/** Day 보기의 출발점·숙소 마커 id의 머리. 같은 장소의 Stop 마커와 구분한다. */
 const START_PREFIX = 'start:';
 const END_PREFIX = 'end:';
 const ENDPOINT_BORDER = '#000000';
@@ -32,6 +32,8 @@ const point = (place: Place) => ({ lng: place.lng, lat: place.lat });
  * - 자동 나누기 미리보기 중(`splitPlan`)이면 후보 핀은 배정될 Day의 색이다. 고른 Day의 번호는 미리보기의 새 순서를
  *   따르고(그날로 올 후보도 번호를 받는다, 스펙 §5.2), 경로선은 지금 순서의 것이라 숨긴다.
  * 지도 맞추기는 고른 Day의 Stop·출발점·숙소만 쓴다(후보·다른 Day는 `fit: false`). 그날 장소가 없으면 후보에 맞춘다.
+ * - 전체 보기: 모든 Day의 보이는 Stop(`D1·2 이름`), 여행 출발지, Day 순서의 숙소를 장소당 한 번 그린다.
+ *   모든 핀을 지도 맞추기에 쓰고 후보·흐린 점·경로선은 그리지 않는다.
  */
 export function tripMapLayers(
   lib: Library,
@@ -41,6 +43,7 @@ export function tripMapLayers(
   selectedPlaceId: string | null,
   splitPlan: string[][] | null = null,
   showOtherDays = true,
+  overview = false,
 ): { markers: MapMarker[]; polylines: MapPolyline[] } {
   const nameOf = (place: Place) => placeMarkerName(place, firstPlaceLabel(place, lib.labels));
   const color = dayColor(dayIndex);
@@ -52,6 +55,41 @@ export function tripMapLayers(
     markers.push(marker);
   };
   const selected = (placeId: string) => placeId === selectedPlaceId;
+  const endpoint = (id: string, place: Place, icon: string, color: string) =>
+    push({
+      id,
+      ...point(place),
+      label: `${icon} ${nameOf(place)}`,
+      color,
+      textColor: MARKER_TEXT,
+      borderColor: ENDPOINT_BORDER,
+      selected: selected(place.id),
+      clusterable: false,
+    });
+
+  if (overview && splitPlan === null) {
+    trip.days.forEach((day, d) => {
+      visibleStops(lib, day).forEach((stop, i) => {
+        const place = lib.places[stop.placeId]!;
+        push({
+          id: place.id,
+          ...point(place),
+          label: `D${d + 1}·${i + 1} ${nameOf(place)}`,
+          color: dayColor(d),
+          textColor: MARKER_TEXT,
+          selected: selected(place.id),
+          clusterable: false,
+        });
+      });
+    });
+    const { start } = dayEndpoints(lib, trip, 0);
+    if (start !== null) endpoint(start.id, start, '🏠', dayColor(0));
+    trip.days.forEach((_day, d) => {
+      const { end } = dayEndpoints(lib, trip, d);
+      if (end !== null) endpoint(end.id, end, '🛏', dayColor(d));
+    });
+    return { markers, polylines: [] };
+  }
 
   const day = trip.days[dayIndex];
   if (day !== undefined) {
@@ -81,20 +119,10 @@ export function tripMapLayers(
       });
     }
     const { start, end } = dayEndpoints(lib, trip, dayIndex);
-    const endpoint = (prefix: string, place: Place, icon: string) =>
-      push({
-        id: `${prefix}${place.id}`,
-        ...point(place),
-        label: `${icon} ${nameOf(place)}`,
-        color,
-        textColor: MARKER_TEXT,
-        borderColor: ENDPOINT_BORDER,
-        selected: selected(place.id),
-        clusterable: false,
-      });
     // 1일차 출발점은 여행 출발지(집), 그 뒤는 전날 숙소(침대). 출발점과 숙소가 같으면 하나만 둔다.
-    if (start !== null) endpoint(START_PREFIX, start, dayIndex === 0 ? '🏠' : '🛏');
-    if (end !== null && end.id !== start?.id) endpoint(END_PREFIX, end, '🛏');
+    if (start !== null)
+      endpoint(`${START_PREFIX}${start.id}`, start, dayIndex === 0 ? '🏠' : '🛏', color);
+    if (end !== null && end.id !== start?.id) endpoint(`${END_PREFIX}${end.id}`, end, '🛏', color);
   }
 
   // 미리보기: 후보가 어느 Day로 가는지.

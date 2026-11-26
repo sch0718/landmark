@@ -4,7 +4,7 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
 import useMediaQuery from '@mui/material/useMediaQuery';
-import { useAtom, useAtomValue } from 'jotai';
+import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router';
 import { toast } from 'sonner';
@@ -24,6 +24,7 @@ import { useCloseStaleSplit, useSplitPlan } from 'src/sections/trips/planner/Aut
 import { CandidatePanel } from 'src/sections/trips/planner/CandidatePanel';
 import { DAY_RAIL_WIDTH, DayTabs, DayTimeline } from 'src/sections/trips/planner/DayTimeline';
 import { MapCard } from 'src/sections/trips/planner/MapCard';
+import { OverviewList } from 'src/sections/trips/planner/OverviewList';
 import { PlannerDnd } from 'src/sections/trips/planner/PlannerDnd';
 import { COLLAPSED_PX, PlannerSheet } from 'src/sections/trips/planner/PlannerSheet';
 import { TripMap } from 'src/sections/trips/planner/TripMap';
@@ -32,7 +33,12 @@ import { TripTitleHeading } from 'src/sections/trips/planner/TripTitleHeading';
 import { useDayPlan, type DayPlan } from 'src/sections/trips/planner/use-day-plan';
 import { useTripHoursRequests } from 'src/sections/trips/planner/use-place-hours';
 import { libraryAtom } from 'src/stores/library-state';
-import { mapCardAtom, selectedDayAtom } from 'src/stores/trip-planner';
+import {
+  mapCardAtom,
+  overviewAtom,
+  selectedDayAtom,
+  selectPlannerDayAtom,
+} from 'src/stores/trip-planner';
 
 /** 이 폭(px) 이상이면 후보 칸을 펼친 채 시작한다. */
 const CANDIDATES_OPEN_MIN = 1100;
@@ -75,6 +81,7 @@ function MapArea({ children }: { children?: ReactNode }) {
  */
 function useSelectedDay(trip: Trip): [number, (dayIndex: number) => void] {
   const [selected, setSelected] = useAtom(selectedDayAtom);
+  const selectDay = useSetAtom(selectPlannerDayAtom);
   const raw = selected[trip.id] ?? 0;
   const dayIndex = Math.min(Math.max(0, raw), trip.days.length - 1);
   useEffect(() => {
@@ -82,8 +89,15 @@ function useSelectedDay(trip: Trip): [number, (dayIndex: number) => void] {
       setSelected((prev) => ({ ...prev, [trip.id]: dayIndex }));
     }
   }, [selected, trip.id, dayIndex, setSelected]);
-  const select = (next: number) => setSelected((prev) => ({ ...prev, [trip.id]: next }));
-  return [dayIndex, select];
+  return [dayIndex, (next) => selectDay(trip.id, next)];
+}
+
+function useOverview(trip: Trip): [boolean, (overview: boolean) => void] {
+  const [overview, setOverview] = useAtom(overviewAtom);
+  return [
+    overview[trip.id] ?? false,
+    (next) => setOverview((prev) => ({ ...prev, [trip.id]: next })),
+  ];
 }
 
 /** 살아 있는 장소가 여행의 후보·Stop·출발지·숙소 중 하나인가. */
@@ -196,24 +210,35 @@ function DetailPane({ placeId, onBack }: { placeId: string; onBack(): void }) {
 function TimelinePane({
   trip,
   dayIndex,
+  overview,
   plan,
   onSelectDay,
+  onOverview,
+  overviewDisabled,
   overlay,
   detailId,
   onCloseDetail,
 }: {
   trip: Trip;
   dayIndex: number;
+  overview: boolean;
   plan: DayPlan;
   onSelectDay(dayIndex: number): void;
+  onOverview(): void;
+  overviewDisabled: boolean;
   overlay: boolean;
   detailId: string | null;
   onCloseDetail(): void;
 }) {
+  const dayContent = overview ? (
+    <OverviewList trip={trip} />
+  ) : (
+    <DayTimeline trip={trip} dayIndex={dayIndex} plan={plan} />
+  );
   return (
     <Box
       component="section"
-      aria-label={detailId === null ? 'Day 시간표' : '장소 상세'}
+      aria-label={detailId !== null ? '장소 상세' : overview ? 'Day별 장소' : 'Day 시간표'}
       sx={{
         // 넓은 화면은 시간표 왼쪽에 Day 세로 목록을 두는 만큼 넓다.
         width: overlay ? DETAIL_WIDTH : DETAIL_WIDTH + DAY_RAIL_WIDTH,
@@ -240,10 +265,15 @@ function TimelinePane({
       ) : overlay ? (
         <>
           <TripCollabSync tripId={trip.id} />
-          <DayTabs trip={trip} dayIndex={dayIndex} onSelect={onSelectDay} />
-          <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-            <DayTimeline trip={trip} dayIndex={dayIndex} plan={plan} />
-          </Box>
+          <DayTabs
+            trip={trip}
+            dayIndex={dayIndex}
+            overview={overview}
+            onOverview={onOverview}
+            overviewDisabled={overviewDisabled}
+            onSelect={onSelectDay}
+          />
+          <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>{dayContent}</Box>
         </>
       ) : (
         // 넓은 화면: Day가 많아도 한눈에 고르도록 세로 목록을 시간표 왼쪽에 둔다.
@@ -251,10 +281,16 @@ function TimelinePane({
         <>
           <TripCollabSync tripId={trip.id} />
           <Box sx={{ flex: 1, minHeight: 0, display: 'flex' }}>
-            <DayTabs trip={trip} dayIndex={dayIndex} onSelect={onSelectDay} vertical />
-            <Box sx={{ flex: 1, minWidth: 0, minHeight: 0, overflow: 'auto' }}>
-              <DayTimeline trip={trip} dayIndex={dayIndex} plan={plan} />
-            </Box>
+            <DayTabs
+              trip={trip}
+              dayIndex={dayIndex}
+              overview={overview}
+              onOverview={onOverview}
+              overviewDisabled={overviewDisabled}
+              onSelect={onSelectDay}
+              vertical
+            />
+            <Box sx={{ flex: 1, minWidth: 0, minHeight: 0, overflow: 'auto' }}>{dayContent}</Box>
           </Box>
         </>
       )}
@@ -265,6 +301,7 @@ function TimelinePane({
 function Planner({ trip, library }: { trip: Trip; library: Library }) {
   const layout = useLayout();
   const [dayIndex, selectDay] = useSelectedDay(trip);
+  const [overview, setOverview] = useOverview(trip);
   // 후보 칸은 1100px 미만이면 접힌 채 시작한다(시간표 칸 옆에서 지도가 너무 좁아진다). 사용자가 펼치거나 접으면
   // (`candidatesOverride`) 그 상태를 지키고, 화면을 다시 열면 기본값으로 돌아간다.
   const roomy = useMediaQuery(`(min-width:${CANDIDATES_OPEN_MIN}px)`, { noSsr: true });
@@ -309,6 +346,10 @@ function Planner({ trip, library }: { trip: Trip; library: Library }) {
   useHiddenPlaceToast(library, trip);
   useCloseStaleSplit(trip);
   const splitPlan = useSplitPlan(trip);
+  const showOverview = overview && splitPlan === null;
+  // 자동 나누기 미리보기 중에는 전체 보기를 열 수 없다(눌러 두면 미리보기가 끝난 뒤에야 바뀐다).
+  const overviewDisabled = splitPlan !== null;
+  const openOverview = () => setOverview(true);
 
   const compact = layout === 'compact';
   const medium = layout === 'medium';
@@ -321,6 +362,7 @@ function Planner({ trip, library }: { trip: Trip; library: Library }) {
       <TripMap
         trip={trip}
         dayIndex={dayIndex}
+        overview={showOverview}
         legs={plan.legs}
         padding={padding}
         cardPlaceId={cardPlaceId}
@@ -328,7 +370,7 @@ function Planner({ trip, library }: { trip: Trip; library: Library }) {
         splitPlan={splitPlan}
         controlsRight={medium ? DETAIL_WIDTH : 0}
       />
-      {plan.offline && (
+      {plan.offline && !showOverview && (
         <OfflineNotice
           rightInset={medium ? DETAIL_WIDTH : 0}
           belowButtons={during || expandShown}
@@ -336,7 +378,7 @@ function Planner({ trip, library }: { trip: Trip; library: Library }) {
       )}
       {extra}
       {during && <TodayLink tripId={trip.id} afterExpand={expandShown} />}
-      {cardPlaceId !== null && (
+      {cardPlaceId !== null && (!showOverview || detailId === null) && (
         <Box
           sx={{
             position: 'absolute',
@@ -344,12 +386,18 @@ function Planner({ trip, library }: { trip: Trip; library: Library }) {
             left: compact ? 8 : 16,
             bottom: compact ? COLLAPSED_PX + 8 : 16,
             width: compact ? 'calc(100% - 16px)' : 'min(360px, calc(100% - 32px))',
+            ...(showOverview && {
+              maxHeight: compact ? `calc(100% - ${COLLAPSED_PX + 16}px)` : 'calc(100% - 32px)',
+              display: 'flex',
+              flexDirection: 'column',
+            }),
           }}
         >
           <MapCard
             key={cardPlaceId}
             trip={trip}
             dayIndex={dayIndex}
+            overview={showOverview}
             plan={plan}
             placeId={cardPlaceId}
             onClose={closeCard}
@@ -368,8 +416,11 @@ function Planner({ trip, library }: { trip: Trip; library: Library }) {
           trip={trip}
           library={library}
           dayIndex={dayIndex}
+          overview={showOverview}
           plan={plan}
           onSelectDay={selectDay}
+          onOverview={openOverview}
+          overviewDisabled={overviewDisabled}
         />
         {detailId !== null && (
           <Box
@@ -455,8 +506,11 @@ function Planner({ trip, library }: { trip: Trip; library: Library }) {
       <TimelinePane
         trip={trip}
         dayIndex={dayIndex}
+        overview={showOverview}
         plan={plan}
         onSelectDay={selectDay}
+        onOverview={openOverview}
+        overviewDisabled={overviewDisabled}
         overlay={medium}
         detailId={detailId}
         onCloseDetail={() => setDetailId(null)}
