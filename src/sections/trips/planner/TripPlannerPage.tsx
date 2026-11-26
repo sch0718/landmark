@@ -214,6 +214,7 @@ function TimelinePane({
   plan,
   onSelectDay,
   onOverview,
+  overviewDisabled,
   overlay,
   detailId,
   onCloseDetail,
@@ -224,6 +225,7 @@ function TimelinePane({
   plan: DayPlan;
   onSelectDay(dayIndex: number): void;
   onOverview(): void;
+  overviewDisabled: boolean;
   overlay: boolean;
   detailId: string | null;
   onCloseDetail(): void;
@@ -268,6 +270,7 @@ function TimelinePane({
             dayIndex={dayIndex}
             overview={overview}
             onOverview={onOverview}
+            overviewDisabled={overviewDisabled}
             onSelect={onSelectDay}
           />
           <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>{dayContent}</Box>
@@ -283,6 +286,7 @@ function TimelinePane({
               dayIndex={dayIndex}
               overview={overview}
               onOverview={onOverview}
+              overviewDisabled={overviewDisabled}
               onSelect={onSelectDay}
               vertical
             />
@@ -298,7 +302,6 @@ function Planner({ trip, library }: { trip: Trip; library: Library }) {
   const layout = useLayout();
   const [dayIndex, selectDay] = useSelectedDay(trip);
   const [overview, setOverview] = useOverview(trip);
-  const openOverview = () => setOverview(true);
   // 후보 칸은 1100px 미만이면 접힌 채 시작한다(시간표 칸 옆에서 지도가 너무 좁아진다). 사용자가 펼치거나 접으면
   // (`candidatesOverride`) 그 상태를 지키고, 화면을 다시 열면 기본값으로 돌아간다.
   const roomy = useMediaQuery(`(min-width:${CANDIDATES_OPEN_MIN}px)`, { noSsr: true });
@@ -344,6 +347,9 @@ function Planner({ trip, library }: { trip: Trip; library: Library }) {
   useCloseStaleSplit(trip);
   const splitPlan = useSplitPlan(trip);
   const showOverview = overview && splitPlan === null;
+  // 자동 나누기 미리보기 중에는 전체 보기를 열 수 없다(눌러 두면 미리보기가 끝난 뒤에야 바뀐다).
+  const overviewDisabled = splitPlan !== null;
+  const openOverview = () => setOverview(true);
 
   const compact = layout === 'compact';
   const medium = layout === 'medium';
@@ -364,7 +370,7 @@ function Planner({ trip, library }: { trip: Trip; library: Library }) {
         splitPlan={splitPlan}
         controlsRight={medium ? DETAIL_WIDTH : 0}
       />
-      {plan.offline && (
+      {plan.offline && !showOverview && (
         <OfflineNotice
           rightInset={medium ? DETAIL_WIDTH : 0}
           belowButtons={during || expandShown}
@@ -414,6 +420,7 @@ function Planner({ trip, library }: { trip: Trip; library: Library }) {
           plan={plan}
           onSelectDay={selectDay}
           onOverview={openOverview}
+          overviewDisabled={overviewDisabled}
         />
         {detailId !== null && (
           <Box
@@ -503,6 +510,7 @@ function Planner({ trip, library }: { trip: Trip; library: Library }) {
         plan={plan}
         onSelectDay={selectDay}
         onOverview={openOverview}
+        overviewDisabled={overviewDisabled}
         overlay={medium}
         detailId={detailId}
         onCloseDetail={() => setDetailId(null)}

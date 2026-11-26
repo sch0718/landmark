@@ -49,6 +49,7 @@ export function DayTabs({
   dayIndex,
   overview,
   onOverview,
+  overviewDisabled = false,
   onSelect,
   vertical = false,
 }: {
@@ -56,6 +57,7 @@ export function DayTabs({
   dayIndex: number;
   overview: boolean;
   onOverview(): void;
+  overviewDisabled?: boolean;
   onSelect(dayIndex: number): void;
   vertical?: boolean;
 }) {
@@ -84,6 +86,7 @@ export function DayTabs({
       <Tab
         value="all"
         label="전체"
+        disabled={overviewDisabled}
         sx={[
           { minHeight: 48, textTransform: 'none' },
           vertical && { alignItems: 'flex-start', minWidth: 0, px: 1.5, py: 1 },

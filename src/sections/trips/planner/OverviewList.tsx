@@ -7,6 +7,7 @@ import { shortDate } from 'src/sections/trips/trip-dates';
 import { libraryAtom } from 'src/stores/library-state';
 import { mapCardAtom } from 'src/stores/trip-planner';
 
+/** 전체 보기의 시간표 자리: Day별 장소 이름과 숙소 한 줄. 행을 누르면 그 장소 카드를 연다. */
 export function OverviewList({ trip }: { trip: Trip }) {
   const library = useAtomValue(libraryAtom);
   const setCard = useSetAtom(mapCardAtom);
@@ -18,6 +19,7 @@ export function OverviewList({ trip }: { trip: Trip }) {
       {trip.days.map((day, d) => {
         const date = dates[d];
         const { end } = dayEndpoints(library, trip, d);
+        const stops = visibleStops(library, day);
 
         return (
           <Box key={d} sx={{ mb: 1.5 }}>
@@ -25,7 +27,12 @@ export function OverviewList({ trip }: { trip: Trip }) {
               {`Day ${d + 1}`}
               {date === undefined ? '' : ` ${shortDate(date)}`}
             </Box>
-            {visibleStops(library, day).map((stop, i) => (
+            {stops.length === 0 && end === null && (
+              <Box sx={{ px: 1, fontSize: 13, color: 'var(--tm-text-secondary)' }}>
+                이 날은 아직 일정이 없어요
+              </Box>
+            )}
+            {stops.map((stop, i) => (
               <Button
                 key={stop.id}
                 fullWidth

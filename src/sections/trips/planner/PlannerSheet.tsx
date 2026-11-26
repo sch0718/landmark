@@ -42,12 +42,14 @@ type Props = {
   plan: DayPlan;
   onSelectDay(dayIndex: number): void;
   onOverview(): void;
+  overviewDisabled?: boolean;
 };
 
 /**
  * 좁은 화면의 일정 시트(스펙 §2.3): 지도 위 아래쪽에서 끌어올린다. 높이는 접힘(탭 줄만)·반쯤·거의 전체.
  * 손잡이를 누르면 접힘 → 반쯤 → 거의 전체 → 접힘으로 돌고, 위아래로 끌면 그 방향으로 한 단계 바뀐다.
  * 탭은 `후보 N`과 지금 고른 `전체` 또는 `Day N` 둘이고, 옆 `Day 목록`에서 전체나 다른 Day를 고른다.
+ * Day가 많아도 탭 줄이 넘치지 않는다. 내용은 넓은 화면의 후보 칸·시간표와 같고, 전체 보기면 Day별 장소 목록이다.
  * 지도 위 카드가 열리면 지도가 보이도록 접는다.
  */
 export function PlannerSheet({
@@ -58,6 +60,7 @@ export function PlannerSheet({
   plan,
   onSelectDay,
   onOverview,
+  overviewDisabled = false,
 }: Props) {
   const card = useAtomValue(mapCardAtom);
   // 카드가 열린 채 좁은 화면이 되면(창 줄이기) 접힌 채로 시작한다.
@@ -232,7 +235,8 @@ export function PlannerSheet({
         </IconButton>
         <Menu anchorEl={dayMenu} open={dayMenu !== null} onClose={() => setDayMenu(null)}>
           <MenuItem
-            selected={overview}
+            selected={tab === 'day' && overview}
+            disabled={overviewDisabled}
             onClick={() => {
               setDayMenu(null);
               select('all');
