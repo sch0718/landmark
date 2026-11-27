@@ -10,7 +10,7 @@ export const selectedDayAtom: PrimitiveAtom<Record<string, number>> = atom<Recor
   {},
 );
 
-/** 여행별로 전체 지도를 보고 있는지. */
+/** 여행별로 전체 지도를 보고 있는지. 없으면 전체(계획 화면을 열면 전체 보기부터). */
 export const overviewAtom: PrimitiveAtom<Record<string, boolean>> = atom<Record<string, boolean>>(
   {},
 );

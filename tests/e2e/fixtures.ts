@@ -210,7 +210,17 @@ export async function openSheetTab(
   page: Page,
   name: 'candidates' | 'Day 1' | 'Day 2',
 ): Promise<void> {
-  if (!isCompact(page)) return;
+  if (!isCompact(page)) {
+    // 넓은 화면은 고른 Day의 시간표가 늘 보인다. `전체` 보기일 때만 그 Day 탭으로 간다.
+    if (name === 'candidates') return;
+    if (await page.getByRole('region', { name: 'Day 시간표' }).isVisible()) return;
+    await page
+      .getByRole('tablist', { name: 'Day 고르기' })
+      .getByRole('tab', { name: new RegExp(`^${name} `) })
+      .click();
+    await expect(page.getByRole('region', { name: 'Day 시간표' })).toBeVisible();
+    return;
+  }
   const sheet = page.getByRole('region', { name: '일정 시트' });
   if (name === 'candidates') {
     await sheet.getByRole('tab', { name: /^후보 / }).click();
@@ -265,6 +275,16 @@ export async function createGangneungTrip(page: Page): Promise<void> {
   await dialog.getByRole('button', { name: '만들기', exact: true }).click();
   await expect(page).toHaveURL(/\/trips\/[^/]+$/);
   await expect(candidatePanel(page).getByRole('heading', { name: '강릉 여행' })).toBeVisible();
+  await showDay1(page);
+}
+
+/**
+ * 계획 화면은 `전체` 보기로 열린다. 예전처럼 Day 1을 고른 상태로 바꾼다.
+ * 좁은 화면은 `Day 목록`으로 Day 1을 고른 뒤 시트를 다시 후보 탭으로 둔다.
+ */
+export async function showDay1(page: Page): Promise<void> {
+  await openSheetTab(page, 'Day 1');
+  await openSheetTab(page, 'candidates');
 }
 
 /** Day 1 시간표의 장소 이름을 위에서부터. */

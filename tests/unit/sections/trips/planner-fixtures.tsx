@@ -247,6 +247,8 @@ export async function open(
     geolocation?: Layer.Layer<Geolocation>;
     /** 영업시간 조회. 없으면 캐시가 비어 있고 요청이 끝나지 않는다(행에 영업시간 줄이 없다). */
     hours?: ReturnType<typeof fakeHours>;
+    /** 전체 보기로 열지(앱 기본). 없으면 Day 1부터 연다. */
+    tripOverview?: boolean;
   } = {},
 ) {
   return renderLibrary(lib, {
@@ -257,5 +259,6 @@ export async function open(
     hoursLookup: options.hours?.layer,
     libraryLocks: options.libraryLocks,
     geolocation: options.geolocation,
+    tripOverview: options.tripOverview,
   });
 }

@@ -82,6 +82,17 @@ async function mapReady() {
   await waitFor(() => expect(screen.queryAllByTestId(/^marker-/).length).toBeGreaterThan(0));
 }
 
+it('계획 화면은 전체 보기로 열리고, Day 탭을 고르면 그 Day 시간표로 간다', async () => {
+  const trip = makeTrip({ stops: [[P1], [P5]] });
+  await open(withTrip(mapLibrary(), trip), { width: 1280, tripOverview: true });
+  const user = userEvent.setup();
+
+  expect(screen.getByRole('tab', { name: '전체' })).toHaveAttribute('aria-selected', 'true');
+  expect(screen.getByRole('region', { name: 'Day별 장소' })).toBeInTheDocument();
+  await user.click(screen.getByRole('tab', { name: /Day 1/ }));
+  expect(screen.getByRole('region', { name: 'Day 시간표' })).toBeInTheDocument();
+});
+
 it('전체 보기의 Day별 장소 목록에서 카드를 열어 보관함 메모를 저장한다', async () => {
   const trip = makeTrip({ stops: [[P1], [P5]] });
   const { store } = await open(withTrip(mapLibrary(), trip), { width: 1280 });

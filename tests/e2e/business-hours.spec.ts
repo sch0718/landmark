@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { expect, type Locator, type Page } from '@playwright/test';
-import { test, mockRoutes, seedStorage } from './fixtures';
+import { test, mockRoutes, seedStorage, showDay1 } from './fixtures';
 
 /** 좁은 화면(하단 시트)인가. 경계는 다른 시험과 같은 compact(<768)다. */
 const isCompact = (page: Page): boolean => page.viewportSize()!.width < 768;
@@ -61,6 +61,7 @@ async function createGangneungTrip(page: Page): Promise<void> {
   await dialog.getByRole('button', { name: '만들기', exact: true }).click();
   await expect(page).toHaveURL(/\/trips\/[^/]+$/);
   await expect(candidatePanel(page).getByRole('heading', { name: '강릉 여행' })).toBeVisible();
+  await showDay1(page);
 }
 
 test.describe('영업시간 경고', () => {
