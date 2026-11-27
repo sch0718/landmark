@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 import type { OpCtx, OpResult } from 'src/domain/library/ops';
 import { diffTrip, isEmptyChange, revertTrip, type TripChange } from 'src/domain/trips/undo';
 import type { Library } from 'src/schema/library';
+import type { Trip } from 'src/schema/trip';
 import { useLibraryAction, type LibraryActionResult } from 'src/stores/library-state';
 
 /** 되돌리기 토스트를 보이는 시간(스펙 §2.5: 8초). */
@@ -28,17 +29,40 @@ export type TripUndoMessage = string | ((result: TripOpDone) => string);
  * 연산이 거절됐거나 바뀐 것이 없으면 토스트를 띄우지 않는다. 연산의 결과는 그대로 돌려준다(폼이 거절 사유를 보인다).
  * 문구가 연산 결과에 달렸으면(`<N>곳을 후보에 넣었어요`) `message`를 함수로 준다. 저장된 최신본 기준의 결과를 받는다.
  */
-export function useTripUndo(tripId: string): {
+export function useTripUndo(
+  tripId: string,
+  checkUndo?: (trip: Trip) => { _tag: 'TripTooLarge'; message: string } | null,
+): {
   run(op: TripOp, message: TripUndoMessage): Promise<LibraryActionResult>;
 } {
   const { run: runAction } = useLibraryAction();
 
   const undo = useCallback(
     async (change: TripChange) => {
-      const result = await runAction((lib, ctx) => revertTrip(lib, change, ctx));
-      if (result.ok && (result.summary?.merged ?? 0) > 0) toast(MERGED_NOTICE);
+      const result = await runAction((lib, ctx) => {
+        const out = revertTrip(lib, change, ctx);
+        if (checkUndo === undefined || !out.ok || out.lib === lib) return out;
+        const trip = out.lib.trips[change.tripId];
+        const error = trip === undefined ? null : checkUndo(trip);
+        return error === null ? out : { ok: false, error };
+      });
+      if (result.ok) {
+        if ((result.summary?.merged ?? 0) > 0) toast(MERGED_NOTICE);
+      } else {
+        const error = result.error;
+        if (
+          error &&
+          typeof error === 'object' &&
+          '_tag' in error &&
+          error._tag === 'TripTooLarge' &&
+          'message' in error &&
+          typeof error.message === 'string'
+        ) {
+          toast.error(error.message);
+        }
+      }
     },
-    [runAction],
+    [checkUndo, runAction],
   );
 
   const run = useCallback(
@@ -58,6 +82,7 @@ export function useTripUndo(tripId: string): {
       if (!result.ok || recorded === null || isEmptyChange(recorded)) return result;
       toast(typeof message === 'string' ? message : message(result), {
         duration: UNDO_MS,
+        actionButtonStyle: { minWidth: 44, minHeight: 44 },
         action: { label: '되돌리기', onClick: () => void undo(recorded) },
       });
       return result;

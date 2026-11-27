@@ -1,7 +1,15 @@
 import { Context, Layer } from 'effect';
 import { randomId } from 'src/lib/random';
 
-const LENGTH = { place: 10, label: 8, trip: 10, stop: 8, meeting: 10, meetingMember: 8 } as const;
+const LENGTH = {
+  place: 10,
+  label: 8,
+  trip: 10,
+  stop: 8,
+  booking: 8,
+  meeting: 10,
+  meetingMember: 8,
+} as const;
 export type IdKind = keyof typeof LENGTH;
 
 /** 무작위 ID. 장소·여행·약속 id는 10자, 라벨·여행 정류장·약속 구성원 id는 8자의 영숫자 소문자(스펙 §3). */

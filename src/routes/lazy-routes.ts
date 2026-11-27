@@ -26,6 +26,7 @@ export const loadTripPlannerPage = lazyChunk(
   () => import('src/sections/trips/planner/TripPlannerPage'),
 );
 export const loadTripTodayPage = lazyChunk(() => import('src/sections/trips/today/TripTodayPage'));
+export const loadTripPrepPage = lazyChunk(() => import('src/sections/trips/prep/TripPrepPage'));
 export const loadSettingsPage = lazyChunk(() => import('src/sections/settings/SettingsPage'));
 export const loadLabelsPage = lazyChunk(() => import('src/sections/labels/LabelsPage'));
 export const loadLegacyImportPage = lazyChunk(
@@ -38,6 +39,9 @@ export const TripPlannerPage = lazy(() =>
 );
 export const TripTodayPage = lazy(() =>
   loadTripTodayPage().then((m) => ({ default: m.TripTodayPage })),
+);
+export const TripPrepPage = lazy(() =>
+  loadTripPrepPage().then((m) => ({ default: m.TripPrepPage })),
 );
 export const SettingsPage = lazy(() =>
   loadSettingsPage().then((m) => ({ default: m.SettingsPage })),

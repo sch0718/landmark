@@ -14,6 +14,7 @@ import { Link, useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { HelpButton } from 'src/components/HelpButton';
 import { EllipsisIcon } from 'src/components/icons';
+import { summarizeBookings } from 'src/domain/trips/bookings';
 import { deleteTrip, restoreTrip } from 'src/domain/trips/ops';
 import { rolloverDate, todayStatus } from 'src/domain/trips/today';
 import { liveTrips, visibleCandidates, visibleStops } from 'src/domain/trips/query';
@@ -51,7 +52,8 @@ function TripCard({ trip, library, onMenu, liveShared, collabShared }: CardProps
   const scheduled = trip.days.reduce((sum, day) => sum + visibleStops(library, day).length, 0);
   const candidates = visibleCandidates(library, trip).length;
   const period = periodLabel(trip.startDate.value, trip.endDate.value);
-  const counts = `일정 ${scheduled}곳 · 후보 ${candidates}곳${liveShared ? ' · 갱신 공유 중' : ''}${collabShared ? ' · 함께 편집 중' : ''}`;
+  const { booked, total } = summarizeBookings(trip.bookings?.value ?? []);
+  const counts = `일정 ${scheduled}곳 · 후보 ${candidates}곳${total > 0 ? ` · 예약 ${booked}/${total}` : ''}${liveShared ? ' · 갱신 공유 중' : ''}${collabShared ? ' · 함께 편집 중' : ''}`;
   return (
     <Box
       component="li"
