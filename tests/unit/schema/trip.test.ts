@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { emptyLibrary, LIBRARY_LIMITS, LibrarySchema, type Place } from 'src/schema/library';
 import { safeParse } from 'src/schema/parse';
 import { daysBetween, TripId, TripStopId, type Stop, type Trip } from 'src/schema/trip';
+import { booking, phrase, prepNote } from '../../fixtures/trip-prep';
 
 const T = '2026-10-08T01:00:00.000Z';
 const f = <V>(value: V) => ({ value, updatedAt: T });
@@ -82,6 +83,108 @@ describe('TripId / TripStopId', () => {
     expect(safeParse(TripStopId, 'abcd1234').success).toBe(true);
     expect(safeParse(TripStopId, 'abcd123').success).toBe(false);
     expect(safeParse(TripStopId, 'abcd12345').success).toBe(false);
+  });
+});
+
+describe('여행 준비 필드', () => {
+  const prep = {
+    bookings: f([booking]),
+    prepNotes: f([prepNote]),
+    phrases: f([phrase]),
+  };
+  const parsePrep = (over: object) => safeParse(LibrarySchema, lib([trip({ ...prep, ...over })]));
+  const many = <T extends { id: string }>(item: T, count: number) =>
+    f(Array.from({ length: count }, (_, i) => ({ ...item, id: String(i).padStart(8, '0') })));
+
+  it('옛 여행에는 준비 필드를 만들지 않고, 기간 밖 예약이 있는 새 여행은 그대로 읽는다', () => {
+    const old = trip();
+    expect(safeParse(LibrarySchema, lib([old]))).toMatchObject({
+      success: true,
+      data: { trips: { [old.id]: old } },
+    });
+    expect(parsePrep({})).toMatchObject({
+      success: true,
+      data: { trips: { [old.id]: prep } },
+    });
+  });
+
+  it.each([
+    ['bookings', many(booking, 61)],
+    ['prepNotes', many(prepNote, 41)],
+    ['phrases', many(phrase, 151)],
+  ])('%s 개수 상한을 검사한다', (key, field) => {
+    expect(parsePrep({ [key]: field }).success).toBe(false);
+  });
+
+  it.each([
+    [
+      'bookings',
+      many(
+        {
+          ...booking,
+          links: [
+            { label: '', url: 'https://example.com/' + 'a'.repeat(480) },
+            { label: '', url: 'https://example.com/' + 'b'.repeat(480) },
+          ],
+        },
+        60,
+      ),
+    ],
+    ['prepNotes', many({ ...prepNote, text: '가'.repeat(1500) }, 20)],
+    ['phrases', many({ ...phrase, text: '가'.repeat(500) }, 60)],
+  ] as const)('%s 배열의 직렬화 길이 상한을 검사한다', (key, field) => {
+    const errors = messages(lib([trip({ ...prep, [key]: field })]));
+    expect(errors).toContain('너무 깁니다');
+  });
+
+  it.each([
+    ['제목 길이', { title: '가'.repeat(81) }],
+    ['메모 길이', { note: '가'.repeat(301) }],
+    ['예약번호 길이', { code: 'a'.repeat(61) }],
+    ['주소 형식', { links: [{ label: '', url: 'https://' }] }],
+    ['무한대 금액', { price: { amount: JSON.parse('1e309') as number, currency: 'EUR' } }],
+    ['음수 금액', { price: { amount: -1, currency: 'EUR' } }],
+    ['통화 형식', { price: { amount: 1, currency: 'eur' } }],
+  ])('잘못된 예약을 거절한다 (%s)', (_, over) => {
+    expect(parsePrep({ bookings: f([{ ...booking, ...over }]) }).success).toBe(false);
+  });
+
+  it.each(['2026-02-30T09:00', '2026-11-27T24:00', '2026-11-27T09:00T', '2026-11-27T09:00Z'])(
+    '잘못된 현지 일시 %s를 거절한다',
+    (value) => {
+      for (const key of ['at', 'freeCancelUntil']) {
+        expect(parsePrep({ bookings: f([{ ...booking, [key]: value }]) }).success).toBe(false);
+      }
+    },
+  );
+
+  it.each([
+    ['정보 길이', { prepNotes: f([{ ...prepNote, text: '가'.repeat(1501) }]) }],
+    ['출처 형식', { prepNotes: f([{ ...prepNote, sources: ['https://'] }]) }],
+    ['문장 길이', { phrases: f([{ ...phrase, text: '가'.repeat(501) }]) }],
+    ['언어 태그 형식', { phrases: f([{ ...phrase, lang: 'en-1' }]) }],
+  ])('잘못된 정보·문장을 거절한다 (%s)', (_, over) => {
+    expect(parsePrep(over).success).toBe(false);
+  });
+
+  it('예약 장소가 없거나 준비 목록 안에서 id가 중복되면 거절한다', () => {
+    const errors = messages(
+      lib([
+        trip({
+          bookings: f([{ ...booking, placeId: pid(9) }, booking]),
+          prepNotes: f([prepNote, prepNote]),
+          phrases: f([phrase, phrase]),
+        }),
+      ]),
+    );
+    expect(errors).toEqual(
+      expect.arrayContaining([
+        `없는 장소입니다: ${pid(9)}`,
+        `bookings id 중복: ${booking.id}`,
+        `prepNotes id 중복: ${prepNote.id}`,
+        `phrases id 중복: ${phrase.id}`,
+      ]),
+    );
   });
 });
 

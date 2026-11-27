@@ -40,6 +40,31 @@ const libraryUsage = [
   'changes',
   'undo <변경 id> | undo --request <요청 id>',
 ];
+const libraryPrepHelp = [
+  '',
+  '보관함 여행 준비 필드 (library put 문서 일부):',
+  '  AI가 조사한 정보에는 sources·checkedOn·unsure를 꼭 적으세요.',
+  '  여행 put에서 생략한 준비 필드는 서버 값을 유지합니다.',
+  '  비울 때는 {"bookings":{"value":[],"updatedAt":"2026-11-27T09:00:00.000Z"}}',
+  '  {',
+  '    "bookings": {"updatedAt":"2026-11-27T09:00:00.000Z","value":[',
+  '      {"id":"book0001","kind":"ticket","title":"입장권","need":"required",',
+  '       "status":"booked","date":"2026-12-31","placeId":null,',
+  '       "links":[{"label":"예매처","url":"https://example.com/tickets"}],',
+  '       "bookBy":null,"at":"2026-12-31T09:00","freeCancelUntil":null,',
+  '       "code":"ZZCODE123","price":{"amount":25,"currency":"EUR"},',
+  '       "bookedVia":"공식 사이트","note":""}',
+  '    ]},',
+  '    "prepNotes": {"updatedAt":"2026-11-27T09:00:00.000Z","value":[',
+  '      {"id":"note0001","topic":"power","region":"스페인","text":"콘센트 규격 확인",',
+  '       "sources":["https://example.com/power"],"checkedOn":"2026-11-27","unsure":true}',
+  '    ]},',
+  '    "phrases": {"updatedAt":"2026-11-27T09:00:00.000Z","value":[',
+  '      {"id":"word0001","situation":"greet","ko":"안녕하세요","text":"Hola",',
+  '       "lang":"es-ES","reading":"올라","note":""}',
+  '    ]}',
+  '  }',
+];
 const listDescription = '고른 앱의 저장된 링크와 결과 모름 예약을 봅니다.';
 const optionHelp: Record<string, [string, string]> = {
   memo: ['--memo', '장소 메모를 넣습니다(Day 메모는 늘 들어감).'],
@@ -140,6 +165,7 @@ export function helpText(command?: CommandName): string {
       '    "legMinutes": { "lodging>notredame": 30 } }',
     );
   }
+  if (!command || command === 'library') lines.push(...libraryPrepHelp);
   lines.push(
     '',
     '끝 코드:',

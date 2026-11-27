@@ -5,6 +5,7 @@ import { ensureSchema } from 'src/server/meet/db';
 import { pushItems } from 'src/server/library-sync/library';
 import type { SyncUser } from 'src/server/library-sync/auth';
 import type { Trip } from 'src/schema/trip';
+import { booking } from '../../fixtures/trip-prep';
 
 // v0.36 앱은 legTransit·legMinutes를 모른다. 받은 여행을 스키마로 읽으며 두 키를 떼고,
 // 다른 필드를 고친 뒤 같은 rev를 base로 올린다.
@@ -74,13 +75,15 @@ beforeEach(async () => {
 afterEach(() => db.close());
 
 it('옛 클라이언트가 선택 필드 없이 올려도 저장된 값이 남는다', async () => {
-  const first = await push(trip(), 0);
+  const bookings = f([booking], t1);
+  const first = await push({ ...trip(), bookings }, 0);
   const reply = await push(oldClient(trip()), first.rev);
   const doc = await stored();
   expect(doc.title.value).toBe('이베리아 여행');
   expect(doc.legTransit).toEqual(f([LEG], t1));
   expect(doc.legMinutes).toEqual(f({ [LEG]: 50 }, t1));
-  expect(reply.results[0]?.doc).toMatchObject({ legTransit: f([LEG], t1) });
+  expect(doc.bookings).toEqual(bookings);
+  expect(reply.results[0]?.doc).toMatchObject({ legTransit: f([LEG], t1), bookings });
 });
 
 it('새 클라이언트에서 지운 선택 필드는 지워진다', async () => {

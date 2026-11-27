@@ -88,7 +88,7 @@ export const SYNC_LOCK = 'tripmap:library-sync';
 export const PUSH_CHUNK_ITEMS = 100;
 export const PUSH_CHUNK_BYTES = 900_000;
 /** 선택 필드를 더하면 올려서 기기마다 한 번 전체를 다시 받는다. */
-const FIELDS_REFRESH = 1;
+const FIELDS_REFRESH = 2;
 
 /** 엔진이 직접 판단한, 사용자에게 보여도 되는 원인만 담는다. */
 class SyncEngineError extends Error {}

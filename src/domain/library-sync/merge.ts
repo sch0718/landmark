@@ -10,18 +10,12 @@ import {
   type ItemDocOf,
   type ItemKind,
 } from './items';
+import { OPTIONAL_FIELD_EMPTY } from './optional-fields';
 
 export type Loser = { path: string; side: 'a' | 'b'; value: unknown; updatedAt: string };
 export type MergeResult<T> = { doc: T; losers: Loser[]; whole?: 'a' | 'b' };
 
-/** 선택 필드는 키 생략으로 지우지 않고 빈 값과 새 시각을 남긴다. */
-export const OPTIONAL_FIELD_EMPTY: Record<ItemKind, Record<string, unknown>> = {
-  place: { visitedOn: null, review: '' },
-  label: { emoji: null },
-  trip: { legTransit: [], legMinutes: {} },
-  folder: {},
-  meeting: {},
-};
+export { OPTIONAL_FIELD_EMPTY } from './optional-fields';
 
 /** 옛 클라이언트가 모르는 선택 필드를 빠뜨려도 저장된 값은 남긴다. */
 export function keepMissingFields<K extends ItemKind>(

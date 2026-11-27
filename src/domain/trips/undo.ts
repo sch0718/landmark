@@ -1,4 +1,5 @@
 import { setField, type Field } from 'src/domain/library/lww';
+import { OPTIONAL_FIELD_EMPTY } from 'src/domain/library-sync/optional-fields';
 import type { OpCtx, OpResult } from 'src/domain/library/ops';
 import type { Library } from 'src/schema/library';
 import type { Day, Stop, Trip } from 'src/schema/trip';
@@ -7,15 +8,6 @@ import type { Day, Stop, Trip } from 'src/schema/trip';
 // `revertTrip`은 그사이 아무도 바꾸지 않은 필드(지금 `updatedAt`이 기록한 이후 값과 같음)만
 // 이전 값으로 쓴다. 다른 탭·다른 편집이 바꾼 필드는 건너뛴다.
 // `ops.ts`가 다시 내보낸다. 파일이 길어져 나눴을 뿐 같은 연산 모음이다.
-
-export type TripFieldPath =
-  | 'title'
-  | 'origin'
-  | 'candidates'
-  | 'legModes'
-  | 'legTransit'
-  | 'legMinutes'
-  | { day: number; field: 'stops' | 'lodging' | 'startTime' };
 
 /** 기간 단위: 날짜 두 필드(값·updatedAt)와 Day 배열 전체. */
 export type TripPeriod = { startDate: Field<string>; endDate: Field<string>; days: readonly Day[] };
@@ -39,8 +31,14 @@ const TOP_FIELDS = [
   'legModes',
   'legTransit',
   'legMinutes',
+  'bookings',
+  'prepNotes',
+  'phrases',
 ] as const;
 const DAY_FIELDS = ['stops', 'lodging', 'startTime'] as const;
+
+export type TripFieldPath =
+  (typeof TOP_FIELDS)[number] | { day: number; field: (typeof DAY_FIELDS)[number] };
 
 const sameField = (a: Field<unknown> | undefined, b: Field<unknown> | undefined): boolean =>
   a === b ||
@@ -103,8 +101,7 @@ function putField(trip: Trip, path: TripFieldPath, field: Field<unknown> | undef
   if (typeof path === 'string') {
     if (field === undefined) {
       const next = { ...trip };
-      // 없음으로 되돌릴 수 있는 필드는 선택 필드 둘뿐이다.
-      if (path === 'legTransit' || path === 'legMinutes') delete next[path];
+      if (Object.hasOwn(OPTIONAL_FIELD_EMPTY.trip, path)) delete next[path];
       return next;
     }
     return { ...trip, [path]: field } as Trip;
@@ -254,11 +251,9 @@ export function revertTrip(lib: Library, change: TripChange, ctx: OpCtx): OpResu
       fc.path,
       fc.before === undefined
         ? // 선택 필드를 지우면 동기화가 이전 기기의 값을 되살리므로 빈 값을 새 시각으로 남긴다.
-          fc.path === 'legTransit'
-          ? { value: [], updatedAt: ctx.now }
-          : fc.path === 'legMinutes'
-            ? { value: {}, updatedAt: ctx.now }
-            : undefined
+          typeof fc.path === 'string' && Object.hasOwn(OPTIONAL_FIELD_EMPTY.trip, fc.path)
+          ? { value: OPTIONAL_FIELD_EMPTY.trip[fc.path], updatedAt: ctx.now }
+          : undefined
         : current === undefined
           ? { value: fc.before.value, updatedAt: ctx.now }
           : setField(current, fc.before.value, ctx.now),

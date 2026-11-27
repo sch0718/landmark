@@ -164,6 +164,9 @@ export function tripRefs(trip: Trip): string[] {
     for (const stop of day.stops.value) refs.add(stop.placeId);
     if (day.lodging.value !== null) refs.add(day.lodging.value);
   }
+  for (const booking of trip.bookings?.value ?? []) {
+    if (booking.placeId !== null) refs.add(booking.placeId);
+  }
   return [...refs].sort();
 }
 

@@ -3,6 +3,7 @@ import {
   isDeleted,
   itemKey,
   ITEM_KINDS,
+  ITEM_DOC_MAX_CHARS,
   lastTouched,
   stableStringify,
   tripRefs,
@@ -292,9 +293,9 @@ export async function pushItems(
         changed: !stored || text !== stored.doc,
       };
     });
-    const overQuota = new Set<(typeof evaluated)[number]>();
+    const tooLarge = new Set(evaluated.filter((e) => e.resultText.length > ITEM_DOC_MAX_CHARS));
     const deltas = evaluated
-      .filter((e) => e.changed)
+      .filter((e) => e.changed && !tooLarge.has(e))
       .map((e) => {
         const bytes = utf8Bytes(e.resultText) - (e.stored ? utf8Bytes(e.stored.doc) : 0);
         // 있던 항목을 막 지우면 deletedAt 시각만큼 커지므로 그만큼은 상한과 상관없이 받는다.
@@ -325,14 +326,14 @@ export async function pushItems(
           (g.items > 0 && items + g.items > quota.items) ||
           (g.growth > 0 && bytes + g.bytes > quota.bytes)
         )
-          overQuota.add(g.e);
+          tooLarge.add(g.e);
         else {
           items += g.items;
           bytes += g.bytes;
         }
       }
     }
-    const kept = evaluated.filter((e) => !overQuota.has(e));
+    const kept = evaluated.filter((e) => !tooLarge.has(e));
     const changed = kept.filter((e) => e.changed);
     let rev = r0;
     if (changed.length) {
@@ -383,7 +384,7 @@ export async function pushItems(
             })),
         );
         settled.tooLarge.push(
-          ...[...overQuota].map((e) => ({
+          ...[...tooLarge].map((e) => ({
             kind: e.item.kind,
             id: e.item.id,
             reason: 'too-large' as const,
@@ -400,7 +401,7 @@ export async function pushItems(
       rejected: [
         ...rejected,
         ...settled.tooLarge,
-        ...[...overQuota].map((e) => ({
+        ...[...tooLarge].map((e) => ({
           kind: e.item.kind,
           id: e.item.id,
           reason: 'too-large' as const,

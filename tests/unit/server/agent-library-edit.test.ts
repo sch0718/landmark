@@ -13,6 +13,7 @@ import type { ItemKind } from 'src/domain/library-sync/items';
 import type { Place } from 'src/schema/library';
 import type { Trip } from 'src/schema/trip';
 import { createTestD1 } from '@sch0718/firebase-session/testing/d1';
+import { booking, phrase, prepNote } from '../../fixtures/trip-prep';
 
 const now = Date.parse('2026-11-06T00:00:00.000Z');
 const iso = new Date(now).toISOString();
@@ -442,6 +443,73 @@ const changeIds = async () =>
     await db.prepare('SELECT id FROM agent_changes ORDER BY rowid').all<{ id: string }>()
   ).results.map((r) => r.id);
 const parsed = async (kind: ItemKind, id: string) => JSON.parse((await row(kind, id))!.doc);
+
+it('예약만 가리키는 장소 행은 묘비여도 허용하고, 없으면 invalid-ref다', async () => {
+  await seed([
+    ['place', place()],
+    ['place', { ...place('place00002'), deletedAt: t }],
+  ]);
+  const reply = await edit(
+    ['place00001', 'place00002', 'place00003'].map((placeId, i) =>
+      put('trip', {
+        ...trip(`trip00000${i + 1}`),
+        bookings: f([{ ...booking, placeId }]),
+      }),
+    ),
+  );
+  expect(reply.results.map((r) => r.status)).toEqual(['ok', 'ok', 'invalid-ref']);
+});
+
+it.each([
+  { removePlace: false, clear: false, statuses: ['ok'] },
+  { removePlace: true, clear: false, statuses: ['ok', 'referenced'] },
+  { removePlace: true, clear: true, statuses: ['ok', 'ok'] },
+])('여행 put에서 예약 생략과 빈 배열을 구분한다 (%j)', async ({ removePlace, clear, statuses }) => {
+  const initial = trip();
+  const p = place();
+  const prep = {
+    bookings: f([{ ...booking, placeId: p.id }]),
+    prepNotes: f([prepNote]),
+    phrases: f([phrase]),
+  };
+  await seed([
+    ['place', p],
+    ['trip', { ...initial, ...prep }],
+  ]);
+  const ops = [
+    put(
+      'trip',
+      {
+        ...initial,
+        title: f('제목 수정'),
+        ...(clear ? { bookings: f([]) } : {}),
+      },
+      1,
+    ),
+  ];
+  if (removePlace) ops.push(del('place', p.id, 1));
+  expect((await edit(ops)).results.map((r) => r.status)).toEqual(statuses);
+  expect(await parsed('trip', initial.id)).toMatchObject({
+    ...prep,
+    bookings: clear ? f([], iso) : prep.bookings,
+    title: f('제목 수정', iso),
+  });
+  expect((await row('place', p.id))?.deleted).toBe(clear ? 1 : 0);
+});
+
+it('AI가 기존 여행에 추가한 첫 예약은 되돌리면 빈 배열과 새 시각이 된다', async () => {
+  const initial = trip();
+  await seed([['trip', initial]]);
+  expect(
+    (await edit([put('trip', { ...initial, bookings: f([booking]) }, 1)])).results[0]?.status,
+  ).toBe('ok');
+  const id = (await changeIds())[0]!;
+  const undoneAt = now + 1000;
+  expect(await undo({ ids: [id] }, undoneAt)).toEqual({ results: [{ id, status: 'undone' }] });
+  expect((await parsed('trip', initial.id)).bookings).toEqual(
+    f([], new Date(undoneAt).toISOString()),
+  );
+});
 
 it('되돌리기: 수정을 복원하고 바뀐 필드에 시각을 찍으며 새 기록은 만들지 않는다', async () => {
   await seed([['place', place()]]);

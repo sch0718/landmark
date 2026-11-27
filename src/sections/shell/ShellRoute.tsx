@@ -4,14 +4,18 @@ import { AgentInboxHost } from 'src/sections/agent/AgentInboxHost';
 import { useAutoBackupBoot } from 'src/sections/server-backup/use-auto-backup-boot';
 import { useSetAtom } from 'jotai';
 import { useSyncBoot } from 'src/sections/library-sync/use-sync-boot';
-import { Component, Suspense, useEffect, type ReactNode } from 'react';
+import { Component, lazy, Suspense, useEffect, type ReactNode } from 'react';
 import { LoadingNotice } from 'src/components/LoadingNotice';
 import { prefetchWhenIdle } from 'src/lib/prefetch';
 import { PANEL_CHUNKS, ROUTE_CHUNKS } from 'src/routes/lazy-routes';
 import { LibraryCorrupt } from 'src/services/errors';
-import { CorruptScreen } from 'src/sections/shell/CorruptScreen';
 import { AppShell } from 'src/sections/shell/AppShell';
 import { libraryReloadAtom, useLibrarySync } from 'src/stores/library-state';
+
+/** 손상 복구 화면은 드물게만 보이므로 첫 화면 JS에서 빼고 그때 받는다. */
+const CorruptScreen = lazy(() =>
+  import('src/sections/shell/CorruptScreen').then((m) => ({ default: m.CorruptScreen })),
+);
 
 type BoundaryProps = { children: ReactNode; onRecovered: () => void };
 type BoundaryState = { error: unknown };
@@ -34,7 +38,11 @@ class CorruptBoundary extends Component<BoundaryProps, BoundaryState> {
     const { error } = this.state;
     if (error === null) return this.props.children;
     if (error instanceof LibraryCorrupt) {
-      return <CorruptScreen error={error} onRecovered={this.recover} />;
+      return (
+        <Suspense fallback={<LoadingNotice />}>
+          <CorruptScreen error={error} onRecovered={this.recover} />
+        </Suspense>
+      );
     }
     throw error;
   }

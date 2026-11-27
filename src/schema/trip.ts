@@ -38,6 +38,138 @@ export const LegMinutes = Schema.Number.check(
   Schema.isBetween({ minimum: 1, maximum: 1440 }),
 );
 
+// 준비 필드 한도(기획서 §4.1). 첫 화면 JS에 들어가므로 `LIBRARY_LIMITS` 키 대신 묶지 않은 상수로 둔다.
+export const PREP_FIELD_CHARS = { bookings: 50_000, prepNotes: 30_000, phrases: 30_000 } as const;
+export const BOOKINGS_MAX = 60;
+export const PREP_NOTES_MAX = 40;
+export const PHRASES_MAX = 150;
+export const BOOKING_TITLE_CHARS = 80;
+export const BOOKING_LINKS_MAX = 3;
+export const BOOKING_LINK_LABEL_CHARS = 30;
+export const PREP_URL_CHARS = 500;
+export const BOOKING_CODE_CHARS = 60;
+export const BOOKING_VIA_CHARS = 40;
+export const BOOKING_NOTE_CHARS = 300;
+export const PREP_REGION_CHARS = 30;
+export const PREP_TEXT_CHARS = 1500;
+export const PREP_SOURCES_MAX = 3;
+export const PHRASE_KO_CHARS = 200;
+export const PHRASE_TEXT_CHARS = 500;
+export const PHRASE_READING_CHARS = 300;
+export const PHRASE_NOTE_CHARS = 200;
+
+const max = (n: number) => Schema.String.check(Schema.isMaxLength(n));
+const text = (n: number) => Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(n));
+const PrepId = Schema.String.check(Schema.isPattern(/^[a-z0-9]{8}$/));
+const isCalendarDate = Schema.is(CalendarDate);
+const isHHmm = Schema.is(HHmm);
+/** 시간대 없는 현지 일시 `YYYY-MM-DDTHH:mm`. */
+const LocalDateTime = Schema.String.check(
+  Schema.makeFilter((value) => {
+    const parts = value.split('T');
+    return parts.length === 2 && isCalendarDate(parts[0]) && isHHmm(parts[1]);
+  }),
+);
+const HttpsUrl = max(PREP_URL_CHARS).check(
+  Schema.makeFilter((value) => {
+    try {
+      return value.startsWith('https://') && new URL(value).protocol === 'https:';
+    } catch {
+      return false;
+    }
+  }),
+);
+
+export const BookingSchema = Schema.Struct({
+  id: PrepId,
+  kind: Schema.Literals([
+    'flight',
+    'train',
+    'bus',
+    'lodging',
+    'ticket',
+    'restaurant',
+    'tour',
+    'car',
+    'insurance',
+    'other',
+  ]),
+  title: text(BOOKING_TITLE_CHARS),
+  need: Schema.Literals(['required', 'recommended', 'optional']),
+  status: Schema.Literals(['todo', 'booked', 'pending', 'skipped']),
+  date: Schema.NullOr(CalendarDate),
+  placeId: Schema.NullOr(PlaceId),
+  links: Schema.Array(Schema.Struct({ label: max(BOOKING_LINK_LABEL_CHARS), url: HttpsUrl })).check(
+    Schema.isMaxLength(BOOKING_LINKS_MAX),
+  ),
+  bookBy: Schema.NullOr(CalendarDate),
+  at: Schema.NullOr(LocalDateTime),
+  freeCancelUntil: Schema.NullOr(LocalDateTime),
+  code: max(BOOKING_CODE_CHARS),
+  price: Schema.NullOr(
+    Schema.Struct({
+      amount: Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0)),
+      currency: Schema.String.check(Schema.isPattern(/^[A-Z]{3}$/)),
+    }),
+  ),
+  bookedVia: max(BOOKING_VIA_CHARS),
+  note: max(BOOKING_NOTE_CHARS),
+});
+
+export const PrepNoteSchema = Schema.Struct({
+  id: PrepId,
+  topic: Schema.Literals([
+    'language',
+    'money',
+    'prices',
+    'weather',
+    'time',
+    'power',
+    'tips',
+    'safety',
+    'emergency',
+    'transit',
+    'docs',
+    'other',
+  ]),
+  region: max(PREP_REGION_CHARS),
+  text: text(PREP_TEXT_CHARS),
+  sources: Schema.Array(HttpsUrl).check(Schema.isMaxLength(PREP_SOURCES_MAX)),
+  checkedOn: Schema.NullOr(CalendarDate),
+  unsure: Schema.Boolean,
+});
+
+export const PhraseSchema = Schema.Struct({
+  id: PrepId,
+  situation: Schema.Literals([
+    'greet',
+    'restaurant',
+    'directions',
+    'transit',
+    'lodging',
+    'shopping',
+    'emergency',
+    'other',
+  ]),
+  ko: text(PHRASE_KO_CHARS),
+  text: text(PHRASE_TEXT_CHARS),
+  /** BCP 47 태그 2~12자. */
+  lang: Schema.String.check(
+    Schema.isMinLength(2),
+    Schema.isMaxLength(12),
+    Schema.makeFilter((value) => {
+      try {
+        Intl.getCanonicalLocales(value);
+        return true;
+      } catch {
+        return false;
+      }
+    }),
+  ),
+  reading: max(PHRASE_READING_CHARS),
+  note: max(PHRASE_NOTE_CHARS),
+});
+
 export const TripSchema = Schema.Struct({
   id: TripId,
   title: FieldSchema(
@@ -56,12 +188,24 @@ export const TripSchema = Schema.Struct({
   /** 옛 버전이 legModes를 읽을 수 있도록 대중교통은 따로 둔다. */
   legTransit: Schema.optional(FieldSchema(Schema.Array(Schema.String))),
   legMinutes: Schema.optional(FieldSchema(Schema.Record(Schema.String, LegMinutes))),
+  bookings: Schema.optional(
+    FieldSchema(Schema.Array(BookingSchema).check(Schema.isMaxLength(BOOKINGS_MAX))),
+  ),
+  prepNotes: Schema.optional(
+    FieldSchema(Schema.Array(PrepNoteSchema).check(Schema.isMaxLength(PREP_NOTES_MAX))),
+  ),
+  phrases: Schema.optional(
+    FieldSchema(Schema.Array(PhraseSchema).check(Schema.isMaxLength(PHRASES_MAX))),
+  ),
   createdAt: IsoDateTime,
   deletedAt: Schema.NullOr(IsoDateTime),
 });
 
 export type Stop = typeof StopSchema.Type;
 export type Day = typeof DaySchema.Type;
+export type Booking = typeof BookingSchema.Type;
+export type PrepNote = typeof PrepNoteSchema.Type;
+export type Phrase = typeof PhraseSchema.Type;
 export type Trip = typeof TripSchema.Type;
 
 const LEG_KEY = /^[a-z0-9]{10}>[a-z0-9]{10}$/;
@@ -117,6 +261,20 @@ export function checkTrip(
       place(at, stop.placeId);
     });
   });
+
+  trip.bookings?.value.forEach((booking, i) => {
+    if (booking.placeId !== null) checkKnown(['bookings', 'value', i, 'placeId'], booking.placeId);
+  });
+  for (const key of ['bookings', 'prepNotes', 'phrases'] as const) {
+    const values = trip[key]?.value;
+    if (!values) continue;
+    if (JSON.stringify(values).length > PREP_FIELD_CHARS[key]) add([key], '너무 깁니다');
+    const seen = new Set<string>();
+    values.forEach(({ id }, i) => {
+      if (seen.has(id)) add([key, 'value', i, 'id'], `${key} id 중복: ${id}`);
+      seen.add(id);
+    });
+  }
 
   for (const key of Object.keys(trip.legModes.value)) {
     if (!LEG_KEY.test(key)) add(['legModes', key], `구간 키가 올바르지 않습니다: ${key}`);
