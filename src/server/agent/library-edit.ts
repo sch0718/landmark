@@ -8,7 +8,7 @@ import {
   type ItemKind,
 } from '../../domain/library-sync/items';
 import { stampChangedFields } from '../../domain/library-sync/stamp';
-import { OPTIONAL_FIELD_EMPTY } from '../../domain/library-sync/merge';
+import { keepMissingFields, OPTIONAL_FIELD_EMPTY } from '../../domain/library-sync/merge';
 import type { Trip } from '../../schema/trip';
 import { idPattern, LIBRARY_QUOTA, pushItems, type PushItem } from '../library-sync/library';
 import { SyncHttpError } from '../library-sync/http';
@@ -19,14 +19,21 @@ export const EDIT_MAX_OPS = 50;
 /** 되돌리기 한 번에 처리하는 변경 수. 한 번의 pushItems로 묶어 50건이어도 D1 쿼리가 10개 안팎이다(Workers Free 호출당 50). */
 export const UNDO_MAX_PER_CALL = 50;
 const LABEL_MAX_CHARS = 80;
+const TRIP_PREP_FIELDS = ['bookings', 'prepNotes', 'phrases'];
 
 /**
- * 동기화 서버는 같은 rev에서 빠진 선택 필드를 남긴다(옛 클라이언트 보호). AI 편집·되돌리기에서
- * 키가 빠진 것은 지우려는 뜻이므로, `from`에 있던 선택 필드를 빈 값과 새 시각으로 채운다.
+ * AI 편집·되돌리기에서 빠진 선택 필드는 빈 값과 새 시각으로 채운다.
+ * 여행 put에서 빠진 준비 필드는 옛 CLI를 위해 보존한다.
  */
-function emptyMissingFields(kind: ItemKind, from: object, doc: object, at: string): void {
+function emptyMissingFields(
+  kind: ItemKind,
+  from: object,
+  doc: object,
+  at: string,
+  skip: readonly string[] = [],
+): void {
   for (const [key, value] of Object.entries(OPTIONAL_FIELD_EMPTY[kind])) {
-    if (Object.hasOwn(from, key) && !Object.hasOwn(doc, key))
+    if (!skip.includes(key) && Object.hasOwn(from, key) && !Object.hasOwn(doc, key))
       (doc as Record<string, unknown>)[key] = { value, updatedAt: at };
   }
 }
@@ -130,17 +137,41 @@ export async function editItems(
   const refKeys = body.ops.flatMap((op) => {
     if (op.op !== 'put' || op.kind !== 'trip') return [];
     const decoded = decodeItem('trip', op.id, op.doc);
-    return decoded.ok ? tripRefs(decoded.doc as Trip).map((id) => ['place', id]) : [];
+    return decoded.ok ? tripRefs(decoded.doc as Trip).map((id) => ['place', id] as const) : [];
   });
-  const rows = (
-    await db
-      .prepare(
-        "SELECT kind, item_id AS id, rev, deleted, doc FROM library_items WHERE user_id = ?1 AND (kind, item_id) IN (SELECT json_extract(value, '$[0]'), json_extract(value, '$[1]') FROM json_each(?2))",
-      )
-      .bind(who.userId, JSON.stringify([...body.ops.map((op) => [op.kind, op.id]), ...refKeys]))
-      .all<Row>()
-  ).results;
+  const readRows = async (keys: readonly (readonly [ItemKind, string])[]) =>
+    (
+      await db
+        .prepare(
+          "SELECT kind, item_id AS id, rev, deleted, doc FROM library_items WHERE user_id = ?1 AND (kind, item_id) IN (SELECT json_extract(value, '$[0]'), json_extract(value, '$[1]') FROM json_each(?2))",
+        )
+        .bind(who.userId, JSON.stringify(keys))
+        .all<Row>()
+    ).results;
+  const keys = [...body.ops.map((op) => [op.kind, op.id] as const), ...refKeys];
+  const rows = await readRows(keys);
   const stored = new Map(rows.map((r) => [itemKey(r.kind, r.id), r]));
+  // 본문에서 빠진 예약을 유지하므로, 저장된 예약만 가리키는 장소도 한 번에 읽는다.
+  const queriedPlaces = new Set(keys.filter(([kind]) => kind === 'place').map(([, id]) => id));
+  const extraPlaces = new Set<string>();
+  for (const op of body.ops) {
+    if (
+      op.kind !== 'trip' ||
+      op.op !== 'put' ||
+      !isRecord(op.doc) ||
+      Object.hasOwn(op.doc, 'bookings')
+    )
+      continue;
+    const row = stored.get(itemKey(op.kind, op.id));
+    if (!row || row.rev !== op.baseRev) continue;
+    const saved = JSON.parse(row.doc) as Trip;
+    for (const { placeId } of saved.bookings?.value ?? []) {
+      if (placeId !== null && !queriedPlaces.has(placeId)) extraPlaces.add(placeId);
+    }
+  }
+  if (extraPlaces.size) {
+    rows.push(...(await readRows([...extraPlaces].map((id) => ['place', id]))));
+  }
   // 참조 검사 기준: 저장된 행 + 이 요청에서 앞서 통과한 항목. 장소는 있음(묘비 포함)만, 여행은 살아 있는 것의 참조.
   const places = new Set(rows.filter((r) => r.kind === 'place').map((r) => r.id));
   let trips: Map<string, string[]> | null = null;
@@ -181,8 +212,18 @@ export async function editItems(
         done('invalid');
         continue;
       }
-      const stamped = stampChangedFields(before, op.doc, at);
-      if (before) emptyMissingFields(op.kind, before, stamped, at);
+      let stamped = stampChangedFields(before, op.doc, at);
+      if (before) {
+        emptyMissingFields(
+          op.kind,
+          before,
+          stamped,
+          at,
+          op.kind === 'trip' ? TRIP_PREP_FIELDS : [],
+        );
+        if (op.kind === 'trip')
+          stamped = keepMissingFields('trip', before as Trip, stamped as Trip);
+      }
       const decoded = decodeItem(op.kind, op.id, stamped);
       if (!decoded.ok) {
         done(decoded.reason);

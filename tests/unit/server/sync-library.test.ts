@@ -17,6 +17,10 @@ import type { SyncUser } from 'src/server/library-sync/auth';
 import { createTestD1 } from '@sch0718/firebase-session/testing/d1';
 import { createSyncMemoryServer } from '../../helpers/sync-memory-server';
 import type { Place } from 'src/schema/library';
+import type { Trip } from 'src/schema/trip';
+import { ITEM_DOC_MAX_CHARS, stableStringify } from 'src/domain/library-sync/items';
+import { buildLiveLibrary } from '../../fixtures/builders';
+import { booking, phrase, prepNote } from '../../fixtures/trip-prep';
 const now = Date.parse('2026-10-29T00:00:00.000Z');
 const t = '2026-10-03T00:00:00.000Z';
 const f = <T>(value: T, updatedAt = t) => ({ value, updatedAt });
@@ -56,6 +60,104 @@ const body = (docs: Place[], baseRev = 0, baseDeleted: boolean | null = null) =>
 });
 const pull = (since = 0, after = '', limit = 500) =>
   pullChanges(db, user, { since, after, limit, deviceId: device }, now);
+
+const pushTrip = (doc: Trip, baseRev = 0) =>
+  pushItems(
+    db,
+    user,
+    {
+      v: 1,
+      deviceId: device,
+      items: [{ kind: 'trip', id: doc.id, baseRev, baseDeleted: false, doc }],
+    },
+    now,
+  );
+
+it('예약만 참조하는 장소는 묘비도 올릴 수 있고 보존 기간 뒤에도 남는다', async () => {
+  const live = place();
+  const dead = { ...place('place00002'), deletedAt: t };
+  const unused = { ...place('place00003'), deletedAt: t };
+  await pushItems(db, user, body([live, dead, unused]), now);
+  const initial = buildLiveLibrary().trips.trip000001!;
+  const trip = {
+    ...initial,
+    days: initial.days.map((day) => ({ ...day, stops: f([]) })),
+    bookings: f([
+      { ...booking, placeId: live.id },
+      { ...booking, id: 'book0002', placeId: dead.id },
+    ]),
+  };
+  const reply = await pushTrip(trip);
+  expect(reply.results).toEqual([{ kind: 'trip', id: trip.id, rev: 2 }]);
+  expect(await purgeTombstones(db, user.userId, now + TOMBSTONE_KEEP_MS + 1)).toBe(1);
+  expect(
+    (
+      await db
+        .prepare(
+          "SELECT item_id AS id, deleted FROM library_items WHERE kind = 'place' ORDER BY item_id",
+        )
+        .all()
+    ).results,
+  ).toEqual([
+    { id: live.id, deleted: 0 },
+    { id: dead.id, deleted: 1 },
+  ]);
+});
+
+it('병합 결과가 20만 자를 넘으면 서버에 저장된 여행을 그대로 둔다', async () => {
+  const initial = buildLiveLibrary().trips.trip000001!;
+  const editedAt = '2026-10-10T00:00:00.000Z';
+  const first = await pushTrip(initial);
+  const stored = {
+    ...initial,
+    days: initial.days.map((day, index) => ({
+      ...day,
+      stops: f(
+        Array.from({ length: 140 }, (_, i) => {
+          const id = String(index * 140 + i);
+          return {
+            id: id.padStart(8, '0'),
+            placeId: id.padStart(10, '0'),
+            stayMin: null,
+            fixedTime: null,
+            note: '가'.repeat(500),
+          };
+        }),
+        editedAt,
+      ),
+    })),
+  };
+  const incoming = {
+    ...initial,
+    prepNotes: f(
+      Array.from({ length: 17 }, (_, i) => ({
+        ...prepNote,
+        id: String(i).padStart(8, '0'),
+        text: '가'.repeat(1500),
+      })),
+      editedAt,
+    ),
+    phrases: f(
+      Array.from({ length: 44 }, (_, i) => ({
+        ...phrase,
+        id: String(i).padStart(8, '0'),
+        text: '가'.repeat(500),
+      })),
+      editedAt,
+    ),
+  };
+  expect(stableStringify(stored).length).toBeLessThan(ITEM_DOC_MAX_CHARS);
+  expect(stableStringify(incoming).length).toBeLessThan(ITEM_DOC_MAX_CHARS);
+  const saved = await pushTrip(stored, first.rev);
+  expect(saved.results[0]?.rev).toBe(2);
+  const reply = await pushTrip(incoming, first.rev);
+  expect(reply.results).toEqual([]);
+  expect(reply.rejected).toEqual([{ kind: 'trip', id: initial.id, reason: 'too-large' }]);
+  expect(await db.prepare('SELECT rev, doc FROM library_items').first()).toEqual({
+    rev: saved.rev,
+    doc: stableStringify(stored),
+  });
+});
 it('새 항목과 동일 내용 및 오래된 base 병합을 처리한다', async () => {
   const p = place();
   const first = await pushItems(db, user, body([p, place('place00002')]), now);

@@ -72,6 +72,16 @@ export function repairLibrary(lib: Library, ctx: OpCtx): Library {
             )
           : trip.candidates;
       const origin = trip.origin.value === p.id ? setField(trip.origin, id, ctx.now) : trip.origin;
+      const bookings = trip.bookings;
+      const nextBookings = bookings?.value.some((booking) => booking.placeId === p.id)
+        ? setField(
+            bookings,
+            bookings.value.map((booking) =>
+              booking.placeId === p.id ? { ...booking, placeId: id } : booking,
+            ),
+            ctx.now,
+          )
+        : bookings;
       const days = trip.days.map((d) => ({
         ...d,
         stops:
@@ -87,10 +97,21 @@ export function repairLibrary(lib: Library, ctx: OpCtx): Library {
       if (
         origin !== trip.origin ||
         candidates !== trip.candidates ||
+        nextBookings !== bookings ||
         days.some((d, i) => d.stops !== trip.days[i]!.stops || d.lodging !== trip.days[i]!.lodging)
       )
         next = putItems(next, [
-          { kind: 'trip', id: trip.id, doc: { ...trip, origin, candidates, days } },
+          {
+            kind: 'trip',
+            id: trip.id,
+            doc: {
+              ...trip,
+              origin,
+              candidates,
+              days,
+              ...(nextBookings && { bookings: nextBookings }),
+            },
+          },
         ]);
     }
   }

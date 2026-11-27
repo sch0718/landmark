@@ -173,6 +173,10 @@ function TokenDialogContent({ api, onClose, onIssued }: Omit<Props, 'open'>) {
                   />
                 }
               />
+              <Typography variant="body2">
+                AI는 동기화한 예약번호를 읽을 수 있고, 이전 값은 AI 변경 기록과 서버 백업에 남을 수
+                있어요.
+              </Typography>
             </>
           ) : (
             <>

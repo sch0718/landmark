@@ -3,6 +3,8 @@ import { repairLibrary } from 'src/domain/library-sync/repair';
 import { stableStringify } from 'src/domain/library-sync/items';
 import { emptyLibrary, LibrarySchema, type Label, type Place } from 'src/schema/library';
 import { safeParse } from 'src/schema/parse';
+import { buildLiveLibrary } from '../../../fixtures/builders';
+import { booking } from '../../../fixtures/trip-prep';
 const t = '2026-10-03T00:00:00.000Z';
 const now = '2026-10-06T00:00:00.000Z';
 const f = <T>(value: T, updatedAt = t) => ({ value, updatedAt });
@@ -29,6 +31,23 @@ const place = (id: string, ids: string[] = []): Place => ({
   saved: f(true),
   createdAt: t,
   deletedAt: null,
+});
+
+it('예약만 참조하는 중복 장소를 생존 장소로 옮긴다', () => {
+  const a = place('place00001');
+  const b = place('place00002');
+  const initial = buildLiveLibrary().trips.trip000001!;
+  const trip = {
+    ...initial,
+    days: initial.days.map((day) => ({ ...day, stops: f([]) })),
+    bookings: f([{ ...booking, placeId: b.id }]),
+  };
+  const result = repairLibrary(
+    { ...emptyLibrary(), places: { [a.id]: a, [b.id]: b }, trips: { [trip.id]: trip } },
+    ctx,
+  );
+  expect(result.places[b.id]?.deletedAt).toBe(now);
+  expect(result.trips[trip.id]?.bookings).toEqual(f([{ ...booking, placeId: a.id }], now));
 });
 it('고칠 것이 없으면 같은 참조다', () => {
   const lib = emptyLibrary();

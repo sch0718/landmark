@@ -2,6 +2,7 @@ import { Schema } from 'effect';
 import { mergeItem } from 'src/domain/library-sync/merge';
 import { describe, expect, it } from 'vitest';
 import { buildLiveLibrary } from '../../../fixtures/builders';
+import { booking } from '../../../fixtures/trip-prep';
 import { diffTrip, renameTrip, revertTrip, setLegMinutes, setLegMode } from 'src/domain/trips/ops';
 import { legBetween } from 'src/domain/trips/query';
 import { estimateLeg } from 'src/domain/trips/geo';
@@ -175,6 +176,17 @@ describe('구간 대중교통·직접 입력 보관함', () => {
         minutes: null,
       });
     }
+  });
+
+  it('첫 예약 추가를 되돌리면 빈 배열과 새 시각을 남긴다', () => {
+    const before = buildLiveLibrary();
+    const trip = { ...tripOf(before), bookings: f([booking]) };
+    const after = { ...before, trips: { ...before.trips, [ID]: trip } };
+    const change = diffTrip(tripOf(before), trip);
+    expect(tripOf(ok(revertTrip(after, change, later))).bookings).toEqual({
+      value: [],
+      updatedAt: later.now,
+    });
   });
 
   it('선택 필드가 없어진 변경도 값과 새 시각으로 복구한다', () => {

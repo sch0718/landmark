@@ -5,10 +5,13 @@ import {
   dirtyItems,
   missingFromLocal,
   type ApplyOptions,
+  type BaseMap,
 } from 'src/domain/library-sync/apply';
 import type { Trip } from 'src/schema/trip';
 import { hashItem } from 'src/domain/library-sync/items';
 import { emptyLibrary, type Place } from 'src/schema/library';
+import { buildLiveLibrary } from '../../../fixtures/builders';
+import { booking } from '../../../fixtures/trip-prep';
 const t = '2026-10-03T00:00:00.000Z';
 const later = '2026-10-04T00:00:00.000Z';
 const now = '2026-10-05T00:00:00.000Z';
@@ -310,3 +313,77 @@ it('전체 선택 충돌도 키별 since를 쓰고 첫 연결에는 남기지 �
   ]);
   expect(applyRemote(local, {}, incoming, { ...keyed, lastSyncAt: null }).conflicts).toEqual([]);
 });
+
+it.each(['A', 'B'] as const)(
+  '%s가 먼저 동기화하면 두 기기가 최신 예약 목록에 맞춰진다',
+  (first) => {
+    const initial = buildLiveLibrary();
+    const trip = initial.trips.trip000001!;
+    const key = 'trip:trip000001';
+    const initialBase = { [key]: { rev: 1, hash: hashItem(trip), deleted: false } };
+    const a = { ...trip, bookings: f([{ ...booking, title: 'A의 예약' }], later) };
+    const b = { ...trip, bookings: f([{ ...booking, title: 'B의 예약' }], now) };
+    const withTrip = (doc: Trip) => ({ ...initial, trips: { [trip.id]: doc } });
+    const remoteTrip = (doc: Trip, rev: number) => ({
+      kind: 'trip' as const,
+      id: doc.id,
+      doc,
+      rev,
+      deleted: false,
+    });
+    const dirtyTrip = (local: typeof initial, base: BaseMap) =>
+      dirtyItems(local, base, []).filter((item) => item.key === key);
+    const firstDoc = first === 'A' ? a : b;
+    const secondDoc = first === 'A' ? b : a;
+    const firstLib = withTrip(firstDoc);
+    const firstPush = applyPushResults(
+      firstLib,
+      initialBase,
+      dirtyTrip(firstLib, initialBase),
+      [remoteTrip(firstDoc, 2)],
+      opts,
+    );
+    expect(dirtyTrip(firstPush.lib, firstPush.base)).toEqual([]);
+
+    const secondPull = applyRemote(
+      withTrip(secondDoc),
+      initialBase,
+      [remoteTrip(firstDoc, 2)],
+      opts,
+    );
+    expect(secondPull.lib.trips[trip.id]?.bookings).toEqual(b.bookings);
+    expect(secondPull.conflicts).toEqual(
+      first === 'A'
+        ? []
+        : [
+            expect.objectContaining({
+              path: 'bookings',
+              mine: a.bookings.value,
+              theirs: b.bookings.value,
+            }),
+          ],
+    );
+    const pending = dirtyTrip(secondPull.lib, secondPull.base);
+    if (first === 'A') {
+      expect(pending).toEqual([expect.objectContaining({ baseRev: 2, doc: b })]);
+      const secondPush = applyPushResults(
+        secondPull.lib,
+        secondPull.base,
+        pending,
+        [remoteTrip(b, 3)],
+        opts,
+      );
+      expect(dirtyTrip(secondPush.lib, secondPush.base)).toEqual([]);
+      const firstPull = applyRemote(firstPush.lib, firstPush.base, [remoteTrip(b, 3)], {
+        ...opts,
+        lastSyncAt: now,
+      });
+      expect(firstPull.lib.trips[trip.id]?.bookings).toEqual(b.bookings);
+      expect(firstPull.conflicts).toEqual([]);
+    } else {
+      expect(pending).toEqual([]);
+      expect(firstPush.lib.trips[trip.id]?.bookings).toEqual(b.bookings);
+      expect(firstPush.conflicts).toEqual([]);
+    }
+  },
+);

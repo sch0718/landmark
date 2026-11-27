@@ -630,6 +630,16 @@ yarn --silent trip library undo <변경 id> --json    # 또는 --request <reques
 
 `put`은 문서를 앱 스키마로 먼저 검사해 보내며, `conflict`·참조 오류는 서버 거절로 끝 코드 5와 사유를 냅니다.
 
+여행 `put`에서 `bookings`·`prepNotes`·`phrases`를 생략하면 서버 값과 시각이 남습니다. 비우려면 `{"bookings":{"value":[],"updatedAt":"2026-11-27T09:00:00.000Z"}}`처럼 `value`에 빈 배열을 넣습니다. AI가 조사한 정보에는 `sources`·`checkedOn`·`unsure`를 꼭 적습니다. 다음은 여행 문서에 넣을 예시입니다.
+
+```json
+{"bookings":{"updatedAt":"2026-11-27T09:00:00.000Z","value":[{"id":"book0001","kind":"ticket","title":"입장권","need":"required","status":"booked","date":"2026-12-31","placeId":null,"links":[{"label":"예매처","url":"https://example.com/tickets"}],"bookBy":null,"at":"2026-12-31T09:00","freeCancelUntil":null,"code":"ZZCODE123","price":{"amount":25,"currency":"EUR"},"bookedVia":"공식 사이트","note":""}]},
+ "prepNotes":{"updatedAt":"2026-11-27T09:00:00.000Z","value":[{"id":"note0001","topic":"power","region":"스페인","text":"콘센트 규격 확인","sources":["https://example.com/power"],"checkedOn":"2026-11-27","unsure":true}]},
+ "phrases":{"updatedAt":"2026-11-27T09:00:00.000Z","value":[{"id":"word0001","situation":"greet","ko":"안녕하세요","text":"Hola","lang":"es-ES","reading":"올라","note":""}]}}
+```
+
+동기화된 예약번호는 `library:read` 토큰으로 읽을 수 있습니다. 고치거나 지운 뒤에도 이전 값이 AI 변경 기록(최대 30일)과 서버 백업에 남을 수 있습니다.
+
 로컬에서 시험하려면 위 「로컬에서 키 없이 해 보기(AI 연결)」의 1~3단계로 `yarn dev:sync`와 로그인을 하고, AI 연결을 만들 때 `보관함 읽기·쓰기`를 켠 토큰을 키체인 `-a localhost:8795`나 `LANDMARK_AGENT_TOKEN`에 넣습니다. `yarn trip library list --app http://localhost:8795`로 읽고 `put`으로 고친 뒤, 설정 › 동기화 › AI 연결의 `AI 변경 기록`에서 `되돌리기`를 눌러 같은 값으로 돌아오는지 봅니다. 병합 뒤에는 미리보기에서 위 순서를 한 번 더 확인합니다.
 
 ### 공유 짧은 링크(`/s/<id>`)

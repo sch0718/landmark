@@ -145,16 +145,16 @@ it('선택 필드는 업데이트 뒤 한 번 다시 받고 실패한 회차는 
     ...base.items,
     'place:place00001': { ...base.items['place:place00001']!, hash: hashItem(p) },
   });
-  writeSyncMeta(a.storage, { ...readSyncMeta(a.storage), fieldsRefresh: undefined });
+  writeSyncMeta(a.storage, { ...readSyncMeta(a.storage), fieldsRefresh: 1 });
   const changes = vi
     .spyOn(a.api, 'changes')
     .mockResolvedValueOnce({ ok: false, kind: 'server', status: 500 });
   await a.engine.runNow('manual');
-  expect(readSyncMeta(a.storage).fieldsRefresh).toBeUndefined();
+  expect(readSyncMeta(a.storage).fieldsRefresh).toBe(1);
   expect((await a.engine.runNow('manual')).phase).toBe('synced');
   expect(changes.mock.calls[1]?.[0]).toMatchObject({ since: 0, after: '' });
   expect(a.state.lib.places[p.id]).toEqual(saved);
-  expect(readSyncMeta(a.storage).fieldsRefresh).toBe(1);
+  expect(readSyncMeta(a.storage).fieldsRefresh).toBe(2);
   const cursor = readSyncMeta(a.storage).cursor!;
   changes.mockClear();
   await a.engine.runNow('manual');
