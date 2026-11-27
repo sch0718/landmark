@@ -4,12 +4,15 @@ import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { useMemo, useState, type Ref } from 'react';
+import { Link } from 'react-router';
 import { HelpButton } from 'src/components/HelpButton';
 import { PanelLeftCloseIcon, PencilIcon, PlusIcon, ShareIcon } from 'src/components/icons';
 import { TruncatedText } from 'src/components/TruncatedText';
 import { liveLabels } from 'src/domain/library/query';
 import { regionsByPlace } from 'src/domain/library/region';
+import { summarizeBookings } from 'src/domain/trips/bookings';
 import { visibleCandidates } from 'src/domain/trips/query';
+import { paths } from 'src/routes/paths';
 import type { Label, Place } from 'src/schema/library';
 import type { Trip } from 'src/schema/trip';
 import {
@@ -151,6 +154,7 @@ type Props = {
 export function CandidatePanel({ trip, dayIndex, onCollapse, collapseRef, fill = true }: Props) {
   const library = useAtomValue(libraryAtom);
   const { run } = useTripUndo(trip.id);
+  const { requiredLeft } = summarizeBookings(trip.bookings?.value ?? []);
   const openCard = useSetAtom(mapCardAtom);
   const openAddSheet = useSetAtom(openAddSheetAtom);
   const [picking, setPicking] = useState(false);
@@ -222,6 +226,14 @@ export function CandidatePanel({ trip, dayIndex, onCollapse, collapseRef, fill =
               sx={{ minHeight: 44 }}
             >
               일정 공유
+            </Button>
+            <Button
+              component={Link}
+              to={paths.tripPrep(trip.id)}
+              size="small"
+              sx={{ minHeight: 44 }}
+            >
+              준비{requiredLeft > 0 && ` · ${requiredLeft}`}
             </Button>
           </Box>
           <TripSettingsDialog trip={trip} open={editing} onClose={() => setEditing(false)} />

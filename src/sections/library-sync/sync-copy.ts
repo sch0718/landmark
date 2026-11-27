@@ -24,6 +24,9 @@ export function conflictPath(path: string): string {
         review: '한 줄 평',
         title: '제목',
         dates: '날짜·일정',
+        bookings: '예약',
+        prepNotes: '여행 정보',
+        phrases: '현지어 문장',
         '': '전체 항목',
       } as Record<string, string>
     )[path] ?? path

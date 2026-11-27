@@ -15,6 +15,7 @@ export type TripOpError =
   | { _tag: 'TripTitleInvalid'; reason: 'empty' | 'too-long' }
   | { _tag: 'TripDatesInvalid'; reason: 'order' | 'too-many-days' }
   | { _tag: 'LegMinutesInvalid'; minutes: number }
+  | { _tag: 'BookingInvalid' | 'TripTooLarge'; message: string }
   | { _tag: 'AlreadyInTrip'; location: TripLocation }
   | { _tag: 'NotFound'; id: string }
   /** 미리보기(자동 나누기)를 만든 뒤 여행이 바뀌어 그 결과를 적용할 수 없다. */

@@ -19,6 +19,7 @@ import {
   TripCollabJoinPage,
   TripsPage,
   TripTodayPage,
+  TripPrepPage,
 } from 'src/routes/lazy-routes';
 import { paths } from 'src/routes/paths';
 import { ShellRoute } from 'src/sections/shell/ShellRoute';
@@ -66,6 +67,7 @@ export const routes: RouteObject[] = [
       { path: paths.tripJoin(':id'), element: lazyElement(<TripCollabJoinPage />, 'trip-join') },
       { path: paths.trip(':id'), element: lazyElement(<TripPlannerPage />, 'trip') },
       { path: paths.tripToday(':id'), element: lazyElement(<TripTodayPage />, 'trip-today') },
+      { path: paths.tripPrep(':id'), element: lazyElement(<TripPrepPage />, 'trip-prep') },
     ],
   },
   { path: '*', element: <ErrorScreen title="페이지를 찾을 수 없어요" /> },
