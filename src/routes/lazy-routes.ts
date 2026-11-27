@@ -124,6 +124,7 @@ export const ROUTE_CHUNKS: readonly (() => Promise<unknown>)[] = [
   loadTripsPage,
   loadTripPlannerPage,
   loadTripTodayPage,
+  loadTripPrepPage,
   loadSettingsPage,
   loadLabelsPage,
   loadLegacyImportPage,

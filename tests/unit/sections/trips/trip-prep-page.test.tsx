@@ -89,3 +89,13 @@ it('다른 탭에서 늘린 일정 때문에 문서가 상한을 넘으면 삭�
   expect(saved.trips[TRIP]?.bookings?.value).toEqual([]);
   expect(saved.trips[TRIP]?.days[0]?.stops.value).toEqual(stops);
 });
+
+it('통화별 금액 합계에 부동소수점 오차를 보이지 않는다', async () => {
+  const bookings = [
+    { ...booking, id: 'price001', price: { amount: 1.1, currency: 'EUR' } },
+    { ...booking, id: 'price002', price: { amount: 2.2, currency: 'EUR' } },
+  ];
+  await open(withTrip(plannerLibrary(), { ...makeTrip(), bookings: f(bookings) }), { path });
+  expect(await screen.findByText(/€3\.30/)).toBeVisible();
+  expect(screen.queryByText(/3\.3000000/)).toBeNull();
+});

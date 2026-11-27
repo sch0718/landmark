@@ -43,7 +43,6 @@ const formatAmount = ({ currency, amount }: { currency: string; amount: number }
   new Intl.NumberFormat('ko-KR', {
     style: 'currency',
     currency,
-    maximumFractionDigits: 20,
   }).format(amount);
 
 function LocalTime({ value }: { value: string }) {
