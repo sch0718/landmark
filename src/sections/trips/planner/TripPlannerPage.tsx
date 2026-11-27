@@ -95,7 +95,7 @@ function useSelectedDay(trip: Trip): [number, (dayIndex: number) => void] {
 function useOverview(trip: Trip): [boolean, (overview: boolean) => void] {
   const [overview, setOverview] = useAtom(overviewAtom);
   return [
-    overview[trip.id] ?? false,
+    overview[trip.id] ?? true,
     (next) => setOverview((prev) => ({ ...prev, [trip.id]: next })),
   ];
 }

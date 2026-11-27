@@ -104,10 +104,10 @@ describe('라우트 화면 나눠 받기', () => {
     await renderApp({ path: '/trips/trip000001', storage, preloadRoutes: false });
     expect(screen.getByRole('navigation', { name: '사이드 메뉴' })).toBeInTheDocument();
     expect(waiting()).toBeInTheDocument();
-    expect(screen.queryByRole('region', { name: 'Day 시간표' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Day별 장소' })).not.toBeInTheDocument();
 
     gates.planner.open();
-    expect(await screen.findByRole('region', { name: 'Day 시간표' })).toBeInTheDocument();
+    expect(await screen.findByRole('region', { name: 'Day별 장소' })).toBeInTheDocument();
     expect(screen.queryByText('불러오는 중…')).not.toBeInTheDocument();
   });
 

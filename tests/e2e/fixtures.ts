@@ -265,6 +265,20 @@ export async function createGangneungTrip(page: Page): Promise<void> {
   await dialog.getByRole('button', { name: '만들기', exact: true }).click();
   await expect(page).toHaveURL(/\/trips\/[^/]+$/);
   await expect(candidatePanel(page).getByRole('heading', { name: '강릉 여행' })).toBeVisible();
+  await showDay1(page);
+}
+
+/**
+ * 계획 화면은 `전체` 보기로 열린다. 넓은 화면에서 Day 1 시간표로 바꾼다.
+ * 좁은 화면은 시트가 후보 탭으로 열려 그대로 둔다(Day 탭을 누르면 그 Day로 간다).
+ */
+export async function showDay1(page: Page): Promise<void> {
+  if (isCompact(page)) return;
+  await page
+    .getByRole('tablist', { name: 'Day 고르기' })
+    .getByRole('tab', { name: /^Day 1 / })
+    .click();
+  await expect(page.getByRole('region', { name: 'Day 시간표' })).toBeVisible();
 }
 
 /** Day 1 시간표의 장소 이름을 위에서부터. */

@@ -20,6 +20,7 @@ import type { HoursLookup } from 'src/services/hours-lookup';
 import { ReverseGeocoder } from 'src/services/reverse-geocoder';
 import { RouteLookup } from 'src/services/route-lookup';
 import { ShareTemplate } from 'src/services/share-template';
+import { overviewAtom } from 'src/stores/trip-planner';
 import { ThemeRoot } from 'src/theme/ThemeRoot';
 import { PENDING_HOURS_LOOKUP } from '../../helpers/pending-hours-lookup';
 
@@ -122,6 +123,8 @@ export async function renderApp(
      * 단계를 기다리는 동안의 칸이나 받기 실패를 볼 때만 끈다.
      */
     preloadPanels?: boolean;
+    /** 계획 화면의 전체 보기 첫 값(여행 id별). 앱 기본은 전체 보기다. */
+    tripOverview?: Record<string, boolean>;
   } = {},
 ) {
   const {
@@ -169,6 +172,7 @@ export async function renderApp(
   );
   const router = createMemoryRouter(routes, { initialEntries: [path] });
   const store = createStore();
+  if (options.tripOverview !== undefined) store.set(overviewAtom, options.tripOverview);
   await act(async () => {
     render(
       <Provider store={store}>

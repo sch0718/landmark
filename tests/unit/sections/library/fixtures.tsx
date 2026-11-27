@@ -133,6 +133,11 @@ export async function renderLibrary(
     geolocation?: NonNullable<Parameters<typeof renderApp>[0]>['geolocation'];
     /** `renderApp`의 `libraryLocks`를 그대로 넘긴다. */
     libraryLocks?: LockManager;
+    /**
+     * 계획 화면을 전체 보기로 열지(앱 기본). 기본 false: 기존 시험은 Day 1부터 연다.
+     * 전체 보기가 기본인 것은 planner-map 시험이 지킨다.
+     */
+    tripOverview?: boolean;
   } = {},
 ) {
   const {
@@ -167,6 +172,10 @@ export async function renderLibrary(
     preloadPanels,
     geolocation,
     libraryLocks,
+    tripOverview:
+      options.tripOverview === true
+        ? undefined
+        : Object.fromEntries(Object.keys(library.trips).map((id) => [id, false])),
   });
   return { ...rendered, storage, setWidth: viewport.setWidth };
 }
