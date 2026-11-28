@@ -110,15 +110,20 @@ const invalid = (message: string): OpResult => ({
   error: { _tag: 'BookingInvalid', message },
 });
 
-function saveBookings(
+type PrepField = keyof typeof PREP_FIELD_CHARS;
+type PrepValues<K extends PrepField> = NonNullable<Trip[K]>['value'];
+
+export function saveField<K extends PrepField>(
   lib: Library,
   trip: Trip,
-  bookings: readonly Booking[],
+  key: K,
+  list: NoInfer<PrepValues<K>>,
   ctx: OpCtx,
 ): OpResult {
-  const field = setOptionalField(trip.bookings, bookings, [], ctx.now);
-  if (field === trip.bookings) return { ok: true, lib };
-  const next = { ...trip, bookings: field };
+  const previous = trip[key];
+  const field = setOptionalField<PrepValues<K>>(previous, list, [], ctx.now);
+  if (field === previous) return { ok: true, lib };
+  const next = { ...trip, [key]: field };
   const error = checkTripSize(next);
   if (error !== null) return { ok: false, error };
   return { ok: true, lib: { ...lib, trips: { ...lib.trips, [trip.id]: next } } };
@@ -147,7 +152,7 @@ export function putBooking(
 
   const bookings = proposeBookings(list, booking, id);
   const issue = bookingLimitsIssue(bookings);
-  return issue === null ? saveBookings(lib, trip, bookings, ctx) : invalid(issue);
+  return issue === null ? saveField(lib, trip, 'bookings', bookings, ctx) : invalid(issue);
 }
 
 export function removeBooking(lib: Library, tripId: string, id: string, ctx: OpCtx): OpResult {
@@ -155,9 +160,10 @@ export function removeBooking(lib: Library, tripId: string, id: string, ctx: OpC
   if (trip === undefined || trip.deletedAt !== null) {
     return { ok: false, error: { _tag: 'NotFound', id: tripId } };
   }
-  return saveBookings(
+  return saveField(
     lib,
     trip,
+    'bookings',
     (trip.bookings?.value ?? []).filter((booking) => booking.id !== id),
     ctx,
   );

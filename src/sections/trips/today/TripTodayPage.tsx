@@ -15,6 +15,7 @@ import { LIST_WIDTH } from 'src/sections/shell/pane-widths';
 import { useLayout } from 'src/sections/shell/use-layout';
 import { TripNotFound } from 'src/sections/trips/TripNotFound';
 import { NextCard } from 'src/sections/trips/today/NextCard';
+import { TodayBookings } from 'src/sections/trips/today/TodayBookings';
 import { TodayHeader } from 'src/sections/trips/today/TodayHeader';
 import { TodayLists } from 'src/sections/trips/today/TodayLists';
 import { TodayMap, type TodayFocusRequest } from 'src/sections/trips/today/TodayMap';
@@ -281,6 +282,7 @@ function Today({ trip }: { trip: Trip }) {
       >
         {(!online || model.plan.offline) && <NoticeBand>{OFFLINE_NOTICE}</NoticeBand>}
       </TodayNotices>
+      <TodayBookings trip={trip} dayIndex={model.dayIndex} isToday={model.isToday} />
       <NextCard
         model={model}
         trip={trip}
