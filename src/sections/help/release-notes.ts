@@ -7,6 +7,15 @@ import type { ReleaseNote } from '@sch0718/app-update';
  */
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: 'v0.39.0',
+    date: '2026-11-28',
+    items: [
+      '여행 계획의 「준비」에서 예약·여행 정보·현지어 문장을 한곳에 모아 봐요.',
+      '현지어 문장은 ▶로 발음을 듣고, 크게 보기로 현지인에게 보여 줄 수 있어요.',
+      '여행 당일 화면 맨 위에 오늘 예약이 보여요.',
+    ],
+  },
+  {
     version: 'v0.38.0',
     date: '2026-11-26',
     items: [
